@@ -1,36 +1,29 @@
 package br.com.missaopmpe.app;
 
-import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.graphics.Color;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
-import android.webkit.WebChromeClient;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
 
 public class MainActivity extends Activity {
-    private WebView webView;
+    private static final String APP_URL = "https://pmpe-jornada-cacador.j32341472.chatgpt.site";
 
-    @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setStatusBarColor(Color.rgb(5, 10, 18));
-        getWindow().setNavigationBarColor(Color.rgb(5, 10, 18));
-        webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(5, 10, 18));
-        webView.getSettings().setJavaScriptEnabled(true);
-        webView.getSettings().setDomStorageEnabled(true);
-        webView.getSettings().setAllowFileAccess(true);
-        webView.setWebViewClient(new WebViewClient());
-        webView.setWebChromeClient(new WebChromeClient());
-        webView.loadUrl("file:///android_asset/index.html");
-        setContentView(webView);
+        openStudyPlatform();
     }
 
-    @Override
-    public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) webView.goBack();
-        else super.onBackPressed();
+    private void openStudyPlatform() {
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(APP_URL));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(intent);
+        } catch (ActivityNotFoundException error) {
+            Intent fallback = new Intent(Intent.ACTION_VIEW, Uri.parse(APP_URL));
+            startActivity(fallback);
+        }
+        finish();
     }
 }
