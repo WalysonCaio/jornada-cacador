@@ -174,7 +174,7 @@ $('#summaryFilter').onchange=()=>renderSummaries($('#summarySearch').value);$('#
 const SUPABASE_URL='https://jybislbbblyjsrcdegjt.supabase.co';
 const SUPABASE_KEY='sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw';
 const SESSION_KEY='pmpe-supabase-session-v1';
-let cloudSession=null,syncTimer=null,syncReady=false,syncBusy=false;
+var cloudSession=null,syncTimer=null,syncReady=false,syncBusy=false;
 function setSyncStatus(kind,text){const dot=$('#syncDot'),label=$('#syncText');dot.className='syncDot'+(kind?' '+kind:'');dot.title=text||'Dados somente neste aparelho';if(label)label.textContent=text||''}
 function authHeaders(token){return{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${token||SUPABASE_KEY}`,'Content-Type':'application/json'}}
 async function authRequest(path,body){const response=await fetch(SUPABASE_URL+path,{method:'POST',headers:authHeaders(),body:JSON.stringify(body)});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.msg||data.message||data.error_description||'Não foi possível acessar a conta.');return data}
