@@ -28,11 +28,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          cp app/build/outputs/apk/debug/app-debug.apk release/Missao-PMPE.apk
-          cp app/build/outputs/bundle/release/app-release.aab release/Missao-PMPE-sem-assinatura.aab
-          cd release && sha256sum Missao-PMPE.apk Missao-PMPE-sem-assinatura.aab > SHA256SUMS.txt
+          cp app/build/outputs/apk/debug/app-debug.apk release/Jornada-do-Cacador.apk
+          cp app/build/outputs/bundle/release/app-release.aab release/Jornada-do-Cacador-sem-assinatura.aab
+          cd release && sha256sum Jornada-do-Cacador.apk Jornada-do-Cacador-sem-assinatura.aab > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Missao-PMPE-Android
+          name: Jornada-do-Cacador-Android
           path: release/
           retention-days: 90
