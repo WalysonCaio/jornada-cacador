@@ -2,24 +2,10 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const PUBLIC_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
-const ALLOWED_ORIGINS = new Set([
-  "https://jornada.wcaio.workers.dev",
-  "https://jornada-cacador.j32341472.chatgpt.site",
-  "http://localhost:4173",
-]);
+const SITE = "https://jornada.wcaio.workers.dev";
 
-function cors(request: Request) {
-  const origin = request.headers.get("origin") ?? "";
-  return {
-    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.has(origin)
-      ? origin
-      : "https://jornada.wcaio.workers.dev",
-    "Access-Control-Allow-Headers": "authorization, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Content-Type": "application/json; charset=utf-8",
-    "Vary": "Origin",
-  };
-}
+const cors = { "Access-Control-Allow-Origin": SITE, "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", "Content-Type": "application/json; charset=utf-8" };
+const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: cors });
 const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"];
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -103,10 +89,7 @@ async function removeGeminiFile(name?: string) {
 }
 
 Deno.serve(async (request) => {
-  const headers = cors(request);
-  const response = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), { status, headers });
-  if (request.method === "OPTIONS") return new Response("ok", { headers });
+  if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
   const auth = request.headers.get("authorization") ?? "";
   const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { Authorization: auth, apikey: PUBLIC_KEY } });
   const user = authResponse.ok ? await authResponse.json() : null;

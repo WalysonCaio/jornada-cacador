@@ -6,14 +6,13 @@ const ALLOWED_ORIGINS = new Set([
   "https://jornada.wcaio.workers.dev",
   "https://jornada-cacador.j32341472.chatgpt.site",
   "http://localhost:4173",
+  "http://localhost:3000",
 ]);
 
 function headers(request: Request) {
   const origin = request.headers.get("origin") ?? "";
   return {
-    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.has(origin)
-      ? origin
-      : "https://jornada.wcaio.workers.dev",
+    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.has(origin) ? origin : "https://jornada.wcaio.workers.dev",
     "Access-Control-Allow-Headers": "authorization, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Content-Type": "application/json; charset=utf-8",
@@ -84,12 +83,18 @@ Deno.serve(async (request) => {
   }
   if (!storagePath.startsWith(`${user.id}/`)) return reply(request, { error: "Este documento não pertence à conta conectada." }, 403);
 
+  let geminiFileName: string | undefined;
   try {
+    const campaignResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_campaigns?id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&select=id,name&limit=1`, { headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
+    const campaigns = campaignResponse.ok ? await campaignResponse.json() : [];
+    if (!Array.isArray(campaigns) || !campaigns[0]?.id) return reply(request, { error: "Este portal não pertence à conta conectada." }, 403);
+    const campaignName = String(payload?.campaign_name ?? campaigns[0]?.name ?? "").trim();
     const fileResponse = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${storagePath}`, { headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
     if (!fileResponse.ok) return reply(request, { error: "Não foi possível abrir o PDF armazenado." }, 502);
     const bytes = new Uint8Array(await fileResponse.arrayBuffer());
     if (bytes.byteLength > 50 * 1024 * 1024) return reply(request, { error: "O edital deve ter no máximo 50 MB para análise." }, 413);
     const geminiFile = await uploadPdfToGemini(bytes, title);
+    geminiFileName = geminiFile.name;
 
     const geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent", {
       method: "POST",
@@ -97,18 +102,44 @@ Deno.serve(async (request) => {
       body: JSON.stringify({
         contents: [{ parts: [
           { file_data: { mime_type: geminiFile.mimeType ?? "application/pdf", file_uri: geminiFile.uri } },
-          { text: "Extraia somente o conteúdo programático deste edital. Retorne JSON com topics: lista de objetos subject, unit e topic. Preserve a ordem, não invente tópicos e ignore inscrições, cronogramas, remuneração e regras administrativas." },
+          { text: `Você é um analista de editais de concursos públicos brasileiros. Analise exclusivamente o PDF anexado e extraia o conteúdo programático que realmente gera matérias de estudo e missões.
+
+Portal do estudante: ${campaignName || "não informado"}
+Nome do arquivo: ${title}
+
+REGRAS OBRIGATÓRIAS:
+1. Localize primeiro as seções intituladas Conteúdo Programático, Conhecimentos Gerais, Conhecimentos Específicos, Objetos de Avaliação ou equivalentes.
+2. Se o PDF possuir vários cargos, use somente o cargo que corresponda ao nome do portal ou do arquivo. Se não for possível identificar com segurança, registre um aviso em meta.warnings; não misture silenciosamente cargos diferentes.
+3. subject deve ser o nome da disciplina conforme o edital, apenas corrigindo espaços, caixa e erros óbvios de OCR.
+4. unit representa bloco, unidade ou seção intermediária quando existir. Não invente unidade.
+5. topic deve ser um item de estudo atômico e fiel. Separe enumerações apenas quando o próprio edital apresentar conteúdos distintos; preserve artigos, leis, decretos, intervalos e qualificadores.
+6. Não transforme título de disciplina em tópico. Não crie exemplos, explicações, pré-requisitos ou subassuntos implícitos.
+7. Ignore inscrições, vagas, cotas, salários, datas, etapas, TAF, exames médicos, recursos, documentação e demais regras administrativas, salvo quando fizerem parte expressa de uma disciplina cobrada.
+8. Preserve a ordem original do edital e não duplique o mesmo tópico dentro da mesma disciplina.
+9. Não use conhecimento externo e não complete texto truncado por suposição.
+10. Em meta, informe detected_scope, confidence de 0 a 1 e warnings objetivos.
+
+Retorne somente o JSON solicitado.` },
         ] }],
         generationConfig: {
           temperature: 0.1, responseMimeType: "application/json",
-          responseSchema: { type: "OBJECT", properties: { topics: { type: "ARRAY", items: { type: "OBJECT", properties: { subject: { type: "STRING" }, unit: { type: "STRING" }, topic: { type: "STRING" } }, required: ["subject", "topic"] } } }, required: ["topics"] },
+          responseSchema: { type: "OBJECT", properties: {
+            meta: { type: "OBJECT", properties: { detected_scope: { type: "STRING" }, confidence: { type: "NUMBER" }, warnings: { type: "ARRAY", items: { type: "STRING" } } }, required: ["detected_scope", "confidence", "warnings"] },
+            topics: { type: "ARRAY", items: { type: "OBJECT", properties: { subject: { type: "STRING" }, unit: { type: "STRING" }, topic: { type: "STRING" } }, required: ["subject", "topic"] } }
+          }, required: ["meta", "topics"] },
         },
       }),
     });
     const geminiData = await geminiResponse.json();
     await removeGeminiFile(geminiFile.name);
+    geminiFileName = undefined;
     if (!geminiResponse.ok) { console.error("Gemini", geminiResponse.status, geminiData); return reply(request, { error: geminiData?.error?.message ?? "O Gemini não conseguiu analisar o edital." }, 502); }
     const parsed = JSON.parse(geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
+    const meta = {
+      detected_scope: String(parsed?.meta?.detected_scope ?? campaignName ?? title).trim(),
+      confidence: Math.max(0, Math.min(1, Number(parsed?.meta?.confidence ?? 0))),
+      warnings: Array.isArray(parsed?.meta?.warnings) ? parsed.meta.warnings.map((warning: unknown) => String(warning).trim()).filter(Boolean).slice(0, 10) : [],
+    };
     const topics = Array.isArray(parsed.topics) ? parsed.topics.slice(0, 1500) : [];
     const uniqueTopics: Array<{ subject: string; unit: string; topic: string }> = [];
     const seenTopics = new Set<string>();
@@ -117,12 +148,16 @@ Deno.serve(async (request) => {
       .replace(/\s+/g, " ")
       .trim()
       .toLocaleLowerCase("pt-BR");
+    const normalizeSearch = (value: unknown) => normalizeKey(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const administrativeOnly = /^(inscri(c|ç)(a|ã)o|cronograma|remunera(c|ç)(a|ã)o|vagas?|isen(c|ç)(a|ã)o|taxa de inscri(c|ç)(a|ã)o|resultado|recursos?|exame m[eé]dico|teste de aptid(a|ã)o f[ií]sica|investiga(c|ç)(a|ã)o social|documentos?|matr[ií]cula|curso de forma(c|ç)(a|ã)o)$/i;
 
     for (const item of topics) {
       const subject = String(item?.subject ?? "Edital").replace(/\s+/g, " ").trim() || "Edital";
       const unit = String(item?.unit ?? "").replace(/\s+/g, " ").trim();
       const topic = String(item?.topic ?? "").replace(/\s+/g, " ").trim();
-      if (!topic) continue;
+      if (!topic || topic.length < 3 || topic.length > 600) continue;
+      if (normalizeSearch(subject) === normalizeSearch(topic)) continue;
+      if (administrativeOnly.test(normalizeSearch(topic))) continue;
 
       // O Gemini pode repetir um tópico em partes diferentes do edital.
       // A tabela aceita apenas um mesmo tópico por disciplina e campanha.
@@ -131,7 +166,8 @@ Deno.serve(async (request) => {
       seenTopics.add(key);
       uniqueTopics.push({ subject, unit, topic });
     }
-    if (!uniqueTopics.length) return reply(request, { error: "Não encontrei o conteúdo programático neste PDF." }, 422);
+    if (uniqueTopics.length < 3) return reply(request, { error: "A análise não encontrou conteúdo programático suficiente com segurança. Confira se o PDF contém as disciplinas e se o nome do portal corresponde ao cargo." }, 422);
+    if (meta.confidence < 0.65) meta.warnings.unshift("A IA indicou baixa confiança na identificação do cargo ou do conteúdo programático. Revise o mapa antes de iniciar as missões.");
 
     const cleared = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${campaignId}`, { method: "DELETE", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
     if (!cleared.ok) {
@@ -150,9 +186,11 @@ Deno.serve(async (request) => {
       return reply(request, { error: "O edital foi analisado, mas nenhum tópico foi confirmado no banco." }, 502);
     }
     await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready" }) });
-    return reply(request, { topics: uniqueTopics, saved: savedTopics.length, provider: "gemini" });
+    return reply(request, { topics: uniqueTopics, saved: savedTopics.length, provider: "gemini", meta });
   } catch (error) {
     console.error("edital-gemini", error);
     return reply(request, { error: "Falha interna ao interpretar o edital." }, 500);
+  } finally {
+    await removeGeminiFile(geminiFileName);
   }
 });

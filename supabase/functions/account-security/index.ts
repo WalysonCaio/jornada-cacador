@@ -1,18 +1,12 @@
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const PUBLIC_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
-const ALLOWED_ORIGINS = new Set([
-  "https://jornada.wcaio.workers.dev",
-  "https://jornada-cacador.j32341472.chatgpt.site",
-  "http://localhost:4173",
-]);
+const ALLOWED_ORIGINS = new Set(["https://jornada.wcaio.workers.dev", "https://jornada-cacador.j32341472.chatgpt.site", "http://localhost:4173", "http://localhost:3000"]);
 
 function cors(request: Request) {
   const origin = request.headers.get("origin") ?? "";
   return {
-    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.has(origin)
-      ? origin
-      : "https://jornada.wcaio.workers.dev",
+    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.has(origin) ? origin : "https://jornada.wcaio.workers.dev",
     "Access-Control-Allow-Headers": "authorization, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Content-Type": "application/json; charset=utf-8",

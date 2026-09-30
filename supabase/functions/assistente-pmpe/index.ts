@@ -8,6 +8,7 @@ const ALLOWED_ORIGINS = new Set([
   "https://jornada.wcaio.workers.dev",
   "https://jornada-cacador.j32341472.chatgpt.site",
   "http://localhost:4173",
+  "http://localhost:3000",
 ]);
 
 function corsHeaders(request: Request) {
