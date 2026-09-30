@@ -1,10 +1,25 @@
-import { claimAiRequest, finishAiRequest, guardResponse } from "../_shared/ai-guard.ts";
-import { corsHeaders } from "../_shared/cors.ts";
-
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const PUBLIC_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
+const ALLOWED_ORIGINS = new Set([
+  "https://jornada.wcaio.workers.dev",
+  "https://jornada-cacador.j32341472.chatgpt.site",
+  "http://localhost:4173",
+]);
+
+function cors(request: Request) {
+  const origin = request.headers.get("origin") ?? "";
+  return {
+    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.has(origin)
+      ? origin
+      : "https://jornada.wcaio.workers.dev",
+    "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Content-Type": "application/json; charset=utf-8",
+    "Vary": "Origin",
+  };
+}
 const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"];
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -88,8 +103,9 @@ async function removeGeminiFile(name?: string) {
 }
 
 Deno.serve(async (request) => {
-  const headers = corsHeaders(request);
-  const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
+  const headers = cors(request);
+  const response = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers });
   if (request.method === "OPTIONS") return new Response("ok", { headers });
   const auth = request.headers.get("authorization") ?? "";
   const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { Authorization: auth, apikey: PUBLIC_KEY } });
@@ -99,17 +115,11 @@ Deno.serve(async (request) => {
   const path = String(input?.storage_path ?? ""), campaignId = String(input?.campaign_id ?? ""), documentId = String(input?.document_id ?? ""), title = String(input?.title ?? "PDF enviado");
   if (!path || !campaignId || !documentId) return response({ error: "Dados do documento incompletos." }, 400);
   if (!path.startsWith(`${user.id}/`)) return response({ error: "Documento de outra conta." }, 403);
-  let guard;
   try {
-    guard = await claimAiRequest(SUPABASE_URL, SERVICE_KEY, user.id, "analysis", documentId);
-    if (!guard.allowed) {
-      const denied = guardResponse(guard);
-      return response(denied.body, denied.status);
-    }
     const file = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${path}`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
-    if (!file.ok) { await finishAiRequest(SUPABASE_URL, SERVICE_KEY, guard.job_id, "gemini", "error", "FILE_READ"); return response({ error: "Não foi possível abrir o PDF." }, 502); }
+    if (!file.ok) return response({ error: "Não foi possível abrir o PDF." }, 502);
     const bytes = new Uint8Array(await file.arrayBuffer());
-    if (bytes.byteLength > 50 * 1024 * 1024) { await finishAiRequest(SUPABASE_URL, SERVICE_KEY, guard.job_id, "gemini", "error", "FILE_TOO_LARGE"); return response({ error: "O PDF deve ter no máximo 50 MB para geração automática." }, 413); }
+    if (bytes.byteLength > 50 * 1024 * 1024) return response({ error: "O PDF deve ter no máximo 50 MB para geração automática." }, 413);
     const geminiFile = await uploadPdfToGemini(bytes, title);
     let generated;
     try {
@@ -120,20 +130,18 @@ Deno.serve(async (request) => {
     const aiData = generated.data;
     const parsed = JSON.parse(aiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
     const summaries = Array.isArray(parsed.summaries) ? parsed.summaries : [];
-    if (!summaries.length) { await finishAiRequest(SUPABASE_URL, SERVICE_KEY, guard.job_id, "gemini", "error", "EMPTY_CONTENT"); return response({ error: "Não encontrei conteúdo de estudo suficiente no PDF." }, 422); }
+    if (!summaries.length) return response({ error: "Não encontrei conteúdo de estudo suficiente no PDF." }, 422);
     await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?source_document_id=eq.${documentId}`, { method: "DELETE", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
     const rows = summaries.map((content: Record<string, unknown>) => ({ campaign_id: campaignId, user_id: user.id, source_document_id: documentId, content_type: "summary", title: String(content.title ?? "Resumo"), content: { ...content, source: title }, source_refs: [{ document_id: documentId, title }] }));
     const saved = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify(rows) });
-    if (!saved.ok) { console.error("Database", saved.status, await saved.text()); await finishAiRequest(SUPABASE_URL, SERVICE_KEY, guard.job_id, "gemini", "error", "DATABASE_SAVE"); return response({ error: "O conteúdo foi criado, mas não pôde ser salvo." }, 502); }
+    if (!saved.ok) { console.error("Database", saved.status, await saved.text()); return response({ error: "O conteúdo foi criado, mas não pôde ser salvo." }, 502); }
     await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready" }) });
-    await finishAiRequest(SUPABASE_URL, SERVICE_KEY, guard.job_id, "gemini");
     return response({ summaries: summaries.length, flashcards: summaries.reduce((n: number, x: { flashcards?: unknown[] }) => n + (x.flashcards?.length ?? 0), 0), questions: summaries.reduce((n: number, x: { questions?: unknown[] }) => n + (x.questions?.length ?? 0), 0), provider: "gemini", model: generated.model });
   } catch (error) {
     console.error("material-gemini", error);
-    await finishAiRequest(SUPABASE_URL, SERVICE_KEY, guard?.job_id, "gemini", "error", String(error));
     if ((error as { retryable?: boolean })?.retryable) {
       await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "pending" }) });
-      return response({ error: "Erro 429 ou alta demanda: a cota gratuita do Gemini pode ter sido atingida. O PDF continua salvo e poderá ser reanalisado depois.", code: "PROVIDER_429", retryable: true }, 429);
+      return response({ error: "As IAs estão com alta demanda agora. O PDF foi salvo e continua aguardando análise. Tente novamente em alguns minutos.", retryable: true }, 503);
     }
     return response({ error: "Falha interna ao gerar o conteúdo do PDF." }, 500);
   }

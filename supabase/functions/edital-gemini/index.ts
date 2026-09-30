@@ -1,12 +1,28 @@
-import { claimAiRequest, finishAiRequest, guardResponse } from "../_shared/ai-guard.ts";
-import { corsHeaders } from "../_shared/cors.ts";
-
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const PUBLISHABLE_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
+const ALLOWED_ORIGINS = new Set([
+  "https://jornada.wcaio.workers.dev",
+  "https://jornada-cacador.j32341472.chatgpt.site",
+  "http://localhost:4173",
+]);
+
+function headers(request: Request) {
+  const origin = request.headers.get("origin") ?? "";
+  return {
+    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.has(origin)
+      ? origin
+      : "https://jornada.wcaio.workers.dev",
+    "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Content-Type": "application/json; charset=utf-8",
+    "Vary": "Origin",
+  };
+}
+
 function reply(request: Request, body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: corsHeaders(request) });
+  return new Response(JSON.stringify(body), { status, headers: headers(request) });
 }
 
 async function uploadPdfToGemini(bytes: Uint8Array, title: string) {
@@ -68,17 +84,11 @@ Deno.serve(async (request) => {
   }
   if (!storagePath.startsWith(`${user.id}/`)) return reply(request, { error: "Este documento não pertence à conta conectada." }, 403);
 
-  let guard;
   try {
-    guard = await claimAiRequest(SUPABASE_URL, SERVICE_ROLE_KEY, user.id, "analysis", documentId);
-    if (!guard.allowed) {
-      const denied = guardResponse(guard);
-      return reply(request, denied.body, denied.status);
-    }
     const fileResponse = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${storagePath}`, { headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
-    if (!fileResponse.ok) { await finishAiRequest(SUPABASE_URL, SERVICE_ROLE_KEY, guard.job_id, "gemini", "error", "FILE_READ"); return reply(request, { error: "Não foi possível abrir o PDF armazenado." }, 502); }
+    if (!fileResponse.ok) return reply(request, { error: "Não foi possível abrir o PDF armazenado." }, 502);
     const bytes = new Uint8Array(await fileResponse.arrayBuffer());
-    if (bytes.byteLength > 50 * 1024 * 1024) { await finishAiRequest(SUPABASE_URL, SERVICE_ROLE_KEY, guard.job_id, "gemini", "error", "FILE_TOO_LARGE"); return reply(request, { error: "O edital deve ter no máximo 50 MB para análise." }, 413); }
+    if (bytes.byteLength > 50 * 1024 * 1024) return reply(request, { error: "O edital deve ter no máximo 50 MB para análise." }, 413);
     const geminiFile = await uploadPdfToGemini(bytes, title);
 
     const geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent", {
@@ -97,16 +107,7 @@ Deno.serve(async (request) => {
     });
     const geminiData = await geminiResponse.json();
     await removeGeminiFile(geminiFile.name);
-    if (!geminiResponse.ok) {
-      console.error("Gemini", geminiResponse.status, geminiData);
-      await finishAiRequest(SUPABASE_URL, SERVICE_ROLE_KEY, guard.job_id, "gemini", "error", String(geminiResponse.status));
-      return reply(request, {
-        error: geminiResponse.status === 429
-          ? "Erro 429: a cota gratuita do Gemini foi atingida. O edital continua salvo; tente novamente mais tarde."
-          : geminiData?.error?.message ?? "O Gemini não conseguiu analisar o edital.",
-        code: geminiResponse.status === 429 ? "PROVIDER_429" : "AI_ERROR",
-      }, geminiResponse.status === 429 ? 429 : 502);
-    }
+    if (!geminiResponse.ok) { console.error("Gemini", geminiResponse.status, geminiData); return reply(request, { error: geminiData?.error?.message ?? "O Gemini não conseguiu analisar o edital." }, 502); }
     const parsed = JSON.parse(geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
     const topics = Array.isArray(parsed.topics) ? parsed.topics.slice(0, 1500) : [];
     const uniqueTopics: Array<{ subject: string; unit: string; topic: string }> = [];
@@ -130,12 +131,11 @@ Deno.serve(async (request) => {
       seenTopics.add(key);
       uniqueTopics.push({ subject, unit, topic });
     }
-    if (!uniqueTopics.length) { await finishAiRequest(SUPABASE_URL, SERVICE_ROLE_KEY, guard.job_id, "gemini", "error", "EMPTY_CONTENT"); return reply(request, { error: "Não encontrei o conteúdo programático neste PDF." }, 422); }
+    if (!uniqueTopics.length) return reply(request, { error: "Não encontrei o conteúdo programático neste PDF." }, 422);
 
     const cleared = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${campaignId}`, { method: "DELETE", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
     if (!cleared.ok) {
       console.error("campaign_topics delete", cleared.status, await cleared.text());
-      await finishAiRequest(SUPABASE_URL, SERVICE_ROLE_KEY, guard.job_id, "gemini", "error", "DATABASE_CLEAR");
       return reply(request, { error: "Não foi possível preparar o mapa anterior para a nova análise." }, 502);
     }
     const rows = uniqueTopics.map((item, index: number) => ({ campaign_id: campaignId, user_id: user.id, subject: item.subject, unit_name: item.unit, topic: item.topic, edital_order: index }));
@@ -143,20 +143,16 @@ Deno.serve(async (request) => {
     if (!inserted.ok) {
       const detail = await inserted.text();
       console.error("campaign_topics insert", inserted.status, detail);
-      await finishAiRequest(SUPABASE_URL, SERVICE_ROLE_KEY, guard.job_id, "gemini", "error", "DATABASE_SAVE");
       return reply(request, { error: `O edital foi analisado, mas os tópicos não puderam ser salvos (${inserted.status}).`, detail }, 502);
     }
     const savedTopics = await inserted.json();
     if (!Array.isArray(savedTopics) || savedTopics.length === 0) {
-      await finishAiRequest(SUPABASE_URL, SERVICE_ROLE_KEY, guard.job_id, "gemini", "error", "DATABASE_EMPTY");
       return reply(request, { error: "O edital foi analisado, mas nenhum tópico foi confirmado no banco." }, 502);
     }
     await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready" }) });
-    await finishAiRequest(SUPABASE_URL, SERVICE_ROLE_KEY, guard.job_id, "gemini");
     return reply(request, { topics: uniqueTopics, saved: savedTopics.length, provider: "gemini" });
   } catch (error) {
     console.error("edital-gemini", error);
-    await finishAiRequest(SUPABASE_URL, SERVICE_ROLE_KEY, guard?.job_id, "gemini", "error", String(error));
     return reply(request, { error: "Falha interna ao interpretar o edital." }, 500);
   }
 });
