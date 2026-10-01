@@ -41,6 +41,25 @@ async function authenticatedUser(authorization: string) {
   return response.ok ? await response.json() : null;
 }
 
+async function reserveUsage(userId: string, campaignId?: string) {
+  if (!SERVICE_ROLE_KEY) return { allowed: false, reason: "SERVER_CONFIGURATION" };
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reserve_ai_usage`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ p_user_id: userId, p_campaign_id: campaignId || null, p_operation: "assistant", p_daily_limit: 40 }),
+  });
+  return response.ok ? await response.json() : { allowed: false, reason: "USAGE_GUARD_UNAVAILABLE" };
+}
+
+async function finishUsage(eventId: number | undefined, status: "success" | "error", provider?: string, model?: string, errorCode?: string) {
+  if (!eventId || !SERVICE_ROLE_KEY) return;
+  await fetch(`${SUPABASE_URL}/rest/v1/ai_usage_events?id=eq.${eventId}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ status, provider: provider || null, model: model || null, error_code: errorCode || null }),
+  }).catch(() => undefined);
+}
+
 async function askGroq(systemPrompt: string, userPrompt: string) {
   if (!GROQ_API_KEY) throw new Error("GROQ_NOT_CONFIGURED");
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -162,6 +181,12 @@ Deno.serve(async (request) => {
     return json(request, { error: "Escreva uma pergunta para o assistente." }, 400);
   }
 
+  const usage = await reserveUsage(user.id, payload.campaign_id);
+  if (!usage.allowed) {
+    if (usage.reason === "DAILY_LIMIT") return json(request, { error: `Você atingiu o limite diário de ${usage.limit || 40} perguntas ao assistente. A cota será renovada à meia-noite.`, code: "DAILY_LIMIT" }, 429);
+    return json(request, { error: "A proteção de consumo da IA está temporariamente indisponível. Tente novamente em alguns minutos.", code: usage.reason }, 503);
+  }
+
   const systemPrompt = `Você é o Instrutor de Estudos do aplicativo Jornada do Caçador.
 Explique em português brasileiro, com clareza, precisão e linguagem de aula escrita.
 O estudante está começando do zero. Organize a resposta com títulos curtos quando útil.
@@ -180,14 +205,18 @@ Modo solicitado: ${mode}.`;
   try {
     let result: { answer: string; model: string; provider: string };
     try {
-      result = await askGroq(systemPrompt, userPrompt);
-    } catch (groqError) {
-      console.error("Groq indisponível; acionando Gemini", groqError);
       result = await askGemini(systemPrompt, userPrompt);
+    } catch (geminiError) {
+      console.error("Gemini indisponível; acionando Groq", geminiError);
+      result = await askGroq(systemPrompt, userPrompt);
     }
+    await finishUsage(usage.event_id, "success", result.provider, result.model);
     return json(request, { ...result, grounded: Boolean(context), user_id: user.id });
   } catch (error) {
     console.error("Todas as IAs falharam", error);
-    return json(request, { error: "As duas IAs estão temporariamente indisponíveis. Tente novamente em alguns minutos." }, 502);
+    const message = String((error as Error)?.message ?? error);
+    const limited = message.includes("429");
+    await finishUsage(usage.event_id, "error", undefined, undefined, limited ? "PROVIDER_429" : "ALL_PROVIDERS_FAILED");
+    return json(request, { error: limited ? "A cota gratuita do provedor de IA foi atingida (erro 429). Aguarde a renovação da cota ou tente novamente mais tarde." : "As duas IAs estão temporariamente indisponíveis. Tente novamente em alguns minutos.", code: limited ? "PROVIDER_429" : "AI_UNAVAILABLE" }, limited ? 429 : 502);
   }
 });

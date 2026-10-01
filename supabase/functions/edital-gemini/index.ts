@@ -63,6 +63,16 @@ async function removeGeminiFile(name?: string) {
   }).catch(() => undefined);
 }
 
+async function reserveUsage(userId: string, campaignId: string) {
+  const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reserve_ai_usage`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ p_user_id: userId, p_campaign_id: campaignId, p_operation: "edital", p_daily_limit: 5 }) });
+  return result.ok ? await result.json() : { allowed: false, reason: "USAGE_GUARD_UNAVAILABLE" };
+}
+
+async function finishUsage(eventId: number | undefined, status: "success" | "error", errorCode?: string) {
+  if (!eventId) return;
+  await fetch(`${SUPABASE_URL}/rest/v1/ai_usage_events?id=eq.${eventId}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ status, provider: "gemini", model: "gemini-3.5-flash-lite", error_code: errorCode || null }) }).catch(() => undefined);
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: headers(request) });
   if (request.method !== "POST") return reply(request, { error: "Método não permitido." }, 405);
@@ -84,15 +94,22 @@ Deno.serve(async (request) => {
   if (!storagePath.startsWith(`${user.id}/`)) return reply(request, { error: "Este documento não pertence à conta conectada." }, 403);
 
   let geminiFileName: string | undefined;
+  let usage: { allowed?: boolean; event_id?: number; reason?: string; limit?: number } | null = null;
   try {
     const campaignResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_campaigns?id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&select=id,name&limit=1`, { headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
     const campaigns = campaignResponse.ok ? await campaignResponse.json() : [];
     if (!Array.isArray(campaigns) || !campaigns[0]?.id) return reply(request, { error: "Este portal não pertence à conta conectada." }, 403);
+    usage = await reserveUsage(user.id, campaignId);
+    if (!usage.allowed) {
+      if (usage.reason === "DAILY_LIMIT") return reply(request, { error: `Você atingiu o limite diário de ${usage.limit || 5} análises. O edital está salvo e poderá ser processado após a renovação da cota.`, retryable: true, code: "DAILY_LIMIT" }, 429);
+      if (usage.reason === "BUSY") return reply(request, { error: "Já existe um PDF sendo analisado. Este edital continuará aguardando na fila.", retryable: true, queued: true, code: "BUSY" }, 409);
+      return reply(request, { error: "A proteção de consumo está temporariamente indisponível.", retryable: true }, 503);
+    }
     const campaignName = String(payload?.campaign_name ?? campaigns[0]?.name ?? "").trim();
     const fileResponse = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${storagePath}`, { headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
-    if (!fileResponse.ok) return reply(request, { error: "Não foi possível abrir o PDF armazenado." }, 502);
+    if (!fileResponse.ok) { await finishUsage(usage.event_id,"error","FILE_READ_FAILED");return reply(request, { error: "Não foi possível abrir o PDF armazenado." }, 502); }
     const bytes = new Uint8Array(await fileResponse.arrayBuffer());
-    if (bytes.byteLength > 50 * 1024 * 1024) return reply(request, { error: "O edital deve ter no máximo 50 MB para análise." }, 413);
+    if (bytes.byteLength > 50 * 1024 * 1024) { await finishUsage(usage.event_id,"error","FILE_TOO_LARGE");return reply(request, { error: "O edital deve ter no máximo 50 MB para análise." }, 413); }
     const geminiFile = await uploadPdfToGemini(bytes, title);
     geminiFileName = geminiFile.name;
 
@@ -133,7 +150,7 @@ Retorne somente o JSON solicitado.` },
     const geminiData = await geminiResponse.json();
     await removeGeminiFile(geminiFile.name);
     geminiFileName = undefined;
-    if (!geminiResponse.ok) { console.error("Gemini", geminiResponse.status, geminiData); return reply(request, { error: geminiData?.error?.message ?? "O Gemini não conseguiu analisar o edital." }, 502); }
+    if (!geminiResponse.ok) { console.error("Gemini", geminiResponse.status, geminiData);await finishUsage(usage.event_id,"error",geminiResponse.status===429?"PROVIDER_429":"PROVIDER_ERROR");return reply(request, { error: geminiResponse.status===429?"A cota gratuita do Gemini foi atingida (erro 429). O edital está salvo; tente novamente após a renovação da cota.":geminiData?.error?.message ?? "O Gemini não conseguiu analisar o edital.",retryable:geminiResponse.status===429,code:geminiResponse.status===429?"PROVIDER_429":"AI_ERROR" }, geminiResponse.status===429?429:502); }
     const parsed = JSON.parse(geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
     const meta = {
       detected_scope: String(parsed?.meta?.detected_scope ?? campaignName ?? title).trim(),
@@ -166,29 +183,31 @@ Retorne somente o JSON solicitado.` },
       seenTopics.add(key);
       uniqueTopics.push({ subject, unit, topic });
     }
-    if (uniqueTopics.length < 3) return reply(request, { error: "A análise não encontrou conteúdo programático suficiente com segurança. Confira se o PDF contém as disciplinas e se o nome do portal corresponde ao cargo." }, 422);
+    if (uniqueTopics.length < 3) { await finishUsage(usage.event_id,"error","INSUFFICIENT_TOPICS");return reply(request, { error: "A análise não encontrou conteúdo programático suficiente com segurança. Confira se o PDF contém as disciplinas e se o nome do portal corresponde ao cargo." }, 422); }
     if (meta.confidence < 0.65) meta.warnings.unshift("A IA indicou baixa confiança na identificação do cargo ou do conteúdo programático. Revise o mapa antes de iniciar as missões.");
 
     const cleared = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${campaignId}`, { method: "DELETE", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
     if (!cleared.ok) {
       console.error("campaign_topics delete", cleared.status, await cleared.text());
-      return reply(request, { error: "Não foi possível preparar o mapa anterior para a nova análise." }, 502);
+      await finishUsage(usage.event_id,"error","MAP_CLEAR_FAILED");return reply(request, { error: "Não foi possível preparar o mapa anterior para a nova análise." }, 502);
     }
     const rows = uniqueTopics.map((item, index: number) => ({ campaign_id: campaignId, user_id: user.id, subject: item.subject, unit_name: item.unit, topic: item.topic, edital_order: index }));
     const inserted = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics`, { method: "POST", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(rows) });
     if (!inserted.ok) {
       const detail = await inserted.text();
       console.error("campaign_topics insert", inserted.status, detail);
-      return reply(request, { error: `O edital foi analisado, mas os tópicos não puderam ser salvos (${inserted.status}).`, detail }, 502);
+      await finishUsage(usage.event_id,"error","TOPICS_SAVE_FAILED");return reply(request, { error: `O edital foi analisado, mas os tópicos não puderam ser salvos (${inserted.status}).`, detail }, 502);
     }
     const savedTopics = await inserted.json();
     if (!Array.isArray(savedTopics) || savedTopics.length === 0) {
-      return reply(request, { error: "O edital foi analisado, mas nenhum tópico foi confirmado no banco." }, 502);
+      await finishUsage(usage.event_id,"error","TOPICS_EMPTY");return reply(request, { error: "O edital foi analisado, mas nenhum tópico foi confirmado no banco." }, 502);
     }
     await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready" }) });
+    await finishUsage(usage.event_id, "success");
     return reply(request, { topics: uniqueTopics, saved: savedTopics.length, provider: "gemini", meta });
   } catch (error) {
     console.error("edital-gemini", error);
+    await finishUsage(usage?.event_id, "error", "PROCESSING_FAILED");
     return reply(request, { error: "Falha interna ao interpretar o edital." }, 500);
   } finally {
     await removeGeminiFile(geminiFileName);
