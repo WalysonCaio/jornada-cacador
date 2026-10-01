@@ -10,19 +10,34 @@ const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function generateStudyPackage(file: { uri: string; mimeType?: string }, title: string) {
+async function generateStudyPackage(file: { uri: string; mimeType?: string }, title: string, campaignContext: string) {
   const requestBody = {
     contents: [{ parts: [
       { file_data: { mime_type: file.mimeType ?? "application/pdf", file_uri: file.uri } },
-      { text: `Crie um pacote de estudo fiel exclusivamente a este PDF. Divida em até 12 assuntos. Para cada assunto produza: disciplina, título, aula escrita detalhada para iniciante, 5 a 10 pontos essenciais, exemplo explicado, bizu de prova, mnemônico útil, pegadinha frequente, 5 a 8 flashcards e 5 questões de múltipla escolha.
+      { text: `Crie um pacote de estudo fiel exclusivamente ao PDF anexado e alinhado ao edital da campanha abaixo. Divida em até 12 assuntos. Para cada assunto produza: disciplina, título, aula escrita detalhada para iniciante, 5 a 10 pontos essenciais, exemplo explicado, bizu de prova, mnemônico útil, pegadinha frequente, 5 a 8 flashcards e exatamente 5 questões de múltipla escolha.
 
-As questões devem avaliar compreensão e aplicação, não apenas memorização. Use enunciados claros, situações práticas quando o material permitir, quatro alternativas plausíveis e apenas uma correta. Inclua dificuldade (facil, medio ou dificil), tópico e uma explicação comentada que justifique a alternativa correta e, de forma breve, mostre o erro conceitual das demais. Não use alternativas obviamente absurdas, não repita o enunciado e não invente lei, artigo, dado ou conteúdo ausente. O arquivo se chama: ${title}.` },
+CONTEXTO DA CAMPANHA:
+${campaignContext || "Edital ainda não disponível; use somente o PDF."}
+
+PADRÃO OBRIGATÓRIO DAS QUESTÕES:
+1. Revise ortografia, concordância, pontuação e clareza em português brasileiro antes de responder.
+2. Para cada assunto gere exatamente: 1 questão fácil, 2 médias e 2 difíceis, nessa progressão pedagógica.
+3. Fácil: conceito direto com distratores plausíveis. Média: exige comparação, interpretação ou aplicação. Difícil: exige análise de caso, exceção, combinação de regras ou distinção conceitual sutil.
+4. Todas as quatro alternativas devem pertencer à mesma disciplina, ao mesmo assunto e ao mesmo contexto do enunciado. É proibido usar alternativas de temas alheios apenas para completar a questão.
+5. As alternativas devem possuir estrutura gramatical e extensão semelhantes. Evite pistas como uma alternativa muito mais detalhada, palavras absolutas usadas apenas nos erros ou três opções evidentemente absurdas.
+6. Deve existir uma única resposta inequivocamente correta segundo o PDF. Não invente lei, artigo, dado, jurisprudência ou exceção ausente.
+7. A explicação deve justificar a correta e comentar brevemente por que cada uma das outras está errada.
+8. Varie a posição da resposta correta entre A, B, C e D.
+9. Se o PDF trouxer questões oficiais, crie uma adaptação fiel e marque origin como adaptada_do_pdf. Caso contrário, crie questão autoral e marque origin como autoral. Nunca apresente uma questão autoral como oficial.
+10. Use o estilo de cobrança compatível com concursos policiais e com a banca indicada no próprio material, sem copiar questões externas nem alegar acesso a banco pago.
+
+O arquivo se chama: ${title}.` },
     ] }],
     generationConfig: {
       temperature: 0.2,
       responseMimeType: "application/json",
       responseSchema: { type: "OBJECT", properties: { summaries: { type: "ARRAY", items: { type: "OBJECT", properties: {
-        subject: { type: "STRING" }, title: { type: "STRING" }, explanation: { type: "STRING" }, points: { type: "ARRAY", items: { type: "STRING" } }, example: { type: "STRING" }, bizu: { type: "STRING" }, mnemonic: { type: "STRING" }, trap: { type: "STRING" }, flashcards: { type: "ARRAY", items: { type: "OBJECT", properties: { question: { type: "STRING" }, answer: { type: "STRING" } }, required: ["question", "answer"] } }, questions: { type: "ARRAY", items: { type: "OBJECT", properties: { statement: { type: "STRING" }, options: { type: "ARRAY", minItems: 4, maxItems: 4, items: { type: "STRING" } }, correct_index: { type: "INTEGER", minimum: 0, maximum: 3 }, explanation: { type: "STRING" }, difficulty: { type: "STRING", enum: ["facil", "medio", "dificil"] }, topic: { type: "STRING" } }, required: ["statement", "options", "correct_index", "explanation", "difficulty", "topic"] } }
+        subject: { type: "STRING" }, title: { type: "STRING" }, explanation: { type: "STRING" }, points: { type: "ARRAY", items: { type: "STRING" } }, example: { type: "STRING" }, bizu: { type: "STRING" }, mnemonic: { type: "STRING" }, trap: { type: "STRING" }, flashcards: { type: "ARRAY", items: { type: "OBJECT", properties: { question: { type: "STRING" }, answer: { type: "STRING" } }, required: ["question", "answer"] } }, questions: { type: "ARRAY", minItems: 5, maxItems: 5, items: { type: "OBJECT", properties: { statement: { type: "STRING" }, options: { type: "ARRAY", minItems: 4, maxItems: 4, items: { type: "STRING" } }, correct_index: { type: "INTEGER", minimum: 0, maximum: 3 }, explanation: { type: "STRING" }, difficulty: { type: "STRING", enum: ["facil", "medio", "dificil"] }, topic: { type: "STRING" }, origin: { type: "STRING", enum: ["autoral", "adaptada_do_pdf"] } }, required: ["statement", "options", "correct_index", "explanation", "difficulty", "topic", "origin"] } }
       }, required: ["subject", "title", "explanation", "points", "example", "bizu", "mnemonic", "trap", "flashcards", "questions"] } } }, required: ["summaries"] },
     },
   };
@@ -88,6 +103,36 @@ async function removeGeminiFile(name?: string) {
   }).catch(() => undefined);
 }
 
+function cleanGeneratedText(value: unknown, max = 4000) {
+  return String(value ?? "").normalize("NFKC").replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+function sanitizeQuestions(value: unknown, fallbackTopic: string) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const valid = [];
+  for (const raw of value) {
+    const statement = cleanGeneratedText(raw?.statement, 1200);
+    const options = Array.isArray(raw?.options) ? raw.options.map((option: unknown) => cleanGeneratedText(option, 600)) : [];
+    const normalizedOptions = options.map((option: string) => option.toLocaleLowerCase("pt-BR"));
+    const correctIndex = Number(raw?.correct_index);
+    const explanation = cleanGeneratedText(raw?.explanation, 3000);
+    const difficulty = ["facil", "medio", "dificil"].includes(raw?.difficulty) ? raw.difficulty : "medio";
+    const key = statement.toLocaleLowerCase("pt-BR");
+    if (statement.length < 20 || options.length !== 4 || options.some((option: string) => option.length < 2)) continue;
+    if (new Set(normalizedOptions).size !== 4 || !Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
+    if (explanation.length < 20 || seen.has(key)) continue;
+    seen.add(key);
+    valid.push({ statement, options, correct_index: correctIndex, explanation, difficulty, topic: cleanGeneratedText(raw?.topic || fallbackTopic, 300), origin: raw?.origin === "adaptada_do_pdf" ? "adaptada_do_pdf" : "autoral" });
+  }
+  const target = { facil: 1, medio: 2, dificil: 2 } as Record<string, number>;
+  const balanced = ["facil", "medio", "medio", "dificil", "dificil"].flatMap((difficulty) => {
+    const index = valid.findIndex((question) => question.difficulty === difficulty && target[difficulty]-- > 0);
+    return index >= 0 ? valid.splice(index, 1) : [];
+  });
+  return balanced.length === 5 ? balanced : [...balanced, ...valid].slice(0, 5);
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
   const auth = request.headers.get("authorization") ?? "";
@@ -99,6 +144,15 @@ Deno.serve(async (request) => {
   if (!path || !campaignId || !documentId) return response({ error: "Dados do documento incompletos." }, 400);
   if (!path.startsWith(`${user.id}/`)) return response({ error: "Documento de outra conta." }, 403);
   try {
+    const campaignResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_campaigns?id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&select=id,name,organization&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
+    const campaigns = campaignResponse.ok ? await campaignResponse.json() : [];
+    if (!Array.isArray(campaigns) || !campaigns[0]?.id) return response({ error: "Este portal não pertence à conta conectada." }, 403);
+    const documentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&storage_path=eq.${encodeURIComponent(path)}&select=id&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
+    const documents = documentResponse.ok ? await documentResponse.json() : [];
+    if (!Array.isArray(documents) || !documents[0]?.id) return response({ error: "O documento não pertence a este portal." }, 403);
+    const topicsResponse = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&select=subject,topic&order=edital_order.asc&limit=500`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
+    const editalTopics = topicsResponse.ok ? await topicsResponse.json() : [];
+    const campaignContext = [`Concurso: ${campaigns[0].name}`, campaigns[0].organization ? `Órgão: ${campaigns[0].organization}` : "", Array.isArray(editalTopics) && editalTopics.length ? `Conteúdo do edital: ${editalTopics.map((item: { subject?: string; topic?: string }) => `${item.subject}: ${item.topic}`).join("; ")}` : ""].filter(Boolean).join("\n").slice(0, 16000);
     const file = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${path}`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
     if (!file.ok) return response({ error: "Não foi possível abrir o PDF." }, 502);
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -106,13 +160,14 @@ Deno.serve(async (request) => {
     const geminiFile = await uploadPdfToGemini(bytes, title);
     let generated;
     try {
-      generated = await generateStudyPackage(geminiFile, title);
+      generated = await generateStudyPackage(geminiFile, title, campaignContext);
     } finally {
       await removeGeminiFile(geminiFile.name);
     }
     const aiData = generated.data;
     const parsed = JSON.parse(aiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
-    const summaries = Array.isArray(parsed.summaries) ? parsed.summaries : [];
+    const rawSummaries = Array.isArray(parsed.summaries) ? parsed.summaries : [];
+    const summaries = rawSummaries.map((content: Record<string, unknown>) => ({ ...content, subject: cleanGeneratedText(content.subject || "Conteúdo", 200), title: cleanGeneratedText(content.title || "Resumo", 300), questions: sanitizeQuestions(content.questions, cleanGeneratedText(content.title || "Assunto", 300)) })).filter((content: { title?: string }) => Boolean(content.title));
     if (!summaries.length) return response({ error: "Não encontrei conteúdo de estudo suficiente no PDF." }, 422);
     await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?source_document_id=eq.${documentId}`, { method: "DELETE", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
     const rows = summaries.map((content: Record<string, unknown>) => ({ campaign_id: campaignId, user_id: user.id, source_document_id: documentId, content_type: "summary", title: String(content.title ?? "Resumo"), content: { ...content, source: title }, source_refs: [{ document_id: documentId, title }] }));
