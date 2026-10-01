@@ -33,7 +33,7 @@ Deno.serve(async (request) => {
   const usage = usageResponse.ok ? await usageResponse.json() : [];
   return reply({
     ok: true,
-    version: "46",
+    version: "47",
     database: true,
     storage: true,
     gemini_configured: Boolean(Deno.env.get("GEMINI_API_KEY")),

@@ -23,6 +23,9 @@ for (const relative of publicFiles) {
 }
 
 const sw = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
-if (!sw.includes("jornada-cacador-v46")) throw new Error("O cache não aponta para a versão 46.");
+if (!sw.includes("jornada-cacador-v47")) throw new Error("O cache não aponta para a versão 47.");
+for (const required of ["rpc/sync_user_state", "_serverRevision", "_resetEpoch", "refreshFromServer", "STALE_RESET"]) {
+  if (!html.includes(required)) throw new Error(`Sincronização precisa incompleta: ${required}`);
+}
 
 console.log(`OK: ${scripts.length} script(s), ${ids.length} IDs únicos, nenhuma referência ausente e nenhum segredo público detectado.`);
