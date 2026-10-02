@@ -36,7 +36,9 @@ async function generateStudyPackage(file: { uri: string; mimeType?: string }, ti
   const requestBody = {
     contents: [{ parts: [
       { file_data: { mime_type: file.mimeType ?? "application/pdf", file_uri: file.uri } },
-      { text: `Crie um pacote de estudo fiel exclusivamente ao PDF anexado e alinhado ao edital da campanha abaixo. Divida em até 12 assuntos. Para cada assunto produza: disciplina, título, aula escrita detalhada para iniciante, 5 a 10 pontos essenciais, exemplo explicado, bizu de prova, mnemônico útil, pegadinha frequente, 5 a 8 flashcards e exatamente 5 questões de múltipla escolha.
+      { text: `Crie um pacote de estudo completo e fiel exclusivamente ao PDF anexado, alinhado ao edital da campanha abaixo. Antes de escrever, percorra o documento inteiro, do início ao fim, inclusive anexos, capítulos finais e páginas posteriores à página 50. Faça internamente um inventário de capítulos, seções e subtópicos. Depois produza de 1 a 24 assuntos, conforme a extensão real do documento: não pare nos primeiros capítulos e não reduza um PDF longo a poucos resumos genéricos.
+
+Para cada assunto produza: disciplina, título específico, aula escrita detalhada e autossuficiente para iniciante, 7 a 12 pontos essenciais, exemplo explicado passo a passo, bizu de prova, mnemônico útil, pegadinha frequente, 6 a 10 flashcards e exatamente 5 questões de múltipla escolha. A explicação deve desenvolver conceitos, regras, exceções e relações importantes; evite parágrafos curtos que apenas repetem o título. Quando o PDF for extenso, consolide apenas subtópicos diretamente relacionados, sem omitir capítulos independentes.
 
 CONTEXTO DA CAMPANHA:
 ${campaignContext || "Edital ainda não disponível; use somente o PDF."}
@@ -56,14 +58,22 @@ PADRÃO OBRIGATÓRIO DAS QUESTÕES:
 9. Se o PDF trouxer questões oficiais, crie uma adaptação fiel e marque origin como adaptada_do_pdf. Caso contrário, crie questão autoral e marque origin como autoral. Nunca apresente uma questão autoral como oficial.
 10. Use o estilo de cobrança compatível com concursos policiais e com a banca indicada no próprio material, sem copiar questões externas nem alegar acesso a banco pago.
 
+CONTROLE DE COBERTURA:
+1. Informe em coverage as páginas estimadas, a lista das principais seções detectadas e quais foram cobertas.
+2. sections_detected e sections_covered devem usar nomes comparáveis e refletir o documento inteiro.
+3. Registre em omissions qualquer seção que não pôde ser estudada, com o motivo real (por exemplo: página ilegível, somente imagem ou conteúdo truncado). Não omita silenciosamente.
+4. coverage_confidence deve variar de 0 a 1. Só use valor alto quando o início, o meio e o final do PDF tiverem sido considerados.
+5. Se alguma página estiver ilegível, informe isso; nunca complete lacunas por suposição.
+
 O arquivo se chama: ${title}.` },
     ] }],
     generationConfig: {
-      temperature: 0.2,
+      temperature: 0.15,
+      maxOutputTokens: 65536,
       responseMimeType: "application/json",
-      responseSchema: { type: "OBJECT", properties: { summaries: { type: "ARRAY", items: { type: "OBJECT", properties: {
+      responseSchema: { type: "OBJECT", properties: { coverage: { type: "OBJECT", properties: { estimated_pages: { type: "INTEGER" }, sections_detected: { type: "ARRAY", items: { type: "STRING" } }, sections_covered: { type: "ARRAY", items: { type: "STRING" } }, omissions: { type: "ARRAY", items: { type: "STRING" } }, coverage_confidence: { type: "NUMBER" } }, required: ["estimated_pages", "sections_detected", "sections_covered", "omissions", "coverage_confidence"] }, summaries: { type: "ARRAY", minItems: 1, maxItems: 24, items: { type: "OBJECT", properties: {
         subject: { type: "STRING" }, title: { type: "STRING" }, explanation: { type: "STRING" }, points: { type: "ARRAY", items: { type: "STRING" } }, example: { type: "STRING" }, bizu: { type: "STRING" }, mnemonic: { type: "STRING" }, trap: { type: "STRING" }, flashcards: { type: "ARRAY", items: { type: "OBJECT", properties: { question: { type: "STRING" }, answer: { type: "STRING" } }, required: ["question", "answer"] } }, questions: { type: "ARRAY", minItems: 5, maxItems: 5, items: { type: "OBJECT", properties: { statement: { type: "STRING" }, options: { type: "ARRAY", minItems: 4, maxItems: 4, items: { type: "STRING" } }, correct_index: { type: "INTEGER", minimum: 0, maximum: 3 }, explanation: { type: "STRING" }, difficulty: { type: "STRING", enum: ["facil", "medio", "dificil"] }, topic: { type: "STRING" }, origin: { type: "STRING", enum: ["autoral", "adaptada_do_pdf"] } }, required: ["statement", "options", "correct_index", "explanation", "difficulty", "topic", "origin"] } }
-      }, required: ["subject", "title", "explanation", "points", "example", "bizu", "mnemonic", "trap", "flashcards", "questions"] } } }, required: ["summaries"] },
+      }, required: ["subject", "title", "explanation", "points", "example", "bizu", "mnemonic", "trap", "flashcards", "questions"] } } }, required: ["coverage", "summaries"] },
     },
   };
 
@@ -90,7 +100,7 @@ O arquivo se chama: ${title}.` },
 }
 
 async function reviewGeneratedQuestions(summaries: unknown[], campaignContext: string) {
-  const compact = summaries.map((summary: any, summaryIndex) => ({ summary_index: summaryIndex, subject: summary?.subject, title: summary?.title, questions: summary?.questions })).slice(0, 12);
+  const compact = summaries.map((summary: any, summaryIndex) => ({ summary_index: summaryIndex, subject: summary?.subject, title: summary?.title, questions: summary?.questions })).slice(0, 24);
   const model = GEMINI_MODELS[0];
   const review = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST",
@@ -99,6 +109,7 @@ async function reviewGeneratedQuestions(summaries: unknown[], campaignContext: s
       contents: [{ parts: [{ text: `Atue como revisor independente de questões de concurso. Revise o conjunto JSON abaixo usando apenas as informações contidas nele e o contexto do edital. Corrija português, ambiguidade, gabarito incompatível com a explicação e alternativas óbvias ou de tema diferente. Mantenha exatamente quatro alternativas, uma única correta e a progressão 1 fácil, 2 médias e 2 difíceis por resumo. Se não for possível corrigir com segurança, remova a questão. Nunca transforme uma questão autoral em oficial.\n\nCONTEXTO:\n${campaignContext}\n\nQUESTÕES:\n${JSON.stringify(compact)}` }] }],
       generationConfig: {
         temperature: 0.05,
+        maxOutputTokens: 32768,
         responseMimeType: "application/json",
         responseSchema: { type: "OBJECT", properties: { reviews: { type: "ARRAY", items: { type: "OBJECT", properties: { summary_index: { type: "INTEGER" }, questions: { type: "ARRAY", items: { type: "OBJECT", properties: { statement: { type: "STRING" }, options: { type: "ARRAY", items: { type: "STRING" } }, correct_index: { type: "INTEGER" }, explanation: { type: "STRING" }, difficulty: { type: "STRING" }, topic: { type: "STRING" }, origin: { type: "STRING" } }, required: ["statement","options","correct_index","explanation","difficulty","topic","origin"] } } }, required: ["summary_index","questions"] } } }, required: ["reviews"] },
       },
@@ -214,6 +225,60 @@ function sanitizeQuestions(value: unknown, fallbackTopic: string) {
   return balanced.length === 5 ? balanced : [...balanced, ...valid].slice(0, 5);
 }
 
+function sanitizeStrings(value: unknown, maxItems: number, maxLength: number) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => cleanGeneratedText(item, maxLength)).filter(Boolean))].slice(0, maxItems);
+}
+
+function sanitizeSummary(value: any, knownSubjects: string[]) {
+  const title = cleanGeneratedText(value?.title || "Resumo", 300);
+  const flashcards = Array.isArray(value?.flashcards) ? value.flashcards.map((card: any) => ({
+    question: cleanGeneratedText(card?.question, 1000),
+    answer: cleanGeneratedText(card?.answer, 2400),
+  })).filter((card: { question: string; answer: string }) => card.question.length >= 8 && card.answer.length >= 8).slice(0, 10) : [];
+  return {
+    ...value,
+    subject: resolveSubject(value?.subject || "Conteúdo", knownSubjects),
+    title,
+    explanation: cleanGeneratedText(value?.explanation, 18000),
+    points: sanitizeStrings(value?.points, 15, 1200),
+    example: cleanGeneratedText(value?.example, 6000),
+    bizu: cleanGeneratedText(value?.bizu, 3000),
+    mnemonic: cleanGeneratedText(value?.mnemonic, 2000),
+    trap: cleanGeneratedText(value?.trap, 3000),
+    flashcards,
+    questions: sanitizeQuestions(value?.questions, title),
+  };
+}
+
+function coverageReport(value: any, summaries: any[]) {
+  const detected = sanitizeStrings(value?.sections_detected, 120, 500);
+  const covered = sanitizeStrings(value?.sections_covered, 120, 500);
+  const omissions = sanitizeStrings(value?.omissions, 50, 1000);
+  const confidence = Math.max(0, Math.min(1, Number(value?.coverage_confidence) || 0));
+  const coveredKeys = covered.map(subjectKey);
+  const matched = detected.filter((section) => { const key = subjectKey(section); return coveredKeys.some((coveredKey) => coveredKey === key || (key.length >= 8 && (coveredKey.includes(key) || key.includes(coveredKey)))); }).length;
+  const percent = detected.length ? Math.round((matched / detected.length) * 100) : Math.round(confidence * 100);
+  const shallow = summaries.filter((summary) => summary.explanation.length < 700 || summary.points.length < 5 || summary.flashcards.length < 5).length;
+  const warnings = [];
+  if (percent < 80) warnings.push(`Cobertura declarada de ${percent}% das seções detectadas.`);
+  if (confidence < 0.7) warnings.push("A IA informou baixa confiança na leitura integral do PDF.");
+  if (omissions.length) warnings.push(`${omissions.length} seção(ões) não puderam ser cobertas.`);
+  if (shallow) warnings.push(`${shallow} resumo(s) ficaram abaixo do nível mínimo de detalhamento.`);
+  return {
+    estimated_pages: Math.max(0, Math.floor(Number(value?.estimated_pages) || 0)),
+    sections_detected: detected,
+    sections_covered: covered,
+    omissions,
+    confidence,
+    percent,
+    summary_count: summaries.length,
+    shallow_summaries: shallow,
+    warnings,
+    needs_review: warnings.length > 0,
+  };
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
   const auth = request.headers.get("authorization") ?? "";
@@ -261,7 +326,10 @@ Deno.serve(async (request) => {
           await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ user_id: user.id, document_id: documentId, sha256: fingerprint, byte_size: bytes.byteLength }) });
           const cachedSubjects = existing.map((row: any) => cleanGeneratedText(row?.content?.subject || "", 200)).filter(Boolean);
           const cachedSubject = resolveSubject(cachedSubjects[0] || "Conteúdo geral", knownSubjects);
-          await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready", detected_subject: cachedSubject, metadata: { primary_subject: cachedSubject, subjects: [...new Set(cachedSubjects)], analyzed_at: new Date().toISOString(), reused_cache: true } }) });
+          const cachedDocumentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${cached[0].document_id}&select=metadata&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
+          const cachedDocuments = cachedDocumentResponse.ok ? await cachedDocumentResponse.json() : [];
+          const cachedCoverage = Array.isArray(cachedDocuments) ? cachedDocuments[0]?.metadata?.coverage : null;
+          await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready", detected_subject: cachedSubject, metadata: { primary_subject: cachedSubject, subjects: [...new Set(cachedSubjects)], analyzed_at: new Date().toISOString(), reused_cache: true, ...(cachedCoverage ? { coverage: cachedCoverage } : {}) } }) });
           await updateJob(documentId, { status: "completed", last_error: null });
           return response({ cached: true, provider: "cache", message: "Este PDF já havia sido analisado. O conteúdo foi reutilizado sem consumir nova cota." });
         }
@@ -282,22 +350,46 @@ Deno.serve(async (request) => {
       await removeGeminiFile(geminiFile.name);
     }
     const aiData = generated.data;
-    const parsed = JSON.parse(aiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
+    const finishReason = String(aiData?.candidates?.[0]?.finishReason || "");
+    let parsed: any;
+    try { parsed = JSON.parse(aiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}"); }
+    catch {
+      const error = new Error(finishReason === "MAX_TOKENS" ? "O PDF produziu conteúdo maior que o limite de saída. Reprocesse o arquivo ou divida-o por capítulos para preservar a cobertura." : "A IA devolveu uma análise incompleta e ela não foi salva.");
+      (error as { userMessage?: string }).userMessage = error.message;
+      throw error;
+    }
     const generatedSummaries = Array.isArray(parsed.summaries) ? parsed.summaries : [];
     const rawSummaries = await reviewGeneratedQuestions(generatedSummaries, campaignContext);
-    const summaries = rawSummaries.map((content: Record<string, unknown>) => ({ ...content, subject: resolveSubject(content.subject || "Conteúdo", knownSubjects), title: cleanGeneratedText(content.title || "Resumo", 300), questions: sanitizeQuestions(content.questions, cleanGeneratedText(content.title || "Assunto", 300)) })).filter((content: { title?: string }) => Boolean(content.title));
+    const summaries = rawSummaries.map((content: Record<string, unknown>) => sanitizeSummary(content, knownSubjects)).filter((content: { title?: string; explanation?: string }) => Boolean(content.title && content.explanation));
     if (!summaries.length) { await finishUsage(usage.event_id,"error",undefined,undefined,"INSUFFICIENT_CONTENT");await updateJob(documentId,{status:"failed",last_error:"INSUFFICIENT_CONTENT"});return response({ error: "Não encontrei conteúdo de estudo suficiente no PDF." }, 422); }
-    await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?source_document_id=eq.${documentId}`, { method: "DELETE", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
+    const coverage = coverageReport(parsed?.coverage, summaries);
+    const grosslyIncomplete = (coverage.sections_detected.length >= 3 && coverage.percent < 50) || coverage.confidence < 0.35 || coverage.shallow_summaries > Math.ceil(summaries.length / 2);
+    if (grosslyIncomplete) {
+      await finishUsage(usage.event_id, "error", "gemini", generated.model, "LOW_COVERAGE");
+      await updateJob(documentId, { status: "failed", last_error: "LOW_COVERAGE" });
+      return response({ error: "A análise não atingiu a cobertura mínima de segurança e não substituiu nenhum conteúdo anterior. Tente novamente; se o PDF for digitalizado, gere uma versão com OCR ou divida-o por capítulos.", coverage }, 422);
+    }
     const rows = summaries.map((content: Record<string, unknown>) => ({ campaign_id: campaignId, user_id: user.id, source_document_id: documentId, content_type: "summary", title: String(content.title ?? "Resumo"), content: { ...content, source: title }, source_refs: [{ document_id: documentId, title }] }));
-    const saved = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify(rows) });
+    const saved = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(rows) });
     if (!saved.ok) { console.error("Database", saved.status, await saved.text());await finishUsage(usage.event_id,"error",undefined,undefined,"CONTENT_SAVE_FAILED");await updateJob(documentId,{status:"retry",last_error:"CONTENT_SAVE_FAILED"});return response({ error: "O conteúdo foi criado, mas não pôde ser salvo." }, 502); }
+    const savedRows = await saved.json().catch(() => []);
+    const newIds = Array.isArray(savedRows) ? savedRows.map((row: { id?: string }) => row.id).filter(Boolean) : [];
+    if (newIds.length) {
+      const cleanup = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?source_document_id=eq.${documentId}&id=not.in.(${newIds.join(",")})`, { method: "DELETE", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
+      if (!cleanup.ok) {
+        await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?id=in.(${newIds.join(",")})`, { method: "DELETE", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
+        await finishUsage(usage.event_id, "error", undefined, undefined, "CONTENT_REPLACE_FAILED");
+        await updateJob(documentId, { status: "retry", last_error: "CONTENT_REPLACE_FAILED" });
+        return response({ error: "A nova análise ficou pronta, mas não foi possível substituir a versão anterior com segurança. O conteúdo anterior foi preservado." }, 502);
+      }
+    }
     const subjectCounts = summaries.reduce((counts: Record<string, number>, item: Record<string, unknown>) => { const subject = cleanGeneratedText(item.subject || "Conteúdo", 200);counts[subject] = (counts[subject] || 0) + 1;return counts; }, {});
     const detectedSubject = Object.entries(subjectCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "Conteúdo geral";
-    await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready", detected_subject: detectedSubject, metadata: { primary_subject: detectedSubject, subjects: Object.keys(subjectCounts), analyzed_at: new Date().toISOString() } }) });
+    await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready", detected_subject: detectedSubject, metadata: { primary_subject: detectedSubject, subjects: Object.keys(subjectCounts), analyzed_at: new Date().toISOString(), coverage } }) });
     await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ user_id: user.id, document_id: documentId, sha256: fingerprint, byte_size: bytes.byteLength }) });
     await finishUsage(usage.event_id, "success", "gemini", generated.model);
     await updateJob(documentId, { status: "completed", last_error: null });
-    return response({ summaries: summaries.length, flashcards: summaries.reduce((n: number, x: { flashcards?: unknown[] }) => n + (x.flashcards?.length ?? 0), 0), questions: summaries.reduce((n: number, x: { questions?: unknown[] }) => n + (x.questions?.length ?? 0), 0), provider: "gemini", model: generated.model });
+    return response({ summaries: summaries.length, flashcards: summaries.reduce((n: number, x: { flashcards?: unknown[] }) => n + (x.flashcards?.length ?? 0), 0), questions: summaries.reduce((n: number, x: { questions?: unknown[] }) => n + (x.questions?.length ?? 0), 0), coverage, provider: "gemini", model: generated.model });
   } catch (error) {
     console.error("material-gemini", error);
     await finishUsage(usage?.event_id, "error", undefined, undefined, (error as { retryable?: boolean })?.retryable ? "PROVIDER_UNAVAILABLE" : "PROCESSING_FAILED");
@@ -306,6 +398,6 @@ Deno.serve(async (request) => {
       await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "pending" }) });
       return response({ error: "As IAs estão com alta demanda agora. O PDF foi salvo e continua aguardando análise. Tente novamente em alguns minutos.", retryable: true }, 503);
     }
-    return response({ error: "Falha interna ao gerar o conteúdo do PDF." }, 500);
+    return response({ error: (error as { userMessage?: string })?.userMessage || "Falha interna ao gerar o conteúdo do PDF." }, 500);
   }
 });
