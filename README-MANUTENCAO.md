@@ -238,3 +238,11 @@ Esta versão altera somente os arquivos públicos. Depois de enviar `dist/index.
 - Registrar ou excluir estudo externo recalcula a ofensiva antes de salvar.
 - Conclusões e tempo externo solicitam sincronização imediata com o Supabase, mantendo a sincronização agendada como segurança.
 - Dados já inseridos na versão 49 são reaproveitados; ao carregar a versão 50, os 90 minutos e a missão já registrados são recalculados automaticamente.
+
+## Versão 51 — mesclagem de conflitos entre aparelhos
+
+- Um conflito de revisão não substitui mais imediatamente os dados locais.
+- Missões concluídas, Histórico diário, tempo estudado e registros externos são mesclados com o estado do servidor.
+- Depois da mesclagem, o aplicativo tenta publicar novamente usando a revisão mais recente.
+- Redefinições deliberadas continuam tendo prioridade e não são desfeitas por aparelhos antigos.
+- O total diário é reparado a partir dos registros externos existentes antes do cálculo da ofensiva.
