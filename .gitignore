@@ -1,6 +1,6 @@
-.gradle/
-.idea/
-local.properties
-**/build/
-*.jks
-release/
+desktop/node_modules/
+desktop/release/
+*.log
+.env
+.env.*
+!.env.example

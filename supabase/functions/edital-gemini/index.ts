@@ -130,11 +130,12 @@ REGRAS OBRIGATÓRIAS:
 3. subject deve ser o nome da disciplina conforme o edital, apenas corrigindo espaços, caixa e erros óbvios de OCR.
 4. unit representa bloco, unidade ou seção intermediária quando existir. Não invente unidade.
 5. topic deve ser um item de estudo atômico e fiel. Separe enumerações apenas quando o próprio edital apresentar conteúdos distintos; preserve artigos, leis, decretos, intervalos e qualificadores.
-6. Não transforme título de disciplina em tópico. Não crie exemplos, explicações, pré-requisitos ou subassuntos implícitos.
+6. Não transforme título de disciplina em tópico e não crie subassuntos ausentes.
 7. Ignore inscrições, vagas, cotas, salários, datas, etapas, TAF, exames médicos, recursos, documentação e demais regras administrativas, salvo quando fizerem parte expressa de uma disciplina cobrada.
-8. Preserve a ordem original do edital e não duplique o mesmo tópico dentro da mesma disciplina.
+8. Preserve em edital_order a ordem original, mas organize learning_order como um professor planejando um currículo: fundamentos e pré-requisitos antes de aplicações e conteúdos avançados. Dentro de cada disciplina, cada etapa deve preparar a próxima.
 9. Não use conhecimento externo e não complete texto truncado por suposição.
-10. Em meta, informe detected_scope, confidence de 0 a 1 e warnings objetivos.
+10. subject_order define a rotação das disciplinas; learning_order começa em 0 dentro de cada disciplina; difficulty é basic, intermediate ou advanced; prerequisite_topic deve conter o título exato de outro tópico retornado na mesma disciplina, ou string vazia; pedagogical_reason explica brevemente por que aquela posição facilita a aprendizagem.
+11. Em meta, informe detected_scope, confidence de 0 a 1 e warnings objetivos.
 
 Retorne somente o JSON solicitado.` },
         ] }],
@@ -142,7 +143,7 @@ Retorne somente o JSON solicitado.` },
           temperature: 0.1, responseMimeType: "application/json",
           responseSchema: { type: "OBJECT", properties: {
             meta: { type: "OBJECT", properties: { detected_scope: { type: "STRING" }, confidence: { type: "NUMBER" }, warnings: { type: "ARRAY", items: { type: "STRING" } } }, required: ["detected_scope", "confidence", "warnings"] },
-            topics: { type: "ARRAY", items: { type: "OBJECT", properties: { subject: { type: "STRING" }, unit: { type: "STRING" }, topic: { type: "STRING" } }, required: ["subject", "topic"] } }
+            topics: { type: "ARRAY", items: { type: "OBJECT", properties: { subject: { type: "STRING" }, unit: { type: "STRING" }, topic: { type: "STRING" }, subject_order: { type: "INTEGER" }, learning_order: { type: "INTEGER" }, difficulty: { type: "STRING", enum: ["basic", "intermediate", "advanced"] }, prerequisite_topic: { type: "STRING" }, pedagogical_reason: { type: "STRING" } }, required: ["subject", "topic", "subject_order", "learning_order", "difficulty", "prerequisite_topic", "pedagogical_reason"] } }
           }, required: ["meta", "topics"] },
         },
       }),
@@ -158,7 +159,7 @@ Retorne somente o JSON solicitado.` },
       warnings: Array.isArray(parsed?.meta?.warnings) ? parsed.meta.warnings.map((warning: unknown) => String(warning).trim()).filter(Boolean).slice(0, 10) : [],
     };
     const topics = Array.isArray(parsed.topics) ? parsed.topics.slice(0, 1500) : [];
-    const uniqueTopics: Array<{ subject: string; unit: string; topic: string }> = [];
+    const uniqueTopics: Array<{ subject: string; unit: string; topic: string; edital_order: number; subject_order: number; learning_order: number; difficulty: string; prerequisite_topic: string; pedagogical_reason: string }> = [];
     const seenTopics = new Set<string>();
     const normalizeKey = (value: unknown) => String(value ?? "")
       .normalize("NFKC")
@@ -168,7 +169,7 @@ Retorne somente o JSON solicitado.` },
     const normalizeSearch = (value: unknown) => normalizeKey(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const administrativeOnly = /^(inscri(c|ç)(a|ã)o|cronograma|remunera(c|ç)(a|ã)o|vagas?|isen(c|ç)(a|ã)o|taxa de inscri(c|ç)(a|ã)o|resultado|recursos?|exame m[eé]dico|teste de aptid(a|ã)o f[ií]sica|investiga(c|ç)(a|ã)o social|documentos?|matr[ií]cula|curso de forma(c|ç)(a|ã)o)$/i;
 
-    for (const item of topics) {
+    for (const [originalIndex, item] of topics.entries()) {
       const subject = String(item?.subject ?? "Edital").replace(/\s+/g, " ").trim() || "Edital";
       const unit = String(item?.unit ?? "").replace(/\s+/g, " ").trim();
       const topic = String(item?.topic ?? "").replace(/\s+/g, " ").trim();
@@ -181,7 +182,8 @@ Retorne somente o JSON solicitado.` },
       const key = `${normalizeKey(subject)}\u0000${normalizeKey(topic)}`;
       if (seenTopics.has(key)) continue;
       seenTopics.add(key);
-      uniqueTopics.push({ subject, unit, topic });
+      const difficulty = ["basic", "intermediate", "advanced"].includes(String(item?.difficulty)) ? String(item.difficulty) : "basic";
+      uniqueTopics.push({ subject, unit, topic, edital_order: originalIndex, subject_order: Math.max(0, Number(item?.subject_order)||0), learning_order: Math.max(0, Number(item?.learning_order)||0), difficulty, prerequisite_topic: String(item?.prerequisite_topic??"").trim(), pedagogical_reason: String(item?.pedagogical_reason??"").trim().slice(0,500) });
     }
     if (uniqueTopics.length < 3) { await finishUsage(usage.event_id,"error","INSUFFICIENT_TOPICS");return reply(request, { error: "A análise não encontrou conteúdo programático suficiente com segurança. Confira se o PDF contém as disciplinas e se o nome do portal corresponde ao cargo." }, 422); }
     if (meta.confidence < 0.65) meta.warnings.unshift("A IA indicou baixa confiança na identificação do cargo ou do conteúdo programático. Revise o mapa antes de iniciar as missões.");
@@ -191,7 +193,7 @@ Retorne somente o JSON solicitado.` },
       console.error("campaign_topics delete", cleared.status, await cleared.text());
       await finishUsage(usage.event_id,"error","MAP_CLEAR_FAILED");return reply(request, { error: "Não foi possível preparar o mapa anterior para a nova análise." }, 502);
     }
-    const rows = uniqueTopics.map((item, index: number) => ({ campaign_id: campaignId, user_id: user.id, subject: item.subject, unit_name: item.unit, topic: item.topic, edital_order: index }));
+    const rows = uniqueTopics.map((item) => ({ campaign_id: campaignId, user_id: user.id, subject: item.subject, unit_name: item.unit, topic: item.topic, edital_order: item.edital_order, subject_order: item.subject_order, learning_order: item.learning_order, difficulty: item.difficulty, prerequisite_topic: item.prerequisite_topic || null, pedagogical_reason: item.pedagogical_reason || null }));
     const inserted = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics`, { method: "POST", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(rows) });
     if (!inserted.ok) {
       const detail = await inserted.text();

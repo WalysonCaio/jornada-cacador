@@ -189,3 +189,32 @@ node scripts/validate-project.mjs
 ```
 
 O resultado esperado começa com `OK:`. Esse teste não substitui o teste autenticado no ambiente de produção, mas detecta erros de sintaxe, IDs duplicados, referências ausentes, versão incorreta do cache e secrets colocados por engano nos arquivos públicos.
+
+## Versão 48 — currículo e foco multiaparelho
+
+Esta versão acrescenta:
+
+- retomada do cronômetro pausado em outro aparelho;
+- recuperação automática de sessão de foco abandonada após 90 segundos sem heartbeat;
+- confirmação para transferir uma sessão realmente ativa;
+- ordem pedagógica gerada a partir do edital, com fundamentos, pré-requisitos e dificuldade;
+- desbloqueio sequencial dos tópicos dentro de cada disciplina;
+- rotação diária determinística entre disciplinas, sem escolha aleatória;
+- caderno de erros conectado às revisões e classificado por urgência;
+- página **Sobre o projeto**, com propósito e autoria.
+
+### Publicação obrigatória da versão 48
+
+1. No Supabase, abra **SQL Editor > New query**.
+2. Cole todo o conteúdo de `supabase/migrations/20261002_pedagogical_focus_sync.sql` e clique em **Run**.
+3. No terminal aberto na raiz do projeto, publique a função que analisa o edital:
+
+```powershell
+supabase functions deploy edital-gemini
+```
+
+4. Envie ao GitHub pelo menos `dist/index.html`, `dist/sw.js`, `README.md`, a função e a nova migração.
+5. Aguarde o Cloudflare concluir a publicação e abra o site com `Ctrl + F5`.
+6. Reanalise o edital uma vez para que os tópicos antigos recebam a nova ordem pedagógica.
+
+O progresso é reconciliado pelo nome da disciplina e do tópico. Assim, a reanálise preserva as conclusões correspondentes, mas tópicos renomeados ou removidos pelo novo edital não são considerados equivalentes automaticamente.

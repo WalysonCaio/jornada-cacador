@@ -23,8 +23,8 @@ for (const relative of publicFiles) {
 }
 
 const sw = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
-if (!sw.includes("jornada-cacador-v47")) throw new Error("O cache não aponta para a versão 47.");
-for (const required of ["rpc/sync_user_state", "_serverRevision", "_resetEpoch", "refreshFromServer", "STALE_RESET"]) {
+if (!sw.includes("jornada-cacador-v48")) throw new Error("O cache não aponta para a versão 48.");
+for (const required of ["rpc/sync_user_state", "rpc/claim_focus_session", "rpc/update_focus_session", "_serverRevision", "_resetEpoch", "refreshFromServer", "STALE_RESET", "subjectOrder", "learningOrder", "errorUrgency", "menuAbout"]) {
   if (!html.includes(required)) throw new Error(`Sincronização precisa incompleta: ${required}`);
 }
 
