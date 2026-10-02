@@ -218,3 +218,15 @@ supabase functions deploy edital-gemini
 6. Reanalise o edital uma vez para que os tópicos antigos recebam a nova ordem pedagógica.
 
 O progresso é reconciliado pelo nome da disciplina e do tópico. Assim, a reanálise preserva as conclusões correspondentes, mas tópicos renomeados ou removidos pelo novo edital não são considerados equivalentes automaticamente.
+
+## Versão 49 — ofensiva qualificada e estudo externo
+
+- Um dia só entra na ofensiva quando possui **50 minutos estudados e pelo menos uma missão concluída**.
+- O tempo pode vir do cronômetro, de registros externos ou da soma dos dois.
+- O botão **Registrar estudo fora do aplicativo**, abaixo do cronômetro, aceita data, minutos e descrição opcional.
+- Registros externos entram automaticamente nas metas diária e semanal.
+- Cada registro pode ser excluído; ao excluir, o tempo é descontado e a ofensiva é recalculada.
+- Os registros fazem parte do estado sincronizado da conta e aparecem nos demais aparelhos.
+- Redefinir o portal ou apagar todo o progresso também remove os registros externos e recalcula a ofensiva.
+
+Esta versão altera somente os arquivos públicos. Depois de enviar `dist/index.html` e `dist/sw.js` ao GitHub, aguarde o Cloudflare e use `Ctrl + F5`. Não há uma nova migração SQL nem Edge Function específica para a versão 49.
