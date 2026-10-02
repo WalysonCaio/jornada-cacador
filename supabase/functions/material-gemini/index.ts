@@ -44,6 +44,7 @@ ${campaignContext || "Edital ainda não disponível; use somente o PDF."}
 TIPO DO DOCUMENTO: ${documentType}. ${["prova", "simulado"].includes(documentType) ? "Extraia e classifique as questões existentes no PDF por disciplina, tópico, banca e ano quando esses dados estiverem expressos. Preserve o sentido e marque como adaptada_do_pdf; não invente identificação oficial." : "Produza conteúdo didático e questões de fixação com base no material."}
 
 PADRÃO OBRIGATÓRIO DAS QUESTÕES:
+0. No campo subject, reutilize exatamente o nome da disciplina presente no conteúdo do edital quando houver correspondência. Materiais diferentes da mesma disciplina devem continuar a trilha existente; não crie variações por caixa, acento, numeração, módulo, volume ou abreviação.
 1. Revise ortografia, concordância, pontuação e clareza em português brasileiro antes de responder.
 2. Para cada assunto gere exatamente: 1 questão fácil, 2 médias e 2 difíceis, nessa progressão pedagógica.
 3. Fácil: conceito direto com distratores plausíveis. Média: exige comparação, interpretação ou aplicação. Difícil: exige análise de caso, exceção, combinação de regras ou distinção conceitual sutil.
@@ -154,6 +155,39 @@ function cleanGeneratedText(value: unknown, max = 4000) {
   return String(value ?? "").normalize("NFKC").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
+function subjectKey(value: unknown) {
+  return cleanGeneratedText(value, 200).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").replace(/\b(disciplina|materia|conteudo|modulo|parte)\b/g, " ").replace(/\b(i{1,3}|iv|v|[1-9])\b$/, " ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+
+function preferredSubject(value: unknown) {
+  const raw = cleanGeneratedText(value || "Conteúdo geral", 200);
+  const key = subjectKey(raw);
+  const aliases: Array<[RegExp, string]> = [
+    [/^(lingua )?portugues(a)?$/, "Língua Portuguesa"],
+    [/^direito constitucional/, "Direito Constitucional"],
+    [/^direito administrativo/, "Direito Administrativo"],
+    [/^direito processual penal/, "Direito Processual Penal"],
+    [/^direito penal/, "Direito Penal"],
+    [/^(raciocinio logico( matematico)?|matematica e rlm|rlm)$/, "Raciocínio Lógico-Matemático"],
+    [/^(informatica|nocao de informatica|nocoes de informatica)$/, "Informática"],
+    [/^historia de pernambuco/, "História de Pernambuco"],
+    [/^(direitos humanos|direito humano)/, "Direitos Humanos"],
+  ];
+  return aliases.find(([pattern]) => pattern.test(key))?.[1] ?? raw;
+}
+
+function resolveSubject(value: unknown, knownSubjects: string[]) {
+  const preferred = preferredSubject(value);
+  const key = subjectKey(preferred);
+  const exact = knownSubjects.find((subject) => subjectKey(subject) === key);
+  if (exact) return preferredSubject(exact);
+  const close = knownSubjects.find((subject) => {
+    const known = subjectKey(subject);
+    return key.length >= 8 && known.length >= 8 && (known.includes(key) || key.includes(known));
+  });
+  return close ? preferredSubject(close) : preferred;
+}
+
 function sanitizeQuestions(value: unknown, fallbackTopic: string) {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
@@ -200,6 +234,12 @@ Deno.serve(async (request) => {
     if (!Array.isArray(documents) || !documents[0]?.id) return response({ error: "O documento não pertence a este portal." }, 403);
     const topicsResponse = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&select=subject,topic&order=edital_order.asc&limit=500`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
     const editalTopics = topicsResponse.ok ? await topicsResponse.json() : [];
+    const knownResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&processing_status=eq.ready&detected_subject=not.is.null&select=detected_subject&limit=500`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
+    const knownDocuments = knownResponse.ok ? await knownResponse.json() : [];
+    const knownSubjects = [...new Set([
+      ...(Array.isArray(editalTopics) ? editalTopics.map((item: { subject?: string }) => cleanGeneratedText(item.subject, 200)) : []),
+      ...(Array.isArray(knownDocuments) ? knownDocuments.map((item: { detected_subject?: string }) => cleanGeneratedText(item.detected_subject, 200)) : []),
+    ].filter(Boolean).map(preferredSubject))];
     const campaignContext = [`Concurso: ${campaigns[0].name}`, campaigns[0].organization ? `Órgão: ${campaigns[0].organization}` : "", Array.isArray(editalTopics) && editalTopics.length ? `Conteúdo do edital: ${editalTopics.map((item: { subject?: string; topic?: string }) => `${item.subject}: ${item.topic}`).join("; ")}` : ""].filter(Boolean).join("\n").slice(0, 16000);
     const documentType = String(documents[0].document_type || "material");
     const operation = ["prova", "simulado"].includes(documentType) ? "exam" : "material";
@@ -220,7 +260,7 @@ Deno.serve(async (request) => {
         if (copied.ok) {
           await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ user_id: user.id, document_id: documentId, sha256: fingerprint, byte_size: bytes.byteLength }) });
           const cachedSubjects = existing.map((row: any) => cleanGeneratedText(row?.content?.subject || "", 200)).filter(Boolean);
-          const cachedSubject = cachedSubjects[0] || "Conteúdo geral";
+          const cachedSubject = resolveSubject(cachedSubjects[0] || "Conteúdo geral", knownSubjects);
           await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready", detected_subject: cachedSubject, metadata: { primary_subject: cachedSubject, subjects: [...new Set(cachedSubjects)], analyzed_at: new Date().toISOString(), reused_cache: true } }) });
           await updateJob(documentId, { status: "completed", last_error: null });
           return response({ cached: true, provider: "cache", message: "Este PDF já havia sido analisado. O conteúdo foi reutilizado sem consumir nova cota." });
@@ -245,7 +285,7 @@ Deno.serve(async (request) => {
     const parsed = JSON.parse(aiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
     const generatedSummaries = Array.isArray(parsed.summaries) ? parsed.summaries : [];
     const rawSummaries = await reviewGeneratedQuestions(generatedSummaries, campaignContext);
-    const summaries = rawSummaries.map((content: Record<string, unknown>) => ({ ...content, subject: cleanGeneratedText(content.subject || "Conteúdo", 200), title: cleanGeneratedText(content.title || "Resumo", 300), questions: sanitizeQuestions(content.questions, cleanGeneratedText(content.title || "Assunto", 300)) })).filter((content: { title?: string }) => Boolean(content.title));
+    const summaries = rawSummaries.map((content: Record<string, unknown>) => ({ ...content, subject: resolveSubject(content.subject || "Conteúdo", knownSubjects), title: cleanGeneratedText(content.title || "Resumo", 300), questions: sanitizeQuestions(content.questions, cleanGeneratedText(content.title || "Assunto", 300)) })).filter((content: { title?: string }) => Boolean(content.title));
     if (!summaries.length) { await finishUsage(usage.event_id,"error",undefined,undefined,"INSUFFICIENT_CONTENT");await updateJob(documentId,{status:"failed",last_error:"INSUFFICIENT_CONTENT"});return response({ error: "Não encontrei conteúdo de estudo suficiente no PDF." }, 422); }
     await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?source_document_id=eq.${documentId}`, { method: "DELETE", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
     const rows = summaries.map((content: Record<string, unknown>) => ({ campaign_id: campaignId, user_id: user.id, source_document_id: documentId, content_type: "summary", title: String(content.title ?? "Resumo"), content: { ...content, source: title }, source_refs: [{ document_id: documentId, title }] }));
