@@ -47,9 +47,9 @@ begin
   if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
   perform pg_advisory_xact_lock(hashtext(v_uid::text));
 
-  select * into v_running from public.focus_sessions
-  where user_id = v_uid and status = 'running'
-  order by updated_at desc limit 1 for update;
+  select fs.* into v_running from public.focus_sessions as fs
+  where fs.user_id = v_uid and fs.status = 'running'
+  order by fs.updated_at desc limit 1 for update;
 
   if v_running.id is not null then
     if v_running.device_id = p_device_id
@@ -69,10 +69,10 @@ begin
     return;
   end if;
 
-  select * into v_paused from public.focus_sessions
-  where user_id = v_uid and status = 'paused' and remaining_seconds > 0
-    and started_at::date = current_date
-  order by updated_at desc limit 1 for update;
+  select fs.* into v_paused from public.focus_sessions as fs
+  where fs.user_id = v_uid and fs.status = 'paused' and fs.remaining_seconds > 0
+    and fs.started_at::date = current_date
+  order by fs.updated_at desc limit 1 for update;
 
   if v_paused.id is not null then
     update public.focus_sessions set

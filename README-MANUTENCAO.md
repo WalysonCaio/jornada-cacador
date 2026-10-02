@@ -246,3 +246,11 @@ Esta versão altera somente os arquivos públicos. Depois de enviar `dist/index.
 - Depois da mesclagem, o aplicativo tenta publicar novamente usando a revisão mais recente.
 - Redefinições deliberadas continuam tendo prioridade e não são desfeitas por aparelhos antigos.
 - O total diário é reparado a partir dos registros externos existentes antes do cálculo da ofensiva.
+
+## Correção SQL v52 — cronômetro
+
+Se o cronômetro mostrar `column reference "remaining_seconds" is ambiguous`, execute no **Supabase > SQL Editor** todo o arquivo:
+
+`supabase/migrations/20261002_fix_focus_remaining_seconds.sql`
+
+O erro ocorre porque `remaining_seconds` é simultaneamente o nome da coluna e do campo retornado pela função PostgreSQL. A correção usa o alias explícito `fs.remaining_seconds`. Não é necessário publicar Edge Function nem alterar Secrets.
