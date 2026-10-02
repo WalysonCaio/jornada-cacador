@@ -57,6 +57,21 @@ Deno.serve(async (request) => {
       }
     }
 
+    const essaysResponse = await fetch(
+      `${SUPABASE_URL}/rest/v1/essay_submissions?user_id=eq.${user.id}&select=storage_path`,
+      { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } },
+    );
+    if (essaysResponse.ok) {
+      const essays = await essaysResponse.json();
+      for (const essay of essays) {
+        if (!essay.storage_path) continue;
+        await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${essay.storage_path}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY },
+        });
+      }
+    }
+
     const deleteResponse = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user.id}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY },
