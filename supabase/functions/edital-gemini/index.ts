@@ -99,8 +99,13 @@ Deno.serve(async (request) => {
     const campaignResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_campaigns?id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&select=id,name&limit=1`, { headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
     const campaigns = campaignResponse.ok ? await campaignResponse.json() : [];
     if (!Array.isArray(campaigns) || !campaigns[0]?.id) return reply(request, { error: "Este portal não pertence à conta conectada." }, 403);
+    const documentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&select=id,document_type,storage_path&limit=1`, { headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
+    const documents = documentResponse.ok ? await documentResponse.json() : [];
+    const document = Array.isArray(documents) ? documents[0] : null;
+    if (!document || document.document_type !== "edital" || document.storage_path !== storagePath) return reply(request, { error: "O arquivo não está registrado como edital deste portal." }, 422);
     usage = await reserveUsage(user.id, campaignId);
     if (!usage.allowed) {
+      await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "pending" }) }).catch(()=>undefined);
       if (usage.reason === "DAILY_LIMIT") return reply(request, { error: `Você atingiu o limite diário de ${usage.limit || 5} análises. O edital está salvo e poderá ser processado após a renovação da cota.`, retryable: true, code: "DAILY_LIMIT" }, 429);
       if (usage.reason === "BUSY") return reply(request, { error: "Já existe um PDF sendo analisado. Este edital continuará aguardando na fila.", retryable: true, queued: true, code: "BUSY" }, 409);
       return reply(request, { error: "A proteção de consumo está temporariamente indisponível.", retryable: true }, 503);
@@ -135,14 +140,15 @@ REGRAS OBRIGATÓRIAS:
 8. Preserve em edital_order a ordem original, mas organize learning_order como um professor planejando um currículo: fundamentos e pré-requisitos antes de aplicações e conteúdos avançados. Dentro de cada disciplina, cada etapa deve preparar a próxima.
 9. Não use conhecimento externo e não complete texto truncado por suposição.
 10. subject_order define a rotação das disciplinas; learning_order começa em 0 dentro de cada disciplina; difficulty é basic, intermediate ou advanced; prerequisite_topic deve conter o título exato de outro tópico retornado na mesma disciplina, ou string vazia; pedagogical_reason explica brevemente por que aquela posição facilita a aprendizagem.
-11. Em meta, informe detected_scope, confidence de 0 a 1 e warnings objetivos.
+11. Antes de extrair, classifique document_kind como edital_concurso, material_estudo ou outro. Um edital verdadeiro costuma conter identificação do certame/cargo e regras/seções formais; uma apostila, livro, resumo, lei isolada ou aula é material_estudo. Explique brevemente em classification_reason.
+12. Em meta, informe detected_scope, confidence de 0 a 1 e warnings objetivos.
 
 Retorne somente o JSON solicitado.` },
         ] }],
         generationConfig: {
           temperature: 0.1, responseMimeType: "application/json",
           responseSchema: { type: "OBJECT", properties: {
-            meta: { type: "OBJECT", properties: { detected_scope: { type: "STRING" }, confidence: { type: "NUMBER" }, warnings: { type: "ARRAY", items: { type: "STRING" } } }, required: ["detected_scope", "confidence", "warnings"] },
+            meta: { type: "OBJECT", properties: { document_kind: { type: "STRING", enum: ["edital_concurso", "material_estudo", "outro"] }, classification_reason: { type: "STRING" }, detected_scope: { type: "STRING" }, confidence: { type: "NUMBER" }, warnings: { type: "ARRAY", items: { type: "STRING" } } }, required: ["document_kind", "classification_reason", "detected_scope", "confidence", "warnings"] },
             topics: { type: "ARRAY", items: { type: "OBJECT", properties: { subject: { type: "STRING" }, unit: { type: "STRING" }, topic: { type: "STRING" }, subject_order: { type: "INTEGER" }, learning_order: { type: "INTEGER" }, difficulty: { type: "STRING", enum: ["basic", "intermediate", "advanced"] }, prerequisite_topic: { type: "STRING" }, pedagogical_reason: { type: "STRING" } }, required: ["subject", "topic", "subject_order", "learning_order", "difficulty", "prerequisite_topic", "pedagogical_reason"] } }
           }, required: ["meta", "topics"] },
         },
@@ -151,13 +157,20 @@ Retorne somente o JSON solicitado.` },
     const geminiData = await geminiResponse.json();
     await removeGeminiFile(geminiFile.name);
     geminiFileName = undefined;
-    if (!geminiResponse.ok) { console.error("Gemini", geminiResponse.status, geminiData);await finishUsage(usage.event_id,"error",geminiResponse.status===429?"PROVIDER_429":"PROVIDER_ERROR");return reply(request, { error: geminiResponse.status===429?"A cota gratuita do Gemini foi atingida (erro 429). O edital está salvo; tente novamente após a renovação da cota.":geminiData?.error?.message ?? "O Gemini não conseguiu analisar o edital.",retryable:geminiResponse.status===429,code:geminiResponse.status===429?"PROVIDER_429":"AI_ERROR" }, geminiResponse.status===429?429:502); }
+    if (!geminiResponse.ok) { console.error("Gemini", geminiResponse.status, geminiData);await finishUsage(usage.event_id,"error",geminiResponse.status===429?"PROVIDER_429":"PROVIDER_ERROR");await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: geminiResponse.status===429 ? "pending" : "error" }) }).catch(()=>undefined);return reply(request, { error: geminiResponse.status===429?"A cota gratuita do Gemini foi atingida (erro 429). O edital está salvo; tente novamente após a renovação da cota.":geminiData?.error?.message ?? "O Gemini não conseguiu analisar o edital.",retryable:geminiResponse.status===429,code:geminiResponse.status===429?"PROVIDER_429":"AI_ERROR" }, geminiResponse.status===429?429:502); }
     const parsed = JSON.parse(geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
     const meta = {
+      document_kind: String(parsed?.meta?.document_kind ?? "outro"),
+      classification_reason: String(parsed?.meta?.classification_reason ?? "Classificação não confirmada.").trim(),
       detected_scope: String(parsed?.meta?.detected_scope ?? campaignName ?? title).trim(),
       confidence: Math.max(0, Math.min(1, Number(parsed?.meta?.confidence ?? 0))),
       warnings: Array.isArray(parsed?.meta?.warnings) ? parsed.meta.warnings.map((warning: unknown) => String(warning).trim()).filter(Boolean).slice(0, 10) : [],
     };
+    if (meta.document_kind !== "edital_concurso") {
+      await finishUsage(usage.event_id, "error", "NOT_AN_EDITAL");
+      await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "error" }) });
+      return reply(request, { error: `Este PDF não parece ser um edital de concurso. ${meta.classification_reason} Exclua-o desta categoria e envie novamente como Material de estudo, Lei ou norma, Prova ou Simulado.`, code: "NOT_AN_EDITAL" }, 422);
+    }
     const topics = Array.isArray(parsed.topics) ? parsed.topics.slice(0, 1500) : [];
     const uniqueTopics: Array<{ subject: string; unit: string; topic: string; edital_order: number; subject_order: number; learning_order: number; difficulty: string; prerequisite_topic: string; pedagogical_reason: string }> = [];
     const seenTopics = new Set<string>();
@@ -210,6 +223,7 @@ Retorne somente o JSON solicitado.` },
   } catch (error) {
     console.error("edital-gemini", error);
     await finishUsage(usage?.event_id, "error", "PROCESSING_FAILED");
+    if (documentId) await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "error" }) }).catch(()=>undefined);
     return reply(request, { error: "Falha interna ao interpretar o edital." }, 500);
   } finally {
     await removeGeminiFile(geminiFileName);

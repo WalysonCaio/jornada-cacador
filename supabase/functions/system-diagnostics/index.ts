@@ -24,22 +24,26 @@ Deno.serve(async (request) => {
 
   const today = new Date().toISOString().slice(0, 10);
   const userId = encodeURIComponent(user.id);
-  const [pending, failed, running, usageResponse] = await Promise.all([
+  const [pending, failed, pendingEssays, failedEssays, running, usageResponse] = await Promise.all([
     count(`study_documents?user_id=eq.${userId}&processing_status=in.(pending,processing)`),
     count(`study_documents?user_id=eq.${userId}&processing_status=eq.error`),
+    count(`essay_submissions?user_id=eq.${userId}&processing_status=in.(pending,processing)`),
+    count(`essay_submissions?user_id=eq.${userId}&processing_status=eq.error`),
     count(`focus_sessions?user_id=eq.${userId}&status=eq.running`),
     fetch(`${SUPABASE_URL}/rest/v1/my_ai_usage_daily?user_id=eq.${userId}&usage_day=eq.${today}&select=operation,successful,failed,input_units,output_units`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } }),
   ]);
   const usage = usageResponse.ok ? await usageResponse.json() : [];
   return reply({
     ok: true,
-    version: "47",
+    version: "56",
     database: true,
     storage: true,
     gemini_configured: Boolean(Deno.env.get("GEMINI_API_KEY")),
     groq_configured: Boolean(Deno.env.get("GROQ_API_KEY")),
     pending_documents: pending,
     failed_documents: failed,
+    pending_essays: pendingEssays,
+    failed_essays: failedEssays,
     running_focus_sessions: running,
     usage,
     checked_at: new Date().toISOString(),

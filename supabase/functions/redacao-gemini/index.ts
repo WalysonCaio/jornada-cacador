@@ -10,14 +10,19 @@ function headers(request: Request) {
 }
 const reply = (request: Request, body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: headers(request) });
 
-async function uploadPdf(bytes: Uint8Array, title: string) {
-  const start = await fetch("https://generativelanguage.googleapis.com/upload/v1beta/files", { method: "POST", headers: { "x-goog-api-key": GEMINI_KEY, "X-Goog-Upload-Protocol": "resumable", "X-Goog-Upload-Command": "start", "X-Goog-Upload-Header-Content-Length": String(bytes.byteLength), "X-Goog-Upload-Header-Content-Type": "application/pdf", "Content-Type": "application/json" }, body: JSON.stringify({ file: { display_name: title } }) });
+async function uploadFile(bytes: Uint8Array, title: string, mimeType: string) {
+  const start = await fetch("https://generativelanguage.googleapis.com/upload/v1beta/files", { method: "POST", headers: { "x-goog-api-key": GEMINI_KEY, "X-Goog-Upload-Protocol": "resumable", "X-Goog-Upload-Command": "start", "X-Goog-Upload-Header-Content-Length": String(bytes.byteLength), "X-Goog-Upload-Header-Content-Type": mimeType, "Content-Type": "application/json" }, body: JSON.stringify({ file: { display_name: title } }) });
   const uploadUrl = start.headers.get("x-goog-upload-url");
   if (!start.ok || !uploadUrl) throw new Error("Não foi possível preparar a redação para análise.");
-  const uploaded = await fetch(uploadUrl, { method: "POST", headers: { "Content-Type": "application/pdf", "Content-Length": String(bytes.byteLength), "X-Goog-Upload-Offset": "0", "X-Goog-Upload-Command": "upload, finalize" }, body: bytes });
+  const uploaded = await fetch(uploadUrl, { method: "POST", headers: { "Content-Type": mimeType, "Content-Length": String(bytes.byteLength), "X-Goog-Upload-Offset": "0", "X-Goog-Upload-Command": "upload, finalize" }, body: bytes });
   const data = await uploaded.json().catch(() => ({}));
   if (!uploaded.ok || !data?.file?.uri) throw new Error(data?.error?.message ?? "Falha ao enviar a redação para a IA.");
   return data.file as { uri: string; name?: string; mimeType?: string };
+}
+
+async function removeGeminiFile(name?: string) {
+  if (!name) return;
+  await fetch(`https://generativelanguage.googleapis.com/v1beta/${name}`, { method: "DELETE", headers: { "x-goog-api-key": GEMINI_KEY } }).catch(() => undefined);
 }
 
 async function finishUsage(id: number | undefined, status: "success" | "error", errorCode?: string) {
@@ -34,6 +39,7 @@ Deno.serve(async (request) => {
   const input = await request.json().catch(() => null);
   const submissionId = String(input?.submission_id ?? "");
   let usageId: number | undefined;
+  let geminiFileName: string | undefined;
   try {
     const rowResponse = await fetch(`${SUPABASE_URL}/rest/v1/essay_submissions?id=eq.${encodeURIComponent(submissionId)}&user_id=eq.${user.id}&select=*&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
     const rows = rowResponse.ok ? await rowResponse.json() : [];
@@ -49,11 +55,17 @@ Deno.serve(async (request) => {
     usageId = usage.event_id;
     await fetch(`${SUPABASE_URL}/rest/v1/essay_submissions?id=eq.${submissionId}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "processing", updated_at: new Date().toISOString() }) });
     const file = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${essay.storage_path}`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
-    if (!file.ok) throw new Error("Não foi possível abrir o PDF da redação.");
+    if (!file.ok) throw new Error("Não foi possível abrir o arquivo da redação.");
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (bytes.byteLength > 20 * 1024 * 1024) throw new Error("A redação deve ter no máximo 20 MB.");
-    const geminiFile = await uploadPdf(bytes, essay.title);
-    const prompt = `Atue como corretor experiente de redações para concursos públicos brasileiros. Analise somente o texto manuscrito ou digitado presente no PDF. Tema informado: ${essay.theme}. Tipo textual informado: ${essay.essay_type}. Quantidade solicitada: ${essay.required_lines || "não informada"} linhas. Instruções adicionais: ${essay.instructions || "nenhuma"}. Não invente trechos ilegíveis. Aponte quando algo não puder ser lido. Avalie aderência ao tema e ao tipo textual, estrutura, tese, argumentação, coesão, coerência, gramática, ortografia, pontuação, repertório, conclusão e respeito à quantidade de linhas. Forneça nota geral de 0 a 100, diagnóstico direto, pontos fortes, problemas encontrados com explicação, plano de melhoria prioritário, sugestões de reescrita em trechos curtos e uma versão-modelo apenas como referência pedagógica. Não afirme seguir critérios oficiais de uma banca quando eles não foram fornecidos.`;
+    const extension = String(essay.source_name ?? "").toLowerCase().split(".").pop();
+    const mimeType = file.headers.get("content-type")?.split(";")[0] || (extension === "png" ? "image/png" : ["jpg", "jpeg"].includes(extension ?? "") ? "image/jpeg" : "application/pdf");
+    if (!["application/pdf", "image/jpeg", "image/png"].includes(mimeType)) throw new Error("Formato inválido. Envie PDF, JPG ou PNG.");
+    const geminiFile = await uploadFile(bytes, essay.title, mimeType);
+    geminiFileName = geminiFile.name;
+    const board = String(essay.board ?? "geral");
+    const boardGuidance = board === "AOCP" ? "Dê atenção especial à adequação ao tema, estrutura dissertativo-argumentativa, domínio da norma-padrão, coesão e coerência." : board === "Cebraspe" ? "Organize a devolutiva em aspectos macroestruturais (conteúdo, argumentação e organização) e microestruturais (gramática, ortografia, pontuação e coesão)." : board === "FGV" ? "Dê atenção especial à compreensão do tema, construção da tese, progressão argumentativa, estrutura, coesão e domínio linguístico." : "Use critérios gerais de redação para concursos públicos.";
+    const prompt = `Atue como corretor experiente de redações para concursos públicos brasileiros. Analise somente o texto manuscrito ou digitado presente no arquivo. Tema informado: ${essay.theme}. Tipo textual informado: ${essay.essay_type}. Banca ou padrão solicitado: ${board}. ${boardGuidance} Quantidade solicitada: ${essay.required_lines || "não informada"} linhas. Instruções adicionais: ${essay.instructions || "nenhuma"}. Não invente trechos ilegíveis. Aponte quando algo não puder ser lido. Avalie aderência ao tema e ao tipo textual, estrutura, tese, argumentação, coesão, coerência, gramática, ortografia, pontuação, repertório, conclusão e respeito à quantidade de linhas. Forneça nota geral de 0 a 100, diagnóstico direto, pontos fortes, problemas encontrados com explicação, plano de melhoria prioritário, sugestões de reescrita em trechos curtos e uma versão-modelo apenas como referência pedagógica. Os critérios são uma aproximação pedagógica: não afirme que a nota reproduz a correção oficial da banca quando o espelho oficial não foi fornecido.`;
     const ai = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY }, body: JSON.stringify({ contents: [{ parts: [{ file_data: { mime_type: geminiFile.mimeType ?? "application/pdf", file_uri: geminiFile.uri } }, { text: prompt }] }], generationConfig: { temperature: 0.15, responseMimeType: "application/json", responseSchema: { type: "OBJECT", properties: { score: { type: "INTEGER", minimum: 0, maximum: 100 }, readable: { type: "BOOLEAN" }, diagnosis: { type: "STRING" }, strengths: { type: "ARRAY", items: { type: "STRING" } }, improvements: { type: "ARRAY", items: { type: "OBJECT", properties: { category: { type: "STRING" }, problem: { type: "STRING" }, recommendation: { type: "STRING" } }, required: ["category", "problem", "recommendation"] } }, priority_plan: { type: "ARRAY", items: { type: "STRING" } }, rewrite_suggestions: { type: "ARRAY", items: { type: "STRING" } }, model_text: { type: "STRING" }, line_observation: { type: "STRING" } }, required: ["score", "readable", "diagnosis", "strengths", "improvements", "priority_plan", "rewrite_suggestions", "model_text", "line_observation"] } } }) });
     const aiData = await ai.json().catch(() => ({}));
     if (!ai.ok) {
@@ -66,12 +78,15 @@ Deno.serve(async (request) => {
     }
     const result = JSON.parse(aiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
     await fetch(`${SUPABASE_URL}/rest/v1/essay_submissions?id=eq.${submissionId}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready", result, updated_at: new Date().toISOString() }) });
-    if (geminiFile.name) await fetch(`https://generativelanguage.googleapis.com/v1beta/${geminiFile.name}`, { method: "DELETE", headers: { "x-goog-api-key": GEMINI_KEY } }).catch(() => undefined);
+    await removeGeminiFile(geminiFileName);
+    geminiFileName = undefined;
     await finishUsage(usageId, "success");
     return reply(request, { result, provider: "gemini" });
   } catch (error) {
     await finishUsage(usageId, "error", "ESSAY_REVIEW_FAILED");
     if (submissionId) await fetch(`${SUPABASE_URL}/rest/v1/essay_submissions?id=eq.${submissionId}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "error", updated_at: new Date().toISOString() }) }).catch(() => undefined);
     return reply(request, { error: String((error as Error)?.message ?? error) }, 500);
+  } finally {
+    await removeGeminiFile(geminiFileName);
   }
 });
