@@ -230,3 +230,11 @@ O progresso é reconciliado pelo nome da disciplina e do tópico. Assim, a rean�
 - Redefinir o portal ou apagar todo o progresso também remove os registros externos e recalcula a ofensiva.
 
 Esta versão altera somente os arquivos públicos. Depois de enviar `dist/index.html` e `dist/sw.js` ao GitHub, aguarde o Cloudflare e use `Ctrl + F5`. Não há uma nova migração SQL nem Edge Function específica para a versão 49.
+
+## Versão 50 — correção da ofensiva sincronizada
+
+- A conclusão marcada pelo **Histórico diário** agora vale para a data da missão, e não para o instante em que o usuário marcou a caixa.
+- A validação considera tanto o progresso da missão quanto o registro do Histórico diário.
+- Registrar ou excluir estudo externo recalcula a ofensiva antes de salvar.
+- Conclusões e tempo externo solicitam sincronização imediata com o Supabase, mantendo a sincronização agendada como segurança.
+- Dados já inseridos na versão 49 são reaproveitados; ao carregar a versão 50, os 90 minutos e a missão já registrados são recalculados automaticamente.
