@@ -10,7 +10,8 @@ O projeto transforma o edital enviado pelo usuário em um plano de aprendizagem:
 - currículo progressivo, com fundamentos antes de conteúdos avançados;
 - missões diárias alternadas entre disciplinas;
 - biblioteca privada de editais, materiais, leis, provas e simulados;
-- resumos, flashcards e questões com apoio de IA e controle visível de cobertura do PDF;
+- PDFs analisados em duas etapas (inventário e geração), com plano reaproveitável, referências de página e controle visível de cobertura;
+- resumos, flashcards e questões com apoio de IA e opção de conferência humana;
 - caderno de erros com prioridade de revisão;
 - cronômetro com continuidade entre celular, computador e aplicativo Android;
 - progresso sincronizado pelo Supabase;
@@ -30,6 +31,7 @@ O projeto transforma o edital enviado pelo usuário em um plano de aprendizagem:
 - `supabase/migrations/`: estrutura e evoluções do banco;
 - `scripts/`: validações locais da versão;
 - `README-MANUTENCAO.md`: implantação, manutenção e diagnóstico.
+- `INSTALACAO-V59.md`: atualização e testes obrigatórios da versão 59.
 
 ## Aviso
 

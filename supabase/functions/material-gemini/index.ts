@@ -18,7 +18,7 @@ async function reserveUsage(userId: string, campaignId: string, operation: "mate
   const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reserve_ai_usage`, {
     method: "POST",
     headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({ p_user_id: userId, p_campaign_id: campaignId, p_operation: operation, p_daily_limit: 5 }),
+    body: JSON.stringify({ p_user_id: userId, p_campaign_id: campaignId, p_operation: operation, p_daily_limit: 10 }),
   });
   return result.ok ? await result.json() : { allowed: false, reason: "USAGE_GUARD_UNAVAILABLE" };
 }
@@ -32,7 +32,38 @@ async function updateJob(documentId: string, values: Record<string, unknown>) {
   await fetch(`${SUPABASE_URL}/rest/v1/processing_jobs?document_id=eq.${encodeURIComponent(documentId)}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ ...values, updated_at: new Date().toISOString() }) }).catch(() => undefined);
 }
 
-async function generateStudyPackage(file: { uri: string; mimeType?: string }, title: string, campaignContext: string, documentType: string) {
+async function createDocumentInventory(file: { uri: string; mimeType?: string }, title: string) {
+  const requestBody = {
+    contents: [{ parts: [
+      { file_data: { mime_type: file.mimeType ?? "application/pdf", file_uri: file.uri } },
+      { text: `Leia o PDF inteiro antes de responder. Crie um inventário estrutural fiel do documento “${title}”. Liste capítulos e seções relevantes na ordem em que aparecem, com página inicial e final estimadas, disciplina e importância para estudo. Considere início, meio, final e anexos. Não resuma ainda e não invente páginas. Se algo estiver ilegível, registre em warnings.` },
+    ] }],
+    generationConfig: {
+      temperature: 0.05,
+      maxOutputTokens: 12000,
+      responseMimeType: "application/json",
+      responseSchema: { type: "OBJECT", properties: {
+        estimated_pages: { type: "INTEGER" },
+        sections: { type: "ARRAY", minItems: 1, maxItems: 80, items: { type: "OBJECT", properties: {
+          name: { type: "STRING" }, subject: { type: "STRING" }, start_page: { type: "INTEGER" }, end_page: { type: "INTEGER" }, importance: { type: "STRING", enum: ["alta", "media", "baixa"] },
+        }, required: ["name", "subject", "start_page", "end_page", "importance"] } },
+        warnings: { type: "ARRAY", items: { type: "STRING" } },
+      }, required: ["estimated_pages", "sections", "warnings"] },
+    },
+  };
+  for (const model of GEMINI_MODELS) {
+    const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY }, body: JSON.stringify(requestBody) });
+    const data = await result.json().catch(() => ({}));
+    if (!result.ok) { if (RETRYABLE_STATUS.has(result.status)) continue; throw new Error(data?.error?.message ?? "Não foi possível mapear os capítulos do PDF."); }
+    try {
+      const parsed = JSON.parse(data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
+      if (Array.isArray(parsed?.sections) && parsed.sections.length) return { ...parsed, model };
+    } catch { /* tenta o modelo seguinte */ }
+  }
+  throw new Error("A IA não conseguiu criar o inventário completo do PDF.");
+}
+
+async function generateStudyPackage(file: { uri: string; mimeType?: string }, title: string, campaignContext: string, documentType: string, inventory: any) {
   const requestBody = {
     contents: [{ parts: [
       { file_data: { mime_type: file.mimeType ?? "application/pdf", file_uri: file.uri } },
@@ -42,6 +73,11 @@ Para cada assunto produza: disciplina, título específico, aula escrita detalha
 
 CONTEXTO DA CAMPANHA:
 ${campaignContext || "Edital ainda não disponível; use somente o PDF."}
+
+INVENTÁRIO CRIADO NA PRIMEIRA ETAPA:
+${JSON.stringify(inventory?.sections || []).slice(0, 30000)}
+
+Use esse inventário como lista de verificação. Cada seção deve aparecer em pelo menos um resumo ou ser registrada em omissions com motivo. Inclua page_start e page_end em cada resumo, usando somente as páginas estimadas no inventário.
 
 TIPO DO DOCUMENTO: ${documentType}. ${["prova", "simulado"].includes(documentType) ? "Extraia e classifique as questões existentes no PDF por disciplina, tópico, banca e ano quando esses dados estiverem expressos. Preserve o sentido e marque como adaptada_do_pdf; não invente identificação oficial." : "Produza conteúdo didático e questões de fixação com base no material."}
 
@@ -72,8 +108,8 @@ O arquivo se chama: ${title}.` },
       maxOutputTokens: 65536,
       responseMimeType: "application/json",
       responseSchema: { type: "OBJECT", properties: { coverage: { type: "OBJECT", properties: { estimated_pages: { type: "INTEGER" }, sections_detected: { type: "ARRAY", items: { type: "STRING" } }, sections_covered: { type: "ARRAY", items: { type: "STRING" } }, omissions: { type: "ARRAY", items: { type: "STRING" } }, coverage_confidence: { type: "NUMBER" } }, required: ["estimated_pages", "sections_detected", "sections_covered", "omissions", "coverage_confidence"] }, summaries: { type: "ARRAY", minItems: 1, maxItems: 24, items: { type: "OBJECT", properties: {
-        subject: { type: "STRING" }, title: { type: "STRING" }, explanation: { type: "STRING" }, points: { type: "ARRAY", items: { type: "STRING" } }, example: { type: "STRING" }, bizu: { type: "STRING" }, mnemonic: { type: "STRING" }, trap: { type: "STRING" }, flashcards: { type: "ARRAY", items: { type: "OBJECT", properties: { question: { type: "STRING" }, answer: { type: "STRING" } }, required: ["question", "answer"] } }, questions: { type: "ARRAY", minItems: 5, maxItems: 5, items: { type: "OBJECT", properties: { statement: { type: "STRING" }, options: { type: "ARRAY", minItems: 4, maxItems: 4, items: { type: "STRING" } }, correct_index: { type: "INTEGER", minimum: 0, maximum: 3 }, explanation: { type: "STRING" }, difficulty: { type: "STRING", enum: ["facil", "medio", "dificil"] }, topic: { type: "STRING" }, origin: { type: "STRING", enum: ["autoral", "adaptada_do_pdf"] } }, required: ["statement", "options", "correct_index", "explanation", "difficulty", "topic", "origin"] } }
-      }, required: ["subject", "title", "explanation", "points", "example", "bizu", "mnemonic", "trap", "flashcards", "questions"] } } }, required: ["coverage", "summaries"] },
+        subject: { type: "STRING" }, title: { type: "STRING" }, page_start: { type: "INTEGER" }, page_end: { type: "INTEGER" }, explanation: { type: "STRING" }, points: { type: "ARRAY", items: { type: "STRING" } }, example: { type: "STRING" }, bizu: { type: "STRING" }, mnemonic: { type: "STRING" }, trap: { type: "STRING" }, flashcards: { type: "ARRAY", items: { type: "OBJECT", properties: { question: { type: "STRING" }, answer: { type: "STRING" } }, required: ["question", "answer"] } }, questions: { type: "ARRAY", minItems: 5, maxItems: 5, items: { type: "OBJECT", properties: { statement: { type: "STRING" }, options: { type: "ARRAY", minItems: 4, maxItems: 4, items: { type: "STRING" } }, correct_index: { type: "INTEGER", minimum: 0, maximum: 3 }, explanation: { type: "STRING" }, difficulty: { type: "STRING", enum: ["facil", "medio", "dificil"] }, topic: { type: "STRING" }, origin: { type: "STRING", enum: ["autoral", "adaptada_do_pdf"] } }, required: ["statement", "options", "correct_index", "explanation", "difficulty", "topic", "origin"] } }
+      }, required: ["subject", "title", "page_start", "page_end", "explanation", "points", "example", "bizu", "mnemonic", "trap", "flashcards", "questions"] } } }, required: ["coverage", "summaries"] },
     },
   };
 
@@ -240,6 +276,8 @@ function sanitizeSummary(value: any, knownSubjects: string[]) {
     ...value,
     subject: resolveSubject(value?.subject || "Conteúdo", knownSubjects),
     title,
+    page_start: Math.max(0, Math.floor(Number(value?.page_start) || 0)),
+    page_end: Math.max(0, Math.floor(Number(value?.page_end) || 0)),
     explanation: cleanGeneratedText(value?.explanation, 18000),
     points: sanitizeStrings(value?.points, 15, 1200),
     example: cleanGeneratedText(value?.example, 6000),
@@ -294,7 +332,7 @@ Deno.serve(async (request) => {
     const campaignResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_campaigns?id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&select=id,name,organization&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
     const campaigns = campaignResponse.ok ? await campaignResponse.json() : [];
     if (!Array.isArray(campaigns) || !campaigns[0]?.id) return response({ error: "Este portal não pertence à conta conectada." }, 403);
-    const documentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&storage_path=eq.${encodeURIComponent(path)}&select=id,document_type&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
+    const documentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&storage_path=eq.${encodeURIComponent(path)}&select=id,document_type,metadata&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
     const documents = documentResponse.ok ? await documentResponse.json() : [];
     if (!Array.isArray(documents) || !documents[0]?.id) return response({ error: "O documento não pertence a este portal." }, 403);
     const topicsResponse = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&select=subject,topic&order=edital_order.asc&limit=500`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
@@ -344,8 +382,14 @@ Deno.serve(async (request) => {
     }
     const geminiFile = await uploadPdfToGemini(bytes, title);
     let generated;
+    let inventory: any = documents[0]?.metadata?.analysis_plan;
     try {
-      generated = await generateStudyPackage(geminiFile, title, campaignContext, documentType);
+      if (!Array.isArray(inventory?.sections) || !inventory.sections.length) {
+        await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_progress: { stage: "inventory", percent: 10, updated_at: new Date().toISOString() } } }) });
+        inventory = await createDocumentInventory(geminiFile, title);
+        await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "generation", percent: 30, completed_sections: 0, total_sections: inventory.sections.length, updated_at: new Date().toISOString() } } }) });
+      }
+      generated = await generateStudyPackage(geminiFile, title, campaignContext, documentType, inventory);
     } finally {
       await removeGeminiFile(geminiFile.name);
     }
@@ -359,6 +403,7 @@ Deno.serve(async (request) => {
       throw error;
     }
     const generatedSummaries = Array.isArray(parsed.summaries) ? parsed.summaries : [];
+    await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "review", percent: 75, completed_sections: parsed?.coverage?.sections_covered?.length || 0, total_sections: inventory?.sections?.length || 0, updated_at: new Date().toISOString() } } }) });
     const rawSummaries = await reviewGeneratedQuestions(generatedSummaries, campaignContext);
     const summaries = rawSummaries.map((content: Record<string, unknown>) => sanitizeSummary(content, knownSubjects)).filter((content: { title?: string; explanation?: string }) => Boolean(content.title && content.explanation));
     if (!summaries.length) { await finishUsage(usage.event_id,"error",undefined,undefined,"INSUFFICIENT_CONTENT");await updateJob(documentId,{status:"failed",last_error:"INSUFFICIENT_CONTENT"});return response({ error: "Não encontrei conteúdo de estudo suficiente no PDF." }, 422); }
@@ -385,7 +430,7 @@ Deno.serve(async (request) => {
     }
     const subjectCounts = summaries.reduce((counts: Record<string, number>, item: Record<string, unknown>) => { const subject = cleanGeneratedText(item.subject || "Conteúdo", 200);counts[subject] = (counts[subject] || 0) + 1;return counts; }, {});
     const detectedSubject = Object.entries(subjectCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "Conteúdo geral";
-    await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready", detected_subject: detectedSubject, metadata: { primary_subject: detectedSubject, subjects: Object.keys(subjectCounts), analyzed_at: new Date().toISOString(), coverage } }) });
+    await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready", detected_subject: detectedSubject, metadata: { ...(documents[0]?.metadata || {}), primary_subject: detectedSubject, subjects: Object.keys(subjectCounts), analyzed_at: new Date().toISOString(), analysis_plan: inventory, analysis_progress: { stage: "completed", percent: 100, completed_sections: coverage.sections_covered.length, total_sections: coverage.sections_detected.length, updated_at: new Date().toISOString() }, coverage } }) });
     await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ user_id: user.id, document_id: documentId, sha256: fingerprint, byte_size: bytes.byteLength }) });
     await finishUsage(usage.event_id, "success", "gemini", generated.model);
     await updateJob(documentId, { status: "completed", last_error: null });

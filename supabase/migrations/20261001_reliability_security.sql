@@ -112,7 +112,7 @@ group by user_id, (created_at at time zone 'America/Sao_Paulo')::date, operation
 
 grant select on public.my_ai_usage_daily to authenticated;
 
--- Limites padrão: 5 PDFs/editais/provas e 40 perguntas por dia.
+-- Os limites são informados pelas Edge Functions: versão 59 usa 10 PDFs/editais/provas/redações e 40 perguntas ao assistente por dia.
 -- Retorna uma decisão atômica e registra a tentativa para impedir corrida de cliques.
 create or replace function public.reserve_ai_usage(
   p_user_id uuid,

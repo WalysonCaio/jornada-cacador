@@ -49,7 +49,7 @@ Deno.serve(async (request) => {
     const activeResponse = await fetch(`${SUPABASE_URL}/rest/v1/essay_submissions?user_id=eq.${user.id}&processing_status=eq.processing&updated_at=gt.${encodeURIComponent(activeSince)}&id=neq.${encodeURIComponent(submissionId)}&select=id&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
     const active = activeResponse.ok ? await activeResponse.json() : [];
     if (Array.isArray(active) && active.length) return reply(request, { error: "Já existe uma redação sendo corrigida. Aguarde a conclusão antes de iniciar outra.", retryable: true }, 409);
-    const guard = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reserve_ai_usage`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ p_user_id: user.id, p_campaign_id: essay.campaign_id, p_operation: "review", p_daily_limit: 5 }) });
+    const guard = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reserve_ai_usage`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ p_user_id: user.id, p_campaign_id: essay.campaign_id, p_operation: "review", p_daily_limit: 10 }) });
     const usage = guard.ok ? await guard.json() : { allowed: false, reason: "USAGE_GUARD_UNAVAILABLE" };
     if (!usage.allowed) return reply(request, { error: usage.reason === "DAILY_LIMIT" ? "Você atingiu o limite diário de 5 correções. Sua redação está salva; tente novamente após a renovação da cota." : "Já existe uma análise em andamento. Aguarde alguns minutos.", retryable: true }, usage.reason === "DAILY_LIMIT" ? 429 : 409);
     usageId = usage.event_id;

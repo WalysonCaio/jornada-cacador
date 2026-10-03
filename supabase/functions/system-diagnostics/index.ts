@@ -24,9 +24,10 @@ Deno.serve(async (request) => {
 
   const today = new Date().toISOString().slice(0, 10);
   const userId = encodeURIComponent(user.id);
-  const [pending, failed, pendingEssays, failedEssays, running, usageResponse] = await Promise.all([
+  const [pending, failed, ready, pendingEssays, failedEssays, running, usageResponse] = await Promise.all([
     count(`study_documents?user_id=eq.${userId}&processing_status=in.(pending,processing)`),
     count(`study_documents?user_id=eq.${userId}&processing_status=eq.error`),
+    count(`study_documents?user_id=eq.${userId}&processing_status=eq.ready`),
     count(`essay_submissions?user_id=eq.${userId}&processing_status=in.(pending,processing)`),
     count(`essay_submissions?user_id=eq.${userId}&processing_status=eq.error`),
     count(`focus_sessions?user_id=eq.${userId}&status=eq.running`),
@@ -35,16 +36,18 @@ Deno.serve(async (request) => {
   const usage = usageResponse.ok ? await usageResponse.json() : [];
   return reply({
     ok: true,
-    version: "58",
+    version: "59",
     database: true,
     storage: true,
     gemini_configured: Boolean(Deno.env.get("GEMINI_API_KEY")),
     groq_configured: Boolean(Deno.env.get("GROQ_API_KEY")),
     pending_documents: pending,
     failed_documents: failed,
+    ready_documents: ready,
     pending_essays: pendingEssays,
     failed_essays: failedEssays,
     running_focus_sessions: running,
+    limits: { pdf_per_operation_per_day: 10, assistant_questions_per_day: 40, max_pdf_megabytes: 50 },
     usage,
     checked_at: new Date().toISOString(),
   });
