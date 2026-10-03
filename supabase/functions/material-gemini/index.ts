@@ -51,16 +51,36 @@ async function createDocumentInventory(file: { uri: string; mimeType?: string },
       }, required: ["estimated_pages", "sections", "warnings"] },
     },
   };
+  let temporaryFailure = false;
+  let lastStatus = 0;
+  let lastMessage = "";
   for (const model of GEMINI_MODELS) {
     const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY }, body: JSON.stringify(requestBody) });
     const data = await result.json().catch(() => ({}));
-    if (!result.ok) { if (RETRYABLE_STATUS.has(result.status)) continue; throw new Error(data?.error?.message ?? "Não foi possível mapear os capítulos do PDF."); }
+    if (!result.ok) {
+      lastStatus = result.status;
+      lastMessage = data?.error?.message ?? `Falha ao mapear o PDF (${result.status}).`;
+      temporaryFailure ||= RETRYABLE_STATUS.has(result.status);
+      console.warn("Inventory fallback", model, result.status, lastMessage);
+      continue;
+    }
     try {
       const parsed = JSON.parse(data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
       if (Array.isArray(parsed?.sections) && parsed.sections.length) return { ...parsed, model };
     } catch { /* tenta o modelo seguinte */ }
   }
-  throw new Error("A IA não conseguiu criar o inventário completo do PDF.");
+  if (temporaryFailure) {
+    const unavailable = new Error(lastMessage || "O serviço de IA está temporariamente indisponível.") as Error & { retryable?: boolean; providerStatus?: number; userMessage?: string };
+    unavailable.retryable = true;
+    unavailable.providerStatus = lastStatus;
+    unavailable.userMessage = lastStatus === 429
+      ? "O Gemini atingiu a cota ou está sobrecarregado. O PDF continua salvo e esta tentativa não consumiu seu limite diário."
+      : "O Gemini está temporariamente indisponível. O PDF continua salvo e esta tentativa não consumiu seu limite diário.";
+    throw unavailable;
+  }
+  // O inventário melhora a auditoria, mas uma resposta estrutural inválida não deve
+  // impedir a leitura principal que já percorre o PDF inteiro.
+  return { estimated_pages: 0, sections: [], warnings: ["O inventário preliminar não ficou disponível; confira o relatório de cobertura ao final."], model: "fallback" };
 }
 
 async function generateStudyPackage(file: { uri: string; mimeType?: string }, title: string, campaignContext: string, documentType: string, inventory: any) {
@@ -173,7 +193,13 @@ async function uploadPdfToGemini(bytes: Uint8Array, title: string) {
     body: JSON.stringify({ file: { display_name: title } }),
   });
   const uploadUrl = start.headers.get("x-goog-upload-url");
-  if (!start.ok || !uploadUrl) throw new Error(`Falha ao iniciar envio ao Gemini (${start.status}).`);
+  if (!start.ok || !uploadUrl) {
+    const error = new Error(`Falha ao iniciar envio ao Gemini (${start.status}).`) as Error & { retryable?: boolean; providerStatus?: number; userMessage?: string };
+    error.retryable = RETRYABLE_STATUS.has(start.status);
+    error.providerStatus = start.status;
+    error.userMessage = start.status === 429 ? "O Gemini atingiu a cota ou está sobrecarregado. O PDF continua salvo e esta tentativa não consumiu seu limite diário." : "Não foi possível enviar o PDF ao Gemini agora. O arquivo continua salvo para uma nova tentativa.";
+    throw error;
+  }
 
   const uploaded = await fetch(uploadUrl, {
     method: "POST",
@@ -186,7 +212,13 @@ async function uploadPdfToGemini(bytes: Uint8Array, title: string) {
     body: bytes,
   });
   const data = await uploaded.json();
-  if (!uploaded.ok || !data?.file?.uri) throw new Error(data?.error?.message ?? `Falha ao enviar PDF ao Gemini (${uploaded.status}).`);
+  if (!uploaded.ok || !data?.file?.uri) {
+    const error = new Error(data?.error?.message ?? `Falha ao enviar PDF ao Gemini (${uploaded.status}).`) as Error & { retryable?: boolean; providerStatus?: number; userMessage?: string };
+    error.retryable = RETRYABLE_STATUS.has(uploaded.status);
+    error.providerStatus = uploaded.status;
+    error.userMessage = uploaded.status === 429 ? "O Gemini atingiu a cota ou está sobrecarregado. O PDF continua salvo e esta tentativa não consumiu seu limite diário." : "O envio do PDF à IA falhou temporariamente. O arquivo continua salvo para uma nova tentativa.";
+    throw error;
+  }
   return data.file as { uri: string; name?: string; mimeType?: string };
 }
 
@@ -387,7 +419,7 @@ Deno.serve(async (request) => {
       if (!Array.isArray(inventory?.sections) || !inventory.sections.length) {
         await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_progress: { stage: "inventory", percent: 10, updated_at: new Date().toISOString() } } }) });
         inventory = await createDocumentInventory(geminiFile, title);
-        await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "generation", percent: 30, completed_sections: 0, total_sections: inventory.sections.length, updated_at: new Date().toISOString() } } }) });
+        await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "generation", percent: 30, completed_sections: 0, total_sections: Array.isArray(inventory.sections) ? inventory.sections.length : 0, updated_at: new Date().toISOString() } } }) });
       }
       generated = await generateStudyPackage(geminiFile, title, campaignContext, documentType, inventory);
     } finally {
@@ -441,7 +473,8 @@ Deno.serve(async (request) => {
     await updateJob(documentId, { status: (error as { retryable?: boolean })?.retryable ? "retry" : "failed", available_at: new Date(Date.now() + 15 * 60000).toISOString(), last_error: String((error as Error)?.message ?? error).slice(0, 1000) });
     if ((error as { retryable?: boolean })?.retryable) {
       await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "pending" }) });
-      return response({ error: "As IAs estão com alta demanda agora. O PDF foi salvo e continua aguardando análise. Tente novamente em alguns minutos.", retryable: true }, 503);
+      const providerStatus = Number((error as { providerStatus?: number })?.providerStatus || 0);
+      return response({ error: (error as { userMessage?: string })?.userMessage || "As IAs estão com alta demanda agora. O PDF foi salvo, não consumiu a cota diária e continua aguardando análise.", retryable: true, code: providerStatus === 429 ? "PROVIDER_RATE_LIMIT" : "PROVIDER_UNAVAILABLE" }, providerStatus === 429 ? 429 : 503);
     }
     return response({ error: (error as { userMessage?: string })?.userMessage || "Falha interna ao gerar o conteúdo do PDF." }, 500);
   }
