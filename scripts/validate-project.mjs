@@ -24,7 +24,10 @@ for (const relative of publicFiles) {
 }
 
 const sw = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
-if (!sw.includes("jornada-cacador-v60")) throw new Error("O cache não aponta para a versão 60.");
+if (!sw.includes("jornada-cacador-v61")) throw new Error("O cache não aponta para a versão 61.");
+const applyServerState = html.match(/function applyServerState[\s\S]*?function mergeProgressStates/)?.[0] || "";
+if (!applyServerState.includes("focusWasRunning") || !applyServerState.includes("if(!focusWasRunning)restoreFocusTimerState()")) throw new Error("A sincronização não preserva o cronômetro de foco.");
+if (applyServerState.includes("timerLeft=focusBlockSeconds()")) throw new Error("A sincronização ainda reinicia o cronômetro para 50 minutos.");
 for (const required of ["rpc/sync_user_state", "rpc/claim_focus_session", "rpc/update_focus_session", "_serverRevision", "_resetEpoch", "refreshFromServer", "STALE_RESET", "subjectOrder", "learningOrder", "errorUrgency", "menuAbout", "STREAK_MIN_SECONDS", "manualStudyEntries", "questionsForMode", "prepareQuestion", "renderCustomBossCard", "renderExamCountdown", "renderEssays", "libraryFolders", "metadata?.coverage", "coverageWarnings", "v59-enhancements.js"]) {
   if (!html.includes(required)) throw new Error(`Sincronização precisa incompleta: ${required}`);
 }
