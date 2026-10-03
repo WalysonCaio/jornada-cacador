@@ -1,6 +1,6 @@
 const { app, BrowserWindow, shell } = require('electron');
 
-const APP_URL = 'https://jornada-cacador.j32341472.chatgpt.site';
+const APP_URL = 'https://jornada.wcaio.workers.dev';
 
 function createWindow() {
   const win = new BrowserWindow({

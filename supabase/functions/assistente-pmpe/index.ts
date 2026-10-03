@@ -6,7 +6,6 @@ const PUBLISHABLE_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
 const GROQ_MODEL = "openai/gpt-oss-20b";
 const ALLOWED_ORIGINS = new Set([
   "https://jornada.wcaio.workers.dev",
-  "https://jornada-cacador.j32341472.chatgpt.site",
   "http://localhost:4173",
   "http://localhost:3000",
 ]);
@@ -137,7 +136,7 @@ Deno.serve(async (request) => {
       });
       if (!fileResponse.ok) return json(request, { error: "Não foi possível ler o PDF armazenado." }, 502);
       const bytes = new Uint8Array(await fileResponse.arrayBuffer());
-      if (bytes.byteLength > 20 * 1024 * 1024) return json(request, { error: "Para análise automática, envie um edital de até 20 MB." }, 413);
+      if (bytes.byteLength > 50 * 1024 * 1024) return json(request, { error: "Para análise automática, envie um edital de até 50 MB." }, 413);
       let binary = "";
       for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
       const base64 = btoa(binary);

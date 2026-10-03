@@ -4,7 +4,6 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const PUBLISHABLE_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
 const ALLOWED_ORIGINS = new Set([
   "https://jornada.wcaio.workers.dev",
-  "https://jornada-cacador.j32341472.chatgpt.site",
   "http://localhost:4173",
   "http://localhost:3000",
 ]);
@@ -106,7 +105,7 @@ Deno.serve(async (request) => {
     usage = await reserveUsage(user.id, campaignId);
     if (!usage.allowed) {
       await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "pending" }) }).catch(()=>undefined);
-      if (usage.reason === "DAILY_LIMIT") return reply(request, { error: `Você atingiu o limite diário de ${usage.limit || 5} análises. O edital está salvo e poderá ser processado após a renovação da cota.`, retryable: true, code: "DAILY_LIMIT" }, 429);
+      if (usage.reason === "DAILY_LIMIT") return reply(request, { error: `Você atingiu o limite diário de ${usage.limit || 10} análises de arquivo concluídas. O edital está salvo e poderá ser processado após a renovação da cota.`, retryable: true, code: "DAILY_LIMIT" }, 429);
       if (usage.reason === "BUSY") return reply(request, { error: "Já existe um PDF sendo analisado. Este edital continuará aguardando na fila.", retryable: true, queued: true, code: "BUSY" }, 409);
       return reply(request, { error: "A proteção de consumo está temporariamente indisponível.", retryable: true }, 503);
     }

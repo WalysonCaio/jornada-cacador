@@ -24,10 +24,18 @@ for (const relative of publicFiles) {
 }
 
 const sw = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
-if (!sw.includes("jornada-cacador-v61")) throw new Error("O cache não aponta para a versão 61.");
+if (!sw.includes("jornada-cacador-v62")) throw new Error("O cache não aponta para a versão 62.");
 const applyServerState = html.match(/function applyServerState[\s\S]*?function mergeProgressStates/)?.[0] || "";
 if (!applyServerState.includes("focusWasRunning") || !applyServerState.includes("if(!focusWasRunning)restoreFocusTimerState()")) throw new Error("A sincronização não preserva o cronômetro de foco.");
 if (applyServerState.includes("timerLeft=focusBlockSeconds()")) throw new Error("A sincronização ainda reinicia o cronômetro para 50 minutos.");
+if (!html.includes("timerLeft=result.resumed?Math.min(timerLeft,serverRemaining):serverRemaining")) throw new Error("Uma retomada remota ainda pode aumentar o tempo restante.");
+if (!sw.includes("url.origin!==self.location.origin") || !sw.includes("r.type==='basic'")) throw new Error("O service worker pode armazenar respostas privadas externas.");
+const desktopMain = fs.readFileSync(new URL("../desktop/main.js", import.meta.url), "utf8");
+if (!desktopMain.includes("https://jornada.wcaio.workers.dev") || desktopMain.includes("chatgpt.site")) throw new Error("O instalador Windows não aponta exclusivamente para o domínio oficial.");
+const manifest = JSON.parse(fs.readFileSync(new URL("../dist/manifest.webmanifest", import.meta.url), "utf8"));
+if (manifest.orientation !== "any") throw new Error("O aplicativo instalado precisa aceitar retrato e paisagem.");
+const headers = fs.readFileSync(new URL("../dist/_headers", import.meta.url), "utf8");
+for (const header of ["X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy", "Cache-Control: no-cache"]) if (!headers.includes(header)) throw new Error(`Cabeçalho de segurança ausente: ${header}`);
 for (const required of ["rpc/sync_user_state", "rpc/claim_focus_session", "rpc/update_focus_session", "_serverRevision", "_resetEpoch", "refreshFromServer", "STALE_RESET", "subjectOrder", "learningOrder", "errorUrgency", "menuAbout", "STREAK_MIN_SECONDS", "manualStudyEntries", "questionsForMode", "prepareQuestion", "renderCustomBossCard", "renderExamCountdown", "renderEssays", "libraryFolders", "metadata?.coverage", "coverageWarnings", "v59-enhancements.js"]) {
   if (!html.includes(required)) throw new Error(`Sincronização precisa incompleta: ${required}`);
 }

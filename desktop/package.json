@@ -1,6 +1,6 @@
 {
   "name": "jornada-do-cacador-desktop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Aplicativo Windows da plataforma Jornada do Caçador",
   "main": "main.js",
   "private": true,

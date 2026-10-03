@@ -100,7 +100,7 @@ O instalador será criado em `desktop\release`. O Windows poderá mostrar um avi
 
 ## Usar no iPad
 
-Abra `https://jornada-cacador.j32341472.chatgpt.site` no Safari. O layout é responsivo e se adapta ao iPad. Para instalar como aplicativo, toque em **Compartilhar > Adicionar à Tela de Início**. Entre com a mesma conta usada no computador para carregar o mesmo progresso.
+Abra `https://jornada.wcaio.workers.dev` no Safari. O layout é responsivo e se adapta ao iPad. Para instalar como aplicativo, toque em **Compartilhar > Adicionar à Tela de Início**. Entre com a mesma conta usada no computador para carregar o mesmo progresso.
 
 ## Publicar em outro domínio
 

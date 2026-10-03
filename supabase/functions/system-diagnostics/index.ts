@@ -2,8 +2,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const PUBLIC_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
 const SITE = "https://jornada.wcaio.workers.dev";
-const cors = { "Access-Control-Allow-Origin": SITE, "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", "Content-Type": "application/json; charset=utf-8" };
-const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: cors });
+const ALLOWED_ORIGINS = new Set([SITE, "http://localhost:4173", "http://localhost:3000"]);
+function cors(request: Request) { const origin=request.headers.get("origin")??"";return { "Access-Control-Allow-Origin": ALLOWED_ORIGINS.has(origin)?origin:SITE, "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", "Content-Type": "application/json; charset=utf-8", "Vary":"Origin" }; }
 
 async function count(path: string) {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -15,14 +15,16 @@ async function count(path: string) {
 }
 
 Deno.serve(async (request) => {
-  if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
+  const headers=cors(request);
+  const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers});
+  if (request.method === "OPTIONS") return new Response("ok", { headers });
   if (request.method !== "POST") return reply({ error: "Método não permitido." }, 405);
   const authorization = request.headers.get("authorization") ?? "";
   const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { Authorization: authorization, apikey: PUBLIC_KEY } });
   const user = userResponse.ok ? await userResponse.json() : null;
   if (!user?.id) return reply({ error: "Sessão inválida." }, 401);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const userId = encodeURIComponent(user.id);
   const [pending, failed, ready, pendingEssays, failedEssays, running, usageResponse] = await Promise.all([
     count(`study_documents?user_id=eq.${userId}&processing_status=in.(pending,processing)`),
@@ -36,7 +38,7 @@ Deno.serve(async (request) => {
   const usage = usageResponse.ok ? await usageResponse.json() : [];
   return reply({
     ok: true,
-    version: "59",
+    version: "62",
     database: true,
     storage: true,
     gemini_configured: Boolean(Deno.env.get("GEMINI_API_KEY")),
@@ -47,7 +49,7 @@ Deno.serve(async (request) => {
     pending_essays: pendingEssays,
     failed_essays: failedEssays,
     running_focus_sessions: running,
-    limits: { pdf_per_operation_per_day: 10, assistant_questions_per_day: 40, max_pdf_megabytes: 50 },
+    limits: { successful_file_analyses_per_day: 10, assistant_questions_per_day: 40, max_pdf_megabytes: 50 },
     usage,
     checked_at: new Date().toISOString(),
   });
