@@ -80,7 +80,7 @@ async function askGroq(systemPrompt: string, userPrompt: string) {
 
 async function askGemini(systemPrompt: string, userPrompt: string) {
   if (!GEMINI_API_KEY) throw new Error("GEMINI_NOT_CONFIGURED");
-  const model = "gemini-3.5-flash-lite";
+  const model = "gemini-2.5-flash-lite";
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
@@ -140,7 +140,7 @@ Deno.serve(async (request) => {
       let binary = "";
       for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
       const base64 = btoa(binary);
-      const geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent", {
+      const geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
         body: JSON.stringify({

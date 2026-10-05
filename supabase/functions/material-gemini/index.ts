@@ -5,8 +5,12 @@ const PUBLIC_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
 const SITE = "https://jornada.wcaio.workers.dev";
 const cors = { "Access-Control-Allow-Origin": SITE, "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", "Content-Type": "application/json; charset=utf-8" };
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: cors });
-const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"];
+// Use only stable model IDs already used by the other production functions.
+// A nonexistent preview ID previously returned 400/404 and stopped every PDF
+// before the compatible model could be attempted.
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+const FALLBACK_STATUS = new Set([400, 404]);
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function sha256(bytes: Uint8Array) {
@@ -20,7 +24,18 @@ async function reserveUsage(userId: string, campaignId: string, operation: "mate
     headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({ p_user_id: userId, p_campaign_id: campaignId, p_operation: operation, p_daily_limit: 10 }),
   });
-  return result.ok ? await result.json() : { allowed: false, reason: "USAGE_GUARD_UNAVAILABLE" };
+  if (result.ok) return await result.json();
+  const detail = await result.text().catch(() => "");
+  console.error("reserve_ai_usage", result.status, detail);
+  return { allowed: false, reason: result.status === 404 ? "USAGE_GUARD_MISSING" : "USAGE_GUARD_UNAVAILABLE" };
+}
+
+async function setDocumentStatus(documentId: string, userId: string, processingStatus: "pending" | "processing" | "ready" | "error") {
+  await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ processing_status: processingStatus }),
+  }).catch(() => undefined);
 }
 
 async function finishUsage(eventId: number | undefined, status: "success" | "error" | "cached", provider?: string, model?: string, errorCode?: string) {
@@ -134,6 +149,7 @@ O arquivo se chama: ${title}.` },
   };
 
   let lastError = "O serviço de IA está temporariamente indisponível.";
+  let lastStatus = 0;
   for (let modelIndex = 0; modelIndex < GEMINI_MODELS.length; modelIndex++) {
     const model = GEMINI_MODELS[modelIndex];
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -144,14 +160,27 @@ O arquivo se chama: ${title}.` },
       });
       const data = await ai.json().catch(() => ({}));
       if (ai.ok) return { data, model };
+      lastStatus = ai.status;
       lastError = data?.error?.message ?? `Falha no modelo ${model} (${ai.status}).`;
       console.warn("Gemini fallback", model, attempt + 1, ai.status, lastError);
-      if (!RETRYABLE_STATUS.has(ai.status)) throw new Error(lastError);
+      // Invalid/unavailable model IDs and model-specific schema limitations must
+      // fall through to the next compatible model instead of aborting the PDF.
+      if (FALLBACK_STATUS.has(ai.status)) break;
+      if (!RETRYABLE_STATUS.has(ai.status)) {
+        const fatal = new Error(lastError) as Error & { providerStatus?: number; userMessage?: string };
+        fatal.providerStatus = ai.status;
+        fatal.userMessage = `O Gemini recusou a geração (${ai.status}). O PDF continua salvo. Detalhe: ${lastError}`;
+        throw fatal;
+      }
       if (attempt === 0) await wait(900 * (modelIndex + 1));
     }
   }
-  const unavailable = new Error(lastError) as Error & { retryable?: boolean };
+  const unavailable = new Error(lastError) as Error & { retryable?: boolean; providerStatus?: number; userMessage?: string };
   unavailable.retryable = true;
+  unavailable.providerStatus = lastStatus;
+  unavailable.userMessage = FALLBACK_STATUS.has(lastStatus)
+    ? `Nenhum modelo Gemini disponível aceitou esta análise (${lastStatus}). O PDF continua salvo e a tentativa não consumiu a cota. Confira a GEMINI_API_KEY e os modelos liberados para ela.`
+    : "O Gemini está temporariamente indisponível. O PDF continua salvo e esta tentativa não consumiu sua cota.";
   throw unavailable;
 }
 
@@ -219,7 +248,38 @@ async function uploadPdfToGemini(bytes: Uint8Array, title: string) {
     error.userMessage = uploaded.status === 429 ? "O Gemini atingiu a cota ou está sobrecarregado. O PDF continua salvo e esta tentativa não consumiu seu limite diário." : "O envio do PDF à IA falhou temporariamente. O arquivo continua salvo para uma nova tentativa.";
     throw error;
   }
-  return data.file as { uri: string; name?: string; mimeType?: string };
+  const file = data.file as { uri: string; name?: string; mimeType?: string; state?: string; error?: { message?: string } };
+  if (!file.name) return file;
+  // Files can remain PROCESSING after the resumable upload. Calling
+  // generateContent before ACTIVE intermittently makes every later stage fail.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (String(file.state || "").toUpperCase() === "ACTIVE") return file;
+    if (String(file.state || "").toUpperCase() === "FAILED") {
+      await removeGeminiFile(file.name);
+      const failed = new Error(file.error?.message || "O Gemini não conseguiu preparar o PDF.") as Error & { retryable?: boolean; userMessage?: string };
+      failed.retryable = true;
+      failed.userMessage = "O Gemini não conseguiu preparar o PDF agora. O arquivo continua salvo e a tentativa não consumiu sua cota.";
+      throw failed;
+    }
+    await wait(1500);
+    const statusResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/${file.name}`, { headers: { "x-goog-api-key": GEMINI_KEY } });
+    const statusData = await statusResponse.json().catch(() => ({}));
+    if (!statusResponse.ok) {
+      if (RETRYABLE_STATUS.has(statusResponse.status)) continue;
+      await removeGeminiFile(file.name);
+      const statusError = new Error(statusData?.error?.message || `Falha ao consultar o PDF no Gemini (${statusResponse.status}).`) as Error & { retryable?: boolean; providerStatus?: number; userMessage?: string };
+      statusError.retryable = true;
+      statusError.providerStatus = statusResponse.status;
+      statusError.userMessage = "O PDF foi enviado, mas a IA não confirmou que ele está pronto. O arquivo continua salvo para tentar novamente.";
+      throw statusError;
+    }
+    Object.assign(file, statusData);
+  }
+  await removeGeminiFile(file.name);
+  const timeout = new Error("Tempo excedido aguardando o Gemini preparar o PDF.") as Error & { retryable?: boolean; userMessage?: string };
+  timeout.retryable = true;
+  timeout.userMessage = "O Gemini demorou para preparar o PDF. Ele continua salvo e esta tentativa não consumiu a cota; tente novamente em alguns minutos.";
+  throw timeout;
 }
 
 async function removeGeminiFile(name?: string) {
@@ -351,6 +411,10 @@ function coverageReport(value: any, summaries: any[]) {
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (!SUPABASE_URL || !SERVICE_KEY || !GEMINI_KEY) {
+    console.error("material-gemini configuration missing", { supabase: Boolean(SUPABASE_URL), serviceRole: Boolean(SERVICE_KEY), gemini: Boolean(GEMINI_KEY) });
+    return response({ error: "A função de materiais não está configurada neste projeto Supabase. Confira SUPABASE_SERVICE_ROLE_KEY e GEMINI_API_KEY nos Secrets.", code: "MISSING_CONFIGURATION" }, 503);
+  }
   const auth = request.headers.get("authorization") ?? "";
   const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { Authorization: auth, apikey: PUBLIC_KEY } });
   const user = authResponse.ok ? await authResponse.json() : null;
@@ -380,9 +444,17 @@ Deno.serve(async (request) => {
     const operation = ["prova", "simulado"].includes(documentType) ? "exam" : "material";
     await fetch(`${SUPABASE_URL}/rest/v1/processing_jobs?on_conflict=document_id,job_type`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ user_id: user.id, campaign_id: campaignId, document_id: documentId, job_type: operation, status: "processing", attempts: 1, locked_at: new Date().toISOString(), locked_by: "material-gemini" }) });
     const file = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${path}`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
-    if (!file.ok) return response({ error: "Não foi possível abrir o PDF." }, 502);
+    if (!file.ok) {
+      await setDocumentStatus(documentId, user.id, "error");
+      await updateJob(documentId, { status: "failed", last_error: `STORAGE_${file.status}` });
+      return response({ error: `Não foi possível abrir o PDF salvo (${file.status}). Confirme se a função e o arquivo pertencem ao mesmo projeto Supabase.`, code: "STORAGE_READ_FAILED" }, 502);
+    }
     const bytes = new Uint8Array(await file.arrayBuffer());
-    if (bytes.byteLength > 50 * 1024 * 1024) return response({ error: "O PDF deve ter no máximo 50 MB para geração automática." }, 413);
+    if (bytes.byteLength > 50 * 1024 * 1024) {
+      await setDocumentStatus(documentId, user.id, "error");
+      await updateJob(documentId, { status: "failed", last_error: "FILE_TOO_LARGE" });
+      return response({ error: "O PDF deve ter no máximo 50 MB para geração automática.", code: "FILE_TOO_LARGE" }, 413);
+    }
     const fingerprint = await sha256(bytes);
     const cachedResponse = await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints?user_id=eq.${encodeURIComponent(user.id)}&sha256=eq.${fingerprint}&document_id=neq.${encodeURIComponent(documentId)}&select=document_id&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
     const cached = cachedResponse.ok ? await cachedResponse.json() : [];
@@ -408,9 +480,11 @@ Deno.serve(async (request) => {
     usage = await reserveUsage(user.id, campaignId, operation);
     if (!usage.allowed) {
       await updateJob(documentId, { status: usage.reason === "BUSY" ? "queued" : "retry", available_at: new Date(Date.now() + 15 * 60000).toISOString(), last_error: usage.reason });
+      await setDocumentStatus(documentId, user.id, "pending");
       if (usage.reason === "DAILY_LIMIT") return response({ error: `Você atingiu o limite diário de ${usage.limit || 10} análises de arquivo concluídas. O arquivo está salvo e poderá ser processado após a renovação da cota.`, retryable: true, code: "DAILY_LIMIT" }, 429);
       if (usage.reason === "BUSY") return response({ error: "Já existe uma análise em andamento. Este PDF entrou na fila e será o próximo.", retryable: true, queued: true, code: "BUSY" }, 409);
-      return response({ error: "A proteção de consumo está temporariamente indisponível.", retryable: true, code: usage.reason }, 503);
+      if (usage.reason === "USAGE_GUARD_MISSING") return response({ error: "A tabela de controle de IA não existe neste projeto Supabase. Execute a migração 20261003_v60_fair_ai_quota.sql no projeto correto.", retryable: true, code: usage.reason }, 503);
+      return response({ error: "A proteção de consumo está temporariamente indisponível. Confira os logs da função material-gemini.", retryable: true, code: usage.reason }, 503);
     }
     const geminiFile = await uploadPdfToGemini(bytes, title);
     let generated;
@@ -476,6 +550,8 @@ Deno.serve(async (request) => {
       const providerStatus = Number((error as { providerStatus?: number })?.providerStatus || 0);
       return response({ error: (error as { userMessage?: string })?.userMessage || "As IAs estão com alta demanda agora. O PDF foi salvo, não consumiu a cota diária e continua aguardando análise.", retryable: true, code: providerStatus === 429 ? "PROVIDER_RATE_LIMIT" : "PROVIDER_UNAVAILABLE" }, providerStatus === 429 ? 429 : 503);
     }
-    return response({ error: (error as { userMessage?: string })?.userMessage || "Falha interna ao gerar o conteúdo do PDF." }, 500);
+    await setDocumentStatus(documentId, user.id, "error");
+    const providerStatus = Number((error as { providerStatus?: number })?.providerStatus || 0);
+    return response({ error: (error as { userMessage?: string })?.userMessage || `Falha ao gerar o conteúdo do PDF${providerStatus ? ` (Gemini ${providerStatus})` : ""}. Consulte os logs de material-gemini para ver o detalhe.`, code: "PROCESSING_FAILED" }, 500);
   }
 });

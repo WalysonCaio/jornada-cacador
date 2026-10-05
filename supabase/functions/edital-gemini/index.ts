@@ -51,7 +51,19 @@ async function uploadPdfToGemini(bytes: Uint8Array, title: string) {
   });
   const data = await uploaded.json();
   if (!uploaded.ok || !data?.file?.uri) throw new Error(data?.error?.message ?? `Falha ao enviar PDF ao Gemini (${uploaded.status}).`);
-  return data.file as { uri: string; name?: string; mimeType?: string };
+  const file = data.file as { uri: string; name?: string; mimeType?: string; state?: string; error?: { message?: string } };
+  if (!file.name) return file;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (String(file.state || "").toUpperCase() === "ACTIVE") return file;
+    if (String(file.state || "").toUpperCase() === "FAILED") { await removeGeminiFile(file.name);throw new Error(file.error?.message || "O Gemini não conseguiu preparar o edital."); }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const statusResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/${file.name}`, { headers: { "x-goog-api-key": GEMINI_API_KEY } });
+    const statusData = await statusResponse.json().catch(() => ({}));
+    if (!statusResponse.ok) { await removeGeminiFile(file.name);throw new Error(statusData?.error?.message || `Falha ao consultar o edital no Gemini (${statusResponse.status}).`); }
+    Object.assign(file, statusData);
+  }
+  await removeGeminiFile(file.name);
+  throw new Error("O Gemini demorou demais para preparar o edital. Tente novamente em alguns minutos.");
 }
 
 async function removeGeminiFile(name?: string) {
@@ -69,7 +81,7 @@ async function reserveUsage(userId: string, campaignId: string) {
 
 async function finishUsage(eventId: number | undefined, status: "success" | "error", errorCode?: string) {
   if (!eventId) return;
-  await fetch(`${SUPABASE_URL}/rest/v1/ai_usage_events?id=eq.${eventId}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ status, provider: "gemini", model: "gemini-3.5-flash-lite", error_code: errorCode || null }) }).catch(() => undefined);
+  await fetch(`${SUPABASE_URL}/rest/v1/ai_usage_events?id=eq.${eventId}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ status, provider: "gemini", model: "gemini-2.5-flash", error_code: errorCode || null }) }).catch(() => undefined);
 }
 
 Deno.serve(async (request) => {
@@ -117,7 +129,7 @@ Deno.serve(async (request) => {
     const geminiFile = await uploadPdfToGemini(bytes, title);
     geminiFileName = geminiFile.name;
 
-    const geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent", {
+    const geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
       body: JSON.stringify({

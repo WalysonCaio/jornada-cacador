@@ -38,7 +38,8 @@ Deno.serve(async (request) => {
   const usage = usageResponse.ok ? await usageResponse.json() : [];
   return reply({
     ok: true,
-    version: "62",
+    version: "63",
+    project_ref: new URL(SUPABASE_URL).hostname.split(".")[0],
     database: true,
     storage: true,
     gemini_configured: Boolean(Deno.env.get("GEMINI_API_KEY")),
