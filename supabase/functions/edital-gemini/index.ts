@@ -2,6 +2,28 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const PUBLISHABLE_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
+let modelDiscovery: Promise<string> | null = null;
+async function pickGeminiModel() {
+  if (modelDiscovery) return modelDiscovery;
+  modelDiscovery = (async () => {
+    const configured = String(Deno.env.get("GEMINI_MODEL") ?? "").replace(/^models\//, "").trim();
+    try {
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { headers: { "x-goog-api-key": GEMINI_API_KEY } });
+      const data = await response.json().catch(() => ({}));
+      const blocked = /(embedding|imagen|veo|tts|audio|live|robotics|computer-use)/i;
+      const names = Array.isArray(data?.models) ? data.models.filter((item: any) => item?.supportedGenerationMethods?.includes("generateContent")).map((item: any) => String(item?.name ?? "").replace(/^models\//, "")).filter((name: string) => name && !blocked.test(name)).sort((a: string, b: string) => Number(!/flash/i.test(a)) - Number(!/flash/i.test(b))) : [];
+      const selected = configured || names[0];
+      if (!selected) throw new Error(data?.error?.message || "Nenhum modelo generateContent liberado.");
+      console.log("Gemini edital model", selected);
+      return selected;
+    } catch (error) {
+      console.error("Gemini model discovery", String((error as Error)?.message ?? error));
+      if (configured) return configured;
+      throw new Error("A chave Gemini não possui um modelo disponível para analisar o edital.");
+    }
+  })();
+  return modelDiscovery;
+}
 const ALLOWED_ORIGINS = new Set([
   "https://jornada.wcaio.workers.dev",
   "http://localhost:4173",
@@ -129,7 +151,8 @@ Deno.serve(async (request) => {
     const geminiFile = await uploadPdfToGemini(bytes, title);
     geminiFileName = geminiFile.name;
 
-    const geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
+    const geminiModel = await pickGeminiModel();
+    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
       body: JSON.stringify({

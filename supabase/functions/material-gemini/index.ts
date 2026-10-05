@@ -5,13 +5,43 @@ const PUBLIC_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
 const SITE = "https://jornada.wcaio.workers.dev";
 const cors = { "Access-Control-Allow-Origin": SITE, "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", "Content-Type": "application/json; charset=utf-8" };
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: cors });
-// Use only stable model IDs already used by the other production functions.
-// A nonexistent preview ID previously returned 400/404 and stopped every PDF
-// before the compatible model could be attempted.
-const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+// Static names are only the emergency fallback. The function asks Gemini which
+// generateContent models are actually enabled for this API key before each job.
+const GEMINI_MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const FALLBACK_STATUS = new Set([400, 404]);
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+let discoveredModels: Promise<string[]> | null = null;
+function normalizeModelName(value: unknown) { return String(value ?? "").replace(/^models\//, "").trim(); }
+async function availableGeminiModels() {
+  if (discoveredModels) return discoveredModels;
+  discoveredModels = (async () => {
+    const configured = normalizeModelName(Deno.env.get("GEMINI_MODEL"));
+    try {
+      const list = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { headers: { "x-goog-api-key": GEMINI_KEY } });
+      const data = await list.json().catch(() => ({}));
+      if (!list.ok) console.warn("Gemini models.list", list.status, data?.error?.message ?? "falha");
+      const blocked = /(embedding|imagen|veo|tts|audio|live|robotics|computer-use)/i;
+      const enabled = Array.isArray(data?.models) ? data.models
+        .filter((item: any) => Array.isArray(item?.supportedGenerationMethods) && item.supportedGenerationMethods.includes("generateContent"))
+        .map((item: any) => normalizeModelName(item?.name))
+        .filter((name: string) => name && !blocked.test(name))
+        .sort((a: string, b: string) => {
+          const score = (name: string) => (/flash(?!.*lite)/i.test(name) ? 0 : /flash-lite/i.test(name) ? 1 : /pro/i.test(name) ? 2 : 3) + (/preview|experimental|exp/i.test(name) ? 4 : 0);
+          return score(a) - score(b) || a.localeCompare(b);
+        }) : [];
+      const candidates = [configured, ...enabled, ...GEMINI_MODEL_FALLBACKS].filter(Boolean);
+      const unique = [...new Set(candidates)].slice(0, 8);
+      console.log("Gemini model candidates", unique);
+      return unique;
+    } catch (error) {
+      console.warn("Gemini model discovery failed", String((error as Error)?.message ?? error));
+      return [...new Set([configured, ...GEMINI_MODEL_FALLBACKS].filter(Boolean))];
+    }
+  })();
+  return discoveredModels;
+}
 
 async function sha256(bytes: Uint8Array) {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
@@ -69,7 +99,7 @@ async function createDocumentInventory(file: { uri: string; mimeType?: string },
   let temporaryFailure = false;
   let lastStatus = 0;
   let lastMessage = "";
-  for (const model of GEMINI_MODELS) {
+  for (const model of await availableGeminiModels()) {
     const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY }, body: JSON.stringify(requestBody) });
     const data = await result.json().catch(() => ({}));
     if (!result.ok) {
@@ -150,8 +180,9 @@ O arquivo se chama: ${title}.` },
 
   let lastError = "O serviço de IA está temporariamente indisponível.";
   let lastStatus = 0;
-  for (let modelIndex = 0; modelIndex < GEMINI_MODELS.length; modelIndex++) {
-    const model = GEMINI_MODELS[modelIndex];
+  const models = await availableGeminiModels();
+  for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
+    const model = models[modelIndex];
     for (let attempt = 0; attempt < 2; attempt++) {
       const ai = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: "POST",
@@ -186,7 +217,8 @@ O arquivo se chama: ${title}.` },
 
 async function reviewGeneratedQuestions(summaries: unknown[], campaignContext: string) {
   const compact = summaries.map((summary: any, summaryIndex) => ({ summary_index: summaryIndex, subject: summary?.subject, title: summary?.title, questions: summary?.questions })).slice(0, 24);
-  const model = GEMINI_MODELS[0];
+  const model = (await availableGeminiModels())[0];
+  if (!model) return summaries;
   const review = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY },

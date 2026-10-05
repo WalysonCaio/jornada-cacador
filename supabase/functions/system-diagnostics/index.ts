@@ -36,13 +36,25 @@ Deno.serve(async (request) => {
     fetch(`${SUPABASE_URL}/rest/v1/my_ai_usage_daily?user_id=eq.${userId}&usage_day=eq.${today}&select=operation,successful,failed,input_units,output_units`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } }),
   ]);
   const usage = usageResponse.ok ? await usageResponse.json() : [];
+  const geminiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
+  let geminiModels: string[] = [];
+  let geminiApiError = "";
+  if (geminiKey) {
+    const modelResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { headers: { "x-goog-api-key": geminiKey } }).catch(() => null);
+    const modelData = modelResponse ? await modelResponse.json().catch(() => ({})) : {};
+    if (modelResponse?.ok && Array.isArray(modelData?.models)) geminiModels = modelData.models.filter((item: any) => item?.supportedGenerationMethods?.includes("generateContent")).map((item: any) => String(item?.name ?? "").replace(/^models\//, "")).filter(Boolean).slice(0, 12);
+    else geminiApiError = modelData?.error?.message || "Não foi possível consultar os modelos Gemini.";
+  }
   return reply({
     ok: true,
-    version: "63",
+    version: "64",
     project_ref: new URL(SUPABASE_URL).hostname.split(".")[0],
     database: true,
     storage: true,
-    gemini_configured: Boolean(Deno.env.get("GEMINI_API_KEY")),
+    gemini_configured: Boolean(geminiKey),
+    gemini_api_ok: geminiModels.length > 0,
+    gemini_available_models: geminiModels,
+    gemini_api_error: geminiApiError || null,
     groq_configured: Boolean(Deno.env.get("GROQ_API_KEY")),
     pending_documents: pending,
     failed_documents: failed,

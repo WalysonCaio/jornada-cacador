@@ -24,7 +24,7 @@ for (const relative of publicFiles) {
 }
 
 const sw = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
-if (!sw.includes("jornada-cacador-v63")) throw new Error("O cache não aponta para a versão 63.");
+if (!sw.includes("jornada-cacador-v64")) throw new Error("O cache não aponta para a versão 64.");
 const applyServerState = html.match(/function applyServerState[\s\S]*?function mergeProgressStates/)?.[0] || "";
 if (!applyServerState.includes("focusWasRunning") || !applyServerState.includes("if(!focusWasRunning)restoreFocusTimerState()")) throw new Error("A sincronização não preserva o cronômetro de foco.");
 if (applyServerState.includes("timerLeft=focusBlockSeconds()")) throw new Error("A sincronização ainda reinicia o cronômetro para 50 minutos.");
@@ -38,7 +38,7 @@ const headers = fs.readFileSync(new URL("../dist/_headers", import.meta.url), "u
 for (const header of ["X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy", "Cache-Control: no-cache"]) if (!headers.includes(header)) throw new Error(`Cabeçalho de segurança ausente: ${header}`);
 const materialFunction = fs.readFileSync(new URL("../supabase/functions/material-gemini/index.ts", import.meta.url), "utf8");
 if (materialFunction.includes("gemini-3.5-flash-lite") || materialFunction.includes("gemini-3.1-flash-lite")) throw new Error("A função de materiais ainda usa um identificador de modelo incompatível.");
-for (const required of ["gemini-2.5-flash", "FALLBACK_STATUS", "PROCESSING", "setDocumentStatus", "USAGE_GUARD_MISSING"]) if (!materialFunction.includes(required)) throw new Error(`Correção de PDF incompleta: ${required}`);
+for (const required of ["models?pageSize=1000", "supportedGenerationMethods", "availableGeminiModels", "FALLBACK_STATUS", "PROCESSING", "setDocumentStatus", "USAGE_GUARD_MISSING"]) if (!materialFunction.includes(required)) throw new Error(`Correção de PDF incompleta: ${required}`);
 for (const required of ["rpc/sync_user_state", "rpc/claim_focus_session", "rpc/update_focus_session", "_serverRevision", "_resetEpoch", "refreshFromServer", "STALE_RESET", "subjectOrder", "learningOrder", "errorUrgency", "menuAbout", "STREAK_MIN_SECONDS", "manualStudyEntries", "questionsForMode", "prepareQuestion", "renderCustomBossCard", "renderExamCountdown", "renderEssays", "libraryFolders", "metadata?.coverage", "coverageWarnings", "v59-enhancements.js"]) {
   if (!html.includes(required)) throw new Error(`Sincronização precisa incompleta: ${required}`);
 }

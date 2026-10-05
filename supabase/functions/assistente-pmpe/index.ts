@@ -59,6 +59,23 @@ async function finishUsage(eventId: number | undefined, status: "success" | "err
   }).catch(() => undefined);
 }
 
+let geminiModelDiscovery: Promise<string> | null = null;
+async function discoverGeminiModel() {
+  if (!GEMINI_API_KEY) throw new Error("GEMINI_NOT_CONFIGURED");
+  if (geminiModelDiscovery) return geminiModelDiscovery;
+  geminiModelDiscovery = (async () => {
+    const modelsResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { headers: { "x-goog-api-key": GEMINI_API_KEY } });
+    const modelsData = await modelsResponse.json().catch(() => ({}));
+    const blocked = /(embedding|imagen|veo|tts|audio|live|robotics|computer-use)/i;
+    const enabled = Array.isArray(modelsData?.models) ? modelsData.models.filter((item: any) => item?.supportedGenerationMethods?.includes("generateContent")).map((item: any) => String(item?.name ?? "").replace(/^models\//, "")).filter((name: string) => name && !blocked.test(name)).sort((a: string, b: string) => Number(!/flash/i.test(a)) - Number(!/flash/i.test(b))) : [];
+    const model = String(Deno.env.get("GEMINI_MODEL") ?? "").replace(/^models\//, "").trim() || enabled[0];
+    if (!modelsResponse.ok || !model) throw new Error(`GEMINI_MODELS_${modelsResponse.status}:${modelsData?.error?.message ?? "nenhum modelo disponível"}`);
+    console.log("Gemini assistant model", model);
+    return model;
+  })();
+  return geminiModelDiscovery;
+}
+
 async function askGroq(systemPrompt: string, userPrompt: string) {
   if (!GROQ_API_KEY) throw new Error("GROQ_NOT_CONFIGURED");
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -79,8 +96,7 @@ async function askGroq(systemPrompt: string, userPrompt: string) {
 }
 
 async function askGemini(systemPrompt: string, userPrompt: string) {
-  if (!GEMINI_API_KEY) throw new Error("GEMINI_NOT_CONFIGURED");
-  const model = "gemini-2.5-flash-lite";
+  const model = await discoverGeminiModel();
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
@@ -140,7 +156,8 @@ Deno.serve(async (request) => {
       let binary = "";
       for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
       const base64 = btoa(binary);
-      const geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent", {
+      const parseModel = await discoverGeminiModel();
+      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${parseModel}:generateContent`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
         body: JSON.stringify({
