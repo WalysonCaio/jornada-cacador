@@ -25,10 +25,15 @@ Esta versão corrige a falha de análise de materiais causada por modelos antigo
    npx supabase functions deploy material-gemini
    ```
 
+   Antes do teste, abra o **SQL Editor** do mesmo projeto Supabase, copie todo
+   o arquivo `supabase/migrations/20261006_v66_release_stale_ai_lock.sql` e
+   pressione **Run**. Isso libera o registro antigo que mostra, incorretamente,
+   “Já existe uma análise em andamento”.
+
 7. Envie a alteração ao GitHub:
 
    ```bat
-   git add supabase/functions/material-gemini/index.ts CORRECAO-GEMINI-INTERACTIONS-V66.md
+   git add supabase/functions/material-gemini/index.ts supabase/migrations/20261006_v66_release_stale_ai_lock.sql CORRECAO-GEMINI-INTERACTIONS-V66.md
    git status
    git commit -m "Corrige analise de PDFs com Gemini Interactions"
    git push origin main
