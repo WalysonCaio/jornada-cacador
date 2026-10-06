@@ -12,6 +12,80 @@ const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const FALLBACK_STATUS = new Set([400, 404]);
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const INTERACTIONS_MODELS = [
+  normalizeModelName(Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash"),
+  "gemini-3.7-flash",
+].filter(Boolean);
+
+function interactionText(data: any) {
+  return String((Array.isArray(data?.steps) ? data.steps : [])
+    .flatMap((step: any) => Array.isArray(step?.content) ? step.content : [])
+    .filter((part: any) => part?.type === "text")
+    .map((part: any) => part?.text || "")
+    .join("\n")).trim();
+}
+
+function standardJsonSchema(value: any): any {
+  if (Array.isArray(value)) return value.map(standardJsonSchema);
+  if (!value || typeof value !== "object") return value;
+  const result: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    result[key] = key === "type" && typeof item === "string" ? item.toLowerCase() : standardJsonSchema(item);
+  }
+  return result;
+}
+
+async function createGeminiInteraction(input: any[], schema: any, maxOutputTokens = 32768) {
+  let lastStatus = 0;
+  let lastMessage = "O Gemini não concluiu a interação.";
+  for (const model of [...new Set(INTERACTIONS_MODELS)]) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 115000);
+    try {
+      const result = await fetch("https://generativelanguage.googleapis.com/v1/interactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model,
+          input,
+          store: false,
+          generation_config: { max_output_tokens: maxOutputTokens, thinking_level: "low" },
+          response_format: { type: "text", mime_type: "application/json", schema: standardJsonSchema(schema) },
+        }),
+      });
+      const data = await result.json().catch(() => ({}));
+      if (result.ok) {
+        const raw = interactionText(data);
+        if (!raw) throw new Error("EMPTY_GEMINI_RESPONSE");
+        return { data, parsed: JSON.parse(raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "")), model };
+      }
+      lastStatus = result.status;
+      lastMessage = data?.error?.message || data?.errors?.[0]?.message || `Gemini ${result.status}`;
+      console.warn("Gemini interaction", model, result.status, lastMessage);
+      // Só um identificador inválido justifica tentar o modelo reserva. Cota e
+      // sobrecarga devem retornar imediatamente, sem gastar os 150 s da função.
+      if (!FALLBACK_STATUS.has(result.status)) break;
+    } catch (error) {
+      lastMessage = (error as Error)?.name === "AbortError" ? "A análise excedeu o tempo seguro de 115 segundos." : String((error as Error)?.message || error);
+      lastStatus = (error as Error)?.name === "AbortError" ? 504 : 500;
+      console.warn("Gemini interaction exception", model, lastMessage);
+      break;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  const error = new Error(lastMessage) as Error & { retryable?: boolean; providerStatus?: number; userMessage?: string };
+  error.retryable = RETRYABLE_STATUS.has(lastStatus) || FALLBACK_STATUS.has(lastStatus) || lastStatus === 0;
+  error.providerStatus = lastStatus;
+  error.userMessage = lastStatus === 429
+    ? "A cota gratuita do Gemini foi atingida. O PDF continua salvo e a tentativa não consumiu seu limite diário; tente após a renovação da cota ou habilite faturamento no Google AI Studio."
+    : lastStatus === 503 || lastStatus === 504
+      ? "O Gemini está sobrecarregado ou excedeu o tempo de análise. O PDF continua salvo e a tentativa não consumiu seu limite diário; tente novamente mais tarde."
+      : `O Gemini recusou a análise${lastStatus ? ` (erro ${lastStatus})` : ""}: ${lastMessage}`;
+  throw error;
+}
+
 function parseGeminiJsonText(data: any) {
   const raw = String(data?.candidates?.[0]?.content?.parts?.map((part: any) => part?.text || "").join("") ?? "").trim();
   if (!raw) throw new Error("EMPTY_GEMINI_RESPONSE");
@@ -260,7 +334,9 @@ function pdfInlinePart(bytes: Uint8Array) {
 }
 
 async function generateStudyPackageStable(file: { uri: string; mimeType?: string }, title: string, campaignContext: string, documentType: string, inlineBytes?: Uint8Array) {
-  const sourcePart = inlineBytes ? pdfInlinePart(inlineBytes) : { file_data: { mime_type: file.mimeType ?? "application/pdf", file_uri: file.uri } };
+  const sourcePart = inlineBytes
+    ? { type: "document", mime_type: "application/pdf", data: pdfInlinePart(inlineBytes).inline_data.data }
+    : { type: "document", mime_type: file.mimeType ?? "application/pdf", uri: file.uri };
   const requestBody = {
     contents: [{ parts: [
       sourcePart,
@@ -287,34 +363,16 @@ TIPO: ${documentType}. ${["prova", "simulado"].includes(documentType) ? "Quando 
       }, required: ["subject", "title", "explanation", "points", "example", "bizu", "mnemonic", "trap", "flashcards", "questions"] } } }, required: ["summaries"] },
     },
   };
-  let lastStatus = 0;
-  let lastError = "O Gemini não conseguiu gerar o conteúdo.";
-  for (const model of (await availableGeminiModels()).slice(0, 4)) {
-    for (const body of [requestBody, relaxedGenerationBody(requestBody, 24576)]) {
-      const ai = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY }, body: JSON.stringify(body) });
-      const data = await ai.json().catch(() => ({}));
-      if (ai.ok) {
-        try {
-          const parsed = parseGeminiJsonText(data);
-          if (Array.isArray(parsed?.summaries) && parsed.summaries.length) return { data, parsed, model };
-          lastError = "O Gemini respondeu sem resumos.";
-        } catch { lastError = "O Gemini devolveu uma resposta incompleta."; }
-        continue;
-      }
-      lastStatus = ai.status;
-      lastError = data?.error?.message ?? `Gemini ${ai.status}`;
-      console.warn("Stable Gemini generation", model, ai.status, lastError);
-      if (RETRYABLE_STATUS.has(ai.status)) await wait(900);
-    }
+  const schema = requestBody.generationConfig.responseSchema;
+  const prompt = requestBody.contents[0].parts[1].text;
+  const result = await createGeminiInteraction([sourcePart, { type: "text", text: prompt }], schema, 32768);
+  if (!Array.isArray(result.parsed?.summaries) || !result.parsed.summaries.length) {
+    const error = new Error("O Gemini respondeu sem resumos utilizáveis.") as Error & { retryable?: boolean; userMessage?: string };
+    error.retryable = true;
+    error.userMessage = "O Gemini leu o arquivo, mas não devolveu resumos utilizáveis. O PDF continua salvo; tente novamente.";
+    throw error;
   }
-  const error = new Error(lastError) as Error & { retryable?: boolean; providerStatus?: number; userMessage?: string };
-  error.retryable = RETRYABLE_STATUS.has(lastStatus) || FALLBACK_STATUS.has(lastStatus) || lastStatus === 0;
-  error.providerStatus = lastStatus;
-  const safeDetail = cleanGeneratedText(lastError, 320).replace(/AIza[\w-]+/g, "[chave protegida]");
-  error.userMessage = lastStatus === 429
-    ? "A cota do Gemini está temporariamente esgotada. O PDF continua salvo e esta tentativa não consumiu seu limite diário."
-    : `O Gemini não concluiu a geração${lastStatus ? ` (erro ${lastStatus})` : ""}. ${safeDetail || "O PDF continua salvo para uma nova tentativa."}`;
-  throw error;
+  return result;
 }
 
 async function reviewGeneratedQuestions(summaries: unknown[], campaignContext: string) {
