@@ -1,6 +1,10 @@
+import { extractText, getDocumentProxy } from "npm:unpdf@0.12.1";
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY")!;
+const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
+const DEEPSEEK_KEY = Deno.env.get("DEEPSEEK_API_KEY") ?? "";
+const GROQ_KEY = Deno.env.get("GROQ_API_KEY") ?? "";
 const PUBLIC_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
 const SITE = "https://jornada.wcaio.workers.dev";
 const cors = { "Access-Control-Allow-Origin": SITE, "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", "Content-Type": "application/json; charset=utf-8" };
@@ -11,6 +15,8 @@ const GEMINI_MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const FALLBACK_STATUS = new Set([400, 404]);
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const TEXT_CHUNK_TARGET = 28000;
+const MAX_TEXT_CHUNKS = 10;
 
 const INTERACTIONS_MODELS = [
   normalizeModelName(Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash"),
@@ -36,12 +42,12 @@ function standardJsonSchema(value: any): any {
   return result;
 }
 
-async function createGeminiInteraction(input: any[], schema: any, maxOutputTokens = 32768) {
+async function createGeminiInteraction(input: any[], schema: any, maxOutputTokens = 32768, timeoutMs = 115000) {
   let lastStatus = 0;
   let lastMessage = "O Gemini não concluiu a interação.";
   for (const model of [...new Set(INTERACTIONS_MODELS)]) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 115000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const result = await fetch("https://generativelanguage.googleapis.com/v1/interactions", {
         method: "POST",
@@ -73,7 +79,7 @@ async function createGeminiInteraction(input: any[], schema: any, maxOutputToken
       // tentativas inúteis nem consumir o tempo máximo da Edge Function.
       if (!FALLBACK_STATUS.has(result.status) && result.status !== 503) break;
     } catch (error) {
-      lastMessage = (error as Error)?.name === "AbortError" ? "A análise excedeu o tempo seguro de 115 segundos." : String((error as Error)?.message || error);
+      lastMessage = (error as Error)?.name === "AbortError" ? `A análise excedeu o tempo seguro de ${Math.round(timeoutMs / 1000)} segundos.` : String((error as Error)?.message || error);
       lastStatus = (error as Error)?.name === "AbortError" ? 504 : 500;
       console.warn("Gemini interaction exception", model, lastMessage);
       break;
@@ -381,6 +387,244 @@ TIPO: ${documentType}. ${["prova", "simulado"].includes(documentType) ? "Quando 
   return result;
 }
 
+type TextPage = { page: number; text: string };
+type TextChunk = { index: number; pageStart: number; pageEnd: number; text: string; headings: string[] };
+type ProviderAttempt = { provider: string; model: string; status: number; message: string };
+
+function jsonFromModelText(value: unknown) {
+  const raw = String(value ?? "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  try { return JSON.parse(raw); } catch { /* extrai o primeiro objeto completo */ }
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start >= 0 && end > start) return JSON.parse(raw.slice(start, end + 1));
+  throw new Error("INVALID_PROVIDER_JSON");
+}
+
+function normalizeExtractedPage(value: unknown) {
+  return String(value ?? "")
+    .replace(/\u0000/g, "")
+    .replace(/[\t ]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+async function extractPdfPages(bytes: Uint8Array): Promise<TextPage[]> {
+  // PDF.js pode transferir/destacar o ArrayBuffer recebido. A cópia mantém os
+  // bytes originais disponíveis para a rota de OCR visual do Gemini.
+  const document = await getDocumentProxy(bytes.slice());
+  const extracted = await extractText(document, { mergePages: false });
+  const rawPages = Array.isArray(extracted?.text) ? extracted.text : [extracted?.text];
+  const pages = rawPages.map((text, index) => ({ page: index + 1, text: normalizeExtractedPage(text) }));
+  const meaningfulCharacters = pages.reduce((total, page) => total + page.text.replace(/\s/g, "").length, 0);
+  if (!pages.length || meaningfulCharacters < Math.max(300, pages.length * 35)) {
+    const error = new Error("PDF_TEXT_EXTRACTION_INSUFFICIENT") as Error & { code?: string; userMessage?: string };
+    error.code = "OCR_REQUIRED";
+    error.userMessage = "O PDF parece ser digitalizado ou não possui texto selecionável. O Gemini tentará a leitura visual; se ela falhar, aplique OCR ao arquivo antes de reenviar.";
+    throw error;
+  }
+  return pages;
+}
+
+function pageHeadings(text: string) {
+  return text.split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length >= 4 && line.length <= 120 && (/^[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ0-9][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ0-9 .,:;()º°ª\-–—/]{3,}$/.test(line) || /^(cap[ií]tulo|t[ií]tulo|se[cç][aã]o|unidade|m[oó]dulo|art\.?)\s/i.test(line)))
+    .slice(0, 8);
+}
+
+function createTextChunks(pages: TextPage[]): TextChunk[] {
+  const chunks: TextChunk[] = [];
+  let current: TextPage[] = [];
+  let length = 0;
+  const flush = () => {
+    if (!current.length) return;
+    chunks.push({
+      index: chunks.length,
+      pageStart: current[0].page,
+      pageEnd: current[current.length - 1].page,
+      text: current.map((page) => `[PÁGINA ${page.page}]\n${page.text}`).join("\n\n"),
+      headings: [...new Set(current.flatMap((page) => pageHeadings(page.text)))].slice(0, 20),
+    });
+    current = [];
+    length = 0;
+  };
+  for (const page of pages) {
+    const addition = page.text.length + 24;
+    if (current.length && length + addition > TEXT_CHUNK_TARGET) flush();
+    current.push(page);
+    length += addition;
+  }
+  flush();
+
+  // Não descarta silenciosamente o final de documentos extensos. Quando há
+  // mais de dez blocos, redistribui páginas contíguas em dez partes.
+  if (chunks.length <= MAX_TEXT_CHUNKS) return chunks;
+  const pagesPerChunk = Math.ceil(pages.length / MAX_TEXT_CHUNKS);
+  const balanced: TextChunk[] = [];
+  for (let offset = 0; offset < pages.length; offset += pagesPerChunk) {
+    const group = pages.slice(offset, offset + pagesPerChunk);
+    balanced.push({
+      index: balanced.length,
+      pageStart: group[0].page,
+      pageEnd: group[group.length - 1].page,
+      text: group.map((page) => `[PÁGINA ${page.page}]\n${page.text}`).join("\n\n"),
+      headings: [...new Set(group.flatMap((page) => pageHeadings(page.text)))].slice(0, 20),
+    });
+  }
+  return balanced;
+}
+
+async function callOpenAiCompatibleProvider(
+  provider: "deepseek" | "groq",
+  prompt: string,
+  attempts: ProviderAttempt[],
+) {
+  const config = provider === "deepseek"
+    ? { key: DEEPSEEK_KEY, url: "https://api.deepseek.com/chat/completions", model: Deno.env.get("DEEPSEEK_MODEL") || "deepseek-chat" }
+    : { key: GROQ_KEY, url: "https://api.groq.com/openai/v1/chat/completions", model: Deno.env.get("GROQ_MODEL") || "llama-3.3-70b-versatile" };
+  if (!config.key) {
+    attempts.push({ provider, model: config.model, status: 0, message: "chave não configurada" });
+    return null;
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 22000);
+  try {
+    const result = await fetch(config.url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${config.key}`, "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          { role: "system", content: "Você é um professor especialista em concursos. Responda somente com um objeto JSON válido, sem markdown." },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.15,
+        response_format: { type: "json_object" },
+      }),
+    });
+    const data = await result.json().catch(() => ({}));
+    if (!result.ok) {
+      attempts.push({ provider, model: config.model, status: result.status, message: String(data?.error?.message || `${provider} ${result.status}`).slice(0, 500) });
+      return null;
+    }
+    const parsed = jsonFromModelText(data?.choices?.[0]?.message?.content);
+    if (!Array.isArray(parsed?.summaries) || !parsed.summaries.length) throw new Error("EMPTY_PROVIDER_SUMMARIES");
+    return { parsed, provider, model: config.model };
+  } catch (error) {
+    const status = (error as Error)?.name === "AbortError" ? 504 : 500;
+    attempts.push({ provider, model: config.model, status, message: String((error as Error)?.message || error).slice(0, 500) });
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function chunkStudyPrompt(chunk: TextChunk, totalChunks: number, title: string, campaignContext: string, documentType: string) {
+  return `Analise exclusivamente o trecho abaixo, extraído das páginas ${chunk.pageStart} a ${chunk.pageEnd} do PDF “${title}”. Este é o bloco ${chunk.index + 1} de ${totalChunks}. Não use conhecimento externo para completar lacunas.
+
+Crie entre 1 e 4 resumos, respeitando a ordem pedagógica do texto. Para cada resumo devolva exatamente os campos: subject, title, page_start, page_end, explanation, points, example, bizu, mnemonic, trap, flashcards e questions.
+
+Regras:
+- explanation deve ser uma aula detalhada, clara e autossuficiente para iniciante;
+- points deve possuir de 5 a 10 itens;
+- flashcards deve possuir de 5 a 8 objetos com question e answer;
+- questions deve possuir exatamente 5 objetos com statement, options (4 alternativas plausíveis do mesmo assunto), correct_index (0 a 3), explanation, difficulty, topic e origin;
+- use a progressão: 1 fácil, 2 médias e 2 difíceis;
+- não invente artigo, lei, exceção, banca ou dado ausente;
+- em referências jurídicas use “Art. 4°”, nunca “Art. 4o”;
+- page_start e page_end devem ficar entre ${chunk.pageStart} e ${chunk.pageEnd};
+- se o trecho apenas continuar um assunto anterior, ainda produza um resumo compreensível, sem fingir que viu páginas ausentes;
+- responda apenas JSON no formato {"summaries":[...]}.
+
+TIPO: ${documentType}.
+CONTEXTO DO EDITAL (somente para nomear a disciplina):
+${campaignContext || "Sem edital sincronizado."}
+
+TÍTULOS DETECTADOS NESTE BLOCO:
+${chunk.headings.join(" | ") || "Nenhum título inequívoco detectado."}
+
+TEXTO EXTRAÍDO:
+${chunk.text}`;
+}
+
+async function generateChunkWithFallback(chunk: TextChunk, totalChunks: number, title: string, campaignContext: string, documentType: string) {
+  const prompt = chunkStudyPrompt(chunk, totalChunks, title, campaignContext, documentType);
+  const attempts: ProviderAttempt[] = [];
+  if (GEMINI_KEY) {
+    try {
+      const result = await createGeminiInteraction([{ type: "text", text: prompt }], {}, 16384, 22000);
+      if (!Array.isArray(result.parsed?.summaries) || !result.parsed.summaries.length) throw new Error("EMPTY_GEMINI_SUMMARIES");
+      return { ...result, provider: "gemini", attempts };
+    } catch (error) {
+      const status = Number((error as { providerStatus?: number })?.providerStatus || 500);
+      attempts.push({ provider: "gemini", model: "automatic-fallback", status, message: String((error as Error)?.message || error).slice(0, 500) });
+      // Também continua em JSON inválido/timeout: o PDF já foi extraído e pode
+      // ser processado com segurança por outro provedor textual.
+    }
+  } else attempts.push({ provider: "gemini", model: "", status: 0, message: "chave não configurada" });
+
+  const deepseek = await callOpenAiCompatibleProvider("deepseek", prompt, attempts);
+  if (deepseek) return { ...deepseek, attempts };
+  const groq = await callOpenAiCompatibleProvider("groq", prompt, attempts);
+  if (groq) return { ...groq, attempts };
+
+  const error = new Error("ALL_AI_PROVIDERS_FAILED") as Error & { retryable?: boolean; providerStatus?: number; userMessage?: string; attempts?: ProviderAttempt[] };
+  error.retryable = true;
+  error.providerStatus = attempts.some((item) => item.status === 429) ? 429 : 503;
+  error.attempts = attempts;
+  error.userMessage = "Gemini, DeepSeek e Groq não concluíram este bloco. O PDF permanece salvo, a tentativa não consumiu a cota diária e poderá ser retomada depois.";
+  throw error;
+}
+
+async function generateStudyPackageFromText(
+  pages: TextPage[], title: string, campaignContext: string, documentType: string,
+  onProgress: (completed: number, total: number, providers: string[]) => Promise<void>,
+) {
+  const chunks = createTextChunks(pages);
+  const results: any[] = new Array(chunks.length);
+  const providers: string[] = [];
+  const models: string[] = [];
+  const attempts: ProviderAttempt[] = [];
+  let nextIndex = 0;
+  let completed = 0;
+  const worker = async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= chunks.length) return;
+      const chunk = chunks[index];
+      const generated = await generateChunkWithFallback(chunk, chunks.length, title, campaignContext, documentType);
+      results[index] = generated;
+      providers.push(generated.provider);
+      models.push(generated.model);
+      attempts.push(...generated.attempts);
+      completed += 1;
+      await onProgress(completed, chunks.length, providers);
+    }
+  };
+  // Duas análises simultâneas aceleram PDFs longos sem disparar uma rajada que
+  // provoque 429 nos provedores gratuitos.
+  await Promise.all(Array.from({ length: Math.min(2, chunks.length) }, () => worker()));
+  const summaries = results.flatMap((generated) => generated?.parsed?.summaries || []);
+  const sections = chunks.flatMap((chunk) => chunk.headings.length ? chunk.headings : [`Páginas ${chunk.pageStart}–${chunk.pageEnd}`]);
+  return {
+    parsed: {
+      summaries,
+      coverage: {
+        estimated_pages: pages.length,
+        sections_detected: sections,
+        sections_covered: sections,
+        omissions: [],
+        coverage_confidence: 0.9,
+      },
+    },
+    provider: [...new Set(providers)].join("+") || "unknown",
+    model: [...new Set(models)].join("+") || "unknown",
+    chunks: chunks.length,
+    attempts,
+  };
+}
+
 async function reviewGeneratedQuestions(summaries: unknown[], campaignContext: string) {
   const compact = summaries.map((summary: any, summaryIndex) => ({ summary_index: summaryIndex, subject: summary?.subject, title: summary?.title, questions: summary?.questions })).slice(0, 24);
   const model = (await availableGeminiModels())[0];
@@ -615,9 +859,9 @@ function coverageReport(value: any, summaries: any[]) {
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
-  if (!SUPABASE_URL || !SERVICE_KEY || !GEMINI_KEY) {
-    console.error("material-gemini configuration missing", { supabase: Boolean(SUPABASE_URL), serviceRole: Boolean(SERVICE_KEY), gemini: Boolean(GEMINI_KEY) });
-    return response({ error: "A função de materiais não está configurada neste projeto Supabase. Confira SUPABASE_SERVICE_ROLE_KEY e GEMINI_API_KEY nos Secrets.", code: "MISSING_CONFIGURATION" }, 503);
+  if (!SUPABASE_URL || !SERVICE_KEY || (!GEMINI_KEY && !DEEPSEEK_KEY && !GROQ_KEY)) {
+    console.error("material-gemini configuration missing", { supabase: Boolean(SUPABASE_URL), serviceRole: Boolean(SERVICE_KEY), gemini: Boolean(GEMINI_KEY), deepseek: Boolean(DEEPSEEK_KEY), groq: Boolean(GROQ_KEY) });
+    return response({ error: "A função de materiais não está configurada. Confira SUPABASE_SERVICE_ROLE_KEY e configure ao menos uma das chaves: GEMINI_API_KEY, DEEPSEEK_API_KEY ou GROQ_API_KEY.", code: "MISSING_CONFIGURATION" }, 503);
   }
   const auth = request.headers.get("authorization") ?? "";
   const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { Authorization: auth, apikey: PUBLIC_KEY } });
@@ -690,26 +934,33 @@ Deno.serve(async (request) => {
       if (usage.reason === "USAGE_GUARD_MISSING") return response({ error: "A tabela de controle de IA não existe neste projeto Supabase. Execute a migração 20261003_v60_fair_ai_quota.sql no projeto correto.", retryable: true, code: usage.reason }, 503);
       return response({ error: "A proteção de consumo está temporariamente indisponível. Confira os logs da função material-gemini.", retryable: true, code: usage.reason }, 503);
     }
-    const geminiFile = await uploadPdfToGemini(bytes, title);
-    let generated;
+    let generated: any;
     let inventory: any = documents[0]?.metadata?.analysis_plan;
+    if (!Array.isArray(inventory?.sections)) inventory = { estimated_pages: 0, sections: [], warnings: [], model: "local-text-extraction" };
+    await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "extracting_text", percent: 15, completed_sections: 0, total_sections: 0, updated_at: new Date().toISOString() } } }) });
     try {
-      if (!Array.isArray(inventory?.sections)) inventory = { estimated_pages: 0, sections: [], warnings: ["Geração direta estável: confira o PDF original para validar a cobertura."], model: "direct-stable" };
-      await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "generation", percent: 30, completed_sections: 0, total_sections: 0, updated_at: new Date().toISOString() } } }) });
+      const pages = await extractPdfPages(bytes);
+      inventory = {
+        estimated_pages: pages.length,
+        sections: pages.flatMap((page) => pageHeadings(page.text).map((name) => ({ name, start_page: page.page, end_page: page.page }))).slice(0, 100),
+        warnings: [],
+        model: "unpdf-local",
+      };
+      generated = await generateStudyPackageFromText(pages, title, campaignContext, documentType, async (completed, total, providers) => {
+        const percent = 20 + Math.round((completed / total) * 55);
+        await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "generation", percent, completed_sections: completed, total_sections: total, providers: [...new Set(providers)], updated_at: new Date().toISOString() } } }) });
+      });
+    } catch (extractionError) {
+      if ((extractionError as { code?: string })?.code !== "OCR_REQUIRED" || !GEMINI_KEY) throw extractionError;
+      console.warn("Local PDF extraction insufficient; using Gemini native document vision");
+      const geminiFile = await uploadPdfToGemini(bytes, title);
       try {
-        generated = await generateStudyPackageStable(geminiFile, title, campaignContext, documentType);
-      } catch (generationError) {
-        const providerStatus = Number((generationError as { providerStatus?: number })?.providerStatus || 0);
-        // Alguns projetos Gemini aceitam o upload no File API, mas recusam o
-        // file_uri no generateContent com 400. Para PDFs pequenos, retomamos o
-        // formato inline usado com sucesso nas primeiras versões.
-        if (providerStatus === 400 && bytes.byteLength <= 14 * 1024 * 1024) {
-          console.warn("File API rejected with 400; retrying inline PDF", bytes.byteLength);
-          generated = await generateStudyPackageStable(geminiFile, title, campaignContext, documentType, bytes);
-        } else throw generationError;
+        inventory = { estimated_pages: 0, sections: [], warnings: ["PDF digitalizado: leitura visual realizada pelo Gemini."], model: "gemini-native-vision" };
+        generated = await generateStudyPackageStable(geminiFile, title, campaignContext, documentType, bytes.byteLength <= 14 * 1024 * 1024 ? bytes : undefined);
+        generated.provider = "gemini-vision";
+      } finally {
+        await removeGeminiFile(geminiFile.name);
       }
-    } finally {
-      await removeGeminiFile(geminiFile.name);
     }
     const parsed: any = generated.parsed;
     const generatedSummaries = Array.isArray(parsed.summaries) ? parsed.summaries : [];
@@ -724,7 +975,7 @@ Deno.serve(async (request) => {
     const hasDeclaredCoverage = Array.isArray(parsed?.coverage?.sections_detected) && parsed.coverage.sections_detected.length > 0;
     const grosslyIncomplete = hasDeclaredCoverage && ((coverage.sections_detected.length >= 3 && coverage.percent < 50) || coverage.confidence < 0.35 || coverage.shallow_summaries > Math.ceil(summaries.length / 2));
     if (grosslyIncomplete) {
-      await finishUsage(usage.event_id, "error", "gemini", generated.model, "LOW_COVERAGE");
+      await finishUsage(usage.event_id, "error", generated.provider, generated.model, "LOW_COVERAGE");
       await updateJob(documentId, { status: "failed", last_error: "LOW_COVERAGE" });
       return response({ error: "A análise não atingiu a cobertura mínima de segurança e não substituiu nenhum conteúdo anterior. Tente novamente; se o PDF for digitalizado, gere uma versão com OCR ou divida-o por capítulos.", coverage }, 422);
     }
@@ -746,9 +997,9 @@ Deno.serve(async (request) => {
     const detectedSubject = Object.entries(subjectCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "Conteúdo geral";
     await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready", detected_subject: detectedSubject, metadata: { ...(documents[0]?.metadata || {}), primary_subject: detectedSubject, subjects: Object.keys(subjectCounts), analyzed_at: new Date().toISOString(), analysis_plan: inventory, analysis_progress: { stage: "completed", percent: 100, completed_sections: coverage.sections_covered.length, total_sections: coverage.sections_detected.length, updated_at: new Date().toISOString() }, coverage } }) });
     await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ user_id: user.id, document_id: documentId, sha256: fingerprint, byte_size: bytes.byteLength }) });
-    await finishUsage(usage.event_id, "success", "gemini", generated.model);
+    await finishUsage(usage.event_id, "success", generated.provider, generated.model);
     await updateJob(documentId, { status: "completed", last_error: null });
-    return response({ summaries: summaries.length, flashcards: summaries.reduce((n: number, x: { flashcards?: unknown[] }) => n + (x.flashcards?.length ?? 0), 0), questions: summaries.reduce((n: number, x: { questions?: unknown[] }) => n + (x.questions?.length ?? 0), 0), coverage, provider: "gemini", model: generated.model });
+    return response({ summaries: summaries.length, flashcards: summaries.reduce((n: number, x: { flashcards?: unknown[] }) => n + (x.flashcards?.length ?? 0), 0), questions: summaries.reduce((n: number, x: { questions?: unknown[] }) => n + (x.questions?.length ?? 0), 0), coverage, provider: generated.provider, model: generated.model, chunks: generated.chunks || 1 });
   } catch (error) {
     console.error("material-gemini", error);
     await finishUsage(usage?.event_id, "error", undefined, undefined, (error as { retryable?: boolean })?.retryable ? "PROVIDER_UNAVAILABLE" : "PROCESSING_FAILED");
@@ -760,6 +1011,6 @@ Deno.serve(async (request) => {
     }
     await setDocumentStatus(documentId, user.id, "error");
     const providerStatus = Number((error as { providerStatus?: number })?.providerStatus || 0);
-    return response({ error: (error as { userMessage?: string })?.userMessage || `Falha ao gerar o conteúdo do PDF${providerStatus ? ` (Gemini ${providerStatus})` : ""}. Consulte os logs de material-gemini para ver o detalhe.`, code: "PROCESSING_FAILED" }, 500);
+    return response({ error: (error as { userMessage?: string })?.userMessage || `Falha ao gerar o conteúdo do PDF${providerStatus ? ` (provedor ${providerStatus})` : ""}. Consulte os logs de material-gemini para ver o detalhe.`, code: "PROCESSING_FAILED" }, 500);
   }
 });
