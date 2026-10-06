@@ -253,10 +253,17 @@ O arquivo se chama: ${title}.` },
 // Fluxo estável: preserva o formato que funcionava nas primeiras versões e
 // evita que inventário, esquema excessivo ou auditoria adicional impeçam o
 // salvamento de um conteúdo que o Gemini já conseguiu produzir.
-async function generateStudyPackageStable(file: { uri: string; mimeType?: string }, title: string, campaignContext: string, documentType: string) {
+function pdfInlinePart(bytes: Uint8Array) {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 8192) binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+  return { inline_data: { mime_type: "application/pdf", data: btoa(binary) } };
+}
+
+async function generateStudyPackageStable(file: { uri: string; mimeType?: string }, title: string, campaignContext: string, documentType: string, inlineBytes?: Uint8Array) {
+  const sourcePart = inlineBytes ? pdfInlinePart(inlineBytes) : { file_data: { mime_type: file.mimeType ?? "application/pdf", file_uri: file.uri } };
   const requestBody = {
     contents: [{ parts: [
-      { file_data: { mime_type: file.mimeType ?? "application/pdf", file_uri: file.uri } },
+      sourcePart,
       { text: `Leia integralmente o PDF “${title}” e crie um pacote de estudo fiel somente ao documento. Divida o conteúdo em até 12 assuntos coerentes, seguindo a ordem pedagógica do material.
 
 Para cada assunto gere: subject, title, explanation, points, example, bizu, mnemonic, trap, flashcards e questions. A explanation deve ser uma aula detalhada e autossuficiente para iniciante. Gere de 5 a 10 pontos essenciais, de 5 a 8 flashcards e 5 questões com quatro alternativas, uma única correta, dificuldade progressiva e explicação comentada. Não invente leis, artigos, dados ou conteúdo ausente.
@@ -303,9 +310,10 @@ TIPO: ${documentType}. ${["prova", "simulado"].includes(documentType) ? "Quando 
   const error = new Error(lastError) as Error & { retryable?: boolean; providerStatus?: number; userMessage?: string };
   error.retryable = RETRYABLE_STATUS.has(lastStatus) || FALLBACK_STATUS.has(lastStatus) || lastStatus === 0;
   error.providerStatus = lastStatus;
+  const safeDetail = cleanGeneratedText(lastError, 320).replace(/AIza[\w-]+/g, "[chave protegida]");
   error.userMessage = lastStatus === 429
     ? "A cota do Gemini está temporariamente esgotada. O PDF continua salvo e esta tentativa não consumiu seu limite diário."
-    : `O Gemini não concluiu a geração${lastStatus ? ` (erro ${lastStatus})` : ""}. O PDF continua salvo; tente novamente em alguns minutos.`;
+    : `O Gemini não concluiu a geração${lastStatus ? ` (erro ${lastStatus})` : ""}. ${safeDetail || "O PDF continua salvo para uma nova tentativa."}`;
   throw error;
 }
 
@@ -624,7 +632,18 @@ Deno.serve(async (request) => {
     try {
       if (!Array.isArray(inventory?.sections)) inventory = { estimated_pages: 0, sections: [], warnings: ["Geração direta estável: confira o PDF original para validar a cobertura."], model: "direct-stable" };
       await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "generation", percent: 30, completed_sections: 0, total_sections: 0, updated_at: new Date().toISOString() } } }) });
-      generated = await generateStudyPackageStable(geminiFile, title, campaignContext, documentType);
+      try {
+        generated = await generateStudyPackageStable(geminiFile, title, campaignContext, documentType);
+      } catch (generationError) {
+        const providerStatus = Number((generationError as { providerStatus?: number })?.providerStatus || 0);
+        // Alguns projetos Gemini aceitam o upload no File API, mas recusam o
+        // file_uri no generateContent com 400. Para PDFs pequenos, retomamos o
+        // formato inline usado com sucesso nas primeiras versões.
+        if (providerStatus === 400 && bytes.byteLength <= 14 * 1024 * 1024) {
+          console.warn("File API rejected with 400; retrying inline PDF", bytes.byteLength);
+          generated = await generateStudyPackageStable(geminiFile, title, campaignContext, documentType, bytes);
+        } else throw generationError;
+      }
     } finally {
       await removeGeminiFile(geminiFile.name);
     }
