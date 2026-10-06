@@ -8,6 +8,9 @@ Hotfix v66.2: os blocos de PDF e texto agora são enviados dentro de um passo
 Hotfix v66.3: em caso de sobrecarga 503, tenta automaticamente os modelos
 3.7 Flash e 3.1 Flash Lite. Erro de cota 429 não gera tentativas repetidas.
 
+Hotfix v66.4: remove o esquema profundo incompatível do `response_format`.
+O retorno continua em JSON e é validado pela função antes de qualquer gravação.
+
 ## Publicação segura
 
 1. Faça uma cópia da pasta atual `C:\Users\Walyson Caio\Documents\jornada-cacador`.

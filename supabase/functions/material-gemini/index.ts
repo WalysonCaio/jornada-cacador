@@ -52,7 +52,11 @@ async function createGeminiInteraction(input: any[], schema: any, maxOutputToken
           input: [{ type: "user_input", content: input }],
           store: false,
           generation_config: { max_output_tokens: maxOutputTokens, thinking_level: "low" },
-          response_format: { type: "text", mime_type: "application/json", schema: standardJsonSchema(schema) },
+          // A Interactions API e os modelos Flash não aceitam de forma
+          // uniforme todos os recursos do grande esquema usado pelo app
+          // (minItems, maxItems e enum em vários níveis). Solicitamos JSON e
+          // fazemos a validação determinística abaixo antes de salvar.
+          response_format: { type: "text", mime_type: "application/json" },
         }),
       });
       const data = await result.json().catch(() => ({}));
