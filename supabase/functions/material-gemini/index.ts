@@ -15,6 +15,7 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const INTERACTIONS_MODELS = [
   normalizeModelName(Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash"),
   "gemini-3.7-flash",
+  "gemini-3.1-flash-lite",
 ].filter(Boolean);
 
 function interactionText(data: any) {
@@ -63,9 +64,10 @@ async function createGeminiInteraction(input: any[], schema: any, maxOutputToken
       lastStatus = result.status;
       lastMessage = data?.error?.message || data?.errors?.[0]?.message || `Gemini ${result.status}`;
       console.warn("Gemini interaction", model, result.status, lastMessage);
-      // Só um identificador inválido justifica tentar o modelo reserva. Cota e
-      // sobrecarga devem retornar imediatamente, sem gastar os 150 s da função.
-      if (!FALLBACK_STATUS.has(result.status)) break;
+      // Modelo indisponível (400/404) ou sobrecarregado (503) usa a próxima
+      // opção imediatamente. Cota 429 é compartilhada e deve parar sem criar
+      // tentativas inúteis nem consumir o tempo máximo da Edge Function.
+      if (!FALLBACK_STATUS.has(result.status) && result.status !== 503) break;
     } catch (error) {
       lastMessage = (error as Error)?.name === "AbortError" ? "A análise excedeu o tempo seguro de 115 segundos." : String((error as Error)?.message || error);
       lastStatus = (error as Error)?.name === "AbortError" ? 504 : 500;

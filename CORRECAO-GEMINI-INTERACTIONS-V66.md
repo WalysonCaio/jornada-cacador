@@ -5,6 +5,9 @@ Esta versão corrige a falha de análise de materiais causada por modelos antigo
 Hotfix v66.2: os blocos de PDF e texto agora são enviados dentro de um passo
 `user_input`, conforme o formato obrigatório da Interactions API.
 
+Hotfix v66.3: em caso de sobrecarga 503, tenta automaticamente os modelos
+3.7 Flash e 3.1 Flash Lite. Erro de cota 429 não gera tentativas repetidas.
+
 ## Publicação segura
 
 1. Faça uma cópia da pasta atual `C:\Users\Walyson Caio\Documents\jornada-cacador`.

@@ -37,7 +37,8 @@ if (manifest.orientation !== "any") throw new Error("O aplicativo instalado prec
 const headers = fs.readFileSync(new URL("../dist/_headers", import.meta.url), "utf8");
 for (const header of ["X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy", "Cache-Control: no-cache"]) if (!headers.includes(header)) throw new Error(`Cabeçalho de segurança ausente: ${header}`);
 const materialFunction = fs.readFileSync(new URL("../supabase/functions/material-gemini/index.ts", import.meta.url), "utf8");
-if (materialFunction.includes("gemini-3.5-flash-lite") || materialFunction.includes("gemini-3.1-flash-lite")) throw new Error("A função de materiais ainda usa um identificador de modelo incompatível.");
+if (materialFunction.includes("gemini-3.5-flash-lite")) throw new Error("A função de materiais ainda usa um identificador de modelo incompatível.");
+if (!materialFunction.includes("/v1/interactions") || !materialFunction.includes('type: "user_input"')) throw new Error("A função de materiais não está usando corretamente a Interactions API.");
 for (const required of ["models?pageSize=1000", "supportedGenerationMethods", "availableGeminiModels", "FALLBACK_STATUS", "PROCESSING", "setDocumentStatus", "USAGE_GUARD_MISSING", "parseGeminiJsonText", "relaxedGenerationBody", "normalizeLegalNotation", "generateStudyPackageStable", "pdfInlinePart", "retrying inline PDF", "hasDeclaredCoverage", "const rawSummaries = generatedSummaries"]) if (!materialFunction.includes(required)) throw new Error(`Correção de PDF incompleta: ${required}`);
 const enhancements = fs.readFileSync(new URL("../dist/v59-enhancements.js", import.meta.url), "utf8");
 for (const required of ["openSummaries", "restoreOpenSummaries", "normalizeLegalTitle", "MutationObserver"]) if (!enhancements.includes(required)) throw new Error(`Persistência do resumo incompleta: ${required}`);
