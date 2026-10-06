@@ -12,6 +12,28 @@ const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const FALLBACK_STATUS = new Set([400, 404]);
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function parseGeminiJsonText(data: any) {
+  const raw = String(data?.candidates?.[0]?.content?.parts?.map((part: any) => part?.text || "").join("") ?? "").trim();
+  if (!raw) throw new Error("EMPTY_GEMINI_RESPONSE");
+  const unfenced = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  try { return JSON.parse(unfenced); } catch { /* tenta extrair o objeto */ }
+  const start = unfenced.indexOf("{");
+  const end = unfenced.lastIndexOf("}");
+  if (start >= 0 && end > start) return JSON.parse(unfenced.slice(start, end + 1));
+  throw new Error("INVALID_GEMINI_JSON");
+}
+
+function relaxedGenerationBody(body: any, maxOutputTokens = 32768) {
+  return {
+    ...body,
+    generationConfig: {
+      temperature: body?.generationConfig?.temperature ?? 0.1,
+      maxOutputTokens,
+      responseMimeType: "application/json",
+    },
+  };
+}
+
 let discoveredModels: Promise<string[]> | null = null;
 function normalizeModelName(value: unknown) { return String(value ?? "").replace(/^models\//, "").trim(); }
 async function availableGeminiModels() {
@@ -110,7 +132,7 @@ async function createDocumentInventory(file: { uri: string; mimeType?: string },
       continue;
     }
     try {
-      const parsed = JSON.parse(data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
+      const parsed = parseGeminiJsonText(data);
       if (Array.isArray(parsed?.sections) && parsed.sections.length) return { ...parsed, model };
     } catch { /* tenta o modelo seguinte */ }
   }
@@ -183,20 +205,33 @@ O arquivo se chama: ${title}.` },
   const models = await availableGeminiModels();
   for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
     const model = models[modelIndex];
-    for (let attempt = 0; attempt < 2; attempt++) {
+    const bodies = [requestBody, relaxedGenerationBody(requestBody)];
+    for (let attempt = 0; attempt < bodies.length; attempt++) {
       const ai = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(bodies[attempt]),
       });
       const data = await ai.json().catch(() => ({}));
-      if (ai.ok) return { data, model };
+      if (ai.ok) {
+        try {
+          const parsed = parseGeminiJsonText(data);
+          if (Array.isArray(parsed?.summaries) && parsed.summaries.length) return { data, parsed, model };
+          lastError = "O modelo não devolveu resumos utilizáveis.";
+        } catch {
+          lastError = String(data?.candidates?.[0]?.finishReason || "") === "MAX_TOKENS"
+            ? "A resposta do modelo foi interrompida pelo limite de saída."
+            : "O modelo devolveu JSON incompleto.";
+        }
+        console.warn("Gemini invalid output", model, attempt + 1, lastError);
+        continue;
+      }
       lastStatus = ai.status;
       lastError = data?.error?.message ?? `Falha no modelo ${model} (${ai.status}).`;
       console.warn("Gemini fallback", model, attempt + 1, ai.status, lastError);
       // Invalid/unavailable model IDs and model-specific schema limitations must
       // fall through to the next compatible model instead of aborting the PDF.
-      if (FALLBACK_STATUS.has(ai.status)) break;
+      if (FALLBACK_STATUS.has(ai.status)) continue;
       if (!RETRYABLE_STATUS.has(ai.status)) {
         const fatal = new Error(lastError) as Error & { providerStatus?: number; userMessage?: string };
         fatal.providerStatus = ai.status;
@@ -326,6 +361,12 @@ function cleanGeneratedText(value: unknown, max = 4000) {
   return String(value ?? "").normalize("NFKC").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
+function normalizeLegalNotation(value: unknown, max = 4000) {
+  return cleanGeneratedText(value, max)
+    .replace(/\b(?:art(?:igo)?\.?)\s*(\d+)\s*(?:o|º|°)(?=\s|[,.;:()\-–—]|$)/gi, (_match, number) => `Art. ${number}°`)
+    .replace(/\b(?:art(?:igo)?\.?)\s*(\d+)(?=\s|[,.;:()\-–—]|$)/gi, (_match, number) => `Art. ${number}°`);
+}
+
 function subjectKey(value: unknown) {
   return cleanGeneratedText(value, 200).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").replace(/\b(disciplina|materia|conteudo|modulo|parte)\b/g, " ").replace(/\b(i{1,3}|iv|v|[1-9])\b$/, " ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
@@ -391,7 +432,7 @@ function sanitizeStrings(value: unknown, maxItems: number, maxLength: number) {
 }
 
 function sanitizeSummary(value: any, knownSubjects: string[]) {
-  const title = cleanGeneratedText(value?.title || "Resumo", 300);
+  const title = normalizeLegalNotation(value?.title || "Resumo", 300);
   const flashcards = Array.isArray(value?.flashcards) ? value.flashcards.map((card: any) => ({
     question: cleanGeneratedText(card?.question, 1000),
     answer: cleanGeneratedText(card?.answer, 2400),
@@ -531,18 +572,13 @@ Deno.serve(async (request) => {
     } finally {
       await removeGeminiFile(geminiFile.name);
     }
-    const aiData = generated.data;
-    const finishReason = String(aiData?.candidates?.[0]?.finishReason || "");
-    let parsed: any;
-    try { parsed = JSON.parse(aiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}"); }
-    catch {
-      const error = new Error(finishReason === "MAX_TOKENS" ? "O PDF produziu conteúdo maior que o limite de saída. Reprocesse o arquivo ou divida-o por capítulos para preservar a cobertura." : "A IA devolveu uma análise incompleta e ela não foi salva.");
-      (error as { userMessage?: string }).userMessage = error.message;
-      throw error;
-    }
+    const parsed: any = generated.parsed;
     const generatedSummaries = Array.isArray(parsed.summaries) ? parsed.summaries : [];
     await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "review", percent: 75, completed_sections: parsed?.coverage?.sections_covered?.length || 0, total_sections: inventory?.sections?.length || 0, updated_at: new Date().toISOString() } } }) });
-    const rawSummaries = await reviewGeneratedQuestions(generatedSummaries, campaignContext);
+    // A própria geração já exige questões revisadas e a sanitização abaixo faz a
+    // validação determinística. Evitar uma terceira chamada grande reduz timeout,
+    // consumo de cota e falhas depois de o PDF já ter sido lido com sucesso.
+    const rawSummaries = generatedSummaries;
     const summaries = rawSummaries.map((content: Record<string, unknown>) => sanitizeSummary(content, knownSubjects)).filter((content: { title?: string; explanation?: string }) => Boolean(content.title && content.explanation));
     if (!summaries.length) { await finishUsage(usage.event_id,"error",undefined,undefined,"INSUFFICIENT_CONTENT");await updateJob(documentId,{status:"failed",last_error:"INSUFFICIENT_CONTENT"});return response({ error: "Não encontrei conteúdo de estudo suficiente no PDF." }, 422); }
     const coverage = coverageReport(parsed?.coverage, summaries);

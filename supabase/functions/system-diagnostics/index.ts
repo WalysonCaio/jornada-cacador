@@ -47,7 +47,7 @@ Deno.serve(async (request) => {
   }
   return reply({
     ok: true,
-    version: "64",
+    version: "65",
     project_ref: new URL(SUPABASE_URL).hostname.split(".")[0],
     database: true,
     storage: true,
