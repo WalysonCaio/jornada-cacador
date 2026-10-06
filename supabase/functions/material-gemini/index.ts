@@ -506,10 +506,12 @@ async function callOpenAiCompatibleProvider(
     const data = await result.json().catch(() => ({}));
     if (!result.ok) {
       attempts.push({ provider, model: config.model, status: result.status, message: String(data?.error?.message || `${provider} ${result.status}`).slice(0, 500) });
+      console.warn("AI provider fallback failed", provider, config.model, result.status, String(data?.error?.message || "").slice(0, 300));
       return null;
     }
     const parsed = jsonFromModelText(data?.choices?.[0]?.message?.content);
     if (!Array.isArray(parsed?.summaries) || !parsed.summaries.length) throw new Error("EMPTY_PROVIDER_SUMMARIES");
+    console.log("AI provider fallback succeeded", provider, config.model);
     return { parsed, provider, model: config.model };
   } catch (error) {
     const status = (error as Error)?.name === "AbortError" ? 504 : 500;
@@ -956,8 +958,20 @@ Deno.serve(async (request) => {
       const geminiFile = await uploadPdfToGemini(bytes, title);
       try {
         inventory = { estimated_pages: 0, sections: [], warnings: ["PDF digitalizado: leitura visual realizada pelo Gemini."], model: "gemini-native-vision" };
-        generated = await generateStudyPackageStable(geminiFile, title, campaignContext, documentType, bytes.byteLength <= 14 * 1024 * 1024 ? bytes : undefined);
-        generated.provider = "gemini-vision";
+        try {
+          generated = await generateStudyPackageStable(geminiFile, title, campaignContext, documentType, bytes.byteLength <= 14 * 1024 * 1024 ? bytes : undefined);
+          generated.provider = "gemini-vision";
+        } catch (visionError) {
+          const status = Number((visionError as { providerStatus?: number })?.providerStatus || 0);
+          const wrapped = new Error(String((visionError as Error)?.message || visionError)) as Error & { retryable?: boolean; providerStatus?: number; userMessage?: string; code?: string };
+          wrapped.retryable = true;
+          wrapped.providerStatus = status || 503;
+          wrapped.code = "OCR_PROVIDER_UNAVAILABLE";
+          wrapped.userMessage = status === 429
+            ? "Este PDF é digitalizado e precisa da leitura visual do Gemini, mas a cota visual foi atingida. DeepSeek e Groq só podem assumir depois que existir texto extraído. O arquivo continua salvo: tente mais tarde ou aplique OCR ao PDF e processe novamente."
+            : "Este PDF é digitalizado e precisa da leitura visual do Gemini, que está temporariamente sobrecarregado. DeepSeek e Groq só podem assumir depois que existir texto extraído. O arquivo continua salvo: tente mais tarde ou aplique OCR ao PDF e processe novamente.";
+          throw wrapped;
+        }
       } finally {
         await removeGeminiFile(geminiFile.name);
       }
