@@ -250,6 +250,65 @@ O arquivo se chama: ${title}.` },
   throw unavailable;
 }
 
+// Fluxo estável: preserva o formato que funcionava nas primeiras versões e
+// evita que inventário, esquema excessivo ou auditoria adicional impeçam o
+// salvamento de um conteúdo que o Gemini já conseguiu produzir.
+async function generateStudyPackageStable(file: { uri: string; mimeType?: string }, title: string, campaignContext: string, documentType: string) {
+  const requestBody = {
+    contents: [{ parts: [
+      { file_data: { mime_type: file.mimeType ?? "application/pdf", file_uri: file.uri } },
+      { text: `Leia integralmente o PDF “${title}” e crie um pacote de estudo fiel somente ao documento. Divida o conteúdo em até 12 assuntos coerentes, seguindo a ordem pedagógica do material.
+
+Para cada assunto gere: subject, title, explanation, points, example, bizu, mnemonic, trap, flashcards e questions. A explanation deve ser uma aula detalhada e autossuficiente para iniciante. Gere de 5 a 10 pontos essenciais, de 5 a 8 flashcards e 5 questões com quatro alternativas, uma única correta, dificuldade progressiva e explicação comentada. Não invente leis, artigos, dados ou conteúdo ausente.
+
+Em títulos jurídicos, escreva sempre a referência como “Art. 4°”, nunca “Art. 4o”.
+
+CONTEXTO DO PORTAL:
+${campaignContext || "Sem edital sincronizado; use exclusivamente o PDF."}
+
+TIPO: ${documentType}. ${["prova", "simulado"].includes(documentType) ? "Quando houver questões no PDF, adapte-as fielmente sem afirmar que uma questão autoral é oficial." : "Produza conteúdo didático e questões de fixação."}` },
+    ] }],
+    generationConfig: {
+      temperature: 0.15,
+      maxOutputTokens: 32768,
+      responseMimeType: "application/json",
+      responseSchema: { type: "OBJECT", properties: { summaries: { type: "ARRAY", minItems: 1, maxItems: 12, items: { type: "OBJECT", properties: {
+        subject: { type: "STRING" }, title: { type: "STRING" }, explanation: { type: "STRING" },
+        points: { type: "ARRAY", items: { type: "STRING" } }, example: { type: "STRING" }, bizu: { type: "STRING" }, mnemonic: { type: "STRING" }, trap: { type: "STRING" },
+        flashcards: { type: "ARRAY", items: { type: "OBJECT", properties: { question: { type: "STRING" }, answer: { type: "STRING" } }, required: ["question", "answer"] } },
+        questions: { type: "ARRAY", items: { type: "OBJECT", properties: { statement: { type: "STRING" }, options: { type: "ARRAY", minItems: 4, maxItems: 4, items: { type: "STRING" } }, correct_index: { type: "INTEGER", minimum: 0, maximum: 3 }, explanation: { type: "STRING" }, difficulty: { type: "STRING", enum: ["facil", "medio", "dificil"] }, topic: { type: "STRING" }, origin: { type: "STRING" } }, required: ["statement", "options", "correct_index", "explanation", "difficulty", "topic"] } },
+      }, required: ["subject", "title", "explanation", "points", "example", "bizu", "mnemonic", "trap", "flashcards", "questions"] } } }, required: ["summaries"] },
+    },
+  };
+  let lastStatus = 0;
+  let lastError = "O Gemini não conseguiu gerar o conteúdo.";
+  for (const model of (await availableGeminiModels()).slice(0, 4)) {
+    for (const body of [requestBody, relaxedGenerationBody(requestBody, 24576)]) {
+      const ai = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY }, body: JSON.stringify(body) });
+      const data = await ai.json().catch(() => ({}));
+      if (ai.ok) {
+        try {
+          const parsed = parseGeminiJsonText(data);
+          if (Array.isArray(parsed?.summaries) && parsed.summaries.length) return { data, parsed, model };
+          lastError = "O Gemini respondeu sem resumos.";
+        } catch { lastError = "O Gemini devolveu uma resposta incompleta."; }
+        continue;
+      }
+      lastStatus = ai.status;
+      lastError = data?.error?.message ?? `Gemini ${ai.status}`;
+      console.warn("Stable Gemini generation", model, ai.status, lastError);
+      if (RETRYABLE_STATUS.has(ai.status)) await wait(900);
+    }
+  }
+  const error = new Error(lastError) as Error & { retryable?: boolean; providerStatus?: number; userMessage?: string };
+  error.retryable = RETRYABLE_STATUS.has(lastStatus) || FALLBACK_STATUS.has(lastStatus) || lastStatus === 0;
+  error.providerStatus = lastStatus;
+  error.userMessage = lastStatus === 429
+    ? "A cota do Gemini está temporariamente esgotada. O PDF continua salvo e esta tentativa não consumiu seu limite diário."
+    : `O Gemini não concluiu a geração${lastStatus ? ` (erro ${lastStatus})` : ""}. O PDF continua salvo; tente novamente em alguns minutos.`;
+  throw error;
+}
+
 async function reviewGeneratedQuestions(summaries: unknown[], campaignContext: string) {
   const compact = summaries.map((summary: any, summaryIndex) => ({ summary_index: summaryIndex, subject: summary?.subject, title: summary?.title, questions: summary?.questions })).slice(0, 24);
   const model = (await availableGeminiModels())[0];
@@ -563,12 +622,9 @@ Deno.serve(async (request) => {
     let generated;
     let inventory: any = documents[0]?.metadata?.analysis_plan;
     try {
-      if (!Array.isArray(inventory?.sections) || !inventory.sections.length) {
-        await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_progress: { stage: "inventory", percent: 10, updated_at: new Date().toISOString() } } }) });
-        inventory = await createDocumentInventory(geminiFile, title);
-        await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "generation", percent: 30, completed_sections: 0, total_sections: Array.isArray(inventory.sections) ? inventory.sections.length : 0, updated_at: new Date().toISOString() } } }) });
-      }
-      generated = await generateStudyPackage(geminiFile, title, campaignContext, documentType, inventory);
+      if (!Array.isArray(inventory?.sections)) inventory = { estimated_pages: 0, sections: [], warnings: ["Geração direta estável: confira o PDF original para validar a cobertura."], model: "direct-stable" };
+      await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "generation", percent: 30, completed_sections: 0, total_sections: 0, updated_at: new Date().toISOString() } } }) });
+      generated = await generateStudyPackageStable(geminiFile, title, campaignContext, documentType);
     } finally {
       await removeGeminiFile(geminiFile.name);
     }
@@ -582,7 +638,8 @@ Deno.serve(async (request) => {
     const summaries = rawSummaries.map((content: Record<string, unknown>) => sanitizeSummary(content, knownSubjects)).filter((content: { title?: string; explanation?: string }) => Boolean(content.title && content.explanation));
     if (!summaries.length) { await finishUsage(usage.event_id,"error",undefined,undefined,"INSUFFICIENT_CONTENT");await updateJob(documentId,{status:"failed",last_error:"INSUFFICIENT_CONTENT"});return response({ error: "Não encontrei conteúdo de estudo suficiente no PDF." }, 422); }
     const coverage = coverageReport(parsed?.coverage, summaries);
-    const grosslyIncomplete = (coverage.sections_detected.length >= 3 && coverage.percent < 50) || coverage.confidence < 0.35 || coverage.shallow_summaries > Math.ceil(summaries.length / 2);
+    const hasDeclaredCoverage = Array.isArray(parsed?.coverage?.sections_detected) && parsed.coverage.sections_detected.length > 0;
+    const grosslyIncomplete = hasDeclaredCoverage && ((coverage.sections_detected.length >= 3 && coverage.percent < 50) || coverage.confidence < 0.35 || coverage.shallow_summaries > Math.ceil(summaries.length / 2));
     if (grosslyIncomplete) {
       await finishUsage(usage.event_id, "error", "gemini", generated.model, "LOW_COVERAGE");
       await updateJob(documentId, { status: "failed", last_error: "LOW_COVERAGE" });
