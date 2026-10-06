@@ -411,7 +411,10 @@ async function loadBrowserExtractedPages(storagePath: string): Promise<TextPage[
   const result = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${sidecarPath}`, {
     headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY },
   });
-  if (result.status === 404) return null;
+  // O Storage pode responder 400 ("Object not found") quando o sidecar ainda
+  // não existe. Isso não é uma falha de processamento; apenas aciona a leitura
+  // visual como alternativa.
+  if (result.status === 400 || result.status === 404) return null;
   if (!result.ok) {
     console.warn("Browser text sidecar unavailable", result.status);
     return null;

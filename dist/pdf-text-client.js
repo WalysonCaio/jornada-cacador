@@ -62,9 +62,12 @@
       meaningful_characters: meaningfulCharacters,
       pages,
     });
+    // Alguns projetos mantêm o bucket limitado a application/pdf. O conteúdo
+    // continua sendo JSON, mas usamos o MIME permitido pelo bucket para que o
+    // sidecar privado possa ser armazenado ao lado do PDF original.
     const upload = await storageFetch(`${doc.storage_path}.text.json`, session, {
       method: "POST",
-      headers: { "Content-Type": "application/json; charset=utf-8", "x-upsert": "true" },
+      headers: { "Content-Type": "application/pdf", "x-upsert": "true" },
       body: payload,
     });
     if (!upload.ok) {
