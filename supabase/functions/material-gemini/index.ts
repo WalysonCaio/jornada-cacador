@@ -48,7 +48,7 @@ async function createGeminiInteraction(input: any[], schema: any, maxOutputToken
         signal: controller.signal,
         body: JSON.stringify({
           model,
-          input,
+          input: [{ type: "user_input", content: input }],
           store: false,
           generation_config: { max_output_tokens: maxOutputTokens, thinking_level: "low" },
           response_format: { type: "text", mime_type: "application/json", schema: standardJsonSchema(schema) },

@@ -2,6 +2,9 @@
 
 Esta versão corrige a falha de análise de materiais causada por modelos antigos, excesso de tentativas e timeout de 150 segundos.
 
+Hotfix v66.2: os blocos de PDF e texto agora são enviados dentro de um passo
+`user_input`, conforme o formato obrigatório da Interactions API.
+
 ## Publicação segura
 
 1. Faça uma cópia da pasta atual `C:\Users\Walyson Caio\Documents\jornada-cacador`.
