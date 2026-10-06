@@ -1,5 +1,3 @@
-import { extractText, getDocumentProxy } from "npm:unpdf@0.12.1";
-
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
@@ -408,20 +406,23 @@ function normalizeExtractedPage(value: unknown) {
     .trim();
 }
 
-async function extractPdfPages(bytes: Uint8Array): Promise<TextPage[]> {
-  // PDF.js pode transferir/destacar o ArrayBuffer recebido. A cópia mantém os
-  // bytes originais disponíveis para a rota de OCR visual do Gemini.
-  const document = await getDocumentProxy(bytes.slice());
-  const extracted = await extractText(document, { mergePages: false });
-  const rawPages = Array.isArray(extracted?.text) ? extracted.text : [extracted?.text];
-  const pages = rawPages.map((text, index) => ({ page: index + 1, text: normalizeExtractedPage(text) }));
-  const meaningfulCharacters = pages.reduce((total, page) => total + page.text.replace(/\s/g, "").length, 0);
-  if (!pages.length || meaningfulCharacters < Math.max(300, pages.length * 35)) {
-    const error = new Error("PDF_TEXT_EXTRACTION_INSUFFICIENT") as Error & { code?: string; userMessage?: string };
-    error.code = "OCR_REQUIRED";
-    error.userMessage = "O PDF parece ser digitalizado ou não possui texto selecionável. O Gemini tentará a leitura visual; se ela falhar, aplique OCR ao arquivo antes de reenviar.";
-    throw error;
+async function loadBrowserExtractedPages(storagePath: string): Promise<TextPage[] | null> {
+  const sidecarPath = `${storagePath}.text.json`;
+  const result = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${sidecarPath}`, {
+    headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY },
+  });
+  if (result.status === 404) return null;
+  if (!result.ok) {
+    console.warn("Browser text sidecar unavailable", result.status);
+    return null;
   }
+  const payload = await result.json().catch(() => null);
+  const pages = Array.isArray(payload?.pages)
+    ? payload.pages.map((item: any, index: number) => ({ page: Number(item?.page) || index + 1, text: normalizeExtractedPage(item?.text) }))
+    : [];
+  const meaningfulCharacters = pages.reduce((total: number, page: TextPage) => total + page.text.replace(/\s/g, "").length, 0);
+  if (!pages.length || meaningfulCharacters < Math.max(300, pages.length * 35)) return null;
+  console.log("Using browser-extracted PDF text", pages.length, meaningfulCharacters);
   return pages;
 }
 
@@ -940,8 +941,9 @@ Deno.serve(async (request) => {
     let inventory: any = documents[0]?.metadata?.analysis_plan;
     if (!Array.isArray(inventory?.sections)) inventory = { estimated_pages: 0, sections: [], warnings: [], model: "local-text-extraction" };
     await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "extracting_text", percent: 15, completed_sections: 0, total_sections: 0, updated_at: new Date().toISOString() } } }) });
-    try {
-      const pages = await extractPdfPages(bytes);
+    const browserPages = await loadBrowserExtractedPages(path);
+    if (browserPages) {
+      const pages = browserPages;
       inventory = {
         estimated_pages: pages.length,
         sections: pages.flatMap((page) => pageHeadings(page.text).map((name) => ({ name, start_page: page.page, end_page: page.page }))).slice(0, 100),
@@ -952,9 +954,15 @@ Deno.serve(async (request) => {
         const percent = 20 + Math.round((completed / total) * 55);
         await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "generation", percent, completed_sections: completed, total_sections: total, providers: [...new Set(providers)], updated_at: new Date().toISOString() } } }) });
       });
-    } catch (extractionError) {
-      if ((extractionError as { code?: string })?.code !== "OCR_REQUIRED" || !GEMINI_KEY) throw extractionError;
-      console.warn("Local PDF extraction insufficient; using Gemini native document vision");
+    } else {
+      if (!GEMINI_KEY) {
+        const noOcr = new Error("OCR_PROVIDER_NOT_CONFIGURED") as Error & { retryable?: boolean; providerStatus?: number; userMessage?: string };
+        noOcr.retryable = true;
+        noOcr.providerStatus = 503;
+        noOcr.userMessage = "O navegador não encontrou texto selecionável neste PDF e o Gemini Visual não está configurado. Aplique OCR ao PDF e tente novamente.";
+        throw noOcr;
+      }
+      console.warn("Browser PDF text unavailable; using Gemini native document vision");
       const geminiFile = await uploadPdfToGemini(bytes, title);
       try {
         inventory = { estimated_pages: 0, sections: [], warnings: ["PDF digitalizado: leitura visual realizada pelo Gemini."], model: "gemini-native-vision" };

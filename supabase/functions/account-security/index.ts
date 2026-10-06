@@ -54,6 +54,10 @@ Deno.serve(async (request) => {
           method: "DELETE",
           headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY },
         });
+        await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${document.storage_path}.text.json`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY },
+        });
       }
     }
 

@@ -430,5 +430,6 @@ window.addEventListener('focus',()=>refreshFromServer());window.addEventListener
 (async function initCloud(){try{cloudSession=JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch{cloudSession=null}const recovering=await openPasswordRecovery();updateAccountUI();if(cloudSession&&!recovering){await pullCloudState();await Promise.all([loadCloudDocuments(),loadGeneratedContent(),loadCampaignTopics(),loadEssays()]);renderAssistant();setTimeout(runNextProcessingJob,1800)}})();
 </script>
 <script src="v59-enhancements.js"></script>
+<script src="pdf-text-client.js"></script>
 </body>
 </html>
