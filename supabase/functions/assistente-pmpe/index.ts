@@ -1,9 +1,11 @@
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "https://jybislbbblyjsrcdegjt.supabase.co";
 const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY");
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const PUBLISHABLE_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
 const GROQ_MODEL = "openai/gpt-oss-20b";
+const DEEPSEEK_MODEL = Deno.env.get("DEEPSEEK_MODEL") || "deepseek-chat";
 const ALLOWED_ORIGINS = new Set([
   "https://jornada.wcaio.workers.dev",
   "http://localhost:4173",
@@ -93,6 +95,25 @@ async function askGroq(systemPrompt: string, userPrompt: string) {
   const answer = data?.choices?.[0]?.message?.content?.trim();
   if (!answer) throw new Error("GROQ_EMPTY");
   return { answer, model: GROQ_MODEL, provider: "groq" };
+}
+
+async function askDeepSeek(systemPrompt: string, userPrompt: string) {
+  if (!DEEPSEEK_API_KEY) throw new Error("DEEPSEEK_NOT_CONFIGURED");
+  const response = await fetch("https://api.deepseek.com/chat/completions", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${DEEPSEEK_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: DEEPSEEK_MODEL,
+      temperature: 0.25,
+      max_tokens: 3000,
+      messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(`DEEPSEEK_${response.status}:${data?.error?.message ?? "falha"}`);
+  const answer = data?.choices?.[0]?.message?.content?.trim();
+  if (!answer) throw new Error("DEEPSEEK_EMPTY");
+  return { answer, model: DEEPSEEK_MODEL, provider: "deepseek" };
 }
 
 async function askGemini(systemPrompt: string, userPrompt: string) {
@@ -189,7 +210,7 @@ Deno.serve(async (request) => {
     }
   }
 
-  if (!GROQ_API_KEY && !GEMINI_API_KEY) return json(request, { error: "Nenhuma IA foi configurada no servidor." }, 503);
+  if (!DEEPSEEK_API_KEY && !GROQ_API_KEY) return json(request, { error: "DeepSeek e Groq não foram configuradas no servidor." }, 503);
   const question = String(payload.question ?? "").trim().slice(0, 6000);
   const context = String(payload.context ?? "").trim().slice(0, 24000);
   const mode = String(payload.mode ?? "explicar").trim().slice(0, 40);
@@ -221,9 +242,9 @@ Modo solicitado: ${mode}.`;
   try {
     let result: { answer: string; model: string; provider: string };
     try {
-      result = await askGemini(systemPrompt, userPrompt);
-    } catch (geminiError) {
-      console.error("Gemini indisponível; acionando Groq", geminiError);
+      result = await askDeepSeek(systemPrompt, userPrompt);
+    } catch (deepSeekError) {
+      console.error("DeepSeek indisponível; acionando Groq", deepSeekError);
       result = await askGroq(systemPrompt, userPrompt);
     }
     await finishUsage(usage.event_id, "success", result.provider, result.model);

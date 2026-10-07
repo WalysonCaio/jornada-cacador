@@ -739,11 +739,15 @@ async function removeGeminiFile(name?: string) {
 }
 
 function cleanGeneratedText(value: unknown, max = 4000) {
-  return String(value ?? "").normalize("NFKC").replace(/\s+/g, " ").trim().slice(0, max);
+  // NFC preserva símbolos semanticamente importantes do português, como
+  // indicadores ordinais (ª/º). NFKC os convertia indevidamente em a/o.
+  return String(value ?? "").normalize("NFC").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
 function normalizeLegalNotation(value: unknown, max = 4000) {
   return cleanGeneratedText(value, max)
+    .replace(/\b(\d+)\s*a(?=\s+[A-Za-zÀ-ÿ])/g, "$1ª")
+    .replace(/\b(\d+)\s*o(?=\s+[A-Za-zÀ-ÿ])/g, "$1º")
     .replace(/\b(?:art(?:igo)?\.?)\s*(\d+)\s*(?:o|º|°)(?=\s|[,.;:()\-–—]|$)/gi, (_match, number) => `Art. ${number}°`)
     .replace(/\b(?:art(?:igo)?\.?)\s*(\d+)(?=\s|[,.;:()\-–—]|$)/gi, (_match, number) => `Art. ${number}°`);
 }
@@ -824,12 +828,12 @@ function sanitizeSummary(value: any, knownSubjects: string[]) {
     title,
     page_start: Math.max(0, Math.floor(Number(value?.page_start) || 0)),
     page_end: Math.max(0, Math.floor(Number(value?.page_end) || 0)),
-    explanation: cleanGeneratedText(value?.explanation, 18000),
-    points: sanitizeStrings(value?.points, 15, 1200),
-    example: cleanGeneratedText(value?.example, 6000),
-    bizu: cleanGeneratedText(value?.bizu, 3000),
-    mnemonic: cleanGeneratedText(value?.mnemonic, 2000),
-    trap: cleanGeneratedText(value?.trap, 3000),
+    explanation: normalizeLegalNotation(value?.explanation, 18000),
+    points: Array.isArray(value?.points) ? [...new Set(value.points.map((item: unknown) => normalizeLegalNotation(item, 1200)).filter(Boolean))].slice(0, 15) : [],
+    example: normalizeLegalNotation(value?.example, 6000),
+    bizu: normalizeLegalNotation(value?.bizu, 3000),
+    mnemonic: normalizeLegalNotation(value?.mnemonic, 2000),
+    trap: normalizeLegalNotation(value?.trap, 3000),
     flashcards,
     questions: sanitizeQuestions(value?.questions, title),
   };
