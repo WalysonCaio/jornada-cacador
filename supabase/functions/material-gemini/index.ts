@@ -16,19 +16,7 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const TEXT_CHUNK_TARGET = 28000;
 const MAX_TEXT_CHUNKS = 10;
 
-const INTERACTIONS_MODELS = [
-  normalizeModelName(Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash"),
-  "gemini-3.7-flash",
-  "gemini-3.1-flash-lite",
-].filter(Boolean);
-
-function interactionText(data: any) {
-  return String((Array.isArray(data?.steps) ? data.steps : [])
-    .flatMap((step: any) => Array.isArray(step?.content) ? step.content : [])
-    .filter((part: any) => part?.type === "text")
-    .map((part: any) => part?.text || "")
-    .join("\n")).trim();
-}
+const GEMINI_TEXT_FALLBACKS = ["gemini-3.8-flash", "gemini-3.5-flash-lite", ...GEMINI_MODEL_FALLBACKS];
 
 function standardJsonSchema(value: any): any {
   if (Array.isArray(value)) return value.map(standardJsonSchema);
@@ -42,36 +30,40 @@ function standardJsonSchema(value: any): any {
 
 async function createGeminiInteraction(input: any[], schema: any, maxOutputTokens = 32768, timeoutMs = 115000, geminiKey = GEMINI_KEY) {
   let lastStatus = 0;
-  let lastMessage = "O Gemini não concluiu a interação.";
-  for (const model of [...new Set(INTERACTIONS_MODELS)]) {
+  let lastMessage = "O Gemini não concluiu a geração.";
+  const parts = input.map((part) => {
+    if (part?.type === "text") return { text: String(part.text || "") };
+    if (part?.type === "document" && part?.data) return { inline_data: { mime_type: part.mime_type || "application/pdf", data: part.data } };
+    if (part?.type === "document" && part?.uri) return { file_data: { mime_type: part.mime_type || "application/pdf", file_uri: part.uri } };
+    if (part?.text || part?.inline_data || part?.file_data) return part;
+    return null;
+  }).filter(Boolean);
+  const models = await availableGeminiModels(geminiKey);
+  for (const model of models.slice(0, 5)) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const result = await fetch("https://generativelanguage.googleapis.com/v1/interactions", {
+      const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
         signal: controller.signal,
         body: JSON.stringify({
-          model,
-          input: [{ type: "user_input", content: input }],
-          store: false,
-          generation_config: { max_output_tokens: maxOutputTokens, thinking_level: "low" },
-          // A Interactions API e os modelos Flash não aceitam de forma
-          // uniforme todos os recursos do grande esquema usado pelo app
-          // (minItems, maxItems e enum em vários níveis). Solicitamos JSON e
-          // fazemos a validação determinística abaixo antes de salvar.
-          response_format: { type: "text", mime_type: "application/json" },
+          contents: [{ role: "user", parts }],
+          generationConfig: {
+            temperature: 0.15,
+            maxOutputTokens,
+            responseMimeType: "application/json",
+            ...(schema && Object.keys(schema).length ? { responseSchema: standardJsonSchema(schema) } : {}),
+          },
         }),
       });
       const data = await result.json().catch(() => ({}));
       if (result.ok) {
-        const raw = interactionText(data);
-        if (!raw) throw new Error("EMPTY_GEMINI_RESPONSE");
-        return { data, parsed: JSON.parse(raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "")), model };
+        return { data, parsed: parseGeminiJsonText(data), model };
       }
       lastStatus = result.status;
       lastMessage = data?.error?.message || data?.errors?.[0]?.message || `Gemini ${result.status}`;
-      console.warn("Gemini interaction", model, result.status, lastMessage);
+      console.warn("Gemini generateContent", model, result.status, lastMessage);
       // Modelo indisponível (400/404) ou sobrecarregado (503) usa a próxima
       // opção imediatamente. Cota 429 é compartilhada e deve parar sem criar
       // tentativas inúteis nem consumir o tempo máximo da Edge Function.
@@ -79,7 +71,7 @@ async function createGeminiInteraction(input: any[], schema: any, maxOutputToken
     } catch (error) {
       lastMessage = (error as Error)?.name === "AbortError" ? `A análise excedeu o tempo seguro de ${Math.round(timeoutMs / 1000)} segundos.` : String((error as Error)?.message || error);
       lastStatus = (error as Error)?.name === "AbortError" ? 504 : 500;
-      console.warn("Gemini interaction exception", model, lastMessage);
+      console.warn("Gemini generateContent exception", model, lastMessage);
       break;
     } finally {
       clearTimeout(timer);
@@ -118,14 +110,15 @@ function relaxedGenerationBody(body: any, maxOutputTokens = 32768) {
   };
 }
 
-let discoveredModels: Promise<string[]> | null = null;
+const discoveredModels = new Map<string, Promise<string[]>>();
 function normalizeModelName(value: unknown) { return String(value ?? "").replace(/^models\//, "").trim(); }
-async function availableGeminiModels() {
-  if (discoveredModels) return discoveredModels;
-  discoveredModels = (async () => {
+async function availableGeminiModels(geminiKey = GEMINI_KEY) {
+  if (!geminiKey) return [];
+  if (discoveredModels.has(geminiKey)) return discoveredModels.get(geminiKey)!;
+  const discovery = (async () => {
     const configured = normalizeModelName(Deno.env.get("GEMINI_MODEL"));
     try {
-      const list = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { headers: { "x-goog-api-key": GEMINI_KEY } });
+      const list = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { headers: { "x-goog-api-key": geminiKey } });
       const data = await list.json().catch(() => ({}));
       if (!list.ok) console.warn("Gemini models.list", list.status, data?.error?.message ?? "falha");
       const blocked = /(embedding|imagen|veo|tts|audio|live|robotics|computer-use)/i;
@@ -137,16 +130,17 @@ async function availableGeminiModels() {
           const score = (name: string) => (/flash(?!.*lite)/i.test(name) ? 0 : /flash-lite/i.test(name) ? 1 : /pro/i.test(name) ? 2 : 3) + (/preview|experimental|exp/i.test(name) ? 4 : 0);
           return score(a) - score(b) || a.localeCompare(b);
         }) : [];
-      const candidates = [configured, ...enabled, ...GEMINI_MODEL_FALLBACKS].filter(Boolean);
+      const candidates = [configured, ...GEMINI_TEXT_FALLBACKS, ...enabled].filter(Boolean);
       const unique = [...new Set(candidates)].slice(0, 8);
       console.log("Gemini model candidates", unique);
       return unique;
     } catch (error) {
       console.warn("Gemini model discovery failed", String((error as Error)?.message ?? error));
-      return [...new Set([configured, ...GEMINI_MODEL_FALLBACKS].filter(Boolean))];
+      return [...new Set([configured, ...GEMINI_TEXT_FALLBACKS].filter(Boolean))];
     }
   })();
-  return discoveredModels;
+  discoveredModels.set(geminiKey, discovery);
+  return discovery;
 }
 
 async function sha256(bytes: Uint8Array) {
@@ -497,14 +491,14 @@ async function callOpenAiCompatibleProvider(
   attempts: ProviderAttempt[],
 ) {
   const config = provider === "deepseek"
-    ? { key: DEEPSEEK_KEY, url: "https://api.deepseek.com/chat/completions", model: Deno.env.get("DEEPSEEK_MODEL") || "deepseek-chat" }
-    : { key: GROQ_KEY, url: "https://api.groq.com/openai/v1/chat/completions", model: Deno.env.get("GROQ_MODEL") || "llama-3.3-70b-versatile" };
+    ? { key: DEEPSEEK_KEY, url: "https://api.deepseek.com/chat/completions", model: Deno.env.get("DEEPSEEK_MODEL") || "deepseek-flash" }
+    : { key: GROQ_KEY, url: "https://api.groq.com/openai/v1/chat/completions", model: Deno.env.get("GROQ_MODEL") || "openai/gpt-oss-120b" };
   if (!config.key) {
     attempts.push({ provider, model: config.model, status: 0, message: "chave não configurada" });
     return null;
   }
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 22000);
+  const timer = setTimeout(() => controller.abort(), 35000);
   try {
     const result = await fetch(config.url, {
       method: "POST",
@@ -517,6 +511,7 @@ async function callOpenAiCompatibleProvider(
           { role: "user", content: prompt },
         ],
         temperature: 0.15,
+        max_tokens: 16384,
         response_format: { type: "json_object" },
       }),
     });
@@ -572,7 +567,7 @@ async function generateChunkWithFallback(chunk: TextChunk, totalChunks: number, 
   const attempts: ProviderAttempt[] = [];
   if (geminiKey) {
     try {
-      const result = await createGeminiInteraction([{ type: "text", text: prompt }], {}, 16384, 22000, geminiKey);
+      const result = await createGeminiInteraction([{ type: "text", text: prompt }], {}, 16384, 35000, geminiKey);
       if (!Array.isArray(result.parsed?.summaries) || !result.parsed.summaries.length) throw new Error("EMPTY_GEMINI_SUMMARIES");
       return { ...result, provider: "gemini", attempts };
     } catch (error) {
@@ -592,7 +587,8 @@ async function generateChunkWithFallback(chunk: TextChunk, totalChunks: number, 
   error.retryable = true;
   error.providerStatus = attempts.some((item) => item.status === 429) ? 429 : 503;
   error.attempts = attempts;
-  error.userMessage = "Gemini, DeepSeek e Groq não concluíram este bloco. O PDF permanece salvo, a tentativa não consumiu a cota diária e poderá ser retomada depois.";
+  const diagnosis = attempts.map((item) => `${item.provider}: ${item.status || item.message}`).join(" · ");
+  error.userMessage = `Gemini, DeepSeek e Groq não concluíram este bloco. O PDF permanece salvo e a tentativa não consumiu a cota diária. Diagnóstico: ${diagnosis}.`;
   throw error;
 }
 
@@ -1056,7 +1052,7 @@ Deno.serve(async (request) => {
     if ((error as { retryable?: boolean })?.retryable) {
       await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "pending" }) });
       const providerStatus = Number((error as { providerStatus?: number })?.providerStatus || 0);
-      return response({ error: (error as { userMessage?: string })?.userMessage || "As IAs estão com alta demanda agora. O PDF foi salvo, não consumiu a cota diária e continua aguardando análise.", retryable: true, code: providerStatus === 429 ? "PROVIDER_RATE_LIMIT" : "PROVIDER_UNAVAILABLE" }, providerStatus === 429 ? 429 : 503);
+      return response({ error: (error as { userMessage?: string })?.userMessage || "As IAs estão com alta demanda agora. O PDF foi salvo, não consumiu a cota diária e continua aguardando análise.", retryable: true, code: providerStatus === 429 ? "PROVIDER_RATE_LIMIT" : "PROVIDER_UNAVAILABLE", attempts: (error as { attempts?: ProviderAttempt[] })?.attempts || [] }, providerStatus === 429 ? 429 : 503);
     }
     await setDocumentStatus(documentId, user.id, "error");
     const providerStatus = Number((error as { providerStatus?: number })?.providerStatus || 0);

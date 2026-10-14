@@ -5,7 +5,7 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const PUBLISHABLE_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
 const GROQ_MODEL = "openai/gpt-oss-20b";
-const DEEPSEEK_MODEL = Deno.env.get("DEEPSEEK_MODEL") || "deepseek-chat";
+const DEEPSEEK_MODEL = Deno.env.get("DEEPSEEK_MODEL") || "deepseek-flash";
 const ALLOWED_ORIGINS = new Set([
   "https://jornada.wcaio.workers.dev",
   "http://localhost:4173",

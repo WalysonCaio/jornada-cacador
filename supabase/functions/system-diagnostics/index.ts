@@ -36,7 +36,13 @@ Deno.serve(async (request) => {
     fetch(`${SUPABASE_URL}/rest/v1/my_ai_usage_daily?user_id=eq.${userId}&usage_day=eq.${today}&select=operation,successful,failed,input_units,output_units`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } }),
   ]);
   const usage = usageResponse.ok ? await usageResponse.json() : [];
-  const geminiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
+  const personalKeyResponse = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_user_ai_secret`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ p_user_id: user.id, p_provider: "gemini" }),
+  }).catch(() => null);
+  const personalGeminiKey = personalKeyResponse?.ok ? String(await personalKeyResponse.json().catch(() => "") || "").trim() : "";
+  const geminiKey = personalGeminiKey || Deno.env.get("GEMINI_API_KEY") || "";
   let geminiModels: string[] = [];
   let geminiApiError = "";
   if (geminiKey) {
@@ -47,15 +53,17 @@ Deno.serve(async (request) => {
   }
   return reply({
     ok: true,
-    version: "65",
+    version: "70",
     project_ref: new URL(SUPABASE_URL).hostname.split(".")[0],
     database: true,
     storage: true,
     gemini_configured: Boolean(geminiKey),
+    gemini_key_source: personalGeminiKey ? "personal" : "shared",
     gemini_api_ok: geminiModels.length > 0,
     gemini_available_models: geminiModels,
     gemini_api_error: geminiApiError || null,
     groq_configured: Boolean(Deno.env.get("GROQ_API_KEY")),
+    deepseek_configured: Boolean(Deno.env.get("DEEPSEEK_API_KEY")),
     pending_documents: pending,
     failed_documents: failed,
     ready_documents: ready,

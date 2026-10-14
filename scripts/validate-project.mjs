@@ -24,7 +24,7 @@ for (const relative of publicFiles) {
 }
 
 const sw = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
-if (!sw.includes("jornada-cacador-v69-personal-ai-key")) throw new Error("O cache não aponta para a versão 69.");
+if (!sw.includes("jornada-cacador-v70-ai-pipeline-fix")) throw new Error("O cache não aponta para a versão 70.");
 const applyServerState = html.match(/function applyServerState[\s\S]*?function mergeProgressStates/)?.[0] || "";
 if (!applyServerState.includes("focusWasRunning") || !applyServerState.includes("if(!focusWasRunning)restoreFocusTimerState()")) throw new Error("A sincronização não preserva o cronômetro de foco.");
 if (applyServerState.includes("timerLeft=focusBlockSeconds()")) throw new Error("A sincronização ainda reinicia o cronômetro para 50 minutos.");
@@ -37,8 +37,9 @@ if (manifest.orientation !== "any") throw new Error("O aplicativo instalado prec
 const headers = fs.readFileSync(new URL("../dist/_headers", import.meta.url), "utf8");
 for (const header of ["X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy", "Cache-Control: no-cache"]) if (!headers.includes(header)) throw new Error(`Cabeçalho de segurança ausente: ${header}`);
 const materialFunction = fs.readFileSync(new URL("../supabase/functions/material-gemini/index.ts", import.meta.url), "utf8");
-if (materialFunction.includes("gemini-3.5-flash-lite")) throw new Error("A função de materiais ainda usa um identificador de modelo incompatível.");
-if (!materialFunction.includes("/v1/interactions") || !materialFunction.includes('type: "user_input"')) throw new Error("A função de materiais não está usando corretamente a Interactions API.");
+if (materialFunction.includes("gemini-3.1-flash-lite")) throw new Error("A função de materiais ainda usa um identificador de modelo antigo.");
+if (!materialFunction.includes(":generateContent") || !materialFunction.includes("availableGeminiModels(geminiKey)")) throw new Error("A função de materiais não está descobrindo e usando modelos compatíveis com a chave pessoal.");
+if (materialFunction.includes('"llama-3.3-70b-versatile"') || materialFunction.includes('"deepseek-chat"')) throw new Error("A função de materiais ainda usa modelos de fallback desativados.");
 for (const required of ["models?pageSize=1000", "supportedGenerationMethods", "availableGeminiModels", "FALLBACK_STATUS", "PROCESSING", "setDocumentStatus", "USAGE_GUARD_MISSING", "parseGeminiJsonText", "relaxedGenerationBody", "normalizeLegalNotation", "generateStudyPackageStable", "pdfInlinePart", "hasDeclaredCoverage", "const rawSummaries = generatedSummaries", "get_user_ai_secret", "key_source"]) if (!materialFunction.includes(required)) throw new Error(`Correção de PDF incompleta: ${required}`);
 const enhancements = fs.readFileSync(new URL("../dist/v59-enhancements.js", import.meta.url), "utf8");
 for (const required of ["openSummaries", "restoreOpenSummaries", "normalizeLegalTitle", "MutationObserver"]) if (!enhancements.includes(required)) throw new Error(`Persistência do resumo incompleta: ${required}`);
@@ -50,5 +51,6 @@ for (const required of ["user_ai_credentials", "vault.create_secret", "get_user_
 for (const required of ["rpc/sync_user_state", "rpc/claim_focus_session", "rpc/update_focus_session", "_serverRevision", "_resetEpoch", "refreshFromServer", "STALE_RESET", "subjectOrder", "learningOrder", "errorUrgency", "menuAbout", "STREAK_MIN_SECONDS", "manualStudyEntries", "questionsForMode", "prepareQuestion", "renderCustomBossCard", "renderExamCountdown", "renderEssays", "libraryFolders", "metadata?.coverage", "coverageWarnings", "v59-enhancements.js"]) {
   if (!html.includes(required)) throw new Error(`Sincronização precisa incompleta: ${required}`);
 }
+if (html.includes("/functions/v1/hyper-endpoint") || !html.includes("/functions/v1/assistente-pmpe")) throw new Error("O frontend ainda aponta para a função antiga do assistente.");
 
 console.log(`OK: ${scripts.length} script(s), ${ids.length} IDs únicos, nenhuma referência ausente e nenhum segredo público detectado.`);
