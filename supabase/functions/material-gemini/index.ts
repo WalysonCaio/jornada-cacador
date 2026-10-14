@@ -40,7 +40,7 @@ function standardJsonSchema(value: any): any {
   return result;
 }
 
-async function createGeminiInteraction(input: any[], schema: any, maxOutputTokens = 32768, timeoutMs = 115000) {
+async function createGeminiInteraction(input: any[], schema: any, maxOutputTokens = 32768, timeoutMs = 115000, geminiKey = GEMINI_KEY) {
   let lastStatus = 0;
   let lastMessage = "O Gemini não concluiu a interação.";
   for (const model of [...new Set(INTERACTIONS_MODELS)]) {
@@ -49,7 +49,7 @@ async function createGeminiInteraction(input: any[], schema: any, maxOutputToken
     try {
       const result = await fetch("https://generativelanguage.googleapis.com/v1/interactions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY },
+        headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
         signal: controller.signal,
         body: JSON.stringify({
           model,
@@ -154,11 +154,11 @@ async function sha256(bytes: Uint8Array) {
   return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-async function reserveUsage(userId: string, campaignId: string, operation: "material" | "exam") {
+async function reserveUsage(userId: string, campaignId: string, operation: "material" | "exam", dailyLimit = 10) {
   const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reserve_ai_usage`, {
     method: "POST",
     headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({ p_user_id: userId, p_campaign_id: campaignId, p_operation: operation, p_daily_limit: 10 }),
+    body: JSON.stringify({ p_user_id: userId, p_campaign_id: campaignId, p_operation: operation, p_daily_limit: dailyLimit }),
   });
   if (result.ok) return await result.json();
   const detail = await result.text().catch(() => "");
@@ -177,6 +177,19 @@ async function setDocumentStatus(documentId: string, userId: string, processingS
 async function finishUsage(eventId: number | undefined, status: "success" | "error" | "cached", provider?: string, model?: string, errorCode?: string) {
   if (!eventId) return;
   await fetch(`${SUPABASE_URL}/rest/v1/ai_usage_events?id=eq.${eventId}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ status, provider: provider || null, model: model || null, error_code: errorCode || null }) }).catch(() => undefined);
+}
+
+async function userGeminiKey(userId: string) {
+  const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_user_ai_secret`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ p_user_id: userId, p_provider: "gemini" }),
+  });
+  if (!result.ok) {
+    if (result.status !== 404) console.warn("Personal Gemini key lookup unavailable", result.status);
+    return "";
+  }
+  return String(await result.json().catch(() => "") || "").trim();
 }
 
 async function updateJob(documentId: string, values: Record<string, unknown>) {
@@ -343,7 +356,7 @@ function pdfInlinePart(bytes: Uint8Array) {
   return { inline_data: { mime_type: "application/pdf", data: btoa(binary) } };
 }
 
-async function generateStudyPackageStable(file: { uri: string; mimeType?: string }, title: string, campaignContext: string, documentType: string, inlineBytes?: Uint8Array) {
+async function generateStudyPackageStable(file: { uri: string; mimeType?: string }, title: string, campaignContext: string, documentType: string, inlineBytes: Uint8Array | undefined, geminiKey: string) {
   const sourcePart = inlineBytes
     ? { type: "document", mime_type: "application/pdf", data: pdfInlinePart(inlineBytes).inline_data.data }
     : { type: "document", mime_type: file.mimeType ?? "application/pdf", uri: file.uri };
@@ -375,7 +388,7 @@ TIPO: ${documentType}. ${["prova", "simulado"].includes(documentType) ? "Quando 
   };
   const schema = requestBody.generationConfig.responseSchema;
   const prompt = requestBody.contents[0].parts[1].text;
-  const result = await createGeminiInteraction([sourcePart, { type: "text", text: prompt }], schema, 32768);
+  const result = await createGeminiInteraction([sourcePart, { type: "text", text: prompt }], schema, 32768, 115000, geminiKey);
   if (!Array.isArray(result.parsed?.summaries) || !result.parsed.summaries.length) {
     const error = new Error("O Gemini respondeu sem resumos utilizáveis.") as Error & { retryable?: boolean; userMessage?: string };
     error.retryable = true;
@@ -554,12 +567,12 @@ TEXTO EXTRAÍDO:
 ${chunk.text}`;
 }
 
-async function generateChunkWithFallback(chunk: TextChunk, totalChunks: number, title: string, campaignContext: string, documentType: string) {
+async function generateChunkWithFallback(chunk: TextChunk, totalChunks: number, title: string, campaignContext: string, documentType: string, geminiKey: string) {
   const prompt = chunkStudyPrompt(chunk, totalChunks, title, campaignContext, documentType);
   const attempts: ProviderAttempt[] = [];
-  if (GEMINI_KEY) {
+  if (geminiKey) {
     try {
-      const result = await createGeminiInteraction([{ type: "text", text: prompt }], {}, 16384, 22000);
+      const result = await createGeminiInteraction([{ type: "text", text: prompt }], {}, 16384, 22000, geminiKey);
       if (!Array.isArray(result.parsed?.summaries) || !result.parsed.summaries.length) throw new Error("EMPTY_GEMINI_SUMMARIES");
       return { ...result, provider: "gemini", attempts };
     } catch (error) {
@@ -586,6 +599,7 @@ async function generateChunkWithFallback(chunk: TextChunk, totalChunks: number, 
 async function generateStudyPackageFromText(
   pages: TextPage[], title: string, campaignContext: string, documentType: string,
   onProgress: (completed: number, total: number, providers: string[]) => Promise<void>,
+  geminiKey: string,
 ) {
   const chunks = createTextChunks(pages);
   const results: any[] = new Array(chunks.length);
@@ -599,7 +613,7 @@ async function generateStudyPackageFromText(
       const index = nextIndex++;
       if (index >= chunks.length) return;
       const chunk = chunks[index];
-      const generated = await generateChunkWithFallback(chunk, chunks.length, title, campaignContext, documentType);
+      const generated = await generateChunkWithFallback(chunk, chunks.length, title, campaignContext, documentType, geminiKey);
       results[index] = generated;
       providers.push(generated.provider);
       models.push(generated.model);
@@ -656,11 +670,11 @@ async function reviewGeneratedQuestions(summaries: unknown[], campaignContext: s
   return summaries.map((summary: any, index) => ({ ...summary, questions: reviews.find((item: any) => Number(item.summary_index) === index)?.questions ?? summary?.questions, review_status: "ai_reviewed" }));
 }
 
-async function uploadPdfToGemini(bytes: Uint8Array, title: string) {
+async function uploadPdfToGemini(bytes: Uint8Array, title: string, geminiKey: string) {
   const start = await fetch("https://generativelanguage.googleapis.com/upload/v1beta/files", {
     method: "POST",
     headers: {
-      "x-goog-api-key": GEMINI_KEY,
+      "x-goog-api-key": geminiKey,
       "X-Goog-Upload-Protocol": "resumable",
       "X-Goog-Upload-Command": "start",
       "X-Goog-Upload-Header-Content-Length": String(bytes.byteLength),
@@ -703,18 +717,18 @@ async function uploadPdfToGemini(bytes: Uint8Array, title: string) {
   for (let attempt = 0; attempt < 20; attempt++) {
     if (String(file.state || "").toUpperCase() === "ACTIVE") return file;
     if (String(file.state || "").toUpperCase() === "FAILED") {
-      await removeGeminiFile(file.name);
+      await removeGeminiFile(file.name, geminiKey);
       const failed = new Error(file.error?.message || "O Gemini não conseguiu preparar o PDF.") as Error & { retryable?: boolean; userMessage?: string };
       failed.retryable = true;
       failed.userMessage = "O Gemini não conseguiu preparar o PDF agora. O arquivo continua salvo e a tentativa não consumiu sua cota.";
       throw failed;
     }
     await wait(1500);
-    const statusResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/${file.name}`, { headers: { "x-goog-api-key": GEMINI_KEY } });
+    const statusResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/${file.name}`, { headers: { "x-goog-api-key": geminiKey } });
     const statusData = await statusResponse.json().catch(() => ({}));
     if (!statusResponse.ok) {
       if (RETRYABLE_STATUS.has(statusResponse.status)) continue;
-      await removeGeminiFile(file.name);
+      await removeGeminiFile(file.name, geminiKey);
       const statusError = new Error(statusData?.error?.message || `Falha ao consultar o PDF no Gemini (${statusResponse.status}).`) as Error & { retryable?: boolean; providerStatus?: number; userMessage?: string };
       statusError.retryable = true;
       statusError.providerStatus = statusResponse.status;
@@ -723,18 +737,18 @@ async function uploadPdfToGemini(bytes: Uint8Array, title: string) {
     }
     Object.assign(file, statusData);
   }
-  await removeGeminiFile(file.name);
+  await removeGeminiFile(file.name, geminiKey);
   const timeout = new Error("Tempo excedido aguardando o Gemini preparar o PDF.") as Error & { retryable?: boolean; userMessage?: string };
   timeout.retryable = true;
   timeout.userMessage = "O Gemini demorou para preparar o PDF. Ele continua salvo e esta tentativa não consumiu a cota; tente novamente em alguns minutos.";
   throw timeout;
 }
 
-async function removeGeminiFile(name?: string) {
+async function removeGeminiFile(name?: string, geminiKey = GEMINI_KEY) {
   if (!name) return;
   await fetch(`https://generativelanguage.googleapis.com/v1beta/${name}`, {
     method: "DELETE",
-    headers: { "x-goog-api-key": GEMINI_KEY },
+    headers: { "x-goog-api-key": geminiKey },
   }).catch(() => undefined);
 }
 
@@ -869,14 +883,19 @@ function coverageReport(value: any, summaries: any[]) {
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
-  if (!SUPABASE_URL || !SERVICE_KEY || (!GEMINI_KEY && !DEEPSEEK_KEY && !GROQ_KEY)) {
+  if (!SUPABASE_URL || !SERVICE_KEY) {
     console.error("material-gemini configuration missing", { supabase: Boolean(SUPABASE_URL), serviceRole: Boolean(SERVICE_KEY), gemini: Boolean(GEMINI_KEY), deepseek: Boolean(DEEPSEEK_KEY), groq: Boolean(GROQ_KEY) });
-    return response({ error: "A função de materiais não está configurada. Confira SUPABASE_SERVICE_ROLE_KEY e configure ao menos uma das chaves: GEMINI_API_KEY, DEEPSEEK_API_KEY ou GROQ_API_KEY.", code: "MISSING_CONFIGURATION" }, 503);
+    return response({ error: "A função de materiais não está configurada. Confira SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY.", code: "MISSING_CONFIGURATION" }, 503);
   }
   const auth = request.headers.get("authorization") ?? "";
   const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { Authorization: auth, apikey: PUBLIC_KEY } });
   const user = authResponse.ok ? await authResponse.json() : null;
   if (!user?.id) return response({ error: "Sessão inválida. Entre novamente." }, 401);
+  const personalGeminiKey = await userGeminiKey(user.id);
+  const activeGeminiKey = personalGeminiKey || GEMINI_KEY;
+  if (!activeGeminiKey && !DEEPSEEK_KEY && !GROQ_KEY) {
+    return response({ error: "Configure sua chave Gemini em Perfil → Configurações de IA." }, 503);
+  }
   const input = await request.json().catch(() => null);
   const path = String(input?.storage_path ?? ""), campaignId = String(input?.campaign_id ?? ""), documentId = String(input?.document_id ?? ""), title = String(input?.title ?? "PDF enviado");
   if (!path || !campaignId || !documentId) return response({ error: "Dados do documento incompletos." }, 400);
@@ -935,7 +954,7 @@ Deno.serve(async (request) => {
         }
       }
     }
-    usage = await reserveUsage(user.id, campaignId, operation);
+    usage = await reserveUsage(user.id, campaignId, operation, personalGeminiKey ? 10 : 2);
     if (!usage.allowed) {
       await updateJob(documentId, { status: usage.reason === "BUSY" ? "queued" : "retry", available_at: new Date(Date.now() + 15 * 60000).toISOString(), last_error: usage.reason });
       await setDocumentStatus(documentId, user.id, "pending");
@@ -960,9 +979,9 @@ Deno.serve(async (request) => {
       generated = await generateStudyPackageFromText(pages, title, campaignContext, documentType, async (completed, total, providers) => {
         const percent = 20 + Math.round((completed / total) * 55);
         await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "generation", percent, completed_sections: completed, total_sections: total, providers: [...new Set(providers)], updated_at: new Date().toISOString() } } }) });
-      });
+      }, activeGeminiKey);
     } else {
-      if (!GEMINI_KEY) {
+      if (!activeGeminiKey) {
         const noOcr = new Error("OCR_PROVIDER_NOT_CONFIGURED") as Error & { retryable?: boolean; providerStatus?: number; userMessage?: string };
         noOcr.retryable = true;
         noOcr.providerStatus = 503;
@@ -970,12 +989,13 @@ Deno.serve(async (request) => {
         throw noOcr;
       }
       console.warn("Browser PDF text unavailable; using Gemini native document vision");
-      const geminiFile = await uploadPdfToGemini(bytes, title);
+      const geminiFile = await uploadPdfToGemini(bytes, title, activeGeminiKey);
       try {
         inventory = { estimated_pages: 0, sections: [], warnings: ["PDF digitalizado: leitura visual realizada pelo Gemini."], model: "gemini-native-vision" };
         try {
-          generated = await generateStudyPackageStable(geminiFile, title, campaignContext, documentType, bytes.byteLength <= 14 * 1024 * 1024 ? bytes : undefined);
+          generated = await generateStudyPackageStable(geminiFile, title, campaignContext, documentType, bytes.byteLength <= 14 * 1024 * 1024 ? bytes : undefined, activeGeminiKey);
           generated.provider = "gemini-vision";
+          generated.key_source = personalGeminiKey ? "personal" : "shared";
         } catch (visionError) {
           const status = Number((visionError as { providerStatus?: number })?.providerStatus || 0);
           const wrapped = new Error(String((visionError as Error)?.message || visionError)) as Error & { retryable?: boolean; providerStatus?: number; userMessage?: string; code?: string };
@@ -988,7 +1008,7 @@ Deno.serve(async (request) => {
           throw wrapped;
         }
       } finally {
-        await removeGeminiFile(geminiFile.name);
+        await removeGeminiFile(geminiFile.name, activeGeminiKey);
       }
     }
     const parsed: any = generated.parsed;
@@ -1028,7 +1048,7 @@ Deno.serve(async (request) => {
     await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ user_id: user.id, document_id: documentId, sha256: fingerprint, byte_size: bytes.byteLength }) });
     await finishUsage(usage.event_id, "success", generated.provider, generated.model);
     await updateJob(documentId, { status: "completed", last_error: null });
-    return response({ summaries: summaries.length, flashcards: summaries.reduce((n: number, x: { flashcards?: unknown[] }) => n + (x.flashcards?.length ?? 0), 0), questions: summaries.reduce((n: number, x: { questions?: unknown[] }) => n + (x.questions?.length ?? 0), 0), coverage, provider: generated.provider, model: generated.model, chunks: generated.chunks || 1 });
+    return response({ summaries: summaries.length, flashcards: summaries.reduce((n: number, x: { flashcards?: unknown[] }) => n + (x.flashcards?.length ?? 0), 0), questions: summaries.reduce((n: number, x: { questions?: unknown[] }) => n + (x.questions?.length ?? 0), 0), coverage, provider: generated.provider, model: generated.model, key_source: personalGeminiKey ? "personal" : "shared", chunks: generated.chunks || 1 });
   } catch (error) {
     console.error("material-gemini", error);
     await finishUsage(usage?.event_id, "error", undefined, undefined, (error as { retryable?: boolean })?.retryable ? "PROVIDER_UNAVAILABLE" : "PROCESSING_FAILED");

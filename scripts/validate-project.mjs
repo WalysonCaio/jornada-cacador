@@ -24,7 +24,7 @@ for (const relative of publicFiles) {
 }
 
 const sw = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
-if (!sw.includes("jornada-cacador-v65")) throw new Error("O cache não aponta para a versão 65.");
+if (!sw.includes("jornada-cacador-v69-personal-ai-key")) throw new Error("O cache não aponta para a versão 69.");
 const applyServerState = html.match(/function applyServerState[\s\S]*?function mergeProgressStates/)?.[0] || "";
 if (!applyServerState.includes("focusWasRunning") || !applyServerState.includes("if(!focusWasRunning)restoreFocusTimerState()")) throw new Error("A sincronização não preserva o cronômetro de foco.");
 if (applyServerState.includes("timerLeft=focusBlockSeconds()")) throw new Error("A sincronização ainda reinicia o cronômetro para 50 minutos.");
@@ -39,9 +39,14 @@ for (const header of ["X-Content-Type-Options", "Referrer-Policy", "Permissions-
 const materialFunction = fs.readFileSync(new URL("../supabase/functions/material-gemini/index.ts", import.meta.url), "utf8");
 if (materialFunction.includes("gemini-3.5-flash-lite")) throw new Error("A função de materiais ainda usa um identificador de modelo incompatível.");
 if (!materialFunction.includes("/v1/interactions") || !materialFunction.includes('type: "user_input"')) throw new Error("A função de materiais não está usando corretamente a Interactions API.");
-for (const required of ["models?pageSize=1000", "supportedGenerationMethods", "availableGeminiModels", "FALLBACK_STATUS", "PROCESSING", "setDocumentStatus", "USAGE_GUARD_MISSING", "parseGeminiJsonText", "relaxedGenerationBody", "normalizeLegalNotation", "generateStudyPackageStable", "pdfInlinePart", "retrying inline PDF", "hasDeclaredCoverage", "const rawSummaries = generatedSummaries"]) if (!materialFunction.includes(required)) throw new Error(`Correção de PDF incompleta: ${required}`);
+for (const required of ["models?pageSize=1000", "supportedGenerationMethods", "availableGeminiModels", "FALLBACK_STATUS", "PROCESSING", "setDocumentStatus", "USAGE_GUARD_MISSING", "parseGeminiJsonText", "relaxedGenerationBody", "normalizeLegalNotation", "generateStudyPackageStable", "pdfInlinePart", "hasDeclaredCoverage", "const rawSummaries = generatedSummaries", "get_user_ai_secret", "key_source"]) if (!materialFunction.includes(required)) throw new Error(`Correção de PDF incompleta: ${required}`);
 const enhancements = fs.readFileSync(new URL("../dist/v59-enhancements.js", import.meta.url), "utf8");
 for (const required of ["openSummaries", "restoreOpenSummaries", "normalizeLegalTitle", "MutationObserver"]) if (!enhancements.includes(required)) throw new Error(`Persistência do resumo incompleta: ${required}`);
+for (const required of ["personalAiDialog", "ai-key-manager", "Testar e salvar", "Chave pessoal ativa"]) if (!enhancements.includes(required)) throw new Error(`Configuração de IA pessoal incompleta: ${required}`);
+const aiKeyManager = fs.readFileSync(new URL("../supabase/functions/ai-key-manager/index.ts", import.meta.url), "utf8");
+for (const required of ["verifyPassword", "validateGeminiKey", "store_user_ai_secret", "delete_user_ai_secret"]) if (!aiKeyManager.includes(required)) throw new Error(`Gerenciador seguro de chaves incompleto: ${required}`);
+const byokMigration = fs.readFileSync(new URL("../supabase/migrations/20261014_v69_user_ai_keys.sql", import.meta.url), "utf8");
+for (const required of ["user_ai_credentials", "vault.create_secret", "get_user_ai_secret", "service_role"]) if (!byokMigration.includes(required)) throw new Error(`Migração BYOK incompleta: ${required}`);
 for (const required of ["rpc/sync_user_state", "rpc/claim_focus_session", "rpc/update_focus_session", "_serverRevision", "_resetEpoch", "refreshFromServer", "STALE_RESET", "subjectOrder", "learningOrder", "errorUrgency", "menuAbout", "STREAK_MIN_SECONDS", "manualStudyEntries", "questionsForMode", "prepareQuestion", "renderCustomBossCard", "renderExamCountdown", "renderEssays", "libraryFolders", "metadata?.coverage", "coverageWarnings", "v59-enhancements.js"]) {
   if (!html.includes(required)) throw new Error(`Sincronização precisa incompleta: ${required}`);
 }

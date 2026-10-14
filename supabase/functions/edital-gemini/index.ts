@@ -1,14 +1,14 @@
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const PUBLISHABLE_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
-let modelDiscovery: Promise<string> | null = null;
-async function pickGeminiModel() {
-  if (modelDiscovery) return modelDiscovery;
-  modelDiscovery = (async () => {
+const modelDiscovery = new Map<string, Promise<string>>();
+async function pickGeminiModel(geminiKey: string) {
+  if (modelDiscovery.has(geminiKey)) return modelDiscovery.get(geminiKey)!;
+  const discovery = (async () => {
     const configured = String(Deno.env.get("GEMINI_MODEL") ?? "").replace(/^models\//, "").trim();
     try {
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { headers: { "x-goog-api-key": GEMINI_API_KEY } });
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { headers: { "x-goog-api-key": geminiKey } });
       const data = await response.json().catch(() => ({}));
       const blocked = /(embedding|imagen|veo|tts|audio|live|robotics|computer-use)/i;
       const names = Array.isArray(data?.models) ? data.models.filter((item: any) => item?.supportedGenerationMethods?.includes("generateContent")).map((item: any) => String(item?.name ?? "").replace(/^models\//, "")).filter((name: string) => name && !blocked.test(name)).sort((a: string, b: string) => Number(!/flash/i.test(a)) - Number(!/flash/i.test(b))) : [];
@@ -22,7 +22,8 @@ async function pickGeminiModel() {
       throw new Error("A chave Gemini não possui um modelo disponível para analisar o edital.");
     }
   })();
-  return modelDiscovery;
+  modelDiscovery.set(geminiKey, discovery);
+  return discovery;
 }
 const ALLOWED_ORIGINS = new Set([
   "https://jornada.wcaio.workers.dev",
@@ -45,11 +46,11 @@ function reply(request: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: headers(request) });
 }
 
-async function uploadPdfToGemini(bytes: Uint8Array, title: string) {
+async function uploadPdfToGemini(bytes: Uint8Array, title: string, geminiKey: string) {
   const start = await fetch("https://generativelanguage.googleapis.com/upload/v1beta/files", {
     method: "POST",
     headers: {
-      "x-goog-api-key": GEMINI_API_KEY,
+      "x-goog-api-key": geminiKey,
       "X-Goog-Upload-Protocol": "resumable",
       "X-Goog-Upload-Command": "start",
       "X-Goog-Upload-Header-Content-Length": String(bytes.byteLength),
@@ -77,33 +78,39 @@ async function uploadPdfToGemini(bytes: Uint8Array, title: string) {
   if (!file.name) return file;
   for (let attempt = 0; attempt < 20; attempt++) {
     if (String(file.state || "").toUpperCase() === "ACTIVE") return file;
-    if (String(file.state || "").toUpperCase() === "FAILED") { await removeGeminiFile(file.name);throw new Error(file.error?.message || "O Gemini não conseguiu preparar o edital."); }
+    if (String(file.state || "").toUpperCase() === "FAILED") { await removeGeminiFile(file.name, geminiKey);throw new Error(file.error?.message || "O Gemini não conseguiu preparar o edital."); }
     await new Promise((resolve) => setTimeout(resolve, 1500));
-    const statusResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/${file.name}`, { headers: { "x-goog-api-key": GEMINI_API_KEY } });
+    const statusResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/${file.name}`, { headers: { "x-goog-api-key": geminiKey } });
     const statusData = await statusResponse.json().catch(() => ({}));
-    if (!statusResponse.ok) { await removeGeminiFile(file.name);throw new Error(statusData?.error?.message || `Falha ao consultar o edital no Gemini (${statusResponse.status}).`); }
+    if (!statusResponse.ok) { await removeGeminiFile(file.name, geminiKey);throw new Error(statusData?.error?.message || `Falha ao consultar o edital no Gemini (${statusResponse.status}).`); }
     Object.assign(file, statusData);
   }
-  await removeGeminiFile(file.name);
+  await removeGeminiFile(file.name, geminiKey);
   throw new Error("O Gemini demorou demais para preparar o edital. Tente novamente em alguns minutos.");
 }
 
-async function removeGeminiFile(name?: string) {
+async function removeGeminiFile(name?: string, geminiKey = GEMINI_API_KEY) {
   if (!name) return;
   await fetch(`https://generativelanguage.googleapis.com/v1beta/${name}`, {
     method: "DELETE",
-    headers: { "x-goog-api-key": GEMINI_API_KEY },
+    headers: { "x-goog-api-key": geminiKey },
   }).catch(() => undefined);
 }
 
-async function reserveUsage(userId: string, campaignId: string) {
-  const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reserve_ai_usage`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ p_user_id: userId, p_campaign_id: campaignId, p_operation: "edital", p_daily_limit: 10 }) });
+async function reserveUsage(userId: string, campaignId: string, dailyLimit = 10) {
+  const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reserve_ai_usage`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ p_user_id: userId, p_campaign_id: campaignId, p_operation: "edital", p_daily_limit: dailyLimit }) });
   return result.ok ? await result.json() : { allowed: false, reason: "USAGE_GUARD_UNAVAILABLE" };
 }
 
 async function finishUsage(eventId: number | undefined, status: "success" | "error", errorCode?: string) {
   if (!eventId) return;
   await fetch(`${SUPABASE_URL}/rest/v1/ai_usage_events?id=eq.${eventId}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ status, provider: "gemini", model: "gemini-2.5-flash", error_code: errorCode || null }) }).catch(() => undefined);
+}
+
+async function userGeminiKey(userId: string) {
+  const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_user_ai_secret`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ p_user_id: userId, p_provider: "gemini" }) });
+  if (!result.ok) return "";
+  return String(await result.json().catch(() => "") || "").trim();
 }
 
 Deno.serve(async (request) => {
@@ -113,7 +120,9 @@ Deno.serve(async (request) => {
   const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { "Authorization": authorization, "apikey": PUBLISHABLE_KEY } });
   const user = userResponse.ok ? await userResponse.json() : null;
   if (!user?.id) return reply(request, { error: "Sessão inválida. Entre novamente." }, 401);
-  if (!GEMINI_API_KEY) return reply(request, { error: "GEMINI_API_KEY não configurada." }, 503);
+  const personalGeminiKey = await userGeminiKey(user.id);
+  const activeGeminiKey = personalGeminiKey || GEMINI_API_KEY;
+  if (!activeGeminiKey) return reply(request, { error: "Configure sua chave Gemini em Perfil → Configurações de IA." }, 503);
 
   const payload = await request.json().catch(() => null);
   const storagePath = String(payload?.storage_path ?? "");
@@ -136,10 +145,10 @@ Deno.serve(async (request) => {
     const documents = documentResponse.ok ? await documentResponse.json() : [];
     const document = Array.isArray(documents) ? documents[0] : null;
     if (!document || document.document_type !== "edital" || document.storage_path !== storagePath) return reply(request, { error: "O arquivo não está registrado como edital deste portal." }, 422);
-    usage = await reserveUsage(user.id, campaignId);
+    usage = await reserveUsage(user.id, campaignId, personalGeminiKey ? 10 : 2);
     if (!usage.allowed) {
       await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "pending" }) }).catch(()=>undefined);
-      if (usage.reason === "DAILY_LIMIT") return reply(request, { error: `Você atingiu o limite diário de ${usage.limit || 10} análises de arquivo concluídas. O edital está salvo e poderá ser processado após a renovação da cota.`, retryable: true, code: "DAILY_LIMIT" }, 429);
+      if (usage.reason === "DAILY_LIMIT") return reply(request, { error: `Você atingiu o limite diário de ${usage.limit || (personalGeminiKey ? 10 : 2)} análises de arquivo concluídas. O edital está salvo e poderá ser processado após a renovação da cota.`, retryable: true, code: "DAILY_LIMIT" }, 429);
       if (usage.reason === "BUSY") return reply(request, { error: "Já existe um PDF sendo analisado. Este edital continuará aguardando na fila.", retryable: true, queued: true, code: "BUSY" }, 409);
       return reply(request, { error: "A proteção de consumo está temporariamente indisponível.", retryable: true }, 503);
     }
@@ -148,13 +157,13 @@ Deno.serve(async (request) => {
     if (!fileResponse.ok) { await finishUsage(usage.event_id,"error","FILE_READ_FAILED");return reply(request, { error: "Não foi possível abrir o PDF armazenado." }, 502); }
     const bytes = new Uint8Array(await fileResponse.arrayBuffer());
     if (bytes.byteLength > 50 * 1024 * 1024) { await finishUsage(usage.event_id,"error","FILE_TOO_LARGE");return reply(request, { error: "O edital deve ter no máximo 50 MB para análise." }, 413); }
-    const geminiFile = await uploadPdfToGemini(bytes, title);
+    const geminiFile = await uploadPdfToGemini(bytes, title, activeGeminiKey);
     geminiFileName = geminiFile.name;
 
-    const geminiModel = await pickGeminiModel();
+    const geminiModel = await pickGeminiModel(activeGeminiKey);
     const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": activeGeminiKey },
       body: JSON.stringify({
         contents: [{ parts: [
           { file_data: { mime_type: geminiFile.mimeType ?? "application/pdf", file_uri: geminiFile.uri } },
@@ -189,7 +198,7 @@ Retorne somente o JSON solicitado.` },
       }),
     });
     const geminiData = await geminiResponse.json();
-    await removeGeminiFile(geminiFile.name);
+    await removeGeminiFile(geminiFile.name, activeGeminiKey);
     geminiFileName = undefined;
     if (!geminiResponse.ok) { console.error("Gemini", geminiResponse.status, geminiData);await finishUsage(usage.event_id,"error",geminiResponse.status===429?"PROVIDER_429":"PROVIDER_ERROR");await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: geminiResponse.status===429 ? "pending" : "error" }) }).catch(()=>undefined);return reply(request, { error: geminiResponse.status===429?"A cota gratuita do Gemini foi atingida (erro 429). O edital está salvo; tente novamente após a renovação da cota.":geminiData?.error?.message ?? "O Gemini não conseguiu analisar o edital.",retryable:geminiResponse.status===429,code:geminiResponse.status===429?"PROVIDER_429":"AI_ERROR" }, geminiResponse.status===429?429:502); }
     const parsed = JSON.parse(geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
@@ -253,13 +262,13 @@ Retorne somente o JSON solicitado.` },
     }
     await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready" }) });
     await finishUsage(usage.event_id, "success");
-    return reply(request, { topics: uniqueTopics, saved: savedTopics.length, provider: "gemini", meta });
+    return reply(request, { topics: uniqueTopics, saved: savedTopics.length, provider: "gemini", key_source: personalGeminiKey ? "personal" : "shared", meta });
   } catch (error) {
     console.error("edital-gemini", error);
     await finishUsage(usage?.event_id, "error", "PROCESSING_FAILED");
     if (documentId) await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "error" }) }).catch(()=>undefined);
     return reply(request, { error: "Falha interna ao interpretar o edital." }, 500);
   } finally {
-    await removeGeminiFile(geminiFileName);
+    await removeGeminiFile(geminiFileName, activeGeminiKey);
   }
 });
