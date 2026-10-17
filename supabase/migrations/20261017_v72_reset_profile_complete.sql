@@ -13,14 +13,17 @@ declare
   deleted_orphan_documents integer := 0;
   deleted_conversations integer := 0;
   deleted_focus_sessions integer := 0;
-  deleted_user_state integer := 0;
+  reset_state_revision bigint := 1;
+  new_reset_epoch bigint := floor(extract(epoch from clock_timestamp()) * 1000)::bigint;
 begin
   if p_user_id is null or auth.role() <> 'service_role' then
     raise exception 'not_authorized';
   end if;
 
   -- Bloqueia duas redefinições simultâneas da mesma conta.
-  perform pg_advisory_xact_lock(hashtext('reset-profile:' || p_user_id::text));
+  -- Usa a mesma trava da função sync_user_state para impedir gravações durante
+  -- a redefinição.
+  perform pg_advisory_xact_lock(hashtext(p_user_id::text));
 
   delete from public.focus_sessions where user_id = p_user_id;
   get diagnostics deleted_focus_sessions = row_count;
@@ -39,8 +42,23 @@ begin
   delete from public.study_documents where user_id = p_user_id;
   get diagnostics deleted_orphan_documents = row_count;
 
-  delete from public.user_state where user_id = p_user_id;
-  get diagnostics deleted_user_state = row_count;
+  -- Não apague a linha de sincronização. Ela funciona como uma lápide: seu
+  -- reset_epoch impede que outro aparelho ainda aberto restaure dados antigos.
+  insert into public.user_state (
+    user_id, state, client_updated_at, server_revision, reset_epoch,
+    updated_by_device, server_updated_at
+  ) values (
+    p_user_id, '{}'::jsonb, now(), 1, new_reset_epoch,
+    'server-profile-reset', now()
+  )
+  on conflict (user_id) do update set
+    state = '{}'::jsonb,
+    client_updated_at = now(),
+    server_revision = public.user_state.server_revision + 1,
+    reset_epoch = greatest(public.user_state.reset_epoch + 1, new_reset_epoch),
+    updated_by_device = 'server-profile-reset',
+    server_updated_at = now()
+  returning server_revision, reset_epoch into reset_state_revision, new_reset_epoch;
 
   return jsonb_build_object(
     'reset', true,
@@ -48,7 +66,8 @@ begin
     'deleted_orphan_documents', deleted_orphan_documents,
     'deleted_conversations', deleted_conversations,
     'deleted_focus_sessions', deleted_focus_sessions,
-    'deleted_user_state', deleted_user_state,
+    'reset_state_revision', reset_state_revision,
+    'reset_epoch', new_reset_epoch,
     'gemini_key_preserved', true
   );
 end;

@@ -183,15 +183,17 @@ REGRAS OBRIGATÓRIAS:
 8. Preserve em edital_order a ordem original, mas organize learning_order como um professor planejando um currículo: fundamentos e pré-requisitos antes de aplicações e conteúdos avançados. Dentro de cada disciplina, cada etapa deve preparar a próxima.
 9. Não use conhecimento externo e não complete texto truncado por suposição.
 10. subject_order define a rotação das disciplinas; learning_order começa em 0 dentro de cada disciplina; difficulty é basic, intermediate ou advanced; prerequisite_topic deve conter o título exato de outro tópico retornado na mesma disciplina, ou string vazia; pedagogical_reason explica brevemente por que aquela posição facilita a aprendizagem.
-11. Antes de extrair, classifique document_kind como edital_concurso, material_estudo ou outro. Um edital verdadeiro costuma conter identificação do certame/cargo e regras/seções formais; uma apostila, livro, resumo, lei isolada ou aula é material_estudo. Explique brevemente em classification_reason.
-12. Em meta, informe detected_scope, confidence de 0 a 1 e warnings objetivos.
+11. Antes de extrair, classifique document_kind como edital_oficial, edital_verticalizado, material_estudo ou outro.
+12. edital_oficial é o documento normativo de abertura do concurso. edital_verticalizado é uma organização fiel do conteúdo programático de um edital, normalmente separada por disciplinas, tópicos ou itens de acompanhamento. AMBOS SÃO FONTES VÁLIDAS para criar o mapa e as missões. Não rejeite um PDF apenas por ser verticalizado ou por não conter inscrições, vagas e regras administrativas.
+13. Somente classifique como material_estudo quando o documento for apostila, aula, livro, resumo explicativo ou lei isolada, sem funcionar como lista do conteúdo programático do concurso.
+14. Em meta, informe detected_scope, confidence de 0 a 1 e warnings objetivos. Se for verticalizado, avise que ele é uma fonte derivada e deve ser conferido com o edital oficial, mas extraia todos os tópicos normalmente.
 
 Retorne somente o JSON solicitado.` },
         ] }],
         generationConfig: {
           temperature: 0.1, responseMimeType: "application/json",
           responseSchema: { type: "OBJECT", properties: {
-            meta: { type: "OBJECT", properties: { document_kind: { type: "STRING", enum: ["edital_concurso", "material_estudo", "outro"] }, classification_reason: { type: "STRING" }, detected_scope: { type: "STRING" }, confidence: { type: "NUMBER" }, warnings: { type: "ARRAY", items: { type: "STRING" } } }, required: ["document_kind", "classification_reason", "detected_scope", "confidence", "warnings"] },
+            meta: { type: "OBJECT", properties: { document_kind: { type: "STRING", enum: ["edital_oficial", "edital_verticalizado", "material_estudo", "outro"] }, classification_reason: { type: "STRING" }, detected_scope: { type: "STRING" }, confidence: { type: "NUMBER" }, warnings: { type: "ARRAY", items: { type: "STRING" } } }, required: ["document_kind", "classification_reason", "detected_scope", "confidence", "warnings"] },
             topics: { type: "ARRAY", items: { type: "OBJECT", properties: { subject: { type: "STRING" }, unit: { type: "STRING" }, topic: { type: "STRING" }, subject_order: { type: "INTEGER" }, learning_order: { type: "INTEGER" }, difficulty: { type: "STRING", enum: ["basic", "intermediate", "advanced"] }, prerequisite_topic: { type: "STRING" }, pedagogical_reason: { type: "STRING" } }, required: ["subject", "topic", "subject_order", "learning_order", "difficulty", "prerequisite_topic", "pedagogical_reason"] } }
           }, required: ["meta", "topics"] },
         },
@@ -209,11 +211,13 @@ Retorne somente o JSON solicitado.` },
       confidence: Math.max(0, Math.min(1, Number(parsed?.meta?.confidence ?? 0))),
       warnings: Array.isArray(parsed?.meta?.warnings) ? parsed.meta.warnings.map((warning: unknown) => String(warning).trim()).filter(Boolean).slice(0, 10) : [],
     };
-    if (meta.document_kind !== "edital_concurso") {
+    const validEditalKinds = new Set(["edital_oficial", "edital_verticalizado", "edital_concurso"]);
+    if (!validEditalKinds.has(meta.document_kind)) {
       await finishUsage(usage.event_id, "error", "NOT_AN_EDITAL");
       await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "error" }) });
-      return reply(request, { error: `Este PDF não parece ser um edital de concurso. ${meta.classification_reason} Exclua-o desta categoria e envie novamente como Material de estudo, Lei ou norma, Prova ou Simulado.`, code: "NOT_AN_EDITAL" }, 422);
+      return reply(request, { error: `Este PDF não parece ser um edital oficial nem um edital verticalizado. ${meta.classification_reason} Exclua-o desta categoria e envie novamente como Material de estudo, Lei ou norma, Prova ou Simulado.`, code: "NOT_AN_EDITAL" }, 422);
     }
+    if (meta.document_kind === "edital_verticalizado" && !meta.warnings.some((warning: string) => /verticalizado/i.test(warning))) meta.warnings.unshift("Edital verticalizado aceito como base do mapa. Confira os tópicos com o edital oficial quando ele estiver disponível.");
     const topics = Array.isArray(parsed.topics) ? parsed.topics.slice(0, 1500) : [];
     const uniqueTopics: Array<{ subject: string; unit: string; topic: string; edital_order: number; subject_order: number; learning_order: number; difficulty: string; prerequisite_topic: string; pedagogical_reason: string }> = [];
     const seenTopics = new Set<string>();

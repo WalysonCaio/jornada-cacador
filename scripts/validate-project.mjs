@@ -24,7 +24,7 @@ for (const relative of publicFiles) {
 }
 
 const sw = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
-if (!sw.includes("jornada-cacador-v72-reset-profile-verified")) throw new Error("O cache não aponta para a versão 72.");
+if (!sw.includes("jornada-cacador-v73-verticalizado-reset-tombstone")) throw new Error("O cache não aponta para a versão 73.");
 const applyServerState = html.match(/function applyServerState[\s\S]*?function mergeProgressStates/)?.[0] || "";
 if (!applyServerState.includes("focusWasRunning") || !applyServerState.includes("if(!focusWasRunning)restoreFocusTimerState()")) throw new Error("A sincronização não preserva o cronômetro de foco.");
 if (applyServerState.includes("timerLeft=focusBlockSeconds()")) throw new Error("A sincronização ainda reinicia o cronômetro para 50 minutos.");
@@ -50,7 +50,9 @@ const accountSecurity = fs.readFileSync(new URL("../supabase/functions/account-s
 for (const required of ["reset_profile", "reset_user_profile_content", "verified", "remaining", "gemini_key_preserved"]) if (!accountSecurity.includes(required)) throw new Error(`Redefinição segura incompleta: ${required}`);
 for (const required of ["clearLocalProfileData", "action:'reset_profile'", "!data.verified", "Redefinir perfil e apagar conteúdos"]) if (!html.includes(required)) throw new Error(`Interface de redefinição incompleta: ${required}`);
 const resetMigration = fs.readFileSync(new URL("../supabase/migrations/20261017_v72_reset_profile_complete.sql", import.meta.url), "utf8");
-for (const required of ["reset_user_profile_content", "study_campaigns", "study_documents", "user_state", "user_ai_credentials"]) if (!resetMigration.includes(required)) throw new Error(`Migração de redefinição incompleta: ${required}`);
+for (const required of ["reset_user_profile_content", "study_campaigns", "study_documents", "user_state", "user_ai_credentials", "server-profile-reset", "reset_epoch", "on conflict (user_id)"]) if (!resetMigration.includes(required)) throw new Error(`Migração de redefinição incompleta: ${required}`);
+const editalFunction = fs.readFileSync(new URL("../supabase/functions/edital-gemini/index.ts", import.meta.url), "utf8");
+for (const required of ["edital_oficial", "edital_verticalizado", "validEditalKinds", "Edital verticalizado aceito"]) if (!editalFunction.includes(required)) throw new Error(`Compatibilidade com edital verticalizado incompleta: ${required}`);
 const byokMigration = fs.readFileSync(new URL("../supabase/migrations/20261014_v69_user_ai_keys.sql", import.meta.url), "utf8");
 for (const required of ["user_ai_credentials", "vault.create_secret", "get_user_ai_secret", "service_role"]) if (!byokMigration.includes(required)) throw new Error(`Migração BYOK incompleta: ${required}`);
 for (const required of ["rpc/sync_user_state", "rpc/claim_focus_session", "rpc/update_focus_session", "_serverRevision", "_resetEpoch", "refreshFromServer", "STALE_RESET", "subjectOrder", "learningOrder", "errorUrgency", "menuAbout", "STREAK_MIN_SECONDS", "manualStudyEntries", "questionsForMode", "prepareQuestion", "renderCustomBossCard", "renderExamCountdown", "renderEssays", "libraryFolders", "metadata?.coverage", "coverageWarnings", "v59-enhancements.js"]) {

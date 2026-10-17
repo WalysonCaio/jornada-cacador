@@ -76,11 +76,20 @@ Deno.serve(async (request) => {
       }
 
       const remaining: Record<string, number> = {};
-      for (const table of ["study_campaigns", "study_documents", "essay_submissions", "user_state", "focus_sessions"]) {
-        const check = await fetch(`${SUPABASE_URL}/rest/v1/${table}?user_id=eq.${user.id}&select=id&limit=1`, { headers: serviceHeaders });
-        const rows = check.ok ? await check.json().catch(() => []) : [];
+      for (const table of ["study_campaigns", "study_documents", "essay_submissions", "focus_sessions"]) {
+        const check = await fetch(`${SUPABASE_URL}/rest/v1/${table}?user_id=eq.${user.id}&select=user_id&limit=1`, { headers: serviceHeaders });
+        if (!check.ok) {
+          console.error("reset-profile-check", table, check.status, await check.text());
+          remaining[table] = 1;
+          continue;
+        }
+        const rows = await check.json().catch(() => null);
         remaining[table] = Array.isArray(rows) ? rows.length : 1;
       }
+      const stateCheck = await fetch(`${SUPABASE_URL}/rest/v1/user_state?user_id=eq.${user.id}&select=state,reset_epoch&limit=1`, { headers: serviceHeaders });
+      const stateRows = stateCheck.ok ? await stateCheck.json().catch(() => null) : null;
+      const cleanState = Array.isArray(stateRows) && stateRows.length === 1 && stateRows[0]?.state && Object.keys(stateRows[0].state).length === 0 && Number(stateRows[0].reset_epoch) > 0;
+      remaining.user_state = cleanState ? 0 : 1;
       remaining.total = Object.values(remaining).reduce((sum, count) => sum + count, 0);
       if (remaining.total > 0) return json({ error: "Ainda existem registros no banco; a redefinição não foi confirmada.", remaining }, 409);
 
