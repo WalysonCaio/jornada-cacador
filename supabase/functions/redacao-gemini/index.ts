@@ -64,6 +64,7 @@ async function userGeminiKey(userId: string) {
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: headers(request) });
+  if (request.method !== "POST") return reply(request, { error: "Método não permitido." }, 405);
   const auth = request.headers.get("authorization") ?? "";
   const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { Authorization: auth, apikey: PUBLIC_KEY } });
   const user = authResponse.ok ? await authResponse.json() : null;

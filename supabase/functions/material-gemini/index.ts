@@ -5,8 +5,11 @@ const DEEPSEEK_KEY = Deno.env.get("DEEPSEEK_API_KEY") ?? "";
 const GROQ_KEY = Deno.env.get("GROQ_API_KEY") ?? "";
 const PUBLIC_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
 const SITE = "https://jornada.wcaio.workers.dev";
-const cors = { "Access-Control-Allow-Origin": SITE, "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", "Content-Type": "application/json; charset=utf-8" };
-const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: cors });
+const ALLOWED_ORIGINS = new Set([SITE, "http://localhost:4173", "http://localhost:3000"]);
+function corsHeaders(request: Request) {
+  const origin = request.headers.get("origin") ?? "";
+  return { "Access-Control-Allow-Origin": ALLOWED_ORIGINS.has(origin) ? origin : SITE, "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", "Content-Type": "application/json; charset=utf-8", "Vary": "Origin" };
+}
 // Static names are only the emergency fallback. The function asks Gemini which
 // generateContent models are actually enabled for this API key before each job.
 const GEMINI_MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
@@ -878,7 +881,10 @@ function coverageReport(value: any, summaries: any[]) {
 }
 
 Deno.serve(async (request) => {
+  const cors = corsHeaders(request);
+  const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: cors });
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (request.method !== "POST") return response({ error: "Método não permitido." }, 405);
   if (!SUPABASE_URL || !SERVICE_KEY) {
     console.error("material-gemini configuration missing", { supabase: Boolean(SUPABASE_URL), serviceRole: Boolean(SERVICE_KEY), gemini: Boolean(GEMINI_KEY), deepseek: Boolean(DEEPSEEK_KEY), groq: Boolean(GROQ_KEY) });
     return response({ error: "A função de materiais não está configurada. Confira SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY.", code: "MISSING_CONFIGURATION" }, 503);
