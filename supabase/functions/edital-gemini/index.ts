@@ -12,7 +12,9 @@ async function pickGeminiModel(geminiKey: string) {
       const data = await response.json().catch(() => ({}));
       const blocked = /(embedding|imagen|veo|tts|audio|live|robotics|computer-use)/i;
       const names = Array.isArray(data?.models) ? data.models.filter((item: any) => item?.supportedGenerationMethods?.includes("generateContent")).map((item: any) => String(item?.name ?? "").replace(/^models\//, "")).filter((name: string) => name && !blocked.test(name)).sort((a: string, b: string) => Number(!/flash/i.test(a)) - Number(!/flash/i.test(b))) : [];
-      const selected = configured || names[0];
+      // Uma configuração antiga não pode forçar um modelo que a chave pessoal
+      // não possui. Prefira-a somente quando ela apareceu na descoberta.
+      const selected = configured && names.includes(configured) ? configured : names[0];
       if (!selected) throw new Error(data?.error?.message || "Nenhum modelo generateContent liberado.");
       console.log("Gemini edital model", selected);
       return selected;
@@ -200,7 +202,19 @@ Retorne somente o JSON solicitado.` },
     const geminiData = await geminiResponse.json();
     await removeGeminiFile(geminiFile.name, activeGeminiKey);
     geminiFileName = undefined;
-    if (!geminiResponse.ok) { console.error("Gemini", geminiResponse.status, geminiData);await finishUsage(usage.event_id,"error",geminiResponse.status===429?"PROVIDER_429":"PROVIDER_ERROR");await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: geminiResponse.status===429 ? "pending" : "error" }) }).catch(()=>undefined);return reply(request, { error: geminiResponse.status===429?"A cota gratuita do Gemini foi atingida (erro 429). O edital está salvo; tente novamente após a renovação da cota.":geminiData?.error?.message ?? "O Gemini não conseguiu analisar o edital.",retryable:geminiResponse.status===429,code:geminiResponse.status===429?"PROVIDER_429":"AI_ERROR" }, geminiResponse.status===429?429:502); }
+    if (!geminiResponse.ok) {
+      console.error("Gemini", geminiResponse.status, geminiData);
+      const retryable = [429, 500, 502, 503, 504].includes(geminiResponse.status);
+      const code = geminiResponse.status === 429 ? "PROVIDER_429" : retryable ? "PROVIDER_UNAVAILABLE" : "AI_ERROR";
+      await finishUsage(usage.event_id, "error", code);
+      await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: retryable ? "pending" : "error" }) }).catch(() => undefined);
+      const providerMessage = geminiResponse.status === 429
+        ? "A cota da sua chave Gemini foi atingida (erro 429). O edital permanece salvo e esta tentativa não foi contabilizada; tente após a renovação da cota."
+        : retryable
+          ? "O Gemini está temporariamente indisponível ou sobrecarregado. O edital permanece salvo na fila; tente novamente em alguns minutos."
+          : geminiData?.error?.message ?? "O Gemini não conseguiu analisar o edital.";
+      return reply(request, { error: providerMessage, retryable, code, provider_status: geminiResponse.status, model: geminiModel }, geminiResponse.status === 429 ? 429 : 502);
+    }
     const parsed = JSON.parse(geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
     const meta = {
       document_kind: String(parsed?.meta?.document_kind ?? "outro"),
@@ -265,9 +279,18 @@ Retorne somente o JSON solicitado.` },
     return reply(request, { topics: uniqueTopics, saved: savedTopics.length, provider: "gemini", key_source: personalGeminiKey ? "personal" : "shared", meta });
   } catch (error) {
     console.error("edital-gemini", error);
-    await finishUsage(usage?.event_id, "error", "PROCESSING_FAILED");
-    if (documentId) await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "error" }) }).catch(()=>undefined);
-    return reply(request, { error: "Falha interna ao interpretar o edital." }, 500);
+    const detail = String((error as Error)?.message ?? error);
+    const invalidKey = /api key|api_key|permission|unauthenticated|forbidden|403/i.test(detail);
+    const retryable = /429|500|502|503|504|high demand|overload|timeout|demorou demais|temporari/i.test(detail);
+    const code = invalidKey ? "INVALID_GEMINI_KEY" : retryable ? "PROVIDER_UNAVAILABLE" : "PROCESSING_FAILED";
+    await finishUsage(usage?.event_id, "error", code);
+    if (documentId) await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: retryable ? "pending" : "error" }) }).catch(()=>undefined);
+    const userMessage = invalidKey
+      ? "A chave Gemini pessoal foi recusada. Abra Perfil → Configurações de IA, teste e salve uma chave válida."
+      : retryable
+        ? "O Gemini está temporariamente indisponível. O edital continua salvo na fila e a tentativa não consumiu seu limite; tente novamente em alguns minutos."
+        : "Não foi possível interpretar este edital. Confira se o arquivo é um PDF válido e tente novamente.";
+    return reply(request, { error: userMessage, retryable, code }, invalidKey ? 401 : retryable ? 503 : 500);
   } finally {
     await removeGeminiFile(geminiFileName, activeGeminiKey);
   }

@@ -24,7 +24,7 @@ for (const relative of publicFiles) {
 }
 
 const sw = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
-if (!sw.includes("jornada-cacador-v70-ai-pipeline-fix")) throw new Error("O cache não aponta para a versão 70.");
+if (!sw.includes("jornada-cacador-v71-profile-reset-fix")) throw new Error("O cache não aponta para a versão 71.");
 const applyServerState = html.match(/function applyServerState[\s\S]*?function mergeProgressStates/)?.[0] || "";
 if (!applyServerState.includes("focusWasRunning") || !applyServerState.includes("if(!focusWasRunning)restoreFocusTimerState()")) throw new Error("A sincronização não preserva o cronômetro de foco.");
 if (applyServerState.includes("timerLeft=focusBlockSeconds()")) throw new Error("A sincronização ainda reinicia o cronômetro para 50 minutos.");
@@ -46,6 +46,9 @@ for (const required of ["openSummaries", "restoreOpenSummaries", "normalizeLegal
 for (const required of ["personalAiDialog", "ai-key-manager", "Testar e salvar", "Chave pessoal ativa"]) if (!enhancements.includes(required)) throw new Error(`Configuração de IA pessoal incompleta: ${required}`);
 const aiKeyManager = fs.readFileSync(new URL("../supabase/functions/ai-key-manager/index.ts", import.meta.url), "utf8");
 for (const required of ["verifyPassword", "validateGeminiKey", "store_user_ai_secret", "delete_user_ai_secret"]) if (!aiKeyManager.includes(required)) throw new Error(`Gerenciador seguro de chaves incompleto: ${required}`);
+const accountSecurity = fs.readFileSync(new URL("../supabase/functions/account-security/index.ts", import.meta.url), "utf8");
+for (const required of ["reset_profile", "study_campaigns", "study_documents", "user_state", "gemini_key_preserved"]) if (!accountSecurity.includes(required)) throw new Error(`Redefinição completa do perfil incompleta: ${required}`);
+for (const required of ["clearLocalProfileData", "action:'reset_profile'", "Redefinir perfil e apagar conteúdos", "chave Gemini pessoal serão mantidas"]) if (!html.includes(required)) throw new Error(`Interface de redefinição completa incompleta: ${required}`);
 const byokMigration = fs.readFileSync(new URL("../supabase/migrations/20261014_v69_user_ai_keys.sql", import.meta.url), "utf8");
 for (const required of ["user_ai_credentials", "vault.create_secret", "get_user_ai_secret", "service_role"]) if (!byokMigration.includes(required)) throw new Error(`Migração BYOK incompleta: ${required}`);
 for (const required of ["rpc/sync_user_state", "rpc/claim_focus_session", "rpc/update_focus_session", "_serverRevision", "_resetEpoch", "refreshFromServer", "STALE_RESET", "subjectOrder", "learningOrder", "errorUrgency", "menuAbout", "STREAK_MIN_SECONDS", "manualStudyEntries", "questionsForMode", "prepareQuestion", "renderCustomBossCard", "renderExamCountdown", "renderEssays", "libraryFolders", "metadata?.coverage", "coverageWarnings", "v59-enhancements.js"]) {

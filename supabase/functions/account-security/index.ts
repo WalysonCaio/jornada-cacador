@@ -31,7 +31,8 @@ Deno.serve(async (request) => {
     if (!user?.id || !user?.email) return json({ error: "Sessão inválida. Entre novamente." }, 401);
 
     const payload = await request.json().catch(() => null);
-    if (payload?.action !== "delete_account" || typeof payload?.password !== "string") {
+    const action = String(payload?.action ?? "");
+    if (!["delete_account", "reset_profile"].includes(action) || typeof payload?.password !== "string") {
       return json({ error: "Solicitação inválida." }, 400);
     }
 
@@ -42,6 +43,19 @@ Deno.serve(async (request) => {
     });
     if (!passwordCheck.ok) return json({ error: "Senha incorreta." }, 401);
 
+    const deleteStorageObject = async (path: string) => {
+      const result = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${path}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY },
+      });
+      // O Storage usa 400 ou 404 quando o objeto já não existe. Nesse caso o
+      // estado desejado (arquivo ausente) já foi alcançado.
+      if (!result.ok && ![400, 404].includes(result.status)) {
+        console.error("storage-delete", result.status, path, await result.text());
+        throw new Error("STORAGE_DELETE_FAILED");
+      }
+    };
+
     const documentsResponse = await fetch(
       `${SUPABASE_URL}/rest/v1/study_documents?user_id=eq.${user.id}&select=storage_path`,
       { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } },
@@ -50,16 +64,10 @@ Deno.serve(async (request) => {
       const documents = await documentsResponse.json();
       for (const document of documents) {
         if (!document.storage_path) continue;
-        await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${document.storage_path}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY },
-        });
-        await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${document.storage_path}.text.json`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY },
-        });
+        await deleteStorageObject(document.storage_path);
+        await deleteStorageObject(`${document.storage_path}.text.json`);
       }
-    }
+    } else throw new Error("DOCUMENT_LIST_FAILED");
 
     const essaysResponse = await fetch(
       `${SUPABASE_URL}/rest/v1/essay_submissions?user_id=eq.${user.id}&select=storage_path`,
@@ -69,11 +77,35 @@ Deno.serve(async (request) => {
       const essays = await essaysResponse.json();
       for (const essay of essays) {
         if (!essay.storage_path) continue;
-        await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${essay.storage_path}`, {
+        await deleteStorageObject(essay.storage_path);
+      }
+    } else if (essaysResponse.status !== 404) throw new Error("ESSAY_LIST_FAILED");
+
+    if (action === "reset_profile") {
+      // Excluir as campanhas remove, por ON DELETE CASCADE, edital, materiais,
+      // mapa, resumos, questões, redações, filas e trilhas. A limpeza explícita
+      // de study_documents também cobre registros antigos sem campanha.
+      const deleteTable = async (table: string) => {
+        const result = await fetch(`${SUPABASE_URL}/rest/v1/${table}?user_id=eq.${user.id}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY },
         });
-      }
+        if (!result.ok) {
+          const detail = await result.text();
+          console.error("reset-profile", table, result.status, detail);
+          throw new Error(`RESET_${table.toUpperCase()}`);
+        }
+      };
+
+      // Interrompe qualquer cronômetro remoto antes de apagar o estado geral.
+      await deleteTable("focus_sessions");
+      await deleteTable("study_campaigns");
+      await deleteTable("study_documents");
+      await deleteTable("user_state");
+
+      // user_ai_credentials não é removida: a chave Gemini pessoal pertence à
+      // conta, e não ao conteúdo de um portal.
+      return json({ reset: true, gemini_key_preserved: true });
     }
 
     const deleteResponse = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user.id}`, {
@@ -88,6 +120,6 @@ Deno.serve(async (request) => {
     return json({ deleted: true });
   } catch (error) {
     console.error("account-security", error);
-    return json({ error: "Falha interna ao excluir a conta." }, 500);
+    return json({ error: "Falha interna ao concluir a operação de segurança." }, 500);
   }
 });

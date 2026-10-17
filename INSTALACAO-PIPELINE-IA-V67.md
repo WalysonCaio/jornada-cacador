@@ -56,8 +56,8 @@ Devem aparecer `GEMINI_API_KEY`, `DEEPSEEK_API_KEY` e `GROQ_API_KEY`. O valor se
 Modelos opcionais podem ser definidos por secrets:
 
 ```powershell
-npx supabase secrets set DEEPSEEK_MODEL=deepseek-chat --project-ref jybislbbblyjsrcdegjt
-npx supabase secrets set GROQ_MODEL=llama-3.3-70b-versatile --project-ref jybislbbblyjsrcdegjt
+npx supabase secrets set DEEPSEEK_MODEL=deepseek-flash --project-ref jybislbbblyjsrcdegjt
+npx supabase secrets set GROQ_MODEL=openai/gpt-oss-120b --project-ref jybislbbblyjsrcdegjt
 ```
 
 Se um desses nomes deixar de existir no provedor, altere somente o respectivo secret; não é necessário reescrever a função.
