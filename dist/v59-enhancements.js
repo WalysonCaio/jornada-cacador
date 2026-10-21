@@ -80,7 +80,7 @@
   if(cloudSession)loadPersonalAiStatus();
 
   ensureCoverageDialog();
-  document.querySelector('#aboutDialog .tag').textContent='Versão 70 · pipeline de IA revisado';
-  document.querySelector('#diagnosticsDialog .small.muted').textContent='Versão 70 · IA pessoal, fallbacks, PDFs e sincronização';
+  document.querySelector('#aboutDialog .tag').textContent='Versão 75 · interface moderna e responsiva';
+  document.querySelector('#diagnosticsDialog .small.muted').textContent='Versão 75 · interface, IA, PDFs, segurança e sincronização';
   setInterval(()=>{if(document.visibilityState==='visible'&&cloudSession&&cloudDocuments.some(doc=>doc.processing_status==='processing'))loadCloudDocuments()},10000);
 })();

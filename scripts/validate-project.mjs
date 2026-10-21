@@ -24,7 +24,10 @@ for (const relative of publicFiles) {
 }
 
 const sw = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
-if (!sw.includes("jornada-cacador-v74-secure-crud-audit")) throw new Error("O cache não aponta para a versão 74.");
+if (!sw.includes("jornada-cacador-v75-modern-responsive-ui")) throw new Error("O cache não aponta para a versão 75.");
+if (!html.includes('href="ui-v75.css"') || !sw.includes("ui-v75.css")) throw new Error("A interface v75 não está ligada ao HTML e ao cache offline.");
+const modernUi = fs.readFileSync(new URL("../dist/ui-v75.css", import.meta.url), "utf8");
+for (const required of ["@media(max-width:719px)", "@media(min-width:1040px)", "prefers-reduced-motion", ":focus-visible", "env(safe-area-inset-bottom)"]) if (!modernUi.includes(required)) throw new Error(`Interface responsiva incompleta: ${required}`);
 const applyServerState = html.match(/function applyServerState[\s\S]*?function mergeProgressStates/)?.[0] || "";
 if (!applyServerState.includes("focusWasRunning") || !applyServerState.includes("if(!focusWasRunning)restoreFocusTimerState()")) throw new Error("A sincronização não preserva o cronômetro de foco.");
 if (applyServerState.includes("timerLeft=focusBlockSeconds()")) throw new Error("A sincronização ainda reinicia o cronômetro para 50 minutos.");
