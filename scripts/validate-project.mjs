@@ -5,7 +5,7 @@ const html = fs.readFileSync(new URL("../dist/index.html", import.meta.url), "ut
 const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map((match) => match[1]).filter(Boolean);
 if (!scripts.length) throw new Error("Nenhum JavaScript incorporado foi encontrado.");
 for (const source of scripts) new vm.Script(source);
-for (const relative of ["../dist/v59-enhancements.js", "../dist/v77-experience.js", "../dist/sw.js"]) new vm.Script(fs.readFileSync(new URL(relative, import.meta.url), "utf8"), { filename: relative });
+for (const relative of ["../dist/v59-enhancements.js", "../dist/v77-experience.js", "../dist/v78-smart-notebook.js", "../dist/sw.js"]) new vm.Script(fs.readFileSync(new URL(relative, import.meta.url), "utf8"), { filename: relative });
 
 const markup = html.replace(/<script(?:\s[^>]*)?>[\s\S]*?<\/script>/gi, "");
 const ids = [...markup.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
@@ -16,7 +16,7 @@ const referencedIds = [...scripts.join("\n").matchAll(/\$\('#([A-Za-z0-9_-]+)'\)
 const missing = [...new Set(referencedIds.filter((id) => !html.includes(`id="${id}"`)))];
 if (missing.length) throw new Error(`Elementos referenciados e ausentes: ${missing.join(", ")}`);
 
-const publicFiles = ["../dist/index.html", "../dist/sw.js", "../dist/content-summaries.js", "../dist/material-deep-dives.js", "../dist/v59-enhancements.js", "../dist/v77-experience.js"];
+const publicFiles = ["../dist/index.html", "../dist/sw.js", "../dist/content-summaries.js", "../dist/material-deep-dives.js", "../dist/v59-enhancements.js", "../dist/v77-experience.js", "../dist/v78-smart-notebook.js"];
 const secretPatterns = [/SUPABASE_SERVICE_ROLE_KEY\s*=\s*["'][^"']+/i, /GEMINI_API_KEY\s*=\s*["'][^"']+/i, /GROQ_API_KEY\s*=\s*["'][^"']+/i];
 for (const relative of publicFiles) {
   const contents = fs.readFileSync(new URL(relative, import.meta.url), "utf8");
@@ -24,9 +24,10 @@ for (const relative of publicFiles) {
 }
 
 const sw = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
-if (!sw.includes("jornada-cacador-v77-study-experience")) throw new Error("O cache não aponta para a versão 77.");
+if (!sw.includes("jornada-cacador-v78-smart-notebook")) throw new Error("O cache não aponta para a versão 78.");
 if (!html.includes('href="ui-v75.css"') || !sw.includes("ui-v75.css")) throw new Error("A interface v75 não está ligada ao HTML e ao cache offline.");
 if (!html.includes('href="ui-v77.css"') || !html.includes('src="v77-experience.js"') || !sw.includes("ui-v77.css") || !sw.includes("v77-experience.js")) throw new Error("A experiência v77 não está ligada ao HTML e ao cache offline.");
+if (!html.includes('href="ui-v78.css"') || !html.includes('src="v78-smart-notebook.js"') || !sw.includes("ui-v78.css") || !sw.includes("v78-smart-notebook.js")) throw new Error("O Caderno Inteligente v78 não está ligado ao HTML e ao cache offline.");
 const modernUi = fs.readFileSync(new URL("../dist/ui-v75.css", import.meta.url), "utf8");
 for (const required of ["@media(max-width:719px)", "@media(min-width:1040px)", "prefers-reduced-motion", ":focus-visible", "env(safe-area-inset-bottom)"]) if (!modernUi.includes(required)) throw new Error(`Interface responsiva incompleta: ${required}`);
 const experienceUi = fs.readFileSync(new URL("../dist/ui-v77.css", import.meta.url), "utf8");
@@ -34,6 +35,9 @@ for (const required of ["todayCommand", "questionFilters", "performanceBar", "@m
 const experienceJs = fs.readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
 for (const required of ["filteredQuestionPool", "questionsForMode('battle'", "renderPerformanceChart", "jornada-last-view-v77", "openUrgentReview"]) if (!experienceJs.includes(required)) throw new Error(`Comportamento v77 incompleto: ${required}`);
 if (!html.includes('data-view="report"><i>◎</i>Questões') || !html.includes('data-menu-view="assistant"')) throw new Error("A navegação principal da versão 77 não está configurada corretamente.");
+const smartNotebookJs = fs.readFileSync(new URL("../dist/v78-smart-notebook.js", import.meta.url), "utf8");
+for (const required of ["contextBlock", "sourceSignature", "cacheKey", "Quiz: nenhuma chamada", "startAdaptiveQuiz", "Cobertura e lacunas", "PÁGINAS:", "MAX_SOURCES=5", "jornada-smart-notebook-v78"]) if (!smartNotebookJs.includes(required)) throw new Error(`Caderno Inteligente incompleto: ${required}`);
+if (smartNotebookJs.includes("generateAudio") || smartNotebookJs.includes("mindMap")) throw new Error("A versão econômica não deve implementar áudio ou mapa mental.");
 const applyServerState = html.match(/function applyServerState[\s\S]*?function mergeProgressStates/)?.[0] || "";
 if (!applyServerState.includes("focusWasRunning") || !applyServerState.includes("if(!focusWasRunning)restoreFocusTimerState()")) throw new Error("A sincronização não preserva o cronômetro de foco.");
 if (applyServerState.includes("timerLeft=focusBlockSeconds()")) throw new Error("A sincronização ainda reinicia o cronômetro para 50 minutos.");
