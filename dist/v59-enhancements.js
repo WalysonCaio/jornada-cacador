@@ -80,7 +80,7 @@
   if(cloudSession)loadPersonalAiStatus();
 
   ensureCoverageDialog();
-  document.querySelector('#aboutDialog .tag').textContent='Versão 75 · interface moderna e responsiva';
-  document.querySelector('#diagnosticsDialog .small.muted').textContent='Versão 75 · interface, IA, PDFs, segurança e sincronização';
+  document.querySelector('#aboutDialog .tag').textContent='Versão 76 · proporções e responsividade revisadas';
+  document.querySelector('#diagnosticsDialog .small.muted').textContent='Versão 76 · interface, IA, PDFs, segurança e sincronização';
   setInterval(()=>{if(document.visibilityState==='visible'&&cloudSession&&cloudDocuments.some(doc=>doc.processing_status==='processing'))loadCloudDocuments()},10000);
 })();

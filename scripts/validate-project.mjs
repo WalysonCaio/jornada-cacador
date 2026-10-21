@@ -24,7 +24,7 @@ for (const relative of publicFiles) {
 }
 
 const sw = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
-if (!sw.includes("jornada-cacador-v75-modern-responsive-ui")) throw new Error("O cache não aponta para a versão 75.");
+if (!sw.includes("jornada-cacador-v76-responsive-proportions")) throw new Error("O cache não aponta para a versão 76.");
 if (!html.includes('href="ui-v75.css"') || !sw.includes("ui-v75.css")) throw new Error("A interface v75 não está ligada ao HTML e ao cache offline.");
 const modernUi = fs.readFileSync(new URL("../dist/ui-v75.css", import.meta.url), "utf8");
 for (const required of ["@media(max-width:719px)", "@media(min-width:1040px)", "prefers-reduced-motion", ":focus-visible", "env(safe-area-inset-bottom)"]) if (!modernUi.includes(required)) throw new Error(`Interface responsiva incompleta: ${required}`);
