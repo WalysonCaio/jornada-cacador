@@ -19,7 +19,7 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const TEXT_CHUNK_TARGET = 28000;
 const MAX_TEXT_CHUNKS = 10;
 
-const GEMINI_TEXT_FALLBACKS = ["gemini-3.8-flash", "gemini-3.5-flash-lite", ...GEMINI_MODEL_FALLBACKS];
+const GEMINI_TEXT_FALLBACKS = [...GEMINI_MODEL_FALLBACKS];
 
 function standardJsonSchema(value: any): any {
   if (Array.isArray(value)) return value.map(standardJsonSchema);
@@ -46,36 +46,54 @@ async function createGeminiInteraction(input: any[], schema: any, maxOutputToken
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents: [{ role: "user", parts }],
-          generationConfig: {
-            temperature: 0.15,
-            maxOutputTokens,
-            responseMimeType: "application/json",
-            ...(schema && Object.keys(schema).length ? { responseSchema: standardJsonSchema(schema) } : {}),
-          },
-        }),
-      });
-      const data = await result.json().catch(() => ({}));
-      if (result.ok) {
-        return { data, parsed: parseGeminiJsonText(data), model };
+      const baseBody = {
+        contents: [{ role: "user", parts }],
+        generationConfig: {
+          temperature: 0.15,
+          maxOutputTokens,
+          responseMimeType: "application/json",
+          ...(schema && Object.keys(schema).length ? { responseSchema: standardJsonSchema(schema) } : {}),
+        },
+      };
+      const bodies = schema && Object.keys(schema).length ? [baseBody, relaxedGenerationBody(baseBody, maxOutputTokens)] : [baseBody];
+      let shouldStopModels = false;
+      for (let attempt = 0; attempt < bodies.length; attempt++) {
+        const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
+          signal: controller.signal,
+          body: JSON.stringify(bodies[attempt]),
+        });
+        const data = await result.json().catch(() => ({}));
+        if (result.ok) {
+          try {
+            return { data, parsed: parseGeminiJsonText(data), model };
+          } catch (parseErr) {
+            lastStatus = 502;
+            lastMessage = String((parseErr as Error)?.message || parseErr);
+            console.warn("Gemini generateContent invalid JSON", model, attempt + 1, lastMessage);
+            continue;
+          }
+        }
+        lastStatus = result.status;
+        lastMessage = data?.error?.message || data?.errors?.[0]?.message || `Gemini ${result.status}`;
+        console.warn("Gemini generateContent", model, attempt + 1, result.status, lastMessage);
+        if (result.status === 400 && attempt === 0 && bodies.length > 1) continue;
+        // Modelo indisponível (400/404) ou sobrecarregado (503) usa a próxima
+        // opção imediatamente. Cota 429 é compartilhada e deve parar sem criar
+        // tentativas inúteis nem consumir o tempo máximo da Edge Function.
+        if (!FALLBACK_STATUS.has(result.status) && result.status !== 503) {
+          shouldStopModels = true;
+        }
+        break;
       }
-      lastStatus = result.status;
-      lastMessage = data?.error?.message || data?.errors?.[0]?.message || `Gemini ${result.status}`;
-      console.warn("Gemini generateContent", model, result.status, lastMessage);
-      // Modelo indisponível (400/404) ou sobrecarregado (503) usa a próxima
-      // opção imediatamente. Cota 429 é compartilhada e deve parar sem criar
-      // tentativas inúteis nem consumir o tempo máximo da Edge Function.
-      if (!FALLBACK_STATUS.has(result.status) && result.status !== 503) break;
+      if (shouldStopModels) break;
     } catch (error) {
-      lastMessage = (error as Error)?.name === "AbortError" ? `A análise excedeu o tempo seguro de ${Math.round(timeoutMs / 1000)} segundos.` : String((error as Error)?.message || error);
-      lastStatus = (error as Error)?.name === "AbortError" ? 504 : 500;
+      const isAbort = (error as Error)?.name === "AbortError";
+      lastMessage = isAbort ? `A análise excedeu o tempo seguro de ${Math.round(timeoutMs / 1000)} segundos.` : String((error as Error)?.message || error);
+      lastStatus = isAbort ? 504 : 500;
       console.warn("Gemini generateContent exception", model, lastMessage);
-      break;
+      if (isAbort) break;
     } finally {
       clearTimeout(timer);
     }
@@ -92,7 +110,10 @@ async function createGeminiInteraction(input: any[], schema: any, maxOutputToken
 }
 
 function parseGeminiJsonText(data: any) {
-  const raw = String(data?.candidates?.[0]?.content?.parts?.map((part: any) => part?.text || "").join("") ?? "").trim();
+  const candidateParts = Array.isArray(data?.candidates?.[0]?.content?.parts)
+    ? data.candidates[0].content.parts.filter((part: any) => !part?.thought)
+    : [];
+  const raw = String((candidateParts.length ? candidateParts : data?.candidates?.[0]?.content?.parts || []).map((part: any) => part?.text || "").join("") ?? "").trim();
   if (!raw) throw new Error("EMPTY_GEMINI_RESPONSE");
   const unfenced = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
   try { return JSON.parse(unfenced); } catch { /* tenta extrair o objeto */ }
@@ -124,16 +145,21 @@ async function availableGeminiModels(geminiKey = GEMINI_KEY) {
       const list = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { headers: { "x-goog-api-key": geminiKey } });
       const data = await list.json().catch(() => ({}));
       if (!list.ok) console.warn("Gemini models.list", list.status, data?.error?.message ?? "falha");
-      const blocked = /(embedding|imagen|veo|tts|audio|live|robotics|computer-use)/i;
+      const blocked = /(embedding|imagen|veo|tts|audio|live|robotics|computer-use|gemma|learnlm|aqa)/i;
       const enabled = Array.isArray(data?.models) ? data.models
         .filter((item: any) => Array.isArray(item?.supportedGenerationMethods) && item.supportedGenerationMethods.includes("generateContent"))
         .map((item: any) => normalizeModelName(item?.name))
         .filter((name: string) => name && !blocked.test(name))
         .sort((a: string, b: string) => {
-          const score = (name: string) => (/flash(?!.*lite)/i.test(name) ? 0 : /flash-lite/i.test(name) ? 1 : /pro/i.test(name) ? 2 : 3) + (/preview|experimental|exp/i.test(name) ? 4 : 0);
+          const score = (name: string) => (name === "gemini-2.5-flash" ? 0 : name === "gemini-2.5-flash-lite" ? 1 : /flash(?!.*lite)/i.test(name) ? 2 : /flash-lite/i.test(name) ? 3 : /pro/i.test(name) ? 4 : 5) + (/preview|experimental|exp/i.test(name) ? 6 : 0);
           return score(a) - score(b) || a.localeCompare(b);
         }) : [];
-      const candidates = [configured, ...GEMINI_TEXT_FALLBACKS, ...enabled].filter(Boolean);
+      const candidates = [
+        configured && (!enabled.length || enabled.includes(configured)) ? configured : "",
+        ...GEMINI_TEXT_FALLBACKS.filter((m) => !enabled.length || enabled.includes(m)),
+        ...enabled,
+        ...GEMINI_TEXT_FALLBACKS,
+      ].filter(Boolean);
       const unique = [...new Set(candidates)].slice(0, 8);
       console.log("Gemini model candidates", unique);
       return unique;
@@ -354,9 +380,11 @@ function pdfInlinePart(bytes: Uint8Array) {
 }
 
 async function generateStudyPackageStable(file: { uri: string; mimeType?: string }, title: string, campaignContext: string, documentType: string, inlineBytes: Uint8Array | undefined, geminiKey: string) {
-  const sourcePart = inlineBytes
-    ? { type: "document", mime_type: "application/pdf", data: pdfInlinePart(inlineBytes).inline_data.data }
-    : { type: "document", mime_type: file.mimeType ?? "application/pdf", uri: file.uri };
+  const sourcePart = file?.uri
+    ? { type: "document", mime_type: file.mimeType ?? "application/pdf", uri: file.uri }
+    : inlineBytes
+      ? { type: "document", mime_type: "application/pdf", data: pdfInlinePart(inlineBytes).inline_data.data }
+      : { type: "document", mime_type: file.mimeType ?? "application/pdf", uri: file.uri };
   const requestBody = {
     contents: [{ parts: [
       sourcePart,
@@ -514,7 +542,7 @@ async function callOpenAiCompatibleProvider(
           { role: "user", content: prompt },
         ],
         temperature: 0.15,
-        max_tokens: 16384,
+        max_tokens: 8192,
         response_format: { type: "json_object" },
       }),
     });
@@ -860,7 +888,7 @@ function coverageReport(value: any, summaries: any[]) {
   const coveredKeys = covered.map(subjectKey);
   const matched = detected.filter((section) => { const key = subjectKey(section); return coveredKeys.some((coveredKey) => coveredKey === key || (key.length >= 8 && (coveredKey.includes(key) || key.includes(coveredKey)))); }).length;
   const percent = detected.length ? Math.round((matched / detected.length) * 100) : Math.round(confidence * 100);
-  const shallow = summaries.filter((summary) => summary.explanation.length < 700 || summary.points.length < 5 || summary.flashcards.length < 5).length;
+  const shallow = summaries.filter((summary) => summary.explanation.length < 220 || summary.points.length < 3 || summary.flashcards.length < 3).length;
   const warnings = [];
   if (percent < 80) warnings.push(`Cobertura declarada de ${percent}% das seções detectadas.`);
   if (confidence < 0.7) warnings.push("A IA informou baixa confiança na leitura integral do PDF.");
@@ -1021,27 +1049,29 @@ Deno.serve(async (request) => {
     // consumo de cota e falhas depois de o PDF já ter sido lido com sucesso.
     const rawSummaries = generatedSummaries;
     const summaries = rawSummaries.map((content: Record<string, unknown>) => sanitizeSummary(content, knownSubjects)).filter((content: { title?: string; explanation?: string }) => Boolean(content.title && content.explanation));
-    if (!summaries.length) { await finishUsage(usage.event_id,"error",undefined,undefined,"INSUFFICIENT_CONTENT");await updateJob(documentId,{status:"failed",last_error:"INSUFFICIENT_CONTENT"});return response({ error: "Não encontrei conteúdo de estudo suficiente no PDF." }, 422); }
+    if (!summaries.length) { await setDocumentStatus(documentId, user.id, "error"); await finishUsage(usage.event_id,"error",undefined,undefined,"INSUFFICIENT_CONTENT");await updateJob(documentId,{status:"failed",last_error:"INSUFFICIENT_CONTENT"});return response({ error: "Não encontrei conteúdo de estudo suficiente no PDF." }, 422); }
     const coverage = coverageReport(parsed?.coverage, summaries);
     const hasDeclaredCoverage = Array.isArray(parsed?.coverage?.sections_detected) && parsed.coverage.sections_detected.length > 0;
-    const grosslyIncomplete = hasDeclaredCoverage && ((coverage.sections_detected.length >= 3 && coverage.percent < 50) || coverage.confidence < 0.35 || coverage.shallow_summaries > Math.ceil(summaries.length / 2));
+    const grosslyIncomplete = hasDeclaredCoverage && ((coverage.sections_detected.length >= 4 && coverage.percent < 25) || coverage.confidence < 0.25);
     if (grosslyIncomplete) {
+      await setDocumentStatus(documentId, user.id, "error");
       await finishUsage(usage.event_id, "error", generated.provider, generated.model, "LOW_COVERAGE");
       await updateJob(documentId, { status: "failed", last_error: "LOW_COVERAGE" });
       return response({ error: "A análise não atingiu a cobertura mínima de segurança e não substituiu nenhum conteúdo anterior. Tente novamente; se o PDF for digitalizado, gere uma versão com OCR ou divida-o por capítulos.", coverage }, 422);
     }
     const rows = summaries.map((content: Record<string, unknown>) => ({ campaign_id: campaignId, user_id: user.id, source_document_id: documentId, content_type: "summary", title: String(content.title ?? "Resumo"), content: { ...content, source: title }, source_refs: [{ document_id: documentId, title }] }));
     const saved = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(rows) });
-    if (!saved.ok) { console.error("Database", saved.status, await saved.text());await finishUsage(usage.event_id,"error",undefined,undefined,"CONTENT_SAVE_FAILED");await updateJob(documentId,{status:"retry",last_error:"CONTENT_SAVE_FAILED"});return response({ error: "O conteúdo foi criado, mas não pôde ser salvo." }, 502); }
+    if (!saved.ok) { console.error("Database", saved.status, await saved.text());await setDocumentStatus(documentId, user.id, "pending");await finishUsage(usage.event_id,"error",undefined,undefined,"CONTENT_SAVE_FAILED");await updateJob(documentId,{status:"retry",last_error:"CONTENT_SAVE_FAILED"});return response({ error: "O conteúdo foi criado, mas não pôde ser salvo.", retryable: true }, 502); }
     const savedRows = await saved.json().catch(() => []);
     const newIds = Array.isArray(savedRows) ? savedRows.map((row: { id?: string }) => row.id).filter(Boolean) : [];
     if (newIds.length) {
       const cleanup = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?source_document_id=eq.${documentId}&id=not.in.(${newIds.join(",")})`, { method: "DELETE", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
       if (!cleanup.ok) {
         await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?id=in.(${newIds.join(",")})`, { method: "DELETE", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
+        await setDocumentStatus(documentId, user.id, "pending");
         await finishUsage(usage.event_id, "error", undefined, undefined, "CONTENT_REPLACE_FAILED");
         await updateJob(documentId, { status: "retry", last_error: "CONTENT_REPLACE_FAILED" });
-        return response({ error: "A nova análise ficou pronta, mas não foi possível substituir a versão anterior com segurança. O conteúdo anterior foi preservado." }, 502);
+        return response({ error: "A nova análise ficou pronta, mas não foi possível substituir a versão anterior com segurança. O conteúdo anterior foi preservado.", retryable: true }, 502);
       }
     }
     const subjectCounts = summaries.reduce((counts: Record<string, number>, item: Record<string, unknown>) => { const subject = cleanGeneratedText(item.subject || "Conteúdo", 200);counts[subject] = (counts[subject] || 0) + 1;return counts; }, {});

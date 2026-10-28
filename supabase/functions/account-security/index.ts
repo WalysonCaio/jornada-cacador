@@ -40,8 +40,13 @@ Deno.serve(async (request) => {
 
     const serviceHeaders = { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY };
     const deleteStorageObject = async (path: string) => {
+      if (!path) return;
       const result = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${path}`, { method: "DELETE", headers: serviceHeaders });
-      if (!result.ok && ![400, 404].includes(result.status)) throw new Error(`STORAGE_DELETE_FAILED:${result.status}`);
+      if (!result.ok && ![400, 404].includes(result.status)) {
+        const body = await result.json().catch(() => ({}));
+        const msg = String(body?.error || body?.message || "");
+        if (!/not found|no such/i.test(msg)) throw new Error(`STORAGE_DELETE_FAILED:${result.status}`);
+      }
     };
     const collectPaths = async (table: string) => {
       const result = await fetch(`${SUPABASE_URL}/rest/v1/${table}?user_id=eq.${user.id}&select=storage_path`, { headers: serviceHeaders });
@@ -77,24 +82,48 @@ Deno.serve(async (request) => {
       const document = await selectOwned("study_documents", documentId, "id,campaign_id,document_type,storage_path");
       if (!document) return json({ error: "Arquivo não encontrado ou não pertence à sua conta." }, 404);
       const storagePath = String(document.storage_path ?? "");
-      if (storagePath) {
-        await deleteStorageObject(storagePath);
-        await deleteStorageObject(`${storagePath}.text.json`);
-      }
+      const isEdital = ["edital", "edital_concurso"].includes(String(document.document_type ?? ""));
+
       const databaseDelete = await fetch(`${SUPABASE_URL}/rest/v1/rpc/delete_user_study_document`, {
         method: "POST",
         headers: { ...serviceHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ p_user_id: user.id, p_document_id: documentId }),
       });
-      const databaseResult = await databaseDelete.json().catch(() => ({}));
+      let databaseResult = await databaseDelete.json().catch(() => ({}));
       if (!databaseDelete.ok || databaseResult?.deleted !== true) {
         const missingMigration = databaseDelete.status === 404 || String(databaseResult?.code ?? "") === "PGRST202";
-        return json({ error: missingMigration
-          ? "A atualização v74 do banco ainda não foi instalada. Execute 20261017_v74_secure_document_delete.sql."
-          : "O banco não confirmou a exclusão do arquivo." }, 409);
+        if (missingMigration) {
+          // Fallback transacional seguro caso a migração 20261017_v74_secure_document_delete.sql
+          // ainda não tenha sido aplicada manualmente no SQL Editor.
+          let deletedTopicsCount = 0;
+          if (isEdital && document.campaign_id) {
+            const topicsDelete = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${encodeURIComponent(String(document.campaign_id))}&user_id=eq.${user.id}`, {
+              method: "DELETE",
+              headers: { ...serviceHeaders, Prefer: "return=representation" },
+            });
+            if (!topicsDelete.ok) return json({ error: "Não foi possível remover os tópicos vinculados ao edital." }, 409);
+            const removedTopics = await topicsDelete.json().catch(() => []);
+            deletedTopicsCount = Array.isArray(removedTopics) ? removedTopics.length : 0;
+          }
+          const deletedDoc = await deleteOwnedRow("study_documents", documentId);
+          if (!deletedDoc) return json({ error: "O banco não confirmou a exclusão do arquivo." }, 409);
+          databaseResult = {
+            deleted: true,
+            document_type: document.document_type,
+            campaign_id: document.campaign_id,
+            deleted_topics: deletedTopicsCount,
+            fallback_used: true,
+          };
+        } else {
+          return json({ error: "O banco não confirmou a exclusão do arquivo." }, 409);
+        }
       }
       const verify = await selectOwned("study_documents", documentId, "id");
       if (verify) return json({ error: "O arquivo ainda existe no banco após a exclusão." }, 409);
+      if (storagePath) {
+        await deleteStorageObject(storagePath);
+        await deleteStorageObject(`${storagePath}.text.json`);
+      }
       return json({ ...databaseResult, deleted: true, kind: "document" });
     }
 
@@ -102,8 +131,8 @@ Deno.serve(async (request) => {
       const essayId = String(payload?.essay_id ?? "");
       const essay = await selectOwned("essay_submissions", essayId, "id,storage_path");
       if (!essay) return json({ error: "Redação não encontrada ou não pertence à sua conta." }, 404);
-      if (essay.storage_path) await deleteStorageObject(String(essay.storage_path));
       if (!await deleteOwnedRow("essay_submissions", essayId)) return json({ error: "O banco não confirmou a exclusão da redação." }, 409);
+      if (essay.storage_path) await deleteStorageObject(String(essay.storage_path));
       return json({ deleted: true, kind: "essay" });
     }
 
@@ -113,9 +142,10 @@ Deno.serve(async (request) => {
       if (!campaign) return json({ error: "Portal não encontrado ou não pertence à sua conta." }, 404);
       const pathsResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?campaign_id=eq.${campaignId}&user_id=eq.${user.id}&select=storage_path`, { headers: serviceHeaders });
       const essaysResponse = await fetch(`${SUPABASE_URL}/rest/v1/essay_submissions?campaign_id=eq.${campaignId}&user_id=eq.${user.id}&select=storage_path`, { headers: serviceHeaders });
-      if (!pathsResponse.ok || !essaysResponse.ok) throw new Error(`CAMPAIGN_PATH_LIST_FAILED:${pathsResponse.status}:${essaysResponse.status}`);
+      if (!pathsResponse.ok || !(essaysResponse.ok || essaysResponse.status === 404)) throw new Error(`CAMPAIGN_PATH_LIST_FAILED:${pathsResponse.status}:${essaysResponse.status}`);
       const paths = await pathsResponse.json().catch(() => []);
-      const essayFiles = await essaysResponse.json().catch(() => []);
+      const essayFiles = essaysResponse.ok ? await essaysResponse.json().catch(() => []) : [];
+      if (!await deleteOwnedRow("study_campaigns", campaignId)) return json({ error: "O banco não confirmou a exclusão do portal." }, 409);
       for (const row of Array.isArray(paths) ? paths : []) {
         const path = String(row?.storage_path ?? "");
         if (path) { await deleteStorageObject(path); await deleteStorageObject(`${path}.text.json`); }
@@ -124,7 +154,6 @@ Deno.serve(async (request) => {
         const path = String(row?.storage_path ?? "");
         if (path) await deleteStorageObject(path);
       }
-      if (!await deleteOwnedRow("study_campaigns", campaignId)) return json({ error: "O banco não confirmou a exclusão do portal." }, 409);
       return json({ deleted: true, kind: "campaign" });
     }
 

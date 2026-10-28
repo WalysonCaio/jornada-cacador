@@ -30,8 +30,8 @@ O projeto transforma o edital enviado pelo usuário em um plano de aprendizagem:
 - `supabase/functions/`: funções de servidor;
 - `supabase/migrations/`: estrutura e evoluções do banco;
 - `scripts/`: validações locais da versão;
-- `README-MANUTENCAO.md`: implantação, manutenção e diagnóstico.
-- `INSTALACAO-V59.md`: atualização e testes obrigatórios da versão 59.
+- `GUIA-UNIFICADO.md`: instalação, publicação, manutenção, backup e diagnóstico.
+- `LICENSE`: condições de visualização e uso do código-fonte.
 
 ## Aviso
 
@@ -40,3 +40,5 @@ Este é um projeto independente de apoio aos estudos. Não possui vínculo ofici
 ## Autoria
 
 Idealizado e desenvolvido por **Walyson Caio**.
+
+O código não é distribuído sob uma licença de código aberto. Consulte `LICENSE` antes de copiar, modificar ou distribuir.

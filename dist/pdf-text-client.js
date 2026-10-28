@@ -1,5 +1,6 @@
 (function () {
   const extractionJobs = new Map();
+  const isEditalType = (doc) => ["edital", "edital_concurso"].includes(String(doc?.document_type || ""));
 
   async function storageFetch(path, session, options = {}) {
     return fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${path}`, {
@@ -19,7 +20,7 @@
   }
 
   async function extractAndUploadText(doc, session) {
-    if (!doc?.storage_path || doc.document_type === "edital") return false;
+    if (!doc?.storage_path || isEditalType(doc)) return false;
     if (await sidecarAlreadyExists(doc.storage_path, session)) return true;
 
     toast(`Preparando o texto de “${doc.title}” no navegador. Você pode aguardar nesta tela.`);
@@ -79,7 +80,7 @@
   }
 
   async function prepareDocumentText(doc, session) {
-    if (!doc || doc.document_type === "edital") return false;
+    if (!doc || isEditalType(doc)) return false;
     if (!extractionJobs.has(doc.id)) {
       extractionJobs.set(doc.id, extractAndUploadText(doc, session).finally(() => extractionJobs.delete(doc.id)));
     }
@@ -89,7 +90,7 @@
   const originalProcessDocument = processEditalDocument;
   processEditalDocument = async function (id) {
     const doc = cloudDocuments.find((item) => item.id === id);
-    if (doc && doc.document_type !== "edital") {
+    if (doc && !isEditalType(doc)) {
       const session = await validSession();
       if (session) {
         try {

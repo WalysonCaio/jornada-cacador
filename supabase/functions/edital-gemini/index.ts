@@ -2,29 +2,78 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const PUBLISHABLE_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
-const modelDiscovery = new Map<string, Promise<string>>();
-async function pickGeminiModel(geminiKey: string) {
+const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+const FALLBACK_STATUS = new Set([400, 404]);
+const modelDiscovery = new Map<string, Promise<string[]>>();
+
+async function availableGeminiModels(geminiKey: string): Promise<string[]> {
   if (modelDiscovery.has(geminiKey)) return modelDiscovery.get(geminiKey)!;
   const discovery = (async () => {
     const configured = String(Deno.env.get("GEMINI_MODEL") ?? "").replace(/^models\//, "").trim();
     try {
       const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { headers: { "x-goog-api-key": geminiKey } });
       const data = await response.json().catch(() => ({}));
-      const blocked = /(embedding|imagen|veo|tts|audio|live|robotics|computer-use)/i;
-      const names = Array.isArray(data?.models) ? data.models.filter((item: any) => item?.supportedGenerationMethods?.includes("generateContent")).map((item: any) => String(item?.name ?? "").replace(/^models\//, "")).filter((name: string) => name && !blocked.test(name)).sort((a: string, b: string) => Number(!/flash/i.test(a)) - Number(!/flash/i.test(b))) : [];
-      const selected = configured && names.includes(configured) ? configured : names[0];
-      if (!selected) throw new Error(data?.error?.message || "Nenhum modelo generateContent liberado.");
-      console.log("Gemini edital model", selected);
-      return selected;
+      const blocked = /(embedding|imagen|veo|tts|audio|live|robotics|computer-use|gemma|learnlm|aqa)/i;
+      const names = Array.isArray(data?.models)
+        ? data.models
+            .filter((item: any) => item?.supportedGenerationMethods?.includes("generateContent"))
+            .map((item: any) => String(item?.name ?? "").replace(/^models\//, "").trim())
+            .filter((name: string) => name && !blocked.test(name))
+            .sort((a: string, b: string) => {
+              const score = (name: string) =>
+                (name === "gemini-2.5-flash" ? 0 : name === "gemini-2.5-flash-lite" ? 1 : /flash(?!.*lite)/i.test(name) ? 2 : /flash-lite/i.test(name) ? 3 : /pro/i.test(name) ? 4 : 5) +
+                (/preview|experimental|exp/i.test(name) ? 6 : 0);
+              return score(a) - score(b) || a.localeCompare(b);
+            })
+        : [];
+      const preferred = [
+        configured && names.includes(configured) ? configured : "",
+        ...FALLBACK_MODELS.filter((m) => names.includes(m)),
+        ...names,
+        ...(names.length === 0 ? [configured, ...FALLBACK_MODELS] : []),
+      ].filter(Boolean);
+      const unique = [...new Set(preferred)].slice(0, 5);
+      if (!unique.length) throw new Error(data?.error?.message || "Nenhum modelo generateContent liberado.");
+      console.log("Gemini edital models", unique);
+      return unique;
     } catch (error) {
       console.error("Gemini model discovery", String((error as Error)?.message ?? error));
-      if (configured) return configured;
+      const fallback = [...new Set([configured, ...FALLBACK_MODELS].filter(Boolean))];
+      if (fallback.length) return fallback;
       throw new Error("A chave Gemini não possui um modelo disponível para analisar o edital.");
     }
   })();
   modelDiscovery.set(geminiKey, discovery);
   return discovery;
 }
+
+function parseGeminiJsonText(data: any) {
+  const parts = Array.isArray(data?.candidates?.[0]?.content?.parts)
+    ? data.candidates[0].content.parts.filter((part: any) => !part?.thought)
+    : [];
+  const raw = String((parts.length ? parts : data?.candidates?.[0]?.content?.parts || []).map((part: any) => part?.text || "").join("") ?? "").trim();
+  if (!raw) throw new Error("EMPTY_GEMINI_RESPONSE");
+  const unfenced = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  try {
+    return JSON.parse(unfenced);
+  } catch {
+    const start = unfenced.indexOf("{");
+    const end = unfenced.lastIndexOf("}");
+    if (start >= 0 && end > start) return JSON.parse(unfenced.slice(start, end + 1));
+    throw new Error("INVALID_GEMINI_JSON");
+  }
+}
+
+async function setDocumentStatus(documentId: string, userId: string, processingStatus: "pending" | "processing" | "ready" | "error") {
+  if (!documentId || !userId) return;
+  await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ processing_status: processingStatus }),
+  }).catch(() => undefined);
+}
+
 const ALLOWED_ORIGINS = new Set([
   "https://jornada.wcaio.workers.dev",
   "http://localhost:4173",
@@ -72,17 +121,24 @@ async function uploadPdfToGemini(bytes: Uint8Array, title: string, geminiKey: st
     },
     body: bytes,
   });
-  const data = await uploaded.json();
+  const data = await uploaded.json().catch(() => ({}));
   if (!uploaded.ok || !data?.file?.uri) throw new Error(data?.error?.message ?? `Falha ao enviar PDF ao Gemini (${uploaded.status}).`);
   const file = data.file as { uri: string; name?: string; mimeType?: string; state?: string; error?: { message?: string } };
   if (!file.name) return file;
   for (let attempt = 0; attempt < 20; attempt++) {
     if (String(file.state || "").toUpperCase() === "ACTIVE") return file;
-    if (String(file.state || "").toUpperCase() === "FAILED") { await removeGeminiFile(file.name, geminiKey);throw new Error(file.error?.message || "O Gemini não conseguiu preparar o edital."); }
+    if (String(file.state || "").toUpperCase() === "FAILED") {
+      await removeGeminiFile(file.name, geminiKey);
+      throw new Error(file.error?.message || "O Gemini não conseguiu preparar o edital.");
+    }
     await new Promise((resolve) => setTimeout(resolve, 1500));
     const statusResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/${file.name}`, { headers: { "x-goog-api-key": geminiKey } });
     const statusData = await statusResponse.json().catch(() => ({}));
-    if (!statusResponse.ok) { await removeGeminiFile(file.name, geminiKey);throw new Error(statusData?.error?.message || `Falha ao consultar o edital no Gemini (${statusResponse.status}).`); }
+    if (!statusResponse.ok) {
+      if (RETRYABLE_STATUS.has(statusResponse.status)) continue;
+      await removeGeminiFile(file.name, geminiKey);
+      throw new Error(statusData?.error?.message || `Falha ao consultar o edital no Gemini (${statusResponse.status}).`);
+    }
     Object.assign(file, statusData);
   }
   await removeGeminiFile(file.name, geminiKey);
@@ -102,9 +158,9 @@ async function reserveUsage(userId: string, campaignId: string, dailyLimit = 10)
   return result.ok ? await result.json() : { allowed: false, reason: "USAGE_GUARD_UNAVAILABLE" };
 }
 
-async function finishUsage(eventId: number | undefined, status: "success" | "error", errorCode?: string) {
+async function finishUsage(eventId: number | undefined, status: "success" | "error", errorCode?: string, model = "gemini-2.5-flash") {
   if (!eventId) return;
-  await fetch(`${SUPABASE_URL}/rest/v1/ai_usage_events?id=eq.${eventId}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ status, provider: "gemini", model: "gemini-2.5-flash", error_code: errorCode || null }) }).catch(() => undefined);
+  await fetch(`${SUPABASE_URL}/rest/v1/ai_usage_events?id=eq.${eventId}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ status, provider: "gemini", model, error_code: errorCode || null }) }).catch(() => undefined);
 }
 
 async function userGeminiKey(userId: string) {
@@ -137,6 +193,7 @@ Deno.serve(async (request) => {
 
   let geminiFileName: string | undefined;
   let usage: { allowed?: boolean; event_id?: number; reason?: string; limit?: number } | null = null;
+  let selectedModel = "gemini-2.5-flash";
   try {
     const campaignResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_campaigns?id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&select=id,name&limit=1`, { headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
     const campaigns = campaignResponse.ok ? await campaignResponse.json() : [];
@@ -144,30 +201,34 @@ Deno.serve(async (request) => {
     const documentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&select=id,document_type,storage_path&limit=1`, { headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
     const documents = documentResponse.ok ? await documentResponse.json() : [];
     const document = Array.isArray(documents) ? documents[0] : null;
-    if (!document || document.document_type !== "edital" || document.storage_path !== storagePath) return reply(request, { error: "O arquivo não está registrado como edital deste portal." }, 422);
+    if (!document || !["edital", "edital_concurso"].includes(String(document.document_type)) || document.storage_path !== storagePath) {
+      await setDocumentStatus(documentId, user.id, "error");
+      return reply(request, { error: "O arquivo não está registrado como edital deste portal." }, 422);
+    }
     usage = await reserveUsage(user.id, campaignId, personalGeminiKey ? 10 : 2);
     if (!usage.allowed) {
-      await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "pending" }) }).catch(()=>undefined);
+      await setDocumentStatus(documentId, user.id, "pending");
       if (usage.reason === "DAILY_LIMIT") return reply(request, { error: `Você atingiu o limite diário de ${usage.limit || (personalGeminiKey ? 10 : 2)} análises de arquivo concluídas. O edital está salvo e poderá ser processado após a renovação da cota.`, retryable: true, code: "DAILY_LIMIT" }, 429);
       if (usage.reason === "BUSY") return reply(request, { error: "Já existe um PDF sendo analisado. Este edital continuará aguardando na fila.", retryable: true, queued: true, code: "BUSY" }, 409);
       return reply(request, { error: "A proteção de consumo está temporariamente indisponível.", retryable: true }, 503);
     }
     const campaignName = String(payload?.campaign_name ?? campaigns[0]?.name ?? "").trim();
     const fileResponse = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${storagePath}`, { headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
-    if (!fileResponse.ok) { await finishUsage(usage.event_id,"error","FILE_READ_FAILED");return reply(request, { error: "Não foi possível abrir o PDF armazenado." }, 502); }
+    if (!fileResponse.ok) {
+      await finishUsage(usage.event_id, "error", "FILE_READ_FAILED");
+      await setDocumentStatus(documentId, user.id, "error");
+      return reply(request, { error: "Não foi possível abrir o PDF armazenado." }, 502);
+    }
     const bytes = new Uint8Array(await fileResponse.arrayBuffer());
-    if (bytes.byteLength > 50 * 1024 * 1024) { await finishUsage(usage.event_id,"error","FILE_TOO_LARGE");return reply(request, { error: "O edital deve ter no máximo 50 MB para análise." }, 413); }
+    if (bytes.byteLength > 50 * 1024 * 1024) {
+      await finishUsage(usage.event_id, "error", "FILE_TOO_LARGE");
+      await setDocumentStatus(documentId, user.id, "error");
+      return reply(request, { error: "O edital deve ter no máximo 50 MB para análise." }, 413);
+    }
     const geminiFile = await uploadPdfToGemini(bytes, title, activeGeminiKey);
     geminiFileName = geminiFile.name;
 
-    const geminiModel = await pickGeminiModel(activeGeminiKey);
-    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": activeGeminiKey },
-      body: JSON.stringify({
-        contents: [{ parts: [
-          { file_data: { mime_type: geminiFile.mimeType ?? "application/pdf", file_uri: geminiFile.uri } },
-          { text: `Você é um analista de editais de concursos públicos brasileiros. Analise exclusivamente o PDF anexado e extraia o conteúdo programático que realmente gera matérias de estudo e missões.
+    const promptText = `Você é um analista de editais de concursos públicos brasileiros. Analise exclusivamente o PDF anexado e extraia o conteúdo programático que realmente gera matérias de estudo e missões.
 
 Portal do estudante: ${campaignName || "não informado"}
 Nome do arquivo: ${title}
@@ -188,22 +249,84 @@ REGRAS OBRIGATÓRIAS:
 13. Somente classifique como material_estudo quando o documento for apostila, aula, livro, resumo explicativo ou lei isolada, sem funcionar como lista do conteúdo programático do concurso.
 14. Em meta, informe detected_scope, confidence de 0 a 1 e warnings objetivos. Se for verticalizado, avise que ele é uma fonte derivada e deve ser conferido com o edital oficial, mas extraia todos os tópicos normalmente.
 
-Retorne somente o JSON solicitado.` },
-        ] }],
-        generationConfig: {
-          temperature: 0.1, responseMimeType: "application/json",
-          responseSchema: { type: "OBJECT", properties: {
-            meta: { type: "OBJECT", properties: { document_kind: { type: "STRING", enum: ["edital_oficial", "edital_verticalizado", "material_estudo", "outro"] }, classification_reason: { type: "STRING" }, detected_scope: { type: "STRING" }, confidence: { type: "NUMBER" }, warnings: { type: "ARRAY", items: { type: "STRING" } } }, required: ["document_kind", "classification_reason", "detected_scope", "confidence", "warnings"] },
-            topics: { type: "ARRAY", items: { type: "OBJECT", properties: { subject: { type: "STRING" }, unit: { type: "STRING" }, topic: { type: "STRING" }, subject_order: { type: "INTEGER" }, learning_order: { type: "INTEGER" }, difficulty: { type: "STRING", enum: ["basic", "intermediate", "advanced"] }, prerequisite_topic: { type: "STRING" }, pedagogical_reason: { type: "STRING" } }, required: ["subject", "topic", "subject_order", "learning_order", "difficulty", "prerequisite_topic", "pedagogical_reason"] } }
-          }, required: ["meta", "topics"] },
-        },
-      }),
-    });
-    const geminiData = await geminiResponse.json();
+Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_oficial","classification_reason":"...","detected_scope":"...","confidence":0.95,"warnings":[]},"topics":[{"subject":"...","unit":"...","topic":"...","subject_order":0,"learning_order":0,"difficulty":"basic","prerequisite_topic":"","pedagogical_reason":"..."}]}.`;
+
+    const baseRequestBody = {
+      contents: [{ parts: [
+        { file_data: { mime_type: geminiFile.mimeType ?? "application/pdf", file_uri: geminiFile.uri } },
+        { text: promptText },
+      ] }],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 65536,
+        responseMimeType: "application/json",
+        responseSchema: { type: "OBJECT", properties: {
+          meta: { type: "OBJECT", properties: { document_kind: { type: "STRING", enum: ["edital_oficial", "edital_verticalizado", "material_estudo", "outro"] }, classification_reason: { type: "STRING" }, detected_scope: { type: "STRING" }, confidence: { type: "NUMBER" }, warnings: { type: "ARRAY", items: { type: "STRING" } } }, required: ["document_kind", "classification_reason", "detected_scope", "confidence", "warnings"] },
+          topics: { type: "ARRAY", items: { type: "OBJECT", properties: { subject: { type: "STRING" }, unit: { type: "STRING" }, topic: { type: "STRING" }, subject_order: { type: "INTEGER" }, learning_order: { type: "INTEGER" }, difficulty: { type: "STRING", enum: ["basic", "intermediate", "advanced"] }, prerequisite_topic: { type: "STRING" }, pedagogical_reason: { type: "STRING" } }, required: ["subject", "topic", "subject_order", "learning_order", "difficulty", "prerequisite_topic", "pedagogical_reason"] } }
+        }, required: ["meta", "topics"] },
+      },
+    };
+    const relaxedBody = {
+      contents: baseRequestBody.contents,
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 65536,
+        responseMimeType: "application/json",
+      },
+    };
+
+    const models = await availableGeminiModels(activeGeminiKey);
+    let parsed: any = null;
+    let lastStatus = 502;
+    let lastErrorMessage = "O Gemini não conseguiu analisar o edital.";
+
+    modelLoop: for (const candidateModel of models) {
+      selectedModel = candidateModel;
+      const bodies = [baseRequestBody, relaxedBody];
+      for (let attempt = 0; attempt < bodies.length; attempt++) {
+        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(candidateModel)}:generateContent`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": activeGeminiKey },
+          body: JSON.stringify(bodies[attempt]),
+        });
+        const geminiData = await geminiResponse.json().catch(() => ({}));
+        if (geminiResponse.ok) {
+          try {
+            parsed = parseGeminiJsonText(geminiData);
+            if (parsed && (Array.isArray(parsed.topics) || parsed.meta)) break modelLoop;
+          } catch (parseErr) {
+            console.warn("edital-gemini JSON parse warning", candidateModel, attempt + 1, String((parseErr as Error)?.message ?? parseErr));
+            lastStatus = 502;
+            lastErrorMessage = "O modelo devolveu uma resposta incompleta ao analisar o edital.";
+            continue;
+          }
+        }
+        lastStatus = geminiResponse.status;
+        lastErrorMessage = geminiData?.error?.message ?? `O Gemini não conseguiu analisar o edital (${geminiResponse.status}).`;
+        console.warn("Gemini edital attempt", candidateModel, attempt + 1, geminiResponse.status, lastErrorMessage);
+        if (geminiResponse.status === 429) break modelLoop;
+        if (geminiResponse.status === 400 && attempt === 0) continue;
+        if (FALLBACK_STATUS.has(geminiResponse.status) || geminiResponse.status === 503) break;
+        break modelLoop;
+      }
+    }
+
     await removeGeminiFile(geminiFile.name, activeGeminiKey);
     geminiFileName = undefined;
-    if (!geminiResponse.ok) { const retryable=[429,500,502,503,504].includes(geminiResponse.status),code=geminiResponse.status===429?"PROVIDER_429":retryable?"PROVIDER_UNAVAILABLE":"AI_ERROR";console.error("Gemini",geminiResponse.status,geminiData);await finishUsage(usage.event_id,"error",code);await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`,{method:"PATCH",headers:{"Authorization":`Bearer ${SERVICE_ROLE_KEY}`,"apikey":SERVICE_ROLE_KEY,"Content-Type":"application/json"},body:JSON.stringify({processing_status:retryable?"pending":"error"})}).catch(()=>undefined);const error=geminiResponse.status===429?"A cota da sua chave Gemini foi atingida (erro 429). O edital permanece salvo e esta tentativa não foi contabilizada.":retryable?"O Gemini está temporariamente indisponível. O edital permanece salvo na fila; tente novamente em alguns minutos.":geminiData?.error?.message??"O Gemini não conseguiu analisar o edital.";return reply(request,{error,retryable,code,provider_status:geminiResponse.status,model:geminiModel},geminiResponse.status===429?429:502);}
-    const parsed = JSON.parse(geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
+
+    if (!parsed) {
+      const retryable = RETRYABLE_STATUS.has(lastStatus);
+      const code = lastStatus === 429 ? "PROVIDER_429" : retryable ? "PROVIDER_UNAVAILABLE" : "AI_ERROR";
+      await finishUsage(usage.event_id, "error", code, selectedModel);
+      await setDocumentStatus(documentId, user.id, retryable ? "pending" : "error");
+      const error = lastStatus === 429
+        ? "A cota da sua chave Gemini foi atingida (erro 429). O edital permanece salvo e esta tentativa não foi contabilizada."
+        : retryable
+          ? "O Gemini está temporariamente indisponível. O edital permanece salvo na fila; tente novamente em alguns minutos."
+          : lastErrorMessage;
+      return reply(request, { error, retryable, code, provider_status: lastStatus, model: selectedModel }, lastStatus === 429 ? 429 : 502);
+    }
+
     const meta = {
       document_kind: String(parsed?.meta?.document_kind ?? "outro"),
       classification_reason: String(parsed?.meta?.classification_reason ?? "Classificação não confirmada.").trim(),
@@ -213,8 +336,8 @@ Retorne somente o JSON solicitado.` },
     };
     const validEditalKinds = new Set(["edital_oficial", "edital_verticalizado", "edital_concurso"]);
     if (!validEditalKinds.has(meta.document_kind)) {
-      await finishUsage(usage.event_id, "error", "NOT_AN_EDITAL");
-      await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "error" }) });
+      await finishUsage(usage.event_id, "error", "NOT_AN_EDITAL", selectedModel);
+      await setDocumentStatus(documentId, user.id, "error");
       return reply(request, { error: `Este PDF não parece ser um edital oficial nem um edital verticalizado. ${meta.classification_reason} Exclua-o desta categoria e envie novamente como Material de estudo, Lei ou norma, Prova ou Simulado.`, code: "NOT_AN_EDITAL" }, 422);
     }
     if (meta.document_kind === "edital_verticalizado" && !meta.warnings.some((warning: string) => /verticalizado/i.test(warning))) meta.warnings.unshift("Edital verticalizado aceito como base do mapa. Confira os tópicos com o edital oficial quando ele estiver disponível.");
@@ -245,33 +368,43 @@ Retorne somente o JSON solicitado.` },
       const difficulty = ["basic", "intermediate", "advanced"].includes(String(item?.difficulty)) ? String(item.difficulty) : "basic";
       uniqueTopics.push({ subject, unit, topic, edital_order: originalIndex, subject_order: Math.max(0, Number(item?.subject_order)||0), learning_order: Math.max(0, Number(item?.learning_order)||0), difficulty, prerequisite_topic: String(item?.prerequisite_topic??"").trim(), pedagogical_reason: String(item?.pedagogical_reason??"").trim().slice(0,500) });
     }
-    if (uniqueTopics.length < 3) { await finishUsage(usage.event_id,"error","INSUFFICIENT_TOPICS");return reply(request, { error: "A análise não encontrou conteúdo programático suficiente com segurança. Confira se o PDF contém as disciplinas e se o nome do portal corresponde ao cargo." }, 422); }
+    if (uniqueTopics.length < 3) {
+      await finishUsage(usage.event_id, "error", "INSUFFICIENT_TOPICS", selectedModel);
+      await setDocumentStatus(documentId, user.id, "error");
+      return reply(request, { error: "A análise não encontrou conteúdo programático suficiente com segurança. Confira se o PDF contém as disciplinas e se o nome do portal corresponde ao cargo." }, 422);
+    }
     if (meta.confidence < 0.65) meta.warnings.unshift("A IA indicou baixa confiança na identificação do cargo ou do conteúdo programático. Revise o mapa antes de iniciar as missões.");
 
-    const cleared = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${campaignId}`, { method: "DELETE", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
+    const cleared = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "DELETE", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
     if (!cleared.ok) {
       console.error("campaign_topics delete", cleared.status, await cleared.text());
-      await finishUsage(usage.event_id,"error","MAP_CLEAR_FAILED");return reply(request, { error: "Não foi possível preparar o mapa anterior para a nova análise." }, 502);
+      await finishUsage(usage.event_id, "error", "MAP_CLEAR_FAILED", selectedModel);
+      await setDocumentStatus(documentId, user.id, "pending");
+      return reply(request, { error: "Não foi possível preparar o mapa anterior para a nova análise.", retryable: true }, 502);
     }
     const rows = uniqueTopics.map((item) => ({ campaign_id: campaignId, user_id: user.id, subject: item.subject, unit_name: item.unit, topic: item.topic, edital_order: item.edital_order, subject_order: item.subject_order, learning_order: item.learning_order, difficulty: item.difficulty, prerequisite_topic: item.prerequisite_topic || null, pedagogical_reason: item.pedagogical_reason || null }));
     const inserted = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics`, { method: "POST", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(rows) });
     if (!inserted.ok) {
       const detail = await inserted.text();
       console.error("campaign_topics insert", inserted.status, detail);
-      await finishUsage(usage.event_id,"error","TOPICS_SAVE_FAILED");return reply(request, { error: `O edital foi analisado, mas os tópicos não puderam ser salvos (${inserted.status}).`, detail }, 502);
+      await finishUsage(usage.event_id, "error", "TOPICS_SAVE_FAILED", selectedModel);
+      await setDocumentStatus(documentId, user.id, "pending");
+      return reply(request, { error: `O edital foi analisado, mas os tópicos não puderam ser salvos (${inserted.status}).`, detail, retryable: true }, 502);
     }
     const savedTopics = await inserted.json();
     if (!Array.isArray(savedTopics) || savedTopics.length === 0) {
-      await finishUsage(usage.event_id,"error","TOPICS_EMPTY");return reply(request, { error: "O edital foi analisado, mas nenhum tópico foi confirmado no banco." }, 502);
+      await finishUsage(usage.event_id, "error", "TOPICS_EMPTY", selectedModel);
+      await setDocumentStatus(documentId, user.id, "pending");
+      return reply(request, { error: "O edital foi analisado, mas nenhum tópico foi confirmado no banco.", retryable: true }, 502);
     }
-    await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready" }) });
-    await finishUsage(usage.event_id, "success");
-    return reply(request, { topics: uniqueTopics, saved: savedTopics.length, provider: "gemini", key_source: personalGeminiKey ? "personal" : "shared", meta });
+    await setDocumentStatus(documentId, user.id, "ready");
+    await finishUsage(usage.event_id, "success", undefined, selectedModel);
+    return reply(request, { topics: uniqueTopics, saved: savedTopics.length, provider: "gemini", model: selectedModel, key_source: personalGeminiKey ? "personal" : "shared", meta });
   } catch (error) {
     console.error("edital-gemini", error);
-    await finishUsage(usage?.event_id, "error", "PROCESSING_FAILED");
-    if (documentId) await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "error" }) }).catch(()=>undefined);
-    return reply(request, { error: "Falha interna ao interpretar o edital." }, 500);
+    await finishUsage(usage?.event_id, "error", "PROCESSING_FAILED", selectedModel);
+    if (documentId) await setDocumentStatus(documentId, user.id, "error");
+    return reply(request, { error: String((error as Error)?.message || "Falha interna ao interpretar o edital.") }, 500);
   } finally {
     await removeGeminiFile(geminiFileName, activeGeminiKey);
   }
