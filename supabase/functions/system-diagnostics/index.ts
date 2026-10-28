@@ -14,6 +14,16 @@ async function count(path: string) {
   return response.ok ? Number(range.split("/")[1] ?? 0) : -1;
 }
 
+function extractSecretString(raw: unknown): string {
+  if (typeof raw === "string") return raw.replace(/[\s\u200B-\u200D\uFEFF]+/g, "").trim();
+  if (Array.isArray(raw) && raw[0]) return extractSecretString(raw[0]);
+  if (raw && typeof raw === "object") {
+    const val = (raw as Record<string, unknown>).get_user_ai_secret ?? (raw as Record<string, unknown>).decrypted_secret ?? "";
+    return typeof val === "string" ? val.replace(/[\s\u200B-\u200D\uFEFF]+/g, "").trim() : "";
+  }
+  return "";
+}
+
 Deno.serve(async (request) => {
   const headers=cors(request);
   const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers});
@@ -41,7 +51,7 @@ Deno.serve(async (request) => {
     headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({ p_user_id: user.id, p_provider: "gemini" }),
   }).catch(() => null);
-  const personalGeminiKey = personalKeyResponse?.ok ? String(await personalKeyResponse.json().catch(() => "") || "").trim() : "";
+  const personalGeminiKey = personalKeyResponse?.ok ? extractSecretString(await personalKeyResponse.json().catch(() => "")) : "";
   const geminiKey = personalGeminiKey || Deno.env.get("GEMINI_API_KEY") || "";
   let geminiModels: string[] = [];
   let geminiApiError = "";
@@ -53,12 +63,13 @@ Deno.serve(async (request) => {
   }
   return reply({
     ok: true,
-    version: "70",
+    version: "78",
     project_ref: new URL(SUPABASE_URL).hostname.split(".")[0],
     database: true,
     storage: true,
     gemini_configured: Boolean(geminiKey),
     gemini_key_source: personalGeminiKey ? "personal" : "shared",
+    gemini_key_last_four: personalGeminiKey ? personalGeminiKey.slice(-4) : null,
     gemini_api_ok: geminiModels.length > 0,
     gemini_available_models: geminiModels,
     gemini_api_error: geminiApiError || null,
@@ -70,7 +81,7 @@ Deno.serve(async (request) => {
     pending_essays: pendingEssays,
     failed_essays: failedEssays,
     running_focus_sessions: running,
-    limits: { successful_file_analyses_per_day: 10, assistant_questions_per_day: 40, max_pdf_megabytes: 50 },
+    limits: { successful_file_analyses_per_day: personalGeminiKey ? 25 : 10, assistant_questions_per_day: 40, max_pdf_megabytes: 50 },
     usage,
     checked_at: new Date().toISOString(),
   });

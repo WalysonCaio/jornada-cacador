@@ -6,6 +6,7 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const PUBLISHABLE_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
 const GROQ_MODEL = "openai/gpt-oss-20b";
 const DEEPSEEK_MODEL = Deno.env.get("DEEPSEEK_MODEL") || "deepseek-flash";
+const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
 const ALLOWED_ORIGINS = new Set([
   "https://jornada.wcaio.workers.dev",
   "http://localhost:4173",
@@ -42,6 +43,16 @@ async function authenticatedUser(authorization: string) {
   return response.ok ? await response.json() : null;
 }
 
+function extractSecretString(raw: unknown): string {
+  if (typeof raw === "string") return raw.replace(/[\s\u200B-\u200D\uFEFF]+/g, "").trim();
+  if (Array.isArray(raw) && raw[0]) return extractSecretString(raw[0]);
+  if (raw && typeof raw === "object") {
+    const val = (raw as Record<string, unknown>).get_user_ai_secret ?? (raw as Record<string, unknown>).decrypted_secret ?? "";
+    return typeof val === "string" ? val.replace(/[\s\u200B-\u200D\uFEFF]+/g, "").trim() : "";
+  }
+  return "";
+}
+
 async function userGeminiKey(userId: string) {
   if (!SERVICE_ROLE_KEY) return "";
   const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_user_ai_secret`, {
@@ -50,7 +61,7 @@ async function userGeminiKey(userId: string) {
     body: JSON.stringify({ p_user_id: userId, p_provider: "gemini" }),
   }).catch(() => null);
   if (!result?.ok) return "";
-  return String(await result.json().catch(() => "") || "").trim();
+  return extractSecretString(await result.json().catch(() => ""));
 }
 
 async function reserveUsage(userId: string, campaignId?: string) {
@@ -72,14 +83,14 @@ async function finishUsage(eventId: number | undefined, status: "success" | "err
   }).catch(() => undefined);
 }
 
-const geminiModelDiscovery = new Map<string, Promise<string>>();
-async function discoverGeminiModel(geminiKey = GEMINI_API_KEY) {
+const geminiModelsCache = new Map<string, Promise<string[]>>();
+async function availableGeminiModels(geminiKey = GEMINI_API_KEY): Promise<string[]> {
   if (!geminiKey) throw new Error("GEMINI_NOT_CONFIGURED");
-  if (geminiModelDiscovery.has(geminiKey)) return geminiModelDiscovery.get(geminiKey)!;
+  if (geminiModelsCache.has(geminiKey)) return geminiModelsCache.get(geminiKey)!;
   const discovery = (async () => {
     const configured = String(Deno.env.get("GEMINI_MODEL") ?? "").replace(/^models\//, "").trim();
-    const modelsResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { headers: { "x-goog-api-key": geminiKey } });
-    const modelsData = await modelsResponse.json().catch(() => ({}));
+    const modelsResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { headers: { "x-goog-api-key": geminiKey } }).catch(() => null);
+    const modelsData = modelsResponse ? await modelsResponse.json().catch(() => ({})) : {};
     const blocked = /(embedding|imagen|veo|tts|audio|live|robotics|computer-use|gemma|learnlm|aqa)/i;
     const enabled = Array.isArray(modelsData?.models)
       ? modelsData.models
@@ -93,13 +104,22 @@ async function discoverGeminiModel(geminiKey = GEMINI_API_KEY) {
             return score(a) - score(b) || a.localeCompare(b);
           })
       : [];
-    const model = (configured && enabled.includes(configured) ? configured : "") || enabled[0] || configured;
-    if (!modelsResponse.ok || !model) throw new Error(`GEMINI_MODELS_${modelsResponse.status}:${modelsData?.error?.message ?? "nenhum modelo disponível"}`);
-    console.log("Gemini assistant model", model);
-    return model;
+    const list = [...new Set([
+      configured && enabled.includes(configured) ? configured : "",
+      ...FALLBACK_MODELS.filter((m) => !enabled.length || enabled.includes(m)),
+      ...enabled,
+      ...FALLBACK_MODELS,
+    ].filter(Boolean))].slice(0, 5);
+    if (!list.length) throw new Error("GEMINI_NO_MODELS");
+    return list;
   })();
-  geminiModelDiscovery.set(geminiKey, discovery);
+  geminiModelsCache.set(geminiKey, discovery);
   return discovery;
+}
+
+async function discoverGeminiModel(geminiKey = GEMINI_API_KEY) {
+  const models = await availableGeminiModels(geminiKey);
+  return models[0];
 }
 
 function parseGeminiJsonText(data: any) {
@@ -158,24 +178,32 @@ async function askDeepSeek(systemPrompt: string, userPrompt: string) {
 }
 
 async function askGemini(systemPrompt: string, userPrompt: string, geminiKey = GEMINI_API_KEY) {
-  const model = await discoverGeminiModel(geminiKey);
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey || "" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-      generationConfig: { temperature: 0.25, maxOutputTokens: 3000 },
-    }),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(`GEMINI_${response.status}:${data?.error?.message ?? "falha"}`);
-  const parts = Array.isArray(data?.candidates?.[0]?.content?.parts)
-    ? data.candidates[0].content.parts.filter((part: any) => !part?.thought)
-    : [];
-  const answer = (parts.length ? parts : data?.candidates?.[0]?.content?.parts || []).map((part: { text?: string }) => part.text ?? "").join("").trim();
-  if (!answer) throw new Error("GEMINI_EMPTY");
-  return { answer, model, provider: "gemini" };
+  if (!geminiKey) throw new Error("GEMINI_NOT_CONFIGURED");
+  const models = await availableGeminiModels(geminiKey);
+  let lastError = "GEMINI_FAILED";
+  for (const model of models) {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+        generationConfig: { temperature: 0.25, maxOutputTokens: 3500 },
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      lastError = `GEMINI_${response.status}:${data?.error?.message ?? "falha"}`;
+      if (response.status === 429 || response.status === 503 || response.status === 404 || response.status === 400) continue;
+      throw new Error(lastError);
+    }
+    const parts = Array.isArray(data?.candidates?.[0]?.content?.parts)
+      ? data.candidates[0].content.parts.filter((part: any) => !part?.thought)
+      : [];
+    const answer = (parts.length ? parts : data?.candidates?.[0]?.content?.parts || []).map((part: { text?: string }) => part.text ?? "").join("").trim();
+    if (answer) return { answer, model, provider: "gemini" };
+  }
+  throw new Error(lastError);
 }
 
 Deno.serve(async (request) => {
@@ -257,7 +285,7 @@ Deno.serve(async (request) => {
       const rows = topics.map((item: { subject?: string; unit?: string; topic?: string }, index: number) => ({ campaign_id: campaignId, user_id: user.id, subject: String(item.subject ?? "Edital"), unit_name: String(item.unit ?? ""), topic: String(item.topic ?? ""), edital_order: index }));
       await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics`, { method: "POST", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify(rows) });
       await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready" }) });
-      return json(request, { topics, provider: "gemini", document_id: documentId });
+      return json(request, { topics, provider: "gemini", key_source: personalGeminiKey ? "personal" : "shared", document_id: documentId });
     } catch (error) {
       console.error("Gemini edital error", error);
       await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "error" }) }).catch(() => undefined);
@@ -265,7 +293,7 @@ Deno.serve(async (request) => {
     }
   }
 
-  if (!DEEPSEEK_API_KEY && !GROQ_API_KEY && !activeGeminiKey) return json(request, { error: "DeepSeek, Groq e Gemini não foram configuradas no servidor." }, 503);
+  if (!DEEPSEEK_API_KEY && !GROQ_API_KEY && !activeGeminiKey) return json(request, { error: "Configure sua chave Gemini em Minha conta → Configurar minha IA." }, 503);
   const question = String(payload.question ?? "").trim().slice(0, 6000);
   const context = String(payload.context ?? "").trim().slice(0, 24000);
   const mode = String(payload.mode ?? "explicar").trim().slice(0, 40);
@@ -295,20 +323,38 @@ Modo solicitado: ${mode}.`;
     : `PEDIDO DO ESTUDANTE:\n${question}\n\nNão foi fornecido material de referência. Avise quando a resposta exigir conferência em fonte oficial.`;
 
   try {
-    let result: { answer: string; model: string; provider: string };
-    try {
-      result = await askDeepSeek(systemPrompt, userPrompt);
-    } catch (deepSeekError) {
-      console.error("DeepSeek indisponível; acionando Groq", deepSeekError);
+    let result: { answer: string; model: string; provider: string } | null = null;
+    let keySource: "personal" | "shared" = personalGeminiKey ? "personal" : "shared";
+
+    // Se o usuário configurou sua própria chave Gemini pessoal, prioriza a chave dele primeiro.
+    if (personalGeminiKey) {
       try {
-        result = await askGroq(systemPrompt, userPrompt);
-      } catch (groqError) {
-        console.error("Groq indisponível; acionando Gemini", groqError);
-        result = await askGemini(systemPrompt, userPrompt, activeGeminiKey);
+        result = await askGemini(systemPrompt, userPrompt, personalGeminiKey);
+        keySource = "personal";
+      } catch (personalErr) {
+        console.warn("Chave Gemini pessoal falhou no assistente; tentando provedores de reserva", personalErr);
       }
     }
+
+    if (!result) {
+      try {
+        result = await askDeepSeek(systemPrompt, userPrompt);
+        keySource = "shared";
+      } catch (deepSeekError) {
+        console.warn("DeepSeek indisponível; acionando Groq", deepSeekError);
+        try {
+          result = await askGroq(systemPrompt, userPrompt);
+          keySource = "shared";
+        } catch (groqError) {
+          console.warn("Groq indisponível; acionando Gemini", groqError);
+          result = await askGemini(systemPrompt, userPrompt, GEMINI_API_KEY || activeGeminiKey);
+          keySource = GEMINI_API_KEY && GEMINI_API_KEY !== personalGeminiKey ? "shared" : (personalGeminiKey ? "personal" : "shared");
+        }
+      }
+    }
+
     await finishUsage(usage.event_id, "success", result.provider, result.model);
-    return json(request, { ...result, grounded: Boolean(context), user_id: user.id });
+    return json(request, { ...result, key_source: keySource, grounded: Boolean(context), user_id: user.id });
   } catch (error) {
     console.error("Todas as IAs falharam", error);
     const message = String((error as Error)?.message ?? error);

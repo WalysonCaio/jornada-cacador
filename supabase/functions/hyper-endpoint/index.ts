@@ -24,6 +24,18 @@ async function authenticatedUser(authorization: string) {
   return response.ok ? await response.json() : null;
 }
 
+async function userGeminiKey(userId: string) {
+  if (!SERVICE_ROLE_KEY) return "";
+  const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_user_ai_secret`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ p_user_id: userId, p_provider: "gemini" }),
+  }).catch(() => null);
+  if (!result?.ok) return "";
+  const raw = await result.json().catch(() => "");
+  return typeof raw === "string" ? raw.replace(/[\s\u200B-\u200D\uFEFF]+/g, "").trim() : "";
+}
+
 async function askGroq(systemPrompt: string, userPrompt: string) {
   if (!GROQ_API_KEY) throw new Error("GROQ_NOT_CONFIGURED");
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -43,12 +55,12 @@ async function askGroq(systemPrompt: string, userPrompt: string) {
   return { answer, model: GROQ_MODEL, provider: "groq" };
 }
 
-async function askGemini(systemPrompt: string, userPrompt: string) {
-  if (!GEMINI_API_KEY) throw new Error("GEMINI_NOT_CONFIGURED");
-  const model = "gemini-3.5-flash-lite";
+async function askGemini(systemPrompt: string, userPrompt: string, geminiKey = GEMINI_API_KEY) {
+  if (!geminiKey) throw new Error("GEMINI_NOT_CONFIGURED");
+  const model = "gemini-2.5-flash";
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
@@ -57,7 +69,7 @@ async function askGemini(systemPrompt: string, userPrompt: string) {
   });
   const data = await response.json();
   if (!response.ok) throw new Error(`GEMINI_${response.status}:${data?.error?.message ?? "falha"}`);
-  const answer = data?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text ?? "").join("").trim();
+  const answer = data?.candidates?.[0]?.content?.parts?.filter((p: any) => !p?.thought).map((part: { text?: string }) => part.text ?? "").join("").trim();
   if (!answer) throw new Error("GEMINI_EMPTY");
   return { answer, model, provider: "gemini" };
 }
@@ -85,9 +97,12 @@ Deno.serve(async (request) => {
     return json(request, { error: "Solicitação inválida." }, 400);
   }
 
+  const personalGeminiKey = await userGeminiKey(user.id);
+  const activeGeminiKey = personalGeminiKey || GEMINI_API_KEY || "";
+
   if (payload.action === "parse_edital") {
-    if (!GEMINI_API_KEY || !SERVICE_ROLE_KEY) {
-      return json(request, { error: "A leitura de editais ainda precisa da GEMINI_API_KEY no Supabase." }, 503);
+    if (!activeGeminiKey || !SERVICE_ROLE_KEY) {
+      return json(request, { error: "A leitura de editais ainda precisa da chave Gemini." }, 503);
     }
     const storagePath = String(payload.storage_path ?? "");
     const campaignId = String(payload.campaign_id ?? "");
@@ -105,9 +120,9 @@ Deno.serve(async (request) => {
       let binary = "";
       for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
       const base64 = btoa(binary);
-      const geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent", {
+      const geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
+        headers: { "Content-Type": "application/json", "x-goog-api-key": activeGeminiKey },
         body: JSON.stringify({
           contents: [{ parts: [
             { inline_data: { mime_type: "application/pdf", data: base64 } },
@@ -115,6 +130,7 @@ Deno.serve(async (request) => {
           ] }],
           generationConfig: {
             temperature: 0.1,
+            maxOutputTokens: 65536,
             responseMimeType: "application/json",
             responseSchema: { type: "OBJECT", properties: { topics: { type: "ARRAY", items: { type: "OBJECT", properties: { subject: { type: "STRING" }, unit: { type: "STRING" }, topic: { type: "STRING" } }, required: ["subject", "topic"] } } }, required: ["topics"] },
           },
@@ -122,22 +138,22 @@ Deno.serve(async (request) => {
       });
       const geminiData = await geminiResponse.json();
       if (!geminiResponse.ok) return json(request, { error: geminiData?.error?.message ?? "O Gemini não conseguiu analisar o edital." }, 502);
-      const raw = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-      const parsed = JSON.parse(raw);
+      const raw = geminiData?.candidates?.[0]?.content?.parts?.filter((p: any) => !p?.thought).map((p: any) => p?.text || "").join("") ?? "{}";
+      const parsed = JSON.parse(raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim() || "{}");
       const topics = Array.isArray(parsed.topics) ? parsed.topics.slice(0, 1500) : [];
       if (!topics.length) return json(request, { error: "Não encontrei um conteúdo programático neste PDF." }, 422);
-      await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${campaignId}`, { method: "DELETE", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
+      await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "DELETE", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
       const rows = topics.map((item: { subject?: string; unit?: string; topic?: string }, index: number) => ({ campaign_id: campaignId, user_id: user.id, subject: String(item.subject ?? "Edital"), unit_name: String(item.unit ?? ""), topic: String(item.topic ?? ""), edital_order: index }));
       await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics`, { method: "POST", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify(rows) });
-      await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready" }) });
-      return json(request, { topics, provider: "gemini", document_id: documentId });
+      await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready" }) });
+      return json(request, { topics, provider: "gemini", key_source: personalGeminiKey ? "personal" : "shared", document_id: documentId });
     } catch (error) {
       console.error("Gemini edital error", error);
       return json(request, { error: "Falha ao interpretar o edital. Tente novamente." }, 502);
     }
   }
 
-  if (!GROQ_API_KEY && !GEMINI_API_KEY) return json(request, { error: "Nenhuma IA foi configurada no servidor." }, 503);
+  if (!GROQ_API_KEY && !activeGeminiKey) return json(request, { error: "Nenhuma IA foi configurada no servidor." }, 503);
   const question = String(payload.question ?? "").trim().slice(0, 6000);
   const context = String(payload.context ?? "").trim().slice(0, 24000);
   const mode = String(payload.mode ?? "explicar").trim().slice(0, 40);
@@ -170,7 +186,7 @@ Modo solicitado: ${mode}.`;
     }
     let result: { answer: string; model: string; provider: string };
     try {
-      result = await askGemini(systemPrompt, userPrompt);
+      result = await askGemini(systemPrompt, userPrompt, activeGeminiKey);
     } catch (geminiError) {
       console.error("Gemini indisponível; acionando Groq", geminiError);
       result = await askGroq(systemPrompt, userPrompt);

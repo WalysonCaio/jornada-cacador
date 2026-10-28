@@ -37,12 +37,16 @@ async function validateGeminiKey(key: string) {
   const result = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=100", { headers: { "x-goog-api-key": key } });
   const data = await result.json().catch(() => ({}));
   if (!result.ok) {
+    if (result.status === 429) return { rateLimited: true, models: [] };
     const error = new Error(data?.error?.message || `Gemini ${result.status}`) as Error & { status?: number };
     error.status = result.status;
     throw error;
   }
-  const usable = Array.isArray(data?.models) && data.models.some((model: any) => model?.supportedGenerationMethods?.includes("generateContent"));
-  if (!usable) throw new Error("A chave é válida, mas não possui modelo generateContent disponível.");
+  const models = Array.isArray(data?.models)
+    ? data.models.filter((model: any) => model?.supportedGenerationMethods?.includes("generateContent")).map((m: any) => String(m?.name ?? "").replace(/^models\//, ""))
+    : [];
+  if (!models.length) throw new Error("A chave é válida, mas não possui modelo generateContent disponível.");
+  return { rateLimited: false, models };
 }
 
 Deno.serve(async (request) => {
@@ -68,18 +72,27 @@ Deno.serve(async (request) => {
     if (password.length < 6 || !await verifyPassword(user.email, password)) return reply(request, { error: "Senha atual incorreta." }, 403);
 
     if (action === "save") {
-      const key = String(input?.key || "").trim();
-      if (key.length < 20 || key.length > 300 || /\s/.test(key)) return reply(request, { error: "A chave Gemini informada não possui um formato válido." }, 400);
+      const key = String(input?.key || "").replace(/[\s\u200B-\u200D\uFEFF]+/g, "").trim();
+      if (key.length < 20 || key.length > 300) return reply(request, { error: "A chave Gemini informada não possui um formato válido." }, 400);
+      let validation = { rateLimited: false, models: [] as string[] };
       try {
-        await validateGeminiKey(key);
+        validation = await validateGeminiKey(key);
       } catch (error) {
         const status = Number((error as { status?: number })?.status || 0);
-        return reply(request, { error: status === 429 ? "A chave foi reconhecida, mas sua cota está temporariamente limitada. Aguarde a renovação antes de salvá-la." : `A chave Gemini não foi aceita: ${String((error as Error)?.message || error)}` }, status === 429 ? 429 : 400);
+        return reply(request, { error: `A chave Gemini não foi aceita: ${String((error as Error)?.message || error)}` }, status === 429 ? 429 : 400);
       }
       const saved = await fetch(`${SUPABASE_URL}/rest/v1/rpc/store_user_ai_secret`, { method: "POST", headers: adminHeaders, body: JSON.stringify({ p_user_id: user.id, p_provider: "gemini", p_secret: key, p_last_four: key.slice(-4) }) });
       const data = await saved.json().catch(() => ({}));
-      if (!saved.ok) throw new Error(data?.message || "Não foi possível guardar a chave no cofre.");
-      return reply(request, { configured: true, provider: "gemini", last_four: key.slice(-4), message: "Chave Gemini testada e armazenada com criptografia." });
+      if (!saved.ok) throw new Error(data?.message || "Não foi possível guardar a chave no cofre. Verifique se a migração 20261014_v69_user_ai_keys.sql foi executada.");
+      return reply(request, {
+        configured: true,
+        provider: "gemini",
+        last_four: key.slice(-4),
+        models_count: validation.models.length,
+        message: validation.rateLimited
+          ? "Chave Gemini reconhecida e salva com criptografia (cota em renovação no momento)."
+          : "Chave Gemini testada e armazenada com criptografia.",
+      });
     }
 
     if (action === "delete") {

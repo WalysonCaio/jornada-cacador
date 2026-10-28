@@ -3,13 +3,16 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const PUBLIC_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
 const ALLOWED_ORIGINS = new Set(["https://jornada.wcaio.workers.dev", "http://localhost:4173", "http://localhost:3000"]);
-const modelDiscovery = new Map<string, Promise<string>>();
-async function pickGeminiModel(geminiKey: string) {
+const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const modelDiscovery = new Map<string, Promise<string[]>>();
+
+async function availableGeminiModels(geminiKey: string): Promise<string[]> {
   if (modelDiscovery.has(geminiKey)) return modelDiscovery.get(geminiKey)!;
   const discovery = (async () => {
     const configured = String(Deno.env.get("GEMINI_MODEL") ?? "").replace(/^models\//, "").trim();
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { headers: { "x-goog-api-key": geminiKey } });
-    const data = await response.json().catch(() => ({}));
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { headers: { "x-goog-api-key": geminiKey } }).catch(() => null);
+    const data = response ? await response.json().catch(() => ({})) : {};
     const blocked = /(embedding|imagen|veo|tts|audio|live|robotics|computer-use|gemma|learnlm|aqa)/i;
     const enabled = Array.isArray(data?.models)
       ? data.models
@@ -23,9 +26,15 @@ async function pickGeminiModel(geminiKey: string) {
             return score(a) - score(b) || a.localeCompare(b);
           })
       : [];
-    const model = (configured && enabled.includes(configured) ? configured : "") || enabled[0] || configured || "gemini-2.5-flash";
-    if (!response.ok || !model) throw new Error(data?.error?.message || "Nenhum modelo Gemini disponível para corrigir a redação.");
-    return model;
+    const candidates = [
+      configured && enabled.includes(configured) ? configured : "",
+      ...FALLBACK_MODELS.filter((m) => !enabled.length || enabled.includes(m)),
+      ...enabled,
+      ...FALLBACK_MODELS,
+    ].filter(Boolean);
+    const unique = [...new Set(candidates)].slice(0, 5);
+    if (!unique.length) throw new Error(data?.error?.message || "Nenhum modelo Gemini disponível para corrigir a redação.");
+    return unique;
   })();
   modelDiscovery.set(geminiKey, discovery);
   return discovery;
@@ -69,7 +78,7 @@ async function uploadFile(bytes: Uint8Array, title: string, mimeType: string, ge
       await removeGeminiFile(file.name, geminiKey);
       throw new Error(file.error?.message || "O Gemini não conseguiu preparar a redação.");
     }
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await wait(1500);
     const statusResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/${file.name}`, { headers: { "x-goog-api-key": geminiKey } });
     const statusData = await statusResponse.json().catch(() => ({}));
     if (!statusResponse.ok) {
@@ -92,10 +101,20 @@ async function finishUsage(id: number | undefined, status: "success" | "error", 
   await fetch(`${SUPABASE_URL}/rest/v1/ai_usage_events?id=eq.${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ status, provider: status === "success" ? "gemini" : null, model: status === "success" ? model : null, error_code: errorCode ?? null }) }).catch(() => undefined);
 }
 
+function extractSecretString(raw: unknown): string {
+  if (typeof raw === "string") return raw.replace(/[\s\u200B-\u200D\uFEFF]+/g, "").trim();
+  if (Array.isArray(raw) && raw[0]) return extractSecretString(raw[0]);
+  if (raw && typeof raw === "object") {
+    const val = (raw as Record<string, unknown>).get_user_ai_secret ?? (raw as Record<string, unknown>).decrypted_secret ?? "";
+    return typeof val === "string" ? val.replace(/[\s\u200B-\u200D\uFEFF]+/g, "").trim() : "";
+  }
+  return "";
+}
+
 async function userGeminiKey(userId: string) {
-  const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_user_ai_secret`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ p_user_id: userId, p_provider: "gemini" }) });
-  if (!result.ok) return "";
-  return String(await result.json().catch(() => "") || "").trim();
+  const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_user_ai_secret`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ p_user_id: userId, p_provider: "gemini" }) }).catch(() => null);
+  if (!result?.ok) return "";
+  return extractSecretString(await result.json().catch(() => ""));
 }
 
 Deno.serve(async (request) => {
@@ -107,7 +126,7 @@ Deno.serve(async (request) => {
   if (!user?.id) return reply(request, { error: "Sessão inválida. Entre novamente." }, 401);
   const personalGeminiKey = await userGeminiKey(user.id);
   const activeGeminiKey = personalGeminiKey || GEMINI_KEY;
-  if (!activeGeminiKey) return reply(request, { error: "Configure sua chave Gemini em Perfil → Configurações de IA." }, 503);
+  if (!activeGeminiKey) return reply(request, { error: "Configure sua chave Gemini em Minha conta → Configurar minha IA." }, 503);
   const input = await request.json().catch(() => null);
   const submissionId = String(input?.submission_id ?? "");
   let usageId: number | undefined;
@@ -122,9 +141,9 @@ Deno.serve(async (request) => {
     const activeResponse = await fetch(`${SUPABASE_URL}/rest/v1/essay_submissions?user_id=eq.${user.id}&processing_status=eq.processing&updated_at=gt.${encodeURIComponent(activeSince)}&id=neq.${encodeURIComponent(submissionId)}&select=id&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
     const active = activeResponse.ok ? await activeResponse.json() : [];
     if (Array.isArray(active) && active.length) return reply(request, { error: "Já existe uma redação sendo corrigida. Aguarde a conclusão antes de iniciar outra.", retryable: true }, 409);
-    const guard = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reserve_ai_usage`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ p_user_id: user.id, p_campaign_id: essay.campaign_id, p_operation: "review", p_daily_limit: personalGeminiKey ? 10 : 2 }) });
+    const guard = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reserve_ai_usage`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ p_user_id: user.id, p_campaign_id: essay.campaign_id, p_operation: "review", p_daily_limit: personalGeminiKey ? 25 : 2 }) });
     const usage = guard.ok ? await guard.json() : { allowed: false, reason: "USAGE_GUARD_UNAVAILABLE" };
-    if (!usage.allowed) return reply(request, { error: usage.reason === "DAILY_LIMIT" ? `Você atingiu o limite diário de ${usage.limit || (personalGeminiKey ? 10 : 2)} análises. Sua redação está salva; configure sua chave pessoal ou tente após a renovação da cota.` : "Já existe uma análise em andamento. Aguarde alguns minutos.", retryable: true }, usage.reason === "DAILY_LIMIT" ? 429 : 409);
+    if (!usage.allowed) return reply(request, { error: usage.reason === "DAILY_LIMIT" ? `Você atingiu o limite diário de ${usage.limit || (personalGeminiKey ? 25 : 2)} análises. Sua redação está salva; configure sua chave pessoal ou tente após a renovação da cota.` : "Já existe uma análise em andamento. Aguarde alguns minutos.", retryable: true }, usage.reason === "DAILY_LIMIT" ? 429 : 409);
     usageId = usage.event_id;
     await fetch(`${SUPABASE_URL}/rest/v1/essay_submissions?id=eq.${encodeURIComponent(submissionId)}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "processing", updated_at: new Date().toISOString() }) });
     const file = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${essay.storage_path}`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
@@ -139,18 +158,63 @@ Deno.serve(async (request) => {
     const board = String(essay.board ?? "geral");
     const boardGuidance = board === "AOCP" ? "Dê atenção especial à adequação ao tema, estrutura dissertativo-argumentativa, domínio da norma-padrão, coesão e coerência." : board === "Cebraspe" ? "Organize a devolutiva em aspectos macroestruturais (conteúdo, argumentação e organização) e microestruturais (gramática, ortografia, pontuação e coesão)." : board === "FGV" ? "Dê atenção especial à compreensão do tema, construção da tese, progressão argumentativa, estrutura, coesão e domínio linguístico." : "Use critérios gerais de redação para concursos públicos.";
     const prompt = `Atue como corretor experiente de redações para concursos públicos brasileiros. Analise somente o texto manuscrito ou digitado presente no arquivo. Tema informado: ${essay.theme}. Tipo textual informado: ${essay.essay_type}. Banca ou padrão solicitado: ${board}. ${boardGuidance} Quantidade solicitada: ${essay.required_lines || "não informada"} linhas. Instruções adicionais: ${essay.instructions || "nenhuma"}. Não invente trechos ilegíveis. Aponte quando algo não puder ser lido. Avalie aderência ao tema e ao tipo textual, estrutura, tese, argumentação, coesão, coerência, gramática, ortografia, pontuação, repertório, conclusão e respeito à quantidade de linhas. Forneça nota geral de 0 a 100, diagnóstico direto, pontos fortes, problemas encontrados com explicação, plano de melhoria prioritário, sugestões de reescrita em trechos curtos e uma versão-modelo apenas como referência pedagógica. Os critérios são uma aproximação pedagógica: não afirme que a nota reproduz a correção oficial da banca quando o espelho oficial não foi fornecido.`;
-    geminiModel = await pickGeminiModel(activeGeminiKey);
-    const ai = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": activeGeminiKey }, body: JSON.stringify({ contents: [{ parts: [{ file_data: { mime_type: geminiFile.mimeType ?? "application/pdf", file_uri: geminiFile.uri } }, { text: prompt }] }], generationConfig: { temperature: 0.15, maxOutputTokens: 16384, responseMimeType: "application/json", responseSchema: { type: "OBJECT", properties: { score: { type: "INTEGER", minimum: 0, maximum: 100 }, readable: { type: "BOOLEAN" }, diagnosis: { type: "STRING" }, strengths: { type: "ARRAY", items: { type: "STRING" } }, improvements: { type: "ARRAY", items: { type: "OBJECT", properties: { category: { type: "STRING" }, problem: { type: "STRING" }, recommendation: { type: "STRING" } }, required: ["category", "problem", "recommendation"] } }, priority_plan: { type: "ARRAY", items: { type: "STRING" } }, rewrite_suggestions: { type: "ARRAY", items: { type: "STRING" } }, model_text: { type: "STRING" }, line_observation: { type: "STRING" } }, required: ["score", "readable", "diagnosis", "strengths", "improvements", "priority_plan", "rewrite_suggestions", "model_text", "line_observation"] } } }) });
-    const aiData = await ai.json().catch(() => ({}));
-    if (!ai.ok) {
-      if (ai.status === 429) {
+    const models = await availableGeminiModels(activeGeminiKey);
+    const baseBody = {
+      contents: [{ parts: [{ file_data: { mime_type: geminiFile.mimeType ?? "application/pdf", file_uri: geminiFile.uri } }, { text: prompt }] }],
+      generationConfig: {
+        temperature: 0.15,
+        maxOutputTokens: 16384,
+        responseMimeType: "application/json",
+        responseSchema: { type: "OBJECT", properties: { score: { type: "INTEGER", minimum: 0, maximum: 100 }, readable: { type: "BOOLEAN" }, diagnosis: { type: "STRING" }, strengths: { type: "ARRAY", items: { type: "STRING" } }, improvements: { type: "ARRAY", items: { type: "OBJECT", properties: { category: { type: "STRING" }, problem: { type: "STRING" }, recommendation: { type: "STRING" } }, required: ["category", "problem", "recommendation"] } }, priority_plan: { type: "ARRAY", items: { type: "STRING" } }, rewrite_suggestions: { type: "ARRAY", items: { type: "STRING" } }, model_text: { type: "STRING" }, line_observation: { type: "STRING" } }, required: ["score", "readable", "diagnosis", "strengths", "improvements", "priority_plan", "rewrite_suggestions", "model_text", "line_observation"] },
+      },
+    };
+    const relaxedBody = {
+      contents: baseBody.contents,
+      generationConfig: { temperature: 0.15, maxOutputTokens: 16384, responseMimeType: "application/json" },
+    };
+
+    let result: any = null;
+    let lastStatus = 500;
+    let lastError = "A IA não conseguiu corrigir a redação.";
+
+    modelLoop: for (let mIdx = 0; mIdx < models.length; mIdx++) {
+      geminiModel = models[mIdx];
+      const bodies = [baseBody, relaxedBody];
+      for (let attempt = 0; attempt < bodies.length; attempt++) {
+        const ai = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": activeGeminiKey },
+          body: JSON.stringify(bodies[attempt]),
+        });
+        const aiData = await ai.json().catch(() => ({}));
+        if (ai.ok) {
+          try {
+            result = parseGeminiJsonText(aiData);
+            if (result && typeof result.score === "number") break modelLoop;
+          } catch {
+            continue;
+          }
+        }
+        lastStatus = ai.status;
+        lastError = aiData?.error?.message ?? "A IA não conseguiu corrigir a redação.";
+        if (ai.status === 400 && attempt === 0) continue;
+        if (ai.status === 429 || ai.status === 503 || ai.status === 404) {
+          if (mIdx + 1 < models.length) await wait(1200);
+          break;
+        }
+        break;
+      }
+    }
+
+    if (!result) {
+      if (lastStatus === 429) {
         await fetch(`${SUPABASE_URL}/rest/v1/essay_submissions?id=eq.${encodeURIComponent(submissionId)}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "pending", updated_at: new Date().toISOString() }) });
         await finishUsage(usageId, "error", "PROVIDER_RATE_LIMIT", geminiModel);
-        return reply(request, { error: "A cota gratuita do Gemini terminou temporariamente. A redação continua salva para nova tentativa.", retryable: true }, 429);
+        return reply(request, { error: "A cota do Gemini atingiu o limite temporário. A redação continua salva para nova tentativa.", retryable: true }, 429);
       }
-      throw new Error(aiData?.error?.message ?? "A IA não conseguiu corrigir a redação.");
+      throw new Error(lastError);
     }
-    const result = parseGeminiJsonText(aiData);
+
     await fetch(`${SUPABASE_URL}/rest/v1/essay_submissions?id=eq.${encodeURIComponent(submissionId)}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready", result, updated_at: new Date().toISOString() }) });
     await removeGeminiFile(geminiFileName, activeGeminiKey);
     geminiFileName = undefined;

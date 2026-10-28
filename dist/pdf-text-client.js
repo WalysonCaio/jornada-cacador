@@ -1,6 +1,7 @@
 (function () {
   const extractionJobs = new Map();
   const isEditalType = (doc) => ["edital", "edital_concurso"].includes(String(doc?.document_type || ""));
+  window._recentUploadedPdfBytes = window._recentUploadedPdfBytes || new Map();
 
   async function storageFetch(path, session, options = {}) {
     return fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${path}`, {
@@ -24,9 +25,16 @@
     if (await sidecarAlreadyExists(doc.storage_path, session)) return true;
 
     toast(`Preparando o texto de “${doc.title}” no navegador. Você pode aguardar nesta tela.`);
-    const pdfResponse = await storageFetch(doc.storage_path, session);
-    if (!pdfResponse.ok) throw new Error("Não foi possível abrir o PDF para preparar o texto.");
-    const bytes = new Uint8Array(await pdfResponse.arrayBuffer());
+    let bytes;
+    const cachedBlob = window._recentUploadedPdfBytes?.get(doc.id);
+    if (cachedBlob) {
+      bytes = new Uint8Array(await cachedBlob.arrayBuffer());
+      window._recentUploadedPdfBytes.delete(doc.id);
+    } else {
+      const pdfResponse = await storageFetch(doc.storage_path, session);
+      if (!pdfResponse.ok) throw new Error("Não foi possível abrir o PDF para preparar o texto.");
+      bytes = new Uint8Array(await pdfResponse.arrayBuffer());
+    }
     const pdfjs = await import("./pdf.mjs");
     pdfjs.GlobalWorkerOptions.workerSrc = new URL("./pdf.worker.mjs", document.baseURI).href;
     const pdf = await pdfjs.getDocument({ data: bytes }).promise;

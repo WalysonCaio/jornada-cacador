@@ -16,7 +16,7 @@ const GEMINI_MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const FALLBACK_STATUS = new Set([400, 404]);
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const TEXT_CHUNK_TARGET = 28000;
+const TEXT_CHUNK_TARGET = 22000;
 const MAX_TEXT_CHUNKS = 10;
 
 const GEMINI_TEXT_FALLBACKS = [...GEMINI_MODEL_FALLBACKS];
@@ -82,7 +82,11 @@ async function createGeminiInteraction(input: any[], schema: any, maxOutputToken
         // Modelo indisponível (400/404) ou sobrecarregado (503) usa a próxima
         // opção imediatamente. Cota 429 é compartilhada e deve parar sem criar
         // tentativas inúteis nem consumir o tempo máximo da Edge Function.
-        if (!FALLBACK_STATUS.has(result.status) && result.status !== 503) {
+        if (result.status === 429 || result.status === 503) {
+          await wait(1200);
+          break;
+        }
+        if (!FALLBACK_STATUS.has(result.status)) {
           shouldStopModels = true;
         }
         break;
@@ -116,10 +120,17 @@ function parseGeminiJsonText(data: any) {
   const raw = String((candidateParts.length ? candidateParts : data?.candidates?.[0]?.content?.parts || []).map((part: any) => part?.text || "").join("") ?? "").trim();
   if (!raw) throw new Error("EMPTY_GEMINI_RESPONSE");
   const unfenced = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-  try { return JSON.parse(unfenced); } catch { /* tenta extrair o objeto */ }
+  const normalizeParsed = (val: any) => {
+    if (Array.isArray(val)) return { summaries: val };
+    if (val && typeof val === "object" && !Array.isArray(val.summaries) && Array.isArray(val.resumos)) {
+      return { ...val, summaries: val.resumos };
+    }
+    return val;
+  };
+  try { return normalizeParsed(JSON.parse(unfenced)); } catch { /* tenta extrair o objeto */ }
   const start = unfenced.indexOf("{");
   const end = unfenced.lastIndexOf("}");
-  if (start >= 0 && end > start) return JSON.parse(unfenced.slice(start, end + 1));
+  if (start >= 0 && end > start) return normalizeParsed(JSON.parse(unfenced.slice(start, end + 1)));
   throw new Error("INVALID_GEMINI_JSON");
 }
 
@@ -202,24 +213,34 @@ async function finishUsage(eventId: number | undefined, status: "success" | "err
   await fetch(`${SUPABASE_URL}/rest/v1/ai_usage_events?id=eq.${eventId}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ status, provider: provider || null, model: model || null, error_code: errorCode || null }) }).catch(() => undefined);
 }
 
+function extractSecretString(raw: unknown): string {
+  if (typeof raw === "string") return raw.replace(/[\s\u200B-\u200D\uFEFF]+/g, "").trim();
+  if (Array.isArray(raw) && raw[0]) return extractSecretString(raw[0]);
+  if (raw && typeof raw === "object") {
+    const val = (raw as Record<string, unknown>).get_user_ai_secret ?? (raw as Record<string, unknown>).decrypted_secret ?? "";
+    return typeof val === "string" ? val.replace(/[\s\u200B-\u200D\uFEFF]+/g, "").trim() : "";
+  }
+  return "";
+}
+
 async function userGeminiKey(userId: string) {
   const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_user_ai_secret`, {
     method: "POST",
     headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({ p_user_id: userId, p_provider: "gemini" }),
-  });
-  if (!result.ok) {
-    if (result.status !== 404) console.warn("Personal Gemini key lookup unavailable", result.status);
+  }).catch(() => null);
+  if (!result || !result.ok) {
+    if (result && result.status !== 404) console.warn("Personal Gemini key lookup unavailable", result.status);
     return "";
   }
-  return String(await result.json().catch(() => "") || "").trim();
+  return extractSecretString(await result.json().catch(() => ""));
 }
 
 async function updateJob(documentId: string, values: Record<string, unknown>) {
   await fetch(`${SUPABASE_URL}/rest/v1/processing_jobs?document_id=eq.${encodeURIComponent(documentId)}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ ...values, updated_at: new Date().toISOString() }) }).catch(() => undefined);
 }
 
-async function createDocumentInventory(file: { uri: string; mimeType?: string }, title: string) {
+async function createDocumentInventory(file: { uri: string; mimeType?: string }, title: string, geminiKey = GEMINI_KEY) {
   const requestBody = {
     contents: [{ parts: [
       { file_data: { mime_type: file.mimeType ?? "application/pdf", file_uri: file.uri } },
@@ -241,8 +262,8 @@ async function createDocumentInventory(file: { uri: string; mimeType?: string },
   let temporaryFailure = false;
   let lastStatus = 0;
   let lastMessage = "";
-  for (const model of await availableGeminiModels()) {
-    const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY }, body: JSON.stringify(requestBody) });
+  for (const model of await availableGeminiModels(geminiKey)) {
+    const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey }, body: JSON.stringify(requestBody) });
     const data = await result.json().catch(() => ({}));
     if (!result.ok) {
       lastStatus = result.status;
@@ -270,7 +291,7 @@ async function createDocumentInventory(file: { uri: string; mimeType?: string },
   return { estimated_pages: 0, sections: [], warnings: ["O inventário preliminar não ficou disponível; confira o relatório de cobertura ao final."], model: "fallback" };
 }
 
-async function generateStudyPackage(file: { uri: string; mimeType?: string }, title: string, campaignContext: string, documentType: string, inventory: any) {
+async function generateStudyPackage(file: { uri: string; mimeType?: string }, title: string, campaignContext: string, documentType: string, inventory: any, geminiKey = GEMINI_KEY) {
   const requestBody = {
     contents: [{ parts: [
       { file_data: { mime_type: file.mimeType ?? "application/pdf", file_uri: file.uri } },
@@ -322,14 +343,14 @@ O arquivo se chama: ${title}.` },
 
   let lastError = "O serviço de IA está temporariamente indisponível.";
   let lastStatus = 0;
-  const models = await availableGeminiModels();
+  const models = await availableGeminiModels(geminiKey);
   for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
     const model = models[modelIndex];
     const bodies = [requestBody, relaxedGenerationBody(requestBody)];
     for (let attempt = 0; attempt < bodies.length; attempt++) {
       const ai = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY },
+        headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
         body: JSON.stringify(bodies[attempt]),
       });
       const data = await ai.json().catch(() => ({}));
@@ -593,19 +614,72 @@ TEXTO EXTRAÍDO:
 ${chunk.text}`;
 }
 
+const CHUNK_SUMMARY_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    summaries: {
+      type: "ARRAY",
+      minItems: 1,
+      maxItems: 6,
+      items: {
+        type: "OBJECT",
+        properties: {
+          subject: { type: "STRING" },
+          title: { type: "STRING" },
+          page_start: { type: "INTEGER" },
+          page_end: { type: "INTEGER" },
+          explanation: { type: "STRING" },
+          points: { type: "ARRAY", items: { type: "STRING" } },
+          example: { type: "STRING" },
+          bizu: { type: "STRING" },
+          mnemonic: { type: "STRING" },
+          trap: { type: "STRING" },
+          flashcards: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: { question: { type: "STRING" }, answer: { type: "STRING" } },
+              required: ["question", "answer"],
+            },
+          },
+          questions: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                statement: { type: "STRING" },
+                options: { type: "ARRAY", minItems: 4, maxItems: 4, items: { type: "STRING" } },
+                correct_index: { type: "INTEGER", minimum: 0, maximum: 3 },
+                explanation: { type: "STRING" },
+                difficulty: { type: "STRING", enum: ["facil", "medio", "dificil"] },
+                topic: { type: "STRING" },
+                origin: { type: "STRING" },
+              },
+              required: ["statement", "options", "correct_index", "explanation", "difficulty", "topic"],
+            },
+          },
+        },
+        required: ["subject", "title", "explanation", "points", "example", "bizu", "mnemonic", "trap", "flashcards", "questions"],
+      },
+    },
+  },
+  required: ["summaries"],
+};
+
 async function generateChunkWithFallback(chunk: TextChunk, totalChunks: number, title: string, campaignContext: string, documentType: string, geminiKey: string) {
   const prompt = chunkStudyPrompt(chunk, totalChunks, title, campaignContext, documentType);
   const attempts: ProviderAttempt[] = [];
-  if (geminiKey) {
-    try {
-      const result = await createGeminiInteraction([{ type: "text", text: prompt }], {}, 16384, 35000, geminiKey);
-      if (!Array.isArray(result.parsed?.summaries) || !result.parsed.summaries.length) throw new Error("EMPTY_GEMINI_SUMMARIES");
-      return { ...result, provider: "gemini", attempts };
-    } catch (error) {
-      const status = Number((error as { providerStatus?: number })?.providerStatus || 500);
-      attempts.push({ provider: "gemini", model: "automatic-fallback", status, message: String((error as Error)?.message || error).slice(0, 500) });
-      // Também continua em JSON inválido/timeout: o PDF já foi extraído e pode
-      // ser processado com segurança por outro provedor textual.
+  const geminiKeys = [...new Set([geminiKey, GEMINI_KEY].filter(Boolean))];
+  if (geminiKeys.length) {
+    for (const candidateKey of geminiKeys) {
+      try {
+        const result = await createGeminiInteraction([{ type: "text", text: prompt }], CHUNK_SUMMARY_SCHEMA, 24576, 65000, candidateKey);
+        if (!Array.isArray(result.parsed?.summaries) || !result.parsed.summaries.length) throw new Error("EMPTY_GEMINI_SUMMARIES");
+        return { ...result, provider: "gemini", attempts };
+      } catch (error) {
+        const status = Number((error as { providerStatus?: number })?.providerStatus || 500);
+        attempts.push({ provider: "gemini", model: "automatic-fallback", status, message: String((error as Error)?.message || error).slice(0, 500) });
+      }
     }
   } else attempts.push({ provider: "gemini", model: "", status: 0, message: "chave não configurada" });
 
@@ -635,7 +709,8 @@ async function generateStudyPackageFromText(
   const attempts: ProviderAttempt[] = [];
   let nextIndex = 0;
   let completed = 0;
-  const worker = async () => {
+  const worker = async (workerIndex: number) => {
+    if (workerIndex > 0) await wait(1200 * workerIndex);
     while (true) {
       const index = nextIndex++;
       if (index >= chunks.length) return;
@@ -651,7 +726,7 @@ async function generateStudyPackageFromText(
   };
   // Duas análises simultâneas aceleram PDFs longos sem disparar uma rajada que
   // provoque 429 nos provedores gratuitos.
-  await Promise.all(Array.from({ length: Math.min(2, chunks.length) }, () => worker()));
+  await Promise.all(Array.from({ length: Math.min(2, chunks.length) }, (_, idx) => worker(idx)));
   const summaries = results.flatMap((generated) => generated?.parsed?.summaries || []);
   const sections = chunks.flatMap((chunk) => chunk.headings.length ? chunk.headings : [`Páginas ${chunk.pageStart}–${chunk.pageEnd}`]);
   return {
@@ -672,13 +747,13 @@ async function generateStudyPackageFromText(
   };
 }
 
-async function reviewGeneratedQuestions(summaries: unknown[], campaignContext: string) {
+async function reviewGeneratedQuestions(summaries: unknown[], campaignContext: string, geminiKey = GEMINI_KEY) {
   const compact = summaries.map((summary: any, summaryIndex) => ({ summary_index: summaryIndex, subject: summary?.subject, title: summary?.title, questions: summary?.questions })).slice(0, 24);
-  const model = (await availableGeminiModels())[0];
+  const model = (await availableGeminiModels(geminiKey))[0];
   if (!model) return summaries;
   const review = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
     body: JSON.stringify({
       contents: [{ parts: [{ text: `Atue como revisor independente de questões de concurso. Revise o conjunto JSON abaixo usando apenas as informações contidas nele e o contexto do edital. Corrija português, ambiguidade, gabarito incompatível com a explicação e alternativas óbvias ou de tema diferente. Mantenha exatamente quatro alternativas, uma única correta e a progressão 1 fácil, 2 médias e 2 difíceis por resumo. Se não for possível corrigir com segurança, remova a questão. Nunca transforme uma questão autoral em oficial.\n\nCONTEXTO:\n${campaignContext}\n\nQUESTÕES:\n${JSON.stringify(compact)}` }] }],
       generationConfig: {
@@ -984,7 +1059,7 @@ Deno.serve(async (request) => {
         }
       }
     }
-    usage = await reserveUsage(user.id, campaignId, operation, personalGeminiKey ? 10 : 2);
+    usage = await reserveUsage(user.id, campaignId, operation, personalGeminiKey ? 25 : 2);
     if (!usage.allowed) {
       await updateJob(documentId, { status: usage.reason === "BUSY" ? "queued" : "retry", available_at: new Date(Date.now() + 15 * 60000).toISOString(), last_error: usage.reason });
       await setDocumentStatus(documentId, user.id, "pending");
