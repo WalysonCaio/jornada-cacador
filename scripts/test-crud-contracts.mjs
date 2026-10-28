@@ -4,6 +4,7 @@ const read = (file) => fs.readFileSync(new URL(file, import.meta.url), "utf8");
 const html = read("../dist/index.html");
 const pdfClient = read("../dist/pdf-text-client.js");
 const enhancements = read("../dist/v59-enhancements.js");
+const experience = read("../dist/v77-experience.js");
 const security = read("../supabase/functions/account-security/index.ts");
 const edital = read("../supabase/functions/edital-gemini/index.ts");
 const material = read("../supabase/functions/material-gemini/index.ts");
@@ -31,6 +32,15 @@ requireAll("v59-enhancements", enhancements, [
   "window.openPersonalAiSettings",
   "data-open-personal-ai",
   "extracting_text",
+]);
+requireAll("v77-experience", experience, [
+  "renderReverseSchedule",
+  "reverseSchedulePanel",
+  "questionTopic",
+  "populateTopicFilter",
+  "startTimedSimulado",
+  "simuladoSheetGrid",
+  "finishTimedSimulado",
 ]);
 requireAll("pdf-text-client", pdfClient, [
   '["edital", "edital_concurso"].includes',
@@ -87,4 +97,4 @@ if (material.includes("gemini-3.8-flash") || material.includes("gemini-3.5-flash
   throw new Error("material-gemini ainda referencia identificadores de modelo inexistentes (3.8/3.5).");
 }
 
-console.log("OK: contratos CRUD protegidos, chave Gemini pessoal validada em todas as funções, exclusão de edital sincronizada, Storage, PDFs e banco cobertos.");
+console.log("OK: contratos CRUD, chave Gemini pessoal, Cronograma Reverso, Filtro por Tópico e Simulado Cronometrado validados.");
