@@ -1035,6 +1035,8 @@
 
   function renderExamBankHub(){
     ensureExamBankHub();
+    enhanceFlashcardsSpacedRepetition();
+    enhanceEssayCenter();
     const catalogEl=q('#examDocumentsCatalog'),countTag=q('#examHubCountTag');
     if(!catalogEl)return;
     const officialQuestions=(ALL_QUESTIONS||[]).filter(item=>normalizedOrigin(item)==='oficial');
@@ -1677,6 +1679,109 @@
     };
   }
 
+
+  // 8. Repetição Espaçada SM-2 nos Flashcards (Estilo Anki / Caveira) + Atalhos 1/2/3
+  function enhanceFlashcardsSpacedRepetition(){
+    const cardsPanel=q('#cards');
+    if(!cardsPanel||q('#flashcardSpacedBar'))return;
+    const head=cardsPanel.querySelector('.sectionHead');
+    if(head){
+      head.insertAdjacentHTML('afterend',`<div class="flashSpacedBar" id="flashcardSpacedBar"><span class="small muted" id="flashSpacedStats">Repetição espaçada ativa (1=Difícil · 2=Rever · 3=Fácil · Espaço=Virar)</span><label class="small" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="flashDueOnlyToggle"> Apenas pendentes/difíceis</label></div>`);
+      q('#flashDueOnlyToggle').onchange=()=>{if(typeof renderCard==='function')renderCard();updateFlashcardSpacedStats()};
+    }
+    const baseGradeCard=typeof gradeCard==='function'?gradeCard:null;
+    if(baseGradeCard){
+      window.gradeCard=function(level){
+        const id=q('#flashcard')?.dataset?.card;
+        const prev=state?.flashProgress?.[id]||{};
+        const streak=level==='easy'?(Number(prev.streak||0)+1):0;
+        const intervalDays=level==='hard'?1:level==='medium'?3:Math.min(30,Math.max(7,streak*7));
+        const nextDue=new Date(Date.now()+intervalDays*86400000).toISOString();
+        baseGradeCard(level);
+        if(id!==undefined&&state?.flashProgress?.[id]){
+          state.flashProgress[id].streak=streak;
+          state.flashProgress[id].nextDue=nextDue;
+          save();
+        }
+        updateFlashcardSpacedStats();
+      };
+    }
+    document.addEventListener('keydown',e=>{
+      if(!q('#study')?.classList.contains('active')||!q('#cards')?.classList.contains('active'))return;
+      if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName||''))return;
+      if(e.key==='1'){e.preventDefault();window.gradeCard?.('hard')}
+      else if(e.key==='2'){e.preventDefault();window.gradeCard?.('medium')}
+      else if(e.key==='3'){e.preventDefault();window.gradeCard?.('easy')}
+    });
+    updateFlashcardSpacedStats();
+  }
+
+  function updateFlashcardSpacedStats(){
+    const statsEl=q('#flashSpacedStats');
+    if(!statsEl)return;
+    const total=(ALL_FLASHCARDS||[]).length;
+    const now=Date.now();
+    let due=0,hardCount=0;
+    for(let i=0;i<total;i++){
+      const p=state?.flashProgress?.[i];
+      if(!p||!p.nextDue||Date.parse(p.nextDue)<=now)due++;
+      if(p?.level==='hard')hardCount++;
+    }
+    statsEl.textContent=`Total: ${total} cartões · ${due} para revisar hoje · ${hardCount} marcados como difícil (Atalhos: 1, 2, 3)`;
+  }
+
+  // 9. Gerador de Temas Policiais + Folha de Redação 30 Linhas para Impressão (#essay)
+  const POLICE_ESSAY_THEMES=[
+    {title:'Redação PMPE — Segurança e Direitos Humanos',theme:'O equilíbrio entre o uso progressivo da força policial e a garantia dos direitos fundamentais na segurança pública brasileira',board:'AOCP'},
+    {title:'Redação Policial — Tecnologia e Combate ao Crime',theme:'O papel da inteligência policial, câmeras corporais e tecnologia no enfrentamento à criminalidade violenta',board:'Cebraspe'},
+    {title:'Redação Segurança Pública — Violência Doméstica',theme:'Desafios das forças de segurança na proteção de grupos vulneráveis e no cumprimento efetivo da Lei Maria da Penha',board:'AOCP'},
+    {title:'Redação Policial — Polícia Comunitária',theme:'A importância do policiamento comunitário e da confiança social para a prevenção primária da violência urbana',board:'FGV'},
+    {title:'Redação Segurança — Sistema Prisional e Reincidência',theme:'Caminhos para reduzir a reincidência criminal e combater a atuação de organizações criminosas no Brasil',board:'Cebraspe'},
+    {title:'Redação Policial — Crimes Cibernéticos',theme:'A evolução dos crimes digitais e a necessidade de modernização investigativa e ostensiva das polícias estaduais',board:'FGV'},
+    {title:'Redação PMPE — Patrimônio Histórico e Cidadania',theme:'Preservação da ordem pública, cultura regional e proteção do patrimônio histórico em grandes eventos populares',board:'AOCP'}
+  ];
+
+  function enhanceEssayCenter(){
+    const essayCard=q('#essay .card');
+    if(!essayCard||q('#essayHelperBar'))return;
+    essayCard.insertAdjacentHTML('afterbegin',`<div class="essayHelperBar" id="essayHelperBar"><button type="button" class="ghost small" id="suggestEssayThemeBtn">🎲 Sortear Tema Policial de Alta Incidência</button><button type="button" class="ghost small" id="printBlankEssaySheetBtn">🖨️ Imprimir Folha Oficial de 30 Linhas</button></div>`);
+    q('#suggestEssayThemeBtn').onclick=()=>{
+      const pick=POLICE_ESSAY_THEMES[Math.floor(Math.random()*POLICE_ESSAY_THEMES.length)];
+      if(q('#essayTitle')&&!q('#essayTitle').value)q('#essayTitle').value=pick.title;
+      if(q('#essayTheme'))q('#essayTheme').value=pick.theme;
+      if(q('#essayBoard'))q('#essayBoard').value=pick.board;
+      if(q('#essayLines')&&!q('#essayLines').value)q('#essayLines').value='30';
+      toast('Tema policial sorteado e preenchido!');
+    };
+    q('#printBlankEssaySheetBtn').onclick=()=>{
+      const theme=q('#essayTheme')?.value?.trim()||'Tema livre / Defina o tema antes de iniciar a escrita';
+      const board=q('#essayBoard')?.value||'Padrão Oficial';
+      const maxLines=Math.min(60,Math.max(15,Number(q('#essayLines')?.value)||30));
+      const w=window.open('','_blank');
+      if(!w)return toast('Permita pop-ups para abrir a folha pautada de 30 linhas.');
+      const linesHtml=Array.from({length:maxLines},(_,i)=>`<div class="rLine"><span>${String(i+1).padStart(2,'0')}</span><i></i></div>`).join('');
+      w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Folha de Redação (${maxLines} linhas)</title><style>body{font:13px/1.45 Inter,Arial,sans-serif;color:#111d2c;max-width:780px;margin:20px auto;padding:0 16px}header{border:2px solid #10253a;border-radius:8px;padding:12px 14px;margin-bottom:14px}h1{font-size:1.05rem;margin:0 0 6px}.theme{font-size:.9rem;background:#f4f8fb;padding:8px 10px;border-left:4px solid #1768ac;margin-top:6px}.rLine{display:grid;grid-template-columns:28px 1fr;align-items:end;height:26px}.rLine span{font-size:.75rem;color:#5a7186;font-weight:700;padding-bottom:2px}.rLine i{display:block;border-bottom:1px solid #8ea4b8;height:100%}@media print{body{margin:10mm;max-width:none}.noPrint{display:none}}</style></head><body><div class="noPrint" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;background:#eef6fc;padding:10px;border-radius:8px"><span><b>Folha de Redação Pautada (${maxLines} linhas)</b> — imprima, escreva à mão e envie foto/PDF para correção na IA</span><button onclick="window.print()" style="padding:8px 14px;font-weight:bold;cursor:pointer">🖨️ Imprimir Folha</button></div><header><h1>FOLHA DE TEXTO DEFINITIVO · BANCA: ${escText(board.toUpperCase())}</h1><div style="font-size:.78rem;color:#4a6075">Respeite as margens, escreva com caneta esferográfica preta ou azul e observe o limite de ${maxLines} linhas.</div><div class="theme"><b>PROPOSTA / TEMA:</b> ${escText(theme)}</div></header><div>${linesHtml}</div></body></html>`);
+      w.document.close();
+    };
+  }
+
+  // 10. Alerta sonoro suave (Web Audio API) ao concluir Bloco de Foco
+  function playCompletionChime(){
+    try{
+      const Ctx=window.AudioContext||window.webkitAudioContext;
+      if(!Ctx)return;
+      const ctx=new Ctx();
+      [523.25,659.25,783.99].forEach((freq,idx)=>{
+        const osc=ctx.createOscillator(),gain=ctx.createGain();
+        osc.type='sine';osc.frequency.value=freq;
+        gain.gain.setValueAtTime(0.08,ctx.currentTime+idx*0.14);
+        gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+idx*0.14+0.35);
+        osc.connect(gain);gain.connect(ctx.destination);
+        osc.start(ctx.currentTime+idx*0.14);osc.stop(ctx.currentTime+idx*0.14+0.36);
+      });
+    }catch{}
+  }
+
   function bindQuestionCenter(){
     ensureTopicFilterSelect();
     ensureSimuladoUI();
@@ -1703,8 +1808,16 @@
 
   const baseOpenView=openView;
   openView=function(id){baseOpenView(id);try{sessionStorage.setItem(viewKey,id)}catch{}if(id==='report'){populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()}if(id==='today')updateTodayCommand();if(id==='map')renderReverseSchedule()};
+  const baseTickClock=typeof tickClock==='function'?tickClock:null;
+  if(baseTickClock){
+    window.tickClock=function(){
+      const wasEnding=typeof timerLeft==='number'&&timerLeft===1&&Boolean(timerRun);
+      baseTickClock();
+      if(wasEnding)playCompletionChime();
+    };
+  }
   const baseRender=render;
-  render=function(){baseRender();updateTodayCommand();renderReverseSchedule();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()};
+  render=function(){baseRender();enhanceFlashcardsSpacedRepetition();enhanceEssayCenter();updateFlashcardSpacedStats();updateTodayCommand();renderReverseSchedule();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()};
   const baseRenderReport=renderReport;
   renderReport=function(){baseRenderReport();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()};
 

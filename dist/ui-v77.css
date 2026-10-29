@@ -129,3 +129,9 @@
 mark.hlLaw{background:rgba(247,189,67,.22);color:#ffe08a;padding:1px 5px;border-radius:5px;font-weight:750}
 mark.hlException{background:rgba(255,107,125,.24);color:#ffb3bd;padding:1px 5px;border-radius:5px;font-weight:800}
 mark.hlPenalty{background:rgba(89,230,255,.2);color:#9beeff;padding:1px 5px;border-radius:5px;font-weight:750}
+
+
+/* Repetição Espaçada nos Flashcards & Barra Auxiliar da Redação */
+.flashSpacedBar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;border:1px solid #244057;background:#07131f;margin-bottom:12px;flex-wrap:wrap}
+.essayHelperBar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:11px;border-bottom:1px solid #213a4f}
+.essayHelperBar button{flex:1;min-width:210px}
