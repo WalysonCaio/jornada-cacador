@@ -16,8 +16,8 @@ const GEMINI_MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const FALLBACK_STATUS = new Set([400, 404]);
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const TEXT_CHUNK_TARGET = 22000;
-const MAX_TEXT_CHUNKS = 10;
+const TEXT_CHUNK_TARGET = 28000;
+const MAX_TEXT_CHUNKS = 4;
 
 const GEMINI_TEXT_FALLBACKS = [...GEMINI_MODEL_FALLBACKS];
 
@@ -476,27 +476,31 @@ function normalizeExtractedPage(value: unknown) {
     .trim();
 }
 
-async function loadBrowserExtractedPages(storagePath: string): Promise<TextPage[] | null> {
+function validateExtractedPagesList(rawPages: unknown): TextPage[] | null {
+  if (!Array.isArray(rawPages) || !rawPages.length) return null;
+  const pages = rawPages
+    .map((item: any, index: number) => ({ page: Number(item?.page) || index + 1, text: normalizeExtractedPage(item?.text) }))
+    .filter((page: TextPage) => page.text.length > 0);
+  const meaningfulCharacters = pages.reduce((total: number, page: TextPage) => total + page.text.replace(/\s/g, "").length, 0);
+  if (!pages.length || meaningfulCharacters < 120) return null;
+  return pages;
+}
+
+async function loadBrowserExtractedPages(storagePath: string, inlinePages?: unknown): Promise<TextPage[] | null> {
+  const fromInline = validateExtractedPagesList(inlinePages);
+  if (fromInline) {
+    console.log("Using inline browser-extracted PDF text", fromInline.length);
+    return fromInline;
+  }
   const sidecarPath = `${storagePath}.text.json`;
   const result = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${sidecarPath}`, {
     headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY },
-  });
-  // O Storage pode responder 400 ("Object not found") quando o sidecar ainda
-  // não existe. Isso não é uma falha de processamento; apenas aciona a leitura
-  // visual como alternativa.
-  if (result.status === 400 || result.status === 404) return null;
-  if (!result.ok) {
-    console.warn("Browser text sidecar unavailable", result.status);
-    return null;
-  }
+  }).catch(() => null);
+  if (!result || result.status === 400 || result.status === 404 || !result.ok) return null;
   const payload = await result.json().catch(() => null);
-  const pages = Array.isArray(payload?.pages)
-    ? payload.pages.map((item: any, index: number) => ({ page: Number(item?.page) || index + 1, text: normalizeExtractedPage(item?.text) }))
-    : [];
-  const meaningfulCharacters = pages.reduce((total: number, page: TextPage) => total + page.text.replace(/\s/g, "").length, 0);
-  if (!pages.length || meaningfulCharacters < Math.max(300, pages.length * 35)) return null;
-  console.log("Using browser-extracted PDF text", pages.length, meaningfulCharacters);
-  return pages;
+  const validated = validateExtractedPagesList(payload?.pages);
+  if (validated) console.log("Using sidecar browser-extracted PDF text", validated.length);
+  return validated;
 }
 
 function pageHeadings(text: string) {
@@ -541,7 +545,7 @@ function createTextChunks(pages: TextPage[]): TextChunk[] {
       index: balanced.length,
       pageStart: group[0].page,
       pageEnd: group[group.length - 1].page,
-      text: group.map((page) => `[PÁGINA ${page.page}]\n${page.text}`).join("\n\n"),
+      text: group.map((page) => `[PÁGINA ${page.page}]\n${page.text}`).join("\n\n").slice(0, 32000),
       headings: [...new Set(group.flatMap((page) => pageHeadings(page.text)))].slice(0, 20),
     });
   }
@@ -684,7 +688,7 @@ async function generateChunkWithFallback(chunk: TextChunk, totalChunks: number, 
   if (geminiKeys.length) {
     for (const candidateKey of geminiKeys) {
       try {
-        const result = await createGeminiInteraction([{ type: "text", text: prompt }], CHUNK_SUMMARY_SCHEMA, 24576, 65000, candidateKey);
+        const result = await createGeminiInteraction([{ type: "text", text: prompt }], CHUNK_SUMMARY_SCHEMA, 24576, 34000, candidateKey);
         if (!Array.isArray(result.parsed?.summaries) || !result.parsed.summaries.length) throw new Error("EMPTY_GEMINI_SUMMARIES");
         return { ...result, provider: "gemini", attempts };
       } catch (error) {
@@ -720,25 +724,33 @@ async function generateStudyPackageFromText(
   const attempts: ProviderAttempt[] = [];
   let nextIndex = 0;
   let completed = 0;
+  let lastChunkError: any = null;
+  const deadline = Date.now() + 45000;
   const worker = async (workerIndex: number) => {
-    if (workerIndex > 0) await wait(1200 * workerIndex);
+    if (workerIndex > 0) await wait(650 * workerIndex);
     while (true) {
+      if (Date.now() > deadline && completed > 0) return;
       const index = nextIndex++;
       if (index >= chunks.length) return;
       const chunk = chunks[index];
-      const generated = await generateChunkWithFallback(chunk, chunks.length, title, campaignContext, documentType, geminiKey);
-      results[index] = generated;
-      providers.push(generated.provider);
-      models.push(generated.model);
-      attempts.push(...generated.attempts);
-      completed += 1;
-      await onProgress(completed, chunks.length, providers);
+      try {
+        const generated = await generateChunkWithFallback(chunk, chunks.length, title, campaignContext, documentType, geminiKey);
+        results[index] = generated;
+        providers.push(generated.provider);
+        models.push(generated.model);
+        attempts.push(...generated.attempts);
+        completed += 1;
+        await onProgress(completed, chunks.length, providers);
+      } catch (chunkErr) {
+        lastChunkError = chunkErr;
+        if ( Array.isArray((chunkErr as any)?.attempts) ) attempts.push(...(chunkErr as any).attempts);
+        console.warn("Chunk generation warning; continuing remaining chunks", index, String((chunkErr as Error)?.message || chunkErr));
+      }
     }
   };
-  // Duas análises simultâneas aceleram PDFs longos sem disparar uma rajada que
-  // provoque 429 nos provedores gratuitos.
-  await Promise.all(Array.from({ length: Math.min(2, chunks.length) }, (_, idx) => worker(idx)));
+  await Promise.all(Array.from({ length: Math.min(3, chunks.length) }, (_, idx) => worker(idx)));
   const summaries = results.flatMap((generated) => generated?.parsed?.summaries || []);
+  if (!summaries.length && lastChunkError) throw lastChunkError;
   const sections = chunks.flatMap((chunk) => chunk.headings.length ? chunk.headings : [`Páginas ${chunk.pageStart}–${chunk.pageEnd}`]);
   return {
     parsed: {
@@ -1089,7 +1101,7 @@ Deno.serve(async (request) => {
     let inventory: any = documents[0]?.metadata?.analysis_plan;
     if (!Array.isArray(inventory?.sections)) inventory = { estimated_pages: 0, sections: [], warnings: [], model: "local-text-extraction" };
     await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "extracting_text", percent: 15, completed_sections: 0, total_sections: 0, updated_at: new Date().toISOString() } } }) });
-    const browserPages = await loadBrowserExtractedPages(path);
+    const browserPages = await loadBrowserExtractedPages(path, input?.extracted_pages);
     if (browserPages) {
       const pages = browserPages;
       inventory = {

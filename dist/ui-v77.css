@@ -1,4 +1,4 @@
-/* V77 — navegação orientada à ação, Cronograma Reverso, Filtro por Tópico, Simulado, Resolução Passo a Passo (estilo boaResposta) e Central de Provas */
+/* V77 — navegação orientada à ação, Cronograma Reverso, Ciclo Automático 80/20, Tesoura TEC/Qconcursos, Simulado Caveira/Cebraspe, Resolução Passo a Passo e Central de Provas */
 .todayCommand{display:grid;grid-template-columns:minmax(0,1.3fr) repeat(2,minmax(170px,.55fr));gap:12px;margin-bottom:16px}
 .commandPrimary,.commandShortcut{border:1px solid #2c5875;border-radius:18px;color:var(--text);text-align:left;padding:17px;background:linear-gradient(145deg,#10283e,#091725);min-height:112px;transition:transform .18s,border-color .18s,background .18s}
 .commandPrimary{position:relative;overflow:hidden;background:radial-gradient(circle at 92% 8%,rgba(79,224,255,.18),transparent 38%),linear-gradient(145deg,#153650,#0a1a2b)}
@@ -18,8 +18,26 @@
 .reverseMetric{padding:12px;border:1px solid #26435a;border-radius:13px;background:#071421;text-align:center}
 .reverseMetric b{display:block;color:var(--cyan);font-size:1.15rem}
 .reverseMetric span{font-size:.71rem;color:var(--muted)}
+
+/* Ciclo de Estudos Automático 80/20 (Estilo Estratégia / Gran) */
+.studyCycleCard{border-color:#2e5a74;background:linear-gradient(145deg,#0d2032,#081421)}
+.studyCycleGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:10px}
+.cycleBlockCard{padding:12px;border-radius:13px;border:1px solid #25435a;background:#07131f;display:flex;flex-direction:column;gap:6px}
+.cycleBlockCard.priorityHigh{border-color:#695024;background:radial-gradient(circle at 95% 0,rgba(247,189,67,.1),transparent 45%),#091522}
+.cycleBlockCard.completed{opacity:.55;border-color:#266349;background:#081c17}
+.cycleBlockTop{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.cycleBlockActions{display:flex;gap:6px;margin-top:auto;padding-top:6px}
+.cycleBlockActions button{flex:1;font-size:.75rem;padding:7px 8px;min-height:34px}
+
+/* Tesoura Eliminadora de Alternativas (Estilo TEC / Qconcursos) */
+.optionWithScissors{display:grid;grid-template-columns:1fr 44px;gap:7px;align-items:stretch}
+.optionWithScissors .optionMainBtn{width:100%;text-align:left}
+.optionMainBtn.eliminatedOption{opacity:.38;text-decoration:line-through;filter:grayscale(.7)}
+.scissorBtn{border:1px solid #29465d;background:#091724;color:var(--muted);border-radius:11px;font-size:1rem;display:grid;place-items:center;padding:0;min-height:48px}
+.scissorBtn:hover,.scissorBtn.active{border-color:#ff7b8b;color:#ff8f9d;background:#28131b}
+
 .simuladoLauncher{border-color:#4b679b;background:radial-gradient(circle at 92% 0,rgba(244,189,87,.12),transparent 38%),linear-gradient(145deg,#132238,#091523)}
-.simuladoConfigGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}
+.simuladoConfigGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}
 .simuladoDialog{width:min(96%,860px);max-height:92dvh}
 .simuladoTopBar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid #26435a;margin-bottom:12px;position:sticky;top:0;z-index:5;background:#0b1a2b}
 .simuladoClockWrap{display:flex;align-items:center;gap:10px}
@@ -34,7 +52,7 @@
 .simuladoNavRow{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:8px;margin-top:12px}
 .viewStateNote{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:.74rem}.viewStateNote:before{content:'✓';color:var(--green)}
 
-/* Resolução Passo a Passo (Estilo boaResposta) */
+/* Resolução Passo a Passo + Bizu Pessoal na Questão */
 .boaRespostaResolution{display:grid;gap:10px;padding:4px 0}
 .resolutionHeader{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding-bottom:8px;border-bottom:1px solid #25435b}
 .resolutionHeader h4{margin:4px 0 0;font-size:1rem;color:#fff}
@@ -59,8 +77,11 @@
 .stepOptBadge.good{background:#123d2b;color:#6bf0b3}
 .stepOptBadge.bad{background:#421822;color:#ff9eab}
 .stepOptBadge.neutral{background:#13283a;color:var(--muted)}
-.resolutionActionBar{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
-.resolutionActionBar button{flex:1;min-width:190px}
+.resolutionActionBar{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}
+.resolutionActionBar button{flex:1 1 150px;font-size:.78rem;padding:8px 10px}
+.personalQuestionBizuBox{padding:10px 12px;border-radius:11px;border:1px solid #243f55;background:#07131f;margin-top:2px}
+.personalBizuRow{display:flex;gap:8px;margin-top:6px}
+.personalBizuRow input{flex:1;background:#0b1b2b;border:1px solid #29465d;color:#fff;padding:8px 10px;border-radius:9px;font-size:.84rem}
 
 /* Diagnóstico Tático (Pontos Fortes e Fracos) */
 .tacticalDiagnosisCard{border-color:#2b5370;background:linear-gradient(145deg,#0d1f31,#081420)}
@@ -91,7 +112,7 @@
 .officialSourcesAccordion{margin-top:14px;padding-top:11px;border-top:1px solid #1f3649}
 .officialSourcesAccordion summary{cursor:pointer;font-size:.82rem;font-weight:750;color:var(--cyan)}
 
-@media(min-width:1040px){#today .desktopGrid{grid-template-columns:minmax(0,1.45fr) minmax(300px,.55fr)}#report .performanceGrid{grid-template-columns:repeat(4,minmax(0,1fr))}.questionFilters{grid-template-columns:repeat(5,minmax(0,1fr))}.questionTrainer{padding:22px}.sourceLinks{grid-template-columns:repeat(4,minmax(0,1fr))}}
-@media(max-width:900px){.todayCommand{grid-template-columns:1fr 1fr}.commandPrimary{grid-column:1/-1}.reportColumns,.diagnosisGrid,.examImportSplit,.examHubTabs{grid-template-columns:1fr}.simuladoConfigGrid{grid-template-columns:1fr}.reverseScheduleGrid{grid-template-columns:repeat(2,1fr)}.sharedBankBanner,.examDocRow{flex-direction:column;align-items:stretch}}
-@media(max-width:719px){.todayCommand{grid-template-columns:1fr 1fr;gap:8px}.commandPrimary{min-height:100px;padding:15px}.commandShortcut{min-height:94px;padding:13px}.commandShortcut b{font-size:.9rem}.commandShortcut span{font-size:.7rem}.questionFilters,.trainerQuickActions{grid-template-columns:1fr}.performanceBar{grid-template-columns:minmax(90px,.8fr) minmax(90px,1.2fr) auto}.questionTrainer .action{position:sticky;bottom:calc(74px + env(safe-area-inset-bottom));z-index:3}.hero{margin-bottom:12px}.simuladoNavRow{grid-template-columns:1fr 1fr}.simuladoNavRow #simuladoSubmitBtn{grid-column:1/-1}}
+@media(min-width:1040px){#today .desktopGrid{grid-template-columns:minmax(0,1.45fr) minmax(300px,.55fr)}#report .performanceGrid{grid-template-columns:repeat(4,minmax(0,1fr))}.questionFilters{grid-template-columns:repeat(3,minmax(0,1fr))}.questionTrainer{padding:22px}.sourceLinks{grid-template-columns:repeat(4,minmax(0,1fr))}.simuladoConfigGrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:900px){.todayCommand{grid-template-columns:1fr 1fr}.commandPrimary{grid-column:1/-1}.reportColumns,.diagnosisGrid,.studyCycleGrid,.examImportSplit,.examHubTabs{grid-template-columns:1fr}.simuladoConfigGrid{grid-template-columns:1fr}.reverseScheduleGrid{grid-template-columns:repeat(2,1fr)}.sharedBankBanner,.examDocRow{flex-direction:column;align-items:stretch}}
+@media(max-width:719px){.todayCommand{grid-template-columns:1fr 1fr;gap:8px}.commandPrimary{min-height:100px;padding:15px}.commandShortcut{min-height:94px;padding:13px}.commandShortcut b{font-size:.9rem}.commandShortcut span{font-size:.7rem}.questionFilters,.trainerQuickActions{grid-template-columns:1fr}.performanceBar{grid-template-columns:minmax(90px,.8fr) minmax(90px,1.2fr) auto}.questionTrainer .action{position:sticky;bottom:calc(74px + env(safe-area-inset-bottom));z-index:3}.hero{margin-bottom:12px}.simuladoNavRow{grid-template-columns:1fr 1fr}.simuladoNavRow #simuladoSubmitBtn{grid-column:1/-1}.personalBizuRow{flex-direction:column}}
 @media(max-width:390px){.todayCommand{grid-template-columns:1fr}.commandPrimary{grid-column:auto}.commandShortcut{min-height:82px}.performanceBar{grid-template-columns:1fr auto}.performanceBar>span{grid-column:1/-1}.performanceTrack{grid-column:1}.performanceBar b{grid-column:2}}

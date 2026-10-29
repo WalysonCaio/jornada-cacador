@@ -3,6 +3,9 @@
   const q=s=>document.querySelector(s), qa=s=>[...document.querySelectorAll(s)];
   const escText=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const viewKey='jornada-last-view-v77';
+  if(typeof processEditalDocument==='function'&&typeof window.processStudyDocument!=='function'){
+    window.processStudyDocument=id=>processEditalDocument(id);
+  }
 
   function addTodayCommand(){
     const today=q('#today'),streak=today?.querySelector('.streakCard');
@@ -31,7 +34,7 @@
     if(dailyBox&&mission&&!q('#practiceDailySubjectBtn')){
       const finishBtn=q('#finishDaily');
       if(finishBtn){
-        finishBtn.insertAdjacentHTML('afterend',`<button class="ghost" id="practiceDailySubjectBtn" type="button" style="width:100%;margin-top:8px">Treinar questões de ${escText(mission.subject||'esta disciplina')}</button>`);
+        finishBtn.insertAdjacentHTML('afterend',`<div class="dailyExtraRow" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px"><button class="ghost" id="practiceDailySubjectBtn" type="button">◎ Questões de ${escText(mission.subject||'hoje')}</button><button class="ghost" id="startSprint5MinBtn" type="button">⚡ Sprint Rápido (5 min)</button></div>`);
         q('#practiceDailySubjectBtn').onclick=()=>{
           openView('report');
           const subjSel=q('#questionSubject');
@@ -40,8 +43,33 @@
             if(match){subjSel.value=match.value;populateTopicFilter();updateQuestionPool()}
           }
         };
+        q('#startSprint5MinBtn').onclick=startQuickSprintBattle;
       }
     }
+  }
+
+  function startQuickSprintBattle(){
+    const pool=(ALL_QUESTIONS||[]);
+    if(!pool.length){
+      openView('report');
+      return toast('Envie um PDF ou gere um caderno na Central de Provas para iniciar o Sprint de 5 minutos.');
+    }
+    const mission=(typeof missionPool==='function'?missionPool():[]).find(item=>item.id===state?.daily)||null;
+    const subjPool=mission?pool.filter(x=>topicKey(learningCategory(x.subject))===topicKey(mission.subject)):[];
+    const source=subjPool.length>=3?subjPool:pool;
+    activeQuestions={
+      mode:'progressive',
+      subject:mission?.subject?`Sprint 5 min · ${mission.subject}`:'Sprint Rápido 5 min',
+      questions:progressiveQuestions(source,Math.min(4,source.length)).map(prepareQuestion),
+      current:0,
+      correct:0,
+      streak:0,
+      level:1,
+      answered:false
+    };
+    q('#questionDialogTitle').textContent='⚡ Sprint Relâmpago de 5 Minutos';
+    q('#questionDialog').showModal();
+    showQuestion();
   }
 
   function ensureTopicPanelSearch(){
@@ -57,16 +85,101 @@
     };
   }
 
-  // 1. Cronograma Reverso até a Data da Prova
+  // 1. Cronograma Reverso + Ciclo de Estudos Automático (Estilo Estratégia / Gran / Caveira)
   function ensureReverseSchedulePanel(){
     const countdownCard=q('#map .examCountdown');
     if(!countdownCard||q('#reverseSchedulePanel'))return;
-    countdownCard.insertAdjacentHTML('afterend',`<div class="card reverseScheduleCard" id="reverseSchedulePanel"><div class="sectionHead"><div><div class="eyebrow">CRONOGRAMA REVERSO ATÉ A PROVA</div><h2 id="reverseScheduleTitle">Ritmo necessário para fechar o edital</h2></div><span class="tag" id="reverseScheduleBadge">Cálculo automático</span></div><div class="reverseScheduleGrid" id="reverseScheduleMetrics"></div><p class="small muted" id="reverseScheduleAdvice" style="margin:10px 0 0"></p></div>`);
+    countdownCard.insertAdjacentHTML('afterend',`<div class="card reverseScheduleCard" id="reverseSchedulePanel"><div class="sectionHead"><div><div class="eyebrow">CRONOGRAMA REVERSO ATÉ A PROVA</div><h2 id="reverseScheduleTitle">Ritmo necessário para fechar o edital</h2></div><span class="tag" id="reverseScheduleBadge">Cálculo automático</span></div><div class="reverseScheduleGrid" id="reverseScheduleMetrics"></div><p class="small muted" id="reverseScheduleAdvice" style="margin:10px 0 0"></p></div><div class="card studyCycleCard" id="studyCyclePanel"><div class="sectionHead"><div><div class="eyebrow">CICLO DE ESTUDOS AUTOMÁTICO & RAIO-X 80/20</div><h2 style="margin:3px 0 0">Rotação Inteligente de Disciplinas</h2><p class="small muted" style="margin:3px 0 0">Distribui seus blocos de foco dando peso dobrado às matérias com mais tópicos pendentes ou menor precisão nas questões.</p></div><span class="tag" id="studyCycleProgressTag">Ciclo ativo</span></div><div class="studyCycleGrid" id="studyCycleBlocks"></div></div>`);
+  }
+
+  function renderStudyCycle(){
+    const container=q('#studyCycleBlocks'),tagEl=q('#studyCycleProgressTag');
+    if(!container)return;
+    const missions=(typeof missionPool==='function'?missionPool():[]).filter(m=>!String(m.id).startsWith('setup-'));
+    if(!missions.length){
+      if(tagEl)tagEl.textContent='Aguardando edital';
+      container.innerHTML=`<div class="empty" style="grid-column:1/-1">Analise o edital na Biblioteca para gerar seu Ciclo Automático de Estudos por peso e prioridade.</div>`;
+      return;
+    }
+
+    const bySubject={};
+    for(const m of missions){
+      const subj=canonicalSubjectName(m.subject||'Disciplina');
+      bySubject[subj]??={total:0,done:0,qTotal:0,qCorrect:0};
+      bySubject[subj].total++;
+      if(state?.done?.[m.id])bySubject[subj].done++;
+    }
+    const scores=(state?.scores||[]).filter(s=>!s.campaignId||s.campaignId===state.activeCampaignId);
+    for(const s of scores){
+      const subj=canonicalSubjectName(s.subject||missions.find(m=>m.id===s.id)?.subject||'');
+      if(bySubject[subj]){
+        bySubject[subj].qTotal+=Number(s.total||0);
+        bySubject[subj].qCorrect+=Number(s.correct||0);
+      }
+    }
+
+    const cycleItems=Object.entries(bySubject).map(([subj,d])=>{
+      const pending=Math.max(0,d.total-d.done);
+      const accuracy=d.qTotal>0?Math.round(d.qCorrect/d.qTotal*100):null;
+      const highPriority=pending>=Math.ceil(d.total*0.5)||(accuracy!==null&&accuracy<68);
+      const blocks=pending===0?1:(highPriority?2:1);
+      const mode=pending===0?'Revisão + Questões':(accuracy!==null&&accuracy<60?'Reforço Teórico + Erros':'Teoria + 10 Questões');
+      const blockMinutes=Math.max(30,Math.min(60,Math.round((state?.settings?.dailyMinutes||60)/2)));
+      return {subj,pending,total:d.total,accuracy,blocks,mode,blockMinutes,highPriority};
+    }).sort((a,b)=>(b.highPriority-a.highPriority)||(b.pending-a.pending));
+
+    state.completedCycleBlocks=state.completedCycleBlocks||{};
+    const campKey=state.activeCampaignId||'default';
+    const doneMap=state.completedCycleBlocks[campKey]||{};
+    const allCompleted=cycleItems.every((item,idx)=>Boolean(doneMap[`${idx}`]));
+    if(allCompleted&&cycleItems.length){
+      state.completedCycleBlocks[campKey]={};
+    }
+    const activeDoneMap=state.completedCycleBlocks[campKey]||{};
+    const doneCount=cycleItems.filter((_,idx)=>activeDoneMap[`${idx}`]).length;
+    if(tagEl)tagEl.textContent=`${doneCount}/${cycleItems.length} blocos no giro`;
+
+    container.innerHTML=cycleItems.slice(0,9).map((item,idx)=>{
+      const completed=Boolean(activeDoneMap[`${idx}`]);
+      const badgeTone=item.highPriority?'priorityHigh':'priorityNormal';
+      return `<div class="cycleBlockCard ${completed?'completed':''} ${badgeTone}">
+        <div class="cycleBlockTop">
+          <span class="eyebrow">BLOCO ${idx+1} · ${item.blocks===2?'PESO 2x (PRIORIDADE 80/20)':'PESO 1x'}</span>
+          <span class="tag">${item.blockMinutes*item.blocks} min</span>
+        </div>
+        <b>${escText(item.subj)}</b>
+        <span class="small muted">${escText(item.mode)} · ${item.pending} pendente(s)${item.accuracy!==null?` · ${item.accuracy}% acerto`:''}</span>
+        <div class="cycleBlockActions">
+          <button type="button" class="ghost small" data-cycle-toggle="${idx}">${completed?'✓ Concluído no giro':'Marcar bloco concluído'}</button>
+          <button type="button" class="ghost small" data-cycle-train="${escText(item.subj)}">◎ Questões</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    qa('[data-cycle-toggle]').forEach(btn=>btn.onclick=()=>{
+      const idx=btn.dataset.cycleToggle;
+      state.completedCycleBlocks=state.completedCycleBlocks||{};
+      state.completedCycleBlocks[campKey]=state.completedCycleBlocks[campKey]||{};
+      state.completedCycleBlocks[campKey][idx]=!state.completedCycleBlocks[campKey][idx];
+      save();
+      renderStudyCycle();
+      toast(state.completedCycleBlocks[campKey][idx]?'Bloco do ciclo concluído!':'Bloco reaberto no ciclo.');
+    });
+    qa('[data-cycle-train]').forEach(btn=>btn.onclick=()=>{
+      const targetSubj=btn.dataset.cycleTrain;
+      openView('report');
+      const subjSel=q('#questionSubject');
+      if(subjSel){
+        const match=[...subjSel.options].find(opt=>topicKey(opt.value)===topicKey(targetSubj));
+        if(match){subjSel.value=match.value;populateTopicFilter();updateQuestionPool()}
+      }
+    });
   }
 
   function renderReverseSchedule(){
     ensureReverseSchedulePanel();
     ensureTopicPanelSearch();
+    renderStudyCycle();
     const panel=q('#reverseSchedulePanel');
     if(!panel)return;
     const campaign=typeof activeCampaign==='function'?activeCampaign():null;
@@ -129,7 +242,7 @@
       : `Cumprindo cerca de ${perWeek} missões por semana (${perStudyDay} por dia de estudo), você fechará 100% do edital antes da prova.`;
   }
 
-  // 2. Filtro de Questões por Tópico, Modo Progressivo (estilo boaResposta) e Reforço de Erros
+  // 2. Filtros Avançados (Tópico, Modo Progressivo, Inéditas/Favoritas estilo TEC/Qconcursos)
   function normalizedOrigin(question){const origin=String(question?.origin||'autoral').toLocaleLowerCase('pt-BR');return /oficial|importad|prova|adaptada/.test(origin)?'oficial':'autoral'}
   function normalizedDifficulty(question){const value=String(question?.difficulty||'medio').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();return value.startsWith('fac')?'facil':value.startsWith('dif')?'dificil':'medio'}
   function topicKey(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
@@ -151,6 +264,16 @@
     });
   }
 
+  function isQuestionFavorited(question){
+    const fp=questionFingerprint(question);
+    return Boolean(state?.favoriteQuestions?.[fp]);
+  }
+
+  function isQuestionAnsweredBefore(question){
+    const fp=questionFingerprint(question);
+    return Boolean(state?.answeredQuestionFingerprints?.[fp]);
+  }
+
   function ensureTopicFilterSelect(){
     const filters=q('.questionFilters');
     if(!filters)return;
@@ -164,6 +287,10 @@
     if(!q('#questionBattleMode')){
       filters.insertAdjacentHTML('beforeend',`<label class="field">Modo de aprendizado<select id="questionBattleMode"><option value="progressive">Desafio progressivo (Fácil → Difícil)</option><option value="balanced">Equilibrado (Mistura níveis)</option><option value="errors">Reforço automático (Meus erros)</option></select></label>`);
       q('#questionBattleMode')?.addEventListener('change',updateQuestionPool);
+    }
+    if(!q('#questionHistoryFilter')){
+      filters.insertAdjacentHTML('beforeend',`<label class="field">Filtro TEC / Caderno<select id="questionHistoryFilter"><option value="all">Todas do banco</option><option value="unanswered">✨ Apenas inéditas (não resolvidas)</option><option value="favorites">⭐ Minhas favoritas</option></select></label>`);
+      q('#questionHistoryFilter')?.addEventListener('change',updateQuestionPool);
     }
     const trainer=q('.questionTrainer');
     if(trainer&&!q('#trainerQuickActions')){
@@ -202,11 +329,17 @@
   }
 
   function filteredQuestionPool(){
-    const subject=q('#questionSubject')?.value||'all',topic=q('#questionTopic')?.value||'all',difficulty=q('#questionDifficulty')?.value||'all',origin=q('#questionOrigin')?.value||'all',battleMode=q('#questionBattleMode')?.value||'progressive';
+    const subject=q('#questionSubject')?.value||'all',topic=q('#questionTopic')?.value||'all',difficulty=q('#questionDifficulty')?.value||'all',origin=q('#questionOrigin')?.value||'all',battleMode=q('#questionBattleMode')?.value||'progressive',historyFilter=q('#questionHistoryFilter')?.value||'all';
     const baseSource=typeof questionsForMode==='function'?questionsForMode('battle',subject):(ALL_QUESTIONS||[]);
     const allMatchingSubject=(ALL_QUESTIONS||[]).filter(item=>subject==='all'||learningCategory(item.subject)===subject);
     const source=allMatchingSubject.length?allMatchingSubject:baseSource;
     let filtered=source.filter(item=>(topic==='all'||topicKey(item?.topic)===topic)&&(difficulty==='all'||normalizedDifficulty(item)===difficulty)&&(origin==='all'||normalizedOrigin(item)===origin));
+    if(historyFilter==='unanswered'){
+      const unanswered=filtered.filter(item=>!isQuestionAnsweredBefore(item));
+      if(unanswered.length)filtered=unanswered;
+    }else if(historyFilter==='favorites'){
+      filtered=filtered.filter(item=>isQuestionFavorited(item));
+    }
     if(battleMode==='errors'){
       const errEntries=activeCampaignErrors();
       const errPool=filtered.filter(item=>questionMatchesErrorPool(item,errEntries));
@@ -316,7 +449,7 @@
     showQuestion();
   }
 
-  // 2B. Resolução Passo a Passo (Estilo boaResposta) + Questão Gêmea
+  // 2B. Resolução Passo a Passo (Estilo boaResposta) + Recursos TEC / Qconcursos / Caveira / Descomplica
   function findRelatedSummary(question){
     if(!Array.isArray(ALL_SUMMARIES)||!ALL_SUMMARIES.length)return null;
     const qSubj=topicKey(learningCategory(question?.subject));
@@ -326,13 +459,15 @@
       || null;
   }
 
-  function formatStepByStepResolution(item,chosenIndex,ok){
+  function formatStepByStepResolution(item,chosenIndex,ok,interactive=true){
     const correctIndex=Number(item.correct_index)||0;
     const correctLetter=String.fromCharCode(65+correctIndex);
     const chosenLetter=Number.isInteger(chosenIndex)?String.fromCharCode(65+chosenIndex):'—';
-    const correctText=item.options?.[correctIndex]||'';
     const rawExp=String(item.explanation||'').trim();
     const related=findRelatedSummary(item);
+    const fp=questionFingerprint(item);
+    const isFav=isQuestionFavorited(item);
+    const savedComment=state?.questionPersonalNotes?.[fp]||'';
 
     const lines=rawExp.split(/\n+|\s*\|\s*/).map(l=>l.trim()).filter(Boolean);
     const conceptLine=lines.find(l=>/^conceito[- ]?chave\s*:/i.test(l));
@@ -371,6 +506,23 @@
       return `<div class="stepOptionItem ${isRight?'isRight':isUserPick?'isWrong':''}"><div><b>${letter})</b> ${escText(opt)}</div>${statusTag}</div>`;
     }).join('');
 
+    const interactiveControls=interactive?`
+      <div class="resolutionActionBar">
+        <button type="button" class="ghost small" id="spawnTwinQuestionBtn">⚡ Gerar questão gêmea</button>
+        <button type="button" class="ghost small" id="explainEasyAnalogyBtn">🧠 Explicar fácil (analogia)</button>
+        <button type="button" class="ghost small" id="createFlashcardFromQuestionBtn">🃏 Virar Flashcard</button>
+        <button type="button" class="ghost small" id="toggleFavoriteQuestionBtn">${isFav?'⭐ Favorita (salva)':'☆ Favoritar questão'}</button>
+        <button type="button" class="ghost small" id="saveQuestionNoteBtn">📌 Salvar no Caderno</button>
+      </div>
+      <div id="easyAnalogyOutput" hidden class="stepResolutionBlock concept" style="margin-top:6px"></div>
+      <div class="personalQuestionBizuBox">
+        <label class="small muted" for="personalQuestionCommentInput">💬 Meu bizu / anotação nesta questão (estilo TEC/Qconcursos):</label>
+        <div class="personalBizuRow">
+          <input type="text" id="personalQuestionCommentInput" value="${escText(savedComment)}" placeholder="Escreva seu mnemônico ou observação rápida para lembrar desta questão...">
+          <button type="button" class="ghost small" id="savePersonalQuestionCommentBtn">Salvar bizu</button>
+        </div>
+      </div>` : '';
+
     return `<div class="boaRespostaResolution ${ok?'isGood':'isBad'}">
       <div class="resolutionHeader">
         <div>
@@ -384,10 +536,7 @@
         <summary>Ver conferência alternativa por alternativa (A–D)</summary>
         <div class="stepOptionsList">${optionsBreakdown}</div>
       </details>
-      <div class="resolutionActionBar">
-        <button type="button" class="ghost small" id="spawnTwinQuestionBtn">⚡ Gerar questão gêmea deste assunto</button>
-        <button type="button" class="ghost small" id="saveQuestionNoteBtn">📌 Salvar resolução no Caderno</button>
-      </div>
+      ${interactiveControls}
     </div>`;
   }
 
@@ -488,12 +637,55 @@
         q('#questionCounter').textContent=`${activeQuestions.current+1}/${activeQuestions.questions.length} · ${normalizedDifficulty(currentItem).toUpperCase()}`;
         q('#nextQuestion').textContent='Responder questão gêmea →';
       }
-      if(btnEl)btnEl.textContent='✓ Questão gêmea adicionada como próxima!';
-      toast('Questão gêmea criada e adicionada à sua sequência!');
+      if(btnEl)btnEl.textContent='✓ Questão gêmea adicionada!';
+      toast('Questão gêmea criada e colocada como próxima da fila!');
     }catch(error){
-      if(btnEl){btnEl.disabled=false;btnEl.textContent='⚡ Gerar questão gêmea deste assunto'}
+      if(btnEl){btnEl.disabled=false;btnEl.textContent='⚡ Gerar questão gêmea'}
       toast(error.message);
     }
+  }
+
+  async function explainQuestionWithEasyAnalogy(item,btnEl){
+    const outBox=q('#easyAnalogyOutput');
+    if(!outBox)return;
+    if(!cloudSession)return toast('Entre na sua conta para usar a explicação com analogia.');
+    if(btnEl){btnEl.disabled=true;btnEl.textContent='⏳ Gerando analogia...'}
+    try{
+      const session=await validSession();
+      if(!session)throw new Error('Sessão expirada.');
+      const correctOpt=item.options?.[Number(item.correct_index)||0]||'';
+      const prompt=`Explique de forma extremamente simples, direta e com uma analogia prática do dia a dia policial por que a resposta correta para a questão abaixo é "${correctOpt}". Máximo de 2 parágrafos curtos.\n\nQuestão: ${item.statement}`;
+      const res=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{
+        method:'POST',
+        headers:{...authHeaders(session.access_token)},
+        body:JSON.stringify({question:prompt,context:item.explanation||'',mode:'explicar',campaign_id:activeCampaign()?.dbId})
+      });
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok)throw new Error(data.error||'Não foi possível gerar a analogia.');
+      outBox.hidden=false;
+      outBox.innerHTML=`<b>🧠 Explicação descomplicada com analogia</b><p>${escText(data.answer||'')}</p>`;
+      if(btnEl)btnEl.textContent='✓ Analogia exibida';
+    }catch(err){
+      if(btnEl){btnEl.disabled=false;btnEl.textContent='🧠 Explicar fácil (analogia)'}
+      toast(err.message);
+    }
+  }
+
+  function createFlashcardFromQuestion(item,btnEl){
+    const correctIdx=Number(item.correct_index)||0;
+    const correctOpt=item.options?.[correctIdx]||'';
+    const subj=canonicalSubjectName(item.subject||'Geral');
+    const cardQ=`[${item.topic||subj}] ${item.statement}`;
+    const cardA=`✅ ${correctOpt}\n\n${item.explanation||''}`.trim();
+    state.customFlashcardsByCampaign=state.customFlashcardsByCampaign||{};
+    const campId=state.activeCampaignId;
+    state.customFlashcardsByCampaign[campId]=state.customFlashcardsByCampaign[campId]||[];
+    state.customFlashcardsByCampaign[campId].push([subj,cardQ,cardA]);
+    ALL_FLASHCARDS.push([subj,cardQ,cardA]);
+    save();
+    if(typeof renderCard==='function')renderCard();
+    if(btnEl){btnEl.disabled=true;btnEl.textContent='✓ Virada em Flashcard!'}
+    toast('Flashcard criado e adicionado à Central de Estudo!');
   }
 
   function saveCurrentQuestionToNotes(item){
@@ -520,7 +712,7 @@
     toast('Questão e resolução passo a passo salvas nas suas Anotações!');
   }
 
-  // Sobrescreve showQuestion e answerQuestion para suportar Desafio Progressivo + Resolução Passo a Passo
+  // Sobrescreve showQuestion e answerQuestion com Tesoura de Alternativas (TEC/Qconcursos) + Resolução Passo a Passo
   window.showQuestion=function(){
     const battle=activeQuestions;
     if(!battle)return;
@@ -533,11 +725,21 @@
       : '';
     q('#questionCounter').textContent=`${battle.current+1}/${battle.questions.length} · ${diffLabel} · ${origin}${levelLabel}`;
     q('#questionText').textContent=item.statement;
-    q('#questionOptions').innerHTML=(item.options||[]).map((o,i)=>`<button data-question-index="${i}"><b>${String.fromCharCode(65+i)}.</b> ${escText(o)}</button>`).join('');
+    q('#questionOptions').innerHTML=(item.options||[]).map((o,i)=>`<div class="optionWithScissors"><button type="button" class="optionMainBtn" data-question-index="${i}"><b>${String.fromCharCode(65+i)}.</b> ${escText(o)}</button><button type="button" class="scissorBtn" data-scissor-index="${i}" title="Riscar/eliminar alternativa (estilo TEC/Qconcursos)" aria-label="Riscar alternativa ${String.fromCharCode(65+i)}">✂</button></div>`).join('');
     q('#questionFeedback').innerHTML='';
     q('#nextQuestion').hidden=true;
     battle.answered=false;
     qa('[data-question-index]').forEach(b=>b.onclick=()=>window.answerQuestion(b,item));
+    qa('[data-scissor-index]').forEach(sBtn=>sBtn.onclick=e=>{
+      e.stopPropagation();
+      if(battle.answered)return;
+      const idx=sBtn.dataset.scissorIndex;
+      const optBtn=q(`[data-question-index="${idx}"]`);
+      if(optBtn){
+        optBtn.classList.toggle('eliminatedOption');
+        sBtn.classList.toggle('active');
+      }
+    });
   };
 
   window.answerQuestion=function(button,item){
@@ -545,6 +747,9 @@
     if(!battle||battle.answered)return;
     battle.answered=true;
     const chosen=Number(button.dataset.questionIndex),correct=Number(item.correct_index),ok=chosen===correct;
+    const fp=questionFingerprint(item);
+    state.answeredQuestionFingerprints=state.answeredQuestionFingerprints||{};
+    state.answeredQuestionFingerprints[fp]=ok?'correct':'wrong';
     recordQuestionResult(item,ok,chosen);
     if(ok){
       battle.correct++;
@@ -556,18 +761,48 @@
       button.classList.add('wrong');
       qa('[data-question-index]').find(b=>Number(b.dataset.questionIndex)===correct)?.classList.add('correct');
     }
-    q('#questionFeedback').innerHTML=formatStepByStepResolution(item,chosen,ok);
-    qa('[data-question-index]').forEach(b=>b.disabled=true);
+    q('#questionFeedback').innerHTML=formatStepByStepResolution(item,chosen,ok,true);
+    qa('[data-question-index],[data-scissor-index]').forEach(b=>b.disabled=true);
+
     const twinBtn=q('#spawnTwinQuestionBtn');
     if(twinBtn)twinBtn.onclick=()=>spawnTwinQuestionForCurrent(item,twinBtn);
+    const analogyBtn=q('#explainEasyAnalogyBtn');
+    if(analogyBtn)analogyBtn.onclick=()=>explainQuestionWithEasyAnalogy(item,analogyBtn);
+    const flashBtn=q('#createFlashcardFromQuestionBtn');
+    if(flashBtn)flashBtn.onclick=()=>createFlashcardFromQuestion(item,flashBtn);
+    const favBtn=q('#toggleFavoriteQuestionBtn');
+    if(favBtn)favBtn.onclick=()=>{
+      state.favoriteQuestions=state.favoriteQuestions||{};
+      if(state.favoriteQuestions[fp]){
+        delete state.favoriteQuestions[fp];
+        favBtn.textContent='☆ Favoritar questão';
+        toast('Removida das favoritas.');
+      }else{
+        state.favoriteQuestions[fp]={savedAt:new Date().toISOString(),subject:item.subject,topic:item.topic};
+        favBtn.textContent='⭐ Favorita (salva)';
+        toast('Questão adicionada às suas Favoritas!');
+      }
+      save();
+      updateQuestionPool();
+    };
     const noteBtn=q('#saveQuestionNoteBtn');
-    if(noteBtn)noteBtn.onclick=()=>{saveCurrentQuestionToNotes(item);noteBtn.disabled=true;noteBtn.textContent='✓ Salva nas Anotações'};
+    if(noteBtn)noteBtn.onclick=()=>{saveCurrentQuestionToNotes(item);noteBtn.disabled=true;noteBtn.textContent='✓ Salva no Caderno'};
+    const bizuSaveBtn=q('#savePersonalQuestionCommentBtn');
+    if(bizuSaveBtn)bizuSaveBtn.onclick=()=>{
+      const val=q('#personalQuestionCommentInput')?.value?.trim()||'';
+      state.questionPersonalNotes=state.questionPersonalNotes||{};
+      if(val)state.questionPersonalNotes[fp]=val;
+      else delete state.questionPersonalNotes[fp];
+      save();
+      toast(val?'Seu bizu pessoal foi salvo nesta questão!':'Bizu removido.');
+    };
+
     q('#nextQuestion').hidden=false;
     q('#nextQuestion').textContent=battle.current===battle.questions.length-1?'Concluir batalha':'Próxima questão →';
     q('#nextQuestion').scrollIntoView({block:'nearest'});
   };
 
-  // 2C. Diagnóstico Tático de Pontos Fortes e Pontos Fracos (Estilo boaResposta)
+  // 2C. Diagnóstico Tático de Pontos Fortes e Pontos Fracos
   function ensureTacticalDiagnosisPanel(){
     const columns=q('#report .reportColumns');
     if(!columns||q('#tacticalDiagnosisPanel'))return;
@@ -641,7 +876,6 @@
           return;
         }
       }
-      // Se ainda não há questões dessa disciplina no banco, abre a aba Gerador no Estilo da Banca já preenchida
       switchExamHubTab('generator');
       if(q('#genBankSubject'))q('#genBankSubject').value=targetSubj;
       q('#examBankHub')?.scrollIntoView({behavior:'smooth',block:'center'});
@@ -658,7 +892,7 @@
     renderTacticalDiagnosis();
   }
 
-  // 3. Central de Provas & Alimentação do Banco (Substitui o card estático "Provas oficiais gratuitas")
+  // 3. Central de Provas & Alimentação do Banco (#examBankHub)
   let activeExamHubTab='catalog';
 
   function ensureExamBankHub(){
@@ -719,11 +953,11 @@
       </div>
       <div class="examHubPanel" id="examHubGeneratorPanel" data-exam-panel="generator" hidden>
         <div class="examGeneratorBox">
-          <div class="eyebrow">ESTILO BOARESPOSTA · RESOLUÇÃO PASSO A PASSO</div>
+          <div class="eyebrow">ESTILO CAVEIRA / TEC / BOARESPOSTA · RESOLUÇÃO PASSO A PASSO</div>
           <h3 style="margin:4px 0 6px">Gerador de Caderno Comentado no Estilo da Banca</h3>
           <p class="small muted" style="margin:0 0 12px">Escolha a banca, a disciplina e o assunto do seu edital. A IA criará questões inéditas com resolução passo a passo (Conceito-chave + análise de cada alternativa + pegadinha) e salvará no seu banco.</p>
           <div class="simuladoConfigGrid" style="margin-bottom:10px">
-            <label class="field" style="margin:0">Banca organizadora<select id="genBankBoard"><option value="Instituto AOCP">Instituto AOCP</option><option value="Cebraspe">Cebraspe</option><option value="FGV Conhecimento">FGV Conhecimento</option><option value="IBFC">IBFC</option><option value="FCC">FCC</option><option value="Vunesp">Vunesp</option></select></label>
+            <label class="field" style="margin:0">Banca organizadora<select id="genBankBoard"><option value="Instituto AOCP">Instituto AOCP</option><option value="Cebraspe">Cebraspe</option><option value="FGV Conhecimento">FGV Conhecimento</option><option value="IBFC">IBFC</option><option value="FCC">FCC</option><option value="Vunesp">Vunesp</option><option value="Projeto Caveira (Policial)">Estilo Caveira (Carreiras Policiais)</option></select></label>
             <label class="field" style="margin:0">Disciplina do portal<select id="genBankSubject"></select></label>
             <label class="field" style="margin:0">Assunto / Tópico foco<select id="genBankTopic"><option value="Geral do edital">Todos os tópicos da disciplina</option></select></label>
           </div>
@@ -832,7 +1066,7 @@
 
     qa('[data-exam-doc-process]').forEach(btn=>btn.onclick=()=>{
       const id=btn.dataset.examDocProcess;
-      if(typeof processStudyDocument==='function')processStudyDocument(id);
+      if(typeof processEditalDocument==='function')processEditalDocument(id);
     });
     qa('[data-exam-doc-battle]').forEach(btn=>btn.onclick=()=>{
       const doc=examDocs.find(d=>d.id===btn.dataset.examDocBattle);
@@ -906,19 +1140,13 @@
     if(libTitle)libTitle.value=titleInput?.value?.trim()||file.name.replace(/\.pdf$/i,'');
     libType.value='prova';
     const btn=q('#quickExamPdfUploadBtn');
-    if(btn){btn.disabled=true;btn.textContent='⏳ Enviando e preparando extração...'}
+    if(btn){btn.disabled=true;btn.textContent='⏳ Enviando e extraindo questões...'}
     try{
       await uploadStudyDocument();
       if(fileInput)fileInput.value='';
       if(titleInput)titleInput.value='';
       switchExamHubTab('catalog');
       renderExamBankHub();
-      const newestExam=(cloudDocuments||[]).find(d=>['prova','simulado'].includes(d.document_type)&&d.processing_status==='pending');
-      if(newestExam&&typeof processStudyDocument==='function'){
-        toast('Prova enviada! Iniciando extração automática das questões...');
-        await processStudyDocument(newestExam.id);
-        renderExamBankHub();
-      }
     }finally{
       if(btn){btn.disabled=false;btn.textContent='Enviar PDF e Extrair Questões'}
     }
@@ -1060,22 +1288,27 @@
     }
   }
 
-  // 4. Modo Simulado Cronometrado com Folha de Respostas
+  // 4. Modo Simulado Cronometrado com Folha de Respostas + Modalidade Líquida Caveira/Cebraspe + Tesoura
   let activeSimulado=null,simuladoTimer=null;
 
   function ensureSimuladoUI(){
     const trainer=q('.questionTrainer');
     if(trainer&&!q('#simuladoLauncher')){
-      trainer.insertAdjacentHTML('afterend',`<div class="card simuladoLauncher" id="simuladoLauncher"><div class="sectionHead"><div><div class="eyebrow">PROVA SIMULADA</div><h2 style="margin:3px 0 0">Simulado Cronometrado com Folha de Respostas</h2><p class="small muted" style="margin:3px 0 0">Monte um caderno completo misturando as disciplinas do portal, navegue livremente pelo gabarito e receba o relatório por matéria ao entregar.</p></div><span class="tag" id="simuladoTotalBadge">0 no banco</span></div><div class="simuladoConfigGrid"><label class="field">Quantidade de questões<select id="simuladoCount"><option value="10">10 questões ( treino rápido )</option><option value="20" selected>20 questões ( simulado curto )</option><option value="30">30 questões ( simulado médio )</option><option value="40">40 questões ( simulado amplo )</option><option value="60">60 questões ( prova completa )</option></select></label><label class="field">Tempo limite<select id="simuladoMinutes"><option value="20">20 minutos</option><option value="40">40 minutos</option><option value="60" selected>1 hora (60 min)</option><option value="90">1h30 (90 min)</option><option value="120">2 horas (120 min)</option><option value="180">3 horas (180 min)</option></select></label><label class="field">Escopo<select id="simuladoScope"><option value="all">Todas as disciplinas do portal</option><option value="filtered">Usar filtros selecionados acima</option></select></label></div><button class="action" id="startSimuladoBtn" style="margin-top:10px">Iniciar Simulado Cronometrado</button></div>`);
+      trainer.insertAdjacentHTML('afterend',`<div class="card simuladoLauncher" id="simuladoLauncher"><div class="sectionHead"><div><div class="eyebrow">PROVA SIMULADA · ESTILO CAVEIRA & BANCAS</div><h2 style="margin:3px 0 0">Simulado Cronometrado com Folha de Respostas</h2><p class="small muted" style="margin:3px 0 0">Monte um caderno completo misturando as disciplinas do portal, elimine alternativas com a tesoura (✂), escolha entre nota tradicional ou líquida (Cebraspe/Caveira) e receba o diagnóstico ao entregar.</p></div><span class="tag" id="simuladoTotalBadge">0 no banco</span></div><div class="simuladoConfigGrid"><label class="field">Quantidade de questões<select id="simuladoCount"><option value="10">10 questões ( treino rápido )</option><option value="20" selected>20 questões ( simulado curto )</option><option value="30">30 questões ( simulado médio )</option><option value="40">40 questões ( simulado amplo )</option><option value="60">60 questões ( prova completa )</option></select></label><label class="field">Tempo limite<select id="simuladoMinutes"><option value="20">20 minutos</option><option value="40">40 minutos</option><option value="60" selected>1 hora (60 min)</option><option value="90">1h30 (90 min)</option><option value="120">2 horas (120 min)</option><option value="180">3 horas (180 min)</option></select></label><label class="field">Escopo<select id="simuladoScope"><option value="all">Todas as disciplinas do portal</option><option value="filtered">Usar filtros selecionados acima</option></select></label><label class="field">Regra de pontuação<select id="simuladoScoringMode"><option value="standard">Tradicional (AOCP / FGV — sem penalidade)</option><option value="liquid">Líquida Caveira / Cebraspe (1 errada anula 1 certa)</option></select></label></div><button class="action" id="startSimuladoBtn" style="margin-top:10px">Iniciar Simulado Cronometrado</button></div>`);
       q('#startSimuladoBtn').onclick=startTimedSimulado;
       q('#simuladoScope').onchange=updateSimuladoAvailability;
     }
     if(!q('#simuladoDialog')){
-      document.body.insertAdjacentHTML('beforeend',`<dialog id="simuladoDialog" class="simuladoDialog"><div class="simuladoTopBar"><div><div class="eyebrow" id="simuladoMetaLabel">SIMULADO CRONOMETRADO</div><h2 id="simuladoTitle" style="margin:2px 0 0;font-size:1.05rem">Caderno de Prova</h2></div><div class="simuladoClockWrap"><span class="simuladoClock" id="simuladoClock">60:00</span><button class="ghost danger small" id="abortSimuladoBtn" type="button">Sair</button></div></div><div id="simuladoStage"><div class="simuladoSheetBar"><div class="small muted" id="simuladoAnsweredCount">0 respondidas</div><div class="simuladoSheetGrid" id="simuladoSheetGrid" aria-label="Folha de respostas"></div></div><div class="questionBox simuladoQuestionBox"><div class="small muted" id="simuladoQuestionMeta"></div><h3 id="simuladoQuestionText" style="margin:8px 0 14px"></h3><div class="questionOptions" id="simuladoOptions"></div></div><div class="simuladoNavRow"><button class="ghost" id="simuladoPrevBtn" type="button">← Anterior</button><button class="ghost" id="simuladoNextBtn" type="button">Próxima →</button><button class="action" id="simuladoSubmitBtn" type="button">Entregar Simulado</button></div></div><div id="simuladoResultStage" hidden></div></dialog>`);
+      document.body.insertAdjacentHTML('beforeend',`<dialog id="simuladoDialog" class="simuladoDialog"><div class="simuladoTopBar"><div><div class="eyebrow" id="simuladoMetaLabel">SIMULADO CRONOMETRADO</div><h2 id="simuladoTitle" style="margin:2px 0 0;font-size:1.05rem">Caderno de Prova</h2></div><div class="simuladoClockWrap"><span class="simuladoClock" id="simuladoClock">60:00</span><button class="ghost danger small" id="abortSimuladoBtn" type="button">Sair</button></div></div><div id="simuladoStage"><div class="simuladoSheetBar"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div class="small muted" id="simuladoAnsweredCount">0 respondidas</div><button type="button" class="ghost small" id="simuladoClearAnswerBtn" style="padding:4px 10px;min-height:30px;font-size:.75rem">␣ Deixar questão em branco</button></div><div class="simuladoSheetGrid" id="simuladoSheetGrid" aria-label="Folha de respostas"></div></div><div class="questionBox simuladoQuestionBox"><div class="small muted" id="simuladoQuestionMeta"></div><h3 id="simuladoQuestionText" style="margin:8px 0 14px"></h3><div class="questionOptions" id="simuladoOptions"></div></div><div class="simuladoNavRow"><button class="ghost" id="simuladoPrevBtn" type="button">← Anterior</button><button class="ghost" id="simuladoNextBtn" type="button">Próxima →</button><button class="action" id="simuladoSubmitBtn" type="button">Entregar Simulado</button></div></div><div id="simuladoResultStage" hidden></div></dialog>`);
       q('#abortSimuladoBtn').onclick=abortTimedSimulado;
       q('#simuladoPrevBtn').onclick=()=>navigateSimulado(-1);
       q('#simuladoNextBtn').onclick=()=>navigateSimulado(1);
       q('#simuladoSubmitBtn').onclick=()=>confirmSubmitSimulado();
+      q('#simuladoClearAnswerBtn').onclick=()=>{
+        if(!activeSimulado)return;
+        activeSimulado.answers[activeSimulado.current]=null;
+        renderSimuladoQuestion();
+      };
     }
   }
 
@@ -1135,6 +1368,7 @@
     if(!pool.length)return toast('Envie um PDF na Biblioteca ou gere questões na Central de Provas para montar o simulado.');
     const wanted=Math.min(pool.length,Math.max(1,Number(q('#simuladoCount')?.value)||20));
     const minutes=Math.max(5,Number(q('#simuladoMinutes')?.value)||60);
+    const scoringMode=q('#simuladoScoringMode')?.value||'standard';
     const questions=buildProportionalSimuladoQuestions(pool,wanted);
     if(!questions.length)return toast('Não foi possível montar o caderno de questões.');
 
@@ -1142,6 +1376,8 @@
     activeSimulado={
       questions,
       answers:new Array(questions.length).fill(null),
+      eliminated:questions.map(()=>new Set()),
+      scoringMode,
       current:0,
       totalSeconds:minutes*60,
       remainingSeconds:minutes*60,
@@ -1152,6 +1388,7 @@
     q('#simuladoStage').hidden=false;
     q('#simuladoResultStage').hidden=true;
     q('#simuladoResultStage').innerHTML='';
+    q('#simuladoMetaLabel').textContent=scoringMode==='liquid'?'SIMULADO CAVEIRA / CEBRASPE (1 ERRADA ANULA 1 CERTA)':'SIMULADO CRONOMETRADO TRADICIONAL';
     q('#simuladoTitle').textContent=`Caderno com ${questions.length} questão${questions.length===1?'':'ões'}`;
     q('#simuladoClock').textContent=formatSimuladoClock(activeSimulado.remainingSeconds);
     q('#simuladoClock').classList.remove('warnText');
@@ -1175,14 +1412,15 @@
 
   function renderSimuladoQuestion(){
     if(!activeSimulado)return;
-    const {questions,answers,current}=activeSimulado;
+    const {questions,answers,eliminated,current}=activeSimulado;
     const item=questions[current];
+    const elimSet=eliminated[current]||new Set();
     const answeredCount=answers.filter(a=>a!==null).length;
-    q('#simuladoAnsweredCount').textContent=`Folha de respostas: ${answeredCount}/${questions.length} marcada${answeredCount===1?'':'s'}`;
+    q('#simuladoAnsweredCount').textContent=`Folha de respostas: ${answeredCount}/${questions.length} marcada${answeredCount===1?'':'s'} (${questions.length-answeredCount} em branco)`;
     q('#simuladoSheetGrid').innerHTML=questions.map((_,i)=>{
       const chosen=answers[i];
       const letter=chosen!==null?String.fromCharCode(65+chosen):'';
-      return `<button type="button" class="sheetBubble ${i===current?'current':''} ${chosen!==null?'answered':''}" data-simulado-jump="${i}" title="Questão ${i+1}${letter?` (Marcada: ${letter})`:''}">${i+1}${letter?`<small>${letter}</small>`:''}</button>`;
+      return `<button type="button" class="sheetBubble ${i===current?'current':''} ${chosen!==null?'answered':''}" data-simulado-jump="${i}" title="Questão ${i+1}${letter?` (Marcada: ${letter})`:' (Em branco)'}">${i+1}${letter?`<small>${letter}</small>`:''}</button>`;
     }).join('');
     qa('[data-simulado-jump]').forEach(btn=>btn.onclick=()=>{activeSimulado.current=Number(btn.dataset.simuladoJump);renderSimuladoQuestion()});
 
@@ -1192,10 +1430,19 @@
     q('#simuladoQuestionText').textContent=item.statement;
     q('#simuladoOptions').innerHTML=(item.options||[]).map((opt,i)=>{
       const selected=answers[current]===i;
-      return `<button type="button" class="${selected?'selectedOption':''}" data-simulado-option="${i}"><b>${String.fromCharCode(65+i)}.</b> ${escText(opt)}</button>`;
+      const isElim=elimSet.has(i);
+      return `<div class="optionWithScissors"><button type="button" class="optionMainBtn ${selected?'selectedOption':''} ${isElim?'eliminatedOption':''}" data-simulado-option="${i}"><b>${String.fromCharCode(65+i)}.</b> ${escText(opt)}</button><button type="button" class="scissorBtn ${isElim?'active':''}" data-simulado-scissor="${i}" title="Riscar/eliminar alternativa">✂</button></div>`;
     }).join('');
     qa('[data-simulado-option]').forEach(btn=>btn.onclick=()=>{
-      activeSimulado.answers[current]=Number(btn.dataset.simuladoOption);
+      const idx=Number(btn.dataset.simuladoOption);
+      activeSimulado.answers[current]=activeSimulado.answers[current]===idx?null:idx;
+      renderSimuladoQuestion();
+    });
+    qa('[data-simulado-scissor]').forEach(sBtn=>sBtn.onclick=e=>{
+      e.stopPropagation();
+      const idx=Number(sBtn.dataset.simuladoScissor);
+      if(elimSet.has(idx))elimSet.delete(idx);
+      else elimSet.add(idx);
       renderSimuladoQuestion();
     });
     q('#simuladoPrevBtn').disabled=current<=0;
@@ -1226,7 +1473,7 @@
     if(!activeSimulado||activeSimulado.finished)return;
     const unanswered=activeSimulado.answers.filter(a=>a===null).length;
     const msg=unanswered>0
-      ? `Você deixou ${unanswered} questão${unanswered===1?'':'ões'} em branco. Deseja entregar o simulado mesmo assim?`
+      ? `Você deixou ${unanswered} questão${unanswered===1?'':'ões'} em branco${activeSimulado.scoringMode==='liquid'?' (sem penalidade na regra líquida)':''}. Deseja entregar o simulado agora?`
       : 'Deseja finalizar e corrigir sua Folha de Respostas agora?';
     if(!confirm(msg))return;
     finishTimedSimulado(false);
@@ -1236,21 +1483,33 @@
     if(!activeSimulado||activeSimulado.finished)return;
     activeSimulado.finished=true;
     clearInterval(simuladoTimer);
-    const {questions,answers,totalSeconds,remainingSeconds}=activeSimulado;
+    const {questions,answers,scoringMode,totalSeconds,remainingSeconds}=activeSimulado;
     const elapsedSeconds=Math.max(1,totalSeconds-remainingSeconds);
     const elapsedMinutes=Math.max(1,Math.round(elapsedSeconds/60));
     const bySubject={};
-    let totalCorrect=0;
+    let totalCorrect=0,totalWrong=0,totalBlank=0;
 
     questions.forEach((item,index)=>{
       const chosen=answers[index];
-      const ok=chosen===Number(item.correct_index);
-      if(ok)totalCorrect++;
+      const isBlank=chosen===null;
+      const ok=!isBlank&&chosen===Number(item.correct_index);
+      if(isBlank)totalBlank++;
+      else if(ok)totalCorrect++;
+      else totalWrong++;
+
       const subj=learningCategory(item.subject)||'Conteúdo geral';
-      bySubject[subj]??={total:0,correct:0};
+      bySubject[subj]??={total:0,correct:0,wrong:0,blank:0};
       bySubject[subj].total++;
-      if(ok)bySubject[subj].correct++;
-      if(typeof recordQuestionResult==='function')recordQuestionResult(item,ok,chosen);
+      if(isBlank)bySubject[subj].blank++;
+      else if(ok)bySubject[subj].correct++;
+      else bySubject[subj].wrong++;
+
+      if(!isBlank){
+        const fp=questionFingerprint(item);
+        state.answeredQuestionFingerprints=state.answeredQuestionFingerprints||{};
+        state.answeredQuestionFingerprints[fp]=ok?'correct':'wrong';
+        if(typeof recordQuestionResult==='function')recordQuestionResult(item,ok,chosen);
+      }
     });
 
     const missions=typeof missionPool==='function'?missionPool():[];
@@ -1269,7 +1528,11 @@
     save();
     render();
 
-    const rate=Math.round(totalCorrect/questions.length*100);
+    const rawRate=Math.round(totalCorrect/questions.length*100);
+    const liquidPoints=Math.max(0,totalCorrect-totalWrong);
+    const liquidRate=Math.round(liquidPoints/questions.length*100);
+    const displayRate=scoringMode==='liquid'?liquidRate:rawRate;
+
     const subjectRows=Object.entries(bySubject).sort((a,b)=>(b[1].correct/b[1].total)-(a[1].correct/a[1].total)).map(([subj,data])=>{
       const subjRate=Math.round(data.correct/data.total*100);
       const tone=subjRate<60?'low':subjRate<80?'mid':'high';
@@ -1278,18 +1541,22 @@
 
     const reviewItems=questions.map((item,i)=>{
       const chosen=answers[i],correct=Number(item.correct_index),ok=chosen===correct;
-      return `<div class="topic" style="border-left:4px solid ${ok?'var(--green)':'var(--red)'};display:block"><div style="margin-bottom:8px"><b>Questão ${i+1} · ${escText(learningCategory(item.subject))}</b> <span class="tag">${ok?'✓ Acertou':'✗ Errou'}</span></div><div class="small" style="margin:6px 0 10px">${escText(item.statement)}</div>${formatStepByStepResolution(item,chosen,ok)}</div>`;
+      return `<div class="topic" style="border-left:4px solid ${chosen===null?'var(--gold)':ok?'var(--green)':'var(--red)'};display:block"><div style="margin-bottom:8px"><b>Questão ${i+1} · ${escText(learningCategory(item.subject))}</b> <span class="tag">${chosen===null?'␣ Em branco':ok?'✓ Acertou':'✗ Errou'}</span></div><div class="small" style="margin:6px 0 10px">${escText(item.statement)}</div>${formatStepByStepResolution(item,chosen,ok,false)}</div>`;
     }).join('');
+
+    const liquidSummary=scoringMode==='liquid'
+      ? `<p class="small" style="margin:6px 0 0;color:var(--cyan)"><b>Pontuação Líquida Caveira/Cebraspe:</b> ${liquidPoints} pts líquidos (${liquidRate}%) · ${totalCorrect} certas − ${totalWrong} erradas · ${totalBlank} em branco.</p>`
+      : '';
 
     q('#simuladoStage').hidden=true;
     const resultStage=q('#simuladoResultStage');
     resultStage.hidden=false;
-    resultStage.innerHTML=`<div class="card"><div class="sectionHead"><div><div class="eyebrow">RESULTADO DO SIMULADO</div><h2>Você acertou ${totalCorrect} de ${questions.length} (${rate}%)</h2><p class="small muted" style="margin:3px 0 0">Tempo utilizado: ${elapsedMinutes} min · Os erros foram enviados automaticamente ao seu Caderno de Erros.</p></div><span class="tag">${rate>=70?'Aprovado no corte (≥70%)':'Abaixo de 70% — revisar'}</span></div><div class="performanceChart" style="margin-top:12px">${subjectRows}</div></div><div class="card"><div class="sectionHead"><h3>Gabarito comentado passo a passo</h3><button class="action" id="closeFinishedSimulado" type="button" style="width:auto;padding:10px 18px">Concluir e fechar</button></div><div class="list">${reviewItems}</div></div>`;
+    resultStage.innerHTML=`<div class="card"><div class="sectionHead"><div><div class="eyebrow">RESULTADO DO SIMULADO</div><h2>Você acertou ${totalCorrect} de ${questions.length} (${rawRate}% bruto)</h2>${liquidSummary}<p class="small muted" style="margin:4px 0 0">Tempo utilizado: ${elapsedMinutes} min · Os erros foram enviados automaticamente ao seu Caderno de Erros.</p></div><span class="tag">${displayRate>=70?'Caveira Aprovado (≥70%)':'Abaixo do corte — revisar'}</span></div><div class="performanceChart" style="margin-top:12px">${subjectRows}</div></div><div class="card"><div class="sectionHead"><h3>Gabarito comentado passo a passo</h3><button class="action" id="closeFinishedSimulado" type="button" style="width:auto;padding:10px 18px">Concluir e fechar</button></div><div class="list">${reviewItems}</div></div>`;
     q('#closeFinishedSimulado').onclick=()=>{
       activeSimulado=null;
       q('#simuladoDialog')?.close();
     };
-    toast(`Simulado concluído: ${totalCorrect}/${questions.length} (${rate}%)`);
+    toast(`Simulado concluído: ${totalCorrect}/${questions.length} (${rawRate}%)`);
   }
 
   function bindQuestionCenter(){
@@ -1298,7 +1565,7 @@
     ensureTacticalDiagnosisPanel();
     ensureExamBankHub();
     q('#questionSubject')?.addEventListener('change',()=>{populateTopicFilter();updateQuestionPool()});
-    for(const selector of ['#questionDifficulty','#questionOrigin','#questionBattleMode'])q(selector)?.addEventListener('change',updateQuestionPool);
+    for(const selector of ['#questionDifficulty','#questionOrigin','#questionBattleMode','#questionHistoryFilter'])q(selector)?.addEventListener('change',updateQuestionPool);
     if(q('#startQuestions'))q('#startQuestions').onclick=startFilteredBattle;
     populateTopicFilter();
     updateQuestionPool();

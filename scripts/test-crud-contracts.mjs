@@ -30,6 +30,9 @@ requireAll("frontend", html, [
   "data.key_source==='personal'",
   "reconcileCloudCampaigns",
   "_ownerUserId",
+  "_activeProcessingDocs",
+  "_autoTriedDocs",
+  "Destravar e Recomeçar Análise",
 ]);
 requireAll("v59-enhancements", enhancements, [
   "window.openPersonalAiSettings",
@@ -37,19 +40,28 @@ requireAll("v59-enhancements", enhancements, [
   "extracting_text",
   "is_question_pack",
   "customQuestionsByCampaign",
+  "customFlashcardsByCampaign",
 ]);
 requireAll("v77-experience", experience, [
   "renderReverseSchedule",
   "reverseSchedulePanel",
+  "renderStudyCycle",
+  "studyCyclePanel",
   "questionTopic",
+  "questionHistoryFilter",
   "populateTopicFilter",
   "startTimedSimulado",
+  "simuladoScoringMode",
   "simuladoSheetGrid",
   "finishTimedSimulado",
   "topicSearchInput",
   "practiceDailySubjectBtn",
+  "startSprint5MinBtn",
   "formatStepByStepResolution",
   "spawnTwinQuestionForCurrent",
+  "explainQuestionWithEasyAnalogy",
+  "createFlashcardFromQuestion",
+  "scissorBtn",
   "progressiveQuestions",
   "startErrorReinforcementBattle",
   "renderTacticalDiagnosis",
@@ -61,6 +73,9 @@ requireAll("v77-experience", experience, [
 requireAll("pdf-text-client", pdfClient, [
   '["edital", "edital_concurso"].includes',
   "_recentUploadedPdfBytes",
+  "_extractedPagesByDocId",
+  "recoverPdfViaAssistant",
+  "compactPagesForInlinePayload",
 ]);
 requireAll("account-security", security, [
   '"delete_document"', '"delete_campaign"', '"delete_essay"',
@@ -77,6 +92,8 @@ requireAll("edital-gemini", edital, [
   "personalGeminiKey",
   "releaseStaleLocks",
   "loadBrowserExtractedEditalText",
+  "fetchWithTimeout",
+  "ensurePdfBytes",
 ]);
 requireAll("material-gemini", material, [
   "parseGeminiJsonText",
@@ -87,6 +104,7 @@ requireAll("material-gemini", material, [
   "personalGeminiKey",
   "releaseStaleLocks",
   "shared_question_bank",
+  "validateExtractedPagesList",
 ]);
 requireAll("redacao-gemini", redacao, [
   "parseGeminiJsonText",
@@ -125,4 +143,4 @@ if (material.includes("gemini-3.8-flash") || material.includes("gemini-3.5-flash
   throw new Error("material-gemini ainda referencia identificadores de modelo inexistentes (3.8/3.5).");
 }
 
-console.log("OK: contratos CRUD, isolamento multiusuário (3+ contas), chave Gemini pessoal, importação de PDFs, recursos boaResposta e Central de Provas validados.");
+console.log("OK: contratos CRUD, anti-loop de PDFs, recuperação automática, chave Gemini pessoal e recursos Caveira/TEC/Qconcursos/Estratégia/Gran validados.");

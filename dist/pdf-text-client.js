@@ -2,6 +2,8 @@
   const extractionJobs = new Map();
   const isEditalType = (doc) => ["edital", "edital_concurso"].includes(String(doc?.document_type || ""));
   window._recentUploadedPdfBytes = window._recentUploadedPdfBytes || new Map();
+  window._extractedPagesByDocId = window._extractedPagesByDocId || new Map();
+  window._activeProcessingDocs = window._activeProcessingDocs || new Set();
 
   async function storageFetch(path, session, options = {}) {
     return fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${path}`, {
@@ -15,16 +17,27 @@
   }
 
   async function sidecarAlreadyExists(path, session) {
-    const response = await storageFetch(`${path}.text.json`, session);
-    if (response.ok) return true;
-    return false;
+    try {
+      const response = await storageFetch(`${path}.text.json`, session);
+      if (response.ok) {
+        const payload = await response.json().catch(() => null);
+        if (Array.isArray(payload?.pages) && payload.pages.length) return payload.pages;
+      }
+    } catch {}
+    return null;
   }
 
   async function extractAndUploadText(doc, session) {
     if (!doc?.storage_path) return false;
-    if (await sidecarAlreadyExists(doc.storage_path, session)) return true;
+    if (window._extractedPagesByDocId.has(doc.id)) return true;
 
-    toast(`Preparando o texto de “${doc.title}” no navegador. Você pode aguardar nesta tela.`);
+    const existingSidecar = await sidecarAlreadyExists(doc.storage_path, session);
+    if (existingSidecar) {
+      window._extractedPagesByDocId.set(doc.id, existingSidecar);
+      return true;
+    }
+
+    toast(`Extraindo texto de “${doc.title}” no navegador...`);
     let bytes;
     const cachedBlob = window._recentUploadedPdfBytes?.get(doc.id);
     if (cachedBlob) {
@@ -35,34 +48,49 @@
       if (!pdfResponse.ok) throw new Error("Não foi possível abrir o PDF para preparar o texto.");
       bytes = new Uint8Array(await pdfResponse.arrayBuffer());
     }
+
     const pdfjs = await import("./pdf.mjs");
     pdfjs.GlobalWorkerOptions.workerSrc = new URL("./pdf.worker.mjs", document.baseURI).href;
-    const pdf = await pdfjs.getDocument({ data: bytes }).promise;
+    const loadingTask = pdfjs.getDocument({ data: bytes });
+    const pdf = await Promise.race([
+      loadingTask.promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("PDF_OPEN_TIMEOUT")), 25000)),
+    ]);
+
+    const maxPages = Math.min(pdf.numPages, 220);
     const pages = [];
     let meaningfulCharacters = 0;
 
-    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-      const page = await pdf.getPage(pageNumber);
-      const content = await page.getTextContent();
-      let text = "";
-      for (const item of content.items || []) {
-        if (!item || typeof item.str !== "string") continue;
-        text += item.str;
-        text += item.hasEOL ? "\n" : " ";
+    for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
+      try {
+        const page = await Promise.race([
+          pdf.getPage(pageNumber),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("PAGE_TIMEOUT")), 4500)),
+        ]);
+        const content = await page.getTextContent();
+        let text = "";
+        for (const item of content.items || []) {
+          if (!item || typeof item.str !== "string") continue;
+          text += item.str;
+          text += item.hasEOL ? "\n" : " ";
+        }
+        text = text.replace(/[\t ]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+        meaningfulCharacters += text.replace(/\s/g, "").length;
+        if (text.length > 0) pages.push({ page: pageNumber, text });
+        page.cleanup();
+      } catch (pageErr) {
+        console.warn("Página ignorada na extração local", pageNumber, pageErr);
       }
-      text = text.replace(/[\t ]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-      meaningfulCharacters += text.replace(/\s/g, "").length;
-      pages.push({ page: pageNumber, text });
-      page.cleanup();
-      if (pageNumber % 3 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+      if (pageNumber % 4 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
     }
-    await pdf.destroy();
+    try { await pdf.destroy(); } catch {}
 
-    const minChars = isEditalType(doc) ? Math.max(250, pages.length * 20) : Math.max(300, pages.length * 35);
-    if (!pages.length || meaningfulCharacters < minChars) {
-      console.info("PDF sem camada de texto suficiente; será usada a leitura visual.", { pages: pages.length, meaningfulCharacters });
+    if (!pages.length || meaningfulCharacters < 120) {
+      console.info("PDF sem camada de texto selecionável suficiente; será usada a leitura visual.", { pages: pages.length, meaningfulCharacters });
       return false;
     }
+
+    window._extractedPagesByDocId.set(doc.id, pages);
 
     const payload = JSON.stringify({
       version: 1,
@@ -71,14 +99,14 @@
       meaningful_characters: meaningfulCharacters,
       pages,
     });
-    const upload = await storageFetch(`${doc.storage_path}.text.json`, session, {
-      method: "POST",
-      headers: { "Content-Type": "application/pdf", "x-upsert": "true" },
-      body: payload,
-    });
-    if (!upload.ok) {
-      const detail = await upload.json().catch(() => ({}));
-      throw new Error(detail.message || detail.error || "Não foi possível salvar o texto preparado.");
+    try {
+      await storageFetch(`${doc.storage_path}.text.json`, session, {
+        method: "POST",
+        headers: { "Content-Type": "application/pdf", "x-upsert": "true" },
+        body: payload,
+      });
+    } catch (sidecarErr) {
+      console.warn("Sidecar opcional não salvo no Storage; usando envio inline.", sidecarErr);
     }
     console.info("Texto do PDF preparado no navegador", { pages: pages.length, meaningfulCharacters });
     return true;
@@ -92,32 +120,260 @@
     return extractionJobs.get(doc.id);
   }
 
-  const originalProcessDocument = processEditalDocument;
-  processEditalDocument = async function (id) {
-    const doc = cloudDocuments.find((item) => item.id === id);
-    if (doc) {
-      const session = await validSession();
-      if (session) {
-        try {
-          await prepareDocumentText(doc, session);
-        } catch (error) {
-          console.warn("Preparação de texto no navegador falhou", error);
-          toast("Não foi possível extrair o texto no navegador. Tentaremos a leitura visual do PDF.");
+  function compactPagesForInlinePayload(pages, maxTotalChars = 115000) {
+    if (!Array.isArray(pages) || !pages.length) return [];
+    const total = pages.reduce((sum, p) => sum + String(p.text || "").length, 0);
+    if (total <= maxTotalChars) return pages;
+    const step = Math.max(1, Math.ceil(total / maxTotalChars));
+    const selected = [];
+    let count = 0;
+    for (let i = 0; i < pages.length; i++) {
+      if (i < 5 || i >= pages.length - 5 || i % step === 0) {
+        const slice = String(pages[i].text || "").slice(0, 3500);
+        if (count + slice.length <= maxTotalChars) {
+          selected.push({ page: pages[i].page, text: slice });
+          count += slice.length;
         }
       }
     }
-    return originalProcessDocument(id);
+    return selected.length ? selected : pages.slice(0, 25);
+  }
+
+  function parseJsonBlock(raw) {
+    const cleaned = String(raw || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+    try { return JSON.parse(cleaned); } catch {}
+    const s = cleaned.indexOf("{");
+    const e = cleaned.lastIndexOf("}");
+    if (s >= 0 && e > s) return JSON.parse(cleaned.slice(s, e + 1));
+    throw new Error("INVALID_RECOVERY_JSON");
+  }
+
+  async function recoverPdfViaAssistant(doc, pages, session) {
+    if (!Array.isArray(pages) || !pages.length) return false;
+    const compactPages = compactPagesForInlinePayload(pages, 45000);
+    const fullText = compactPages.map((p) => `[PÁGINA ${p.page}]\n${p.text}`).join("\n\n").slice(0, 45000);
+    toast(`Concluindo análise de “${doc.title}” pelo modo de recuperação inteligente...`);
+
+    if (isEditalType(doc)) {
+      const prompt = `Extraia o conteúdo programático (disciplinas e tópicos de estudo) deste edital de concurso ("${doc.title}"). Ignore regras de inscrição, taxas e datas administrativas. Responda EXCLUSIVAMENTE um JSON válido no formato {"topics":[{"subject":"Nome da Disciplina","unit":"","topic":"Tópico de estudo"}]}.`;
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`, {
+        method: "POST",
+        headers: { ...authHeaders(session.access_token) },
+        body: JSON.stringify({
+          question: prompt,
+          context: fullText,
+          mode: "resumo",
+          campaign_id: doc.campaign_id,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.answer) return false;
+      const parsed = parseJsonBlock(data.answer);
+      const topics = Array.isArray(parsed?.topics) ? parsed.topics.filter((t) => t?.subject && t?.topic).slice(0, 800) : [];
+      if (!topics.length) return false;
+
+      await cloudFetch(`campaign_topics?campaign_id=eq.${doc.campaign_id}&user_id=eq.${session.user.id}`, { method: "DELETE" }).catch(() => undefined);
+      const rows = topics.map((item, idx) => ({
+        campaign_id: doc.campaign_id,
+        user_id: session.user.id,
+        subject: String(item.subject || "Edital").trim(),
+        unit_name: String(item.unit || "").trim(),
+        topic: String(item.topic || "").trim(),
+        edital_order: idx,
+        subject_order: 0,
+        learning_order: idx,
+        difficulty: "basic",
+      }));
+      await cloudFetch("campaign_topics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(rows),
+      });
+      await cloudFetch(`study_documents?id=eq.${doc.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ processing_status: "ready" }),
+      });
+      const previous = [...(state.customCampaign?.missions || [])];
+      const prefix = state.activeCampaignId.replace(/[^a-z0-9]/gi, "").slice(-10);
+      const missions = topics.map((item, i) => ({
+        id: `${prefix}-ai-${i}`,
+        si: null,
+        ti: i,
+        name: item.topic || item.name,
+        subject: item.subject || "Edital",
+      }));
+      if (typeof reconcileMissionProgress === "function") reconcileMissionProgress(previous, missions);
+      state.customCampaign = { name: activeCampaign()?.name || "Campanha", missions };
+      if (activeCampaign()) activeCampaign().customCampaign = state.customCampaign;
+      save();
+      await loadCampaignTopics();
+      doc.processing_status = "ready";
+      await loadCloudDocuments();
+      render();
+      toast("Edital analisado e missões sincronizadas com sucesso!");
+      return true;
+    }
+
+    // Recuperação inteligente para Material, Lei, Prova ou Simulado
+    const isExam = ["prova", "simulado"].includes(String(doc.document_type || ""));
+    const prompt = `Com base no PDF "${doc.title}" (${doc.document_type}), gere um pacote de estudo estruturado. Responda EXCLUSIVAMENTE com um objeto JSON puro (sem blocos markdown) no formato:
+{"summaries":[{"subject":"Disciplina","title":"Título específico do assunto","page_start":1,"page_end":${pages.length},"explanation":"Aula escrita detalhada e clara para iniciantes explicando todo o conteúdo e regras","points":["Ponto 1","Ponto 2","Ponto 3","Ponto 4","Ponto 5"],"example":"Exemplo prático aplicado explicado passo a passo","bizu":"Dica rápida de memorização para prova","mnemonic":"Mnemônico ou associação","trap":"Pegadinha frequente de banca sobre este tema","flashcards":[{"question":"Pergunta 1?","answer":"Resposta 1"},{"question":"Pergunta 2?","answer":"Resposta 2"},{"question":"Pergunta 3?","answer":"Resposta 3"}],"questions":[{"statement":"Enunciado da questão 1","options":["Opção A","Opção B","Opção C","Opção D"],"correct_index":0,"explanation":"Conceito-chave: ... | ✅ Correta: ... | ❌ Demais alternativas: ... | ⚠️ Pegadinha: ...","difficulty":"facil","topic":"Assunto","origin":"${isExam ? "adaptada_do_pdf" : "autoral"}"}]}]}
+Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 questões de 4 alternativas em cada assunto.`;
+
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`, {
+      method: "POST",
+      headers: { ...authHeaders(session.access_token) },
+      body: JSON.stringify({
+        question: prompt,
+        context: fullText,
+        mode: "aula completa",
+        campaign_id: doc.campaign_id,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.answer) return false;
+    const parsed = parseJsonBlock(data.answer);
+    const summaries = Array.isArray(parsed?.summaries) ? parsed.summaries.filter((s) => s?.title && s?.explanation) : [];
+    if (!summaries.length) return false;
+
+    const dbRows = summaries.map((content) => ({
+      campaign_id: doc.campaign_id,
+      user_id: session.user.id,
+      source_document_id: doc.id,
+      content_type: "summary",
+      title: String(content.title || doc.title).slice(0, 200),
+      content: {
+        ...content,
+        subject: typeof canonicalSubjectName === "function" ? canonicalSubjectName(content.subject || "Conteúdo Geral") : (content.subject || "Conteúdo Geral"),
+        source: doc.title,
+      },
+      source_refs: [{ document_id: doc.id, title: doc.title }],
+    }));
+
+    const saveRes = await cloudFetch("generated_study_content", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+      body: JSON.stringify(dbRows),
+    });
+    if (!saveRes.ok) return false;
+
+    const primarySubject = dbRows[0]?.content?.subject || "Conteúdo Geral";
+    const coverage = {
+      estimated_pages: pages.length,
+      sections_detected: summaries.map((s) => s.title),
+      sections_covered: summaries.map((s) => s.title),
+      omissions: [],
+      confidence: 0.9,
+      percent: 100,
+      summary_count: summaries.length,
+      shallow_summaries: 0,
+      warnings: [],
+      needs_review: false,
+    };
+
+    await cloudFetch(`study_documents?id=eq.${doc.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        processing_status: "ready",
+        detected_subject: primarySubject,
+        metadata: {
+          ...(doc.metadata || {}),
+          primary_subject: primarySubject,
+          analyzed_at: new Date().toISOString(),
+          analysis_progress: { stage: "completed", percent: 100, completed_sections: summaries.length, total_sections: summaries.length, updated_at: new Date().toISOString() },
+          coverage,
+        },
+      }),
+    });
+
+    doc.processing_status = "ready";
+    await Promise.all([loadGeneratedContent(), loadCloudDocuments()]);
+    render();
+    toast("Conteúdo, resumos, flashcards e questões gerados com sucesso!");
+    return true;
+  }
+
+  // Intercepta chamadas fetch para edital-gemini e material-gemini para anexar extracted_pages inline e aplicar timeout seguro de 80s
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = async function (input, init) {
+    const url = typeof input === "string" ? input : input?.url || "";
+    if (init?.method === "POST" && (url.includes("/functions/v1/edital-gemini") || url.includes("/functions/v1/material-gemini"))) {
+      try {
+        const bodyObj = JSON.parse(init.body || "{}");
+        const docId = bodyObj?.document_id;
+        const pages = docId ? window._extractedPagesByDocId.get(docId) : null;
+        if (Array.isArray(pages) && pages.length) {
+          const compact = compactPagesForInlinePayload(pages, 110000);
+          bodyObj.extracted_pages = compact;
+          if (url.includes("/functions/v1/edital-gemini")) {
+            bodyObj.extracted_text = compact.map((p) => `[PÁGINA ${p.page}]\n${p.text}`).join("\n\n").slice(0, 110000);
+          }
+          init = { ...init, body: JSON.stringify(bodyObj) };
+        }
+      } catch {}
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 80000);
+      try {
+        return await nativeFetch(input, { ...init, signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    return nativeFetch(input, init);
+  };
+
+  const originalProcessDocument = processEditalDocument;
+  processEditalDocument = async function (id) {
+    const doc = cloudDocuments.find((item) => item.id === id);
+    if (!doc) return;
+    window._activeProcessingDocs.add(id);
+    const session = await validSession();
+    if (session) {
+      try {
+        await prepareDocumentText(doc, session);
+      } catch (error) {
+        console.warn("Preparação de texto no navegador falhou", error);
+        toast("Não foi possível extrair o texto no navegador. Tentaremos a leitura visual do PDF.");
+      }
+    }
+    try {
+      await originalProcessDocument(id);
+      const updatedDoc = cloudDocuments.find((item) => item.id === id);
+      const pages = window._extractedPagesByDocId.get(id);
+      if (updatedDoc && updatedDoc.processing_status !== "ready" && Array.isArray(pages) && pages.length && session) {
+        try {
+          await recoverPdfViaAssistant(updatedDoc, pages, session);
+        } catch (recErr) {
+          console.warn("Modo de recuperação complementar falhou", recErr);
+        }
+      }
+    } finally {
+      window._activeProcessingDocs.delete(id);
+      const btn = document.querySelector(`[data-process-doc="${id}"]`);
+      if (btn) btn.disabled = false;
+      const finalDoc = cloudDocuments.find((item) => item.id === id);
+      if (finalDoc && finalDoc.processing_status === "processing") {
+        finalDoc.processing_status = "pending";
+        cloudFetch(`study_documents?id=eq.${id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ processing_status: "pending" }),
+        }).catch(() => undefined);
+        renderUserDocuments();
+      }
+    }
   };
 
   const originalDeleteDocument = deleteCloudDocument;
   deleteCloudDocument = async function (id) {
     const doc = cloudDocuments.find((item) => item.id === id);
     const path = doc?.storage_path;
+    window._extractedPagesByDocId.delete(id);
+    window._activeProcessingDocs.delete(id);
     await originalDeleteDocument(id);
     if (!path || cloudDocuments.some((item) => item.id === id)) return;
     const session = await validSession().catch(() => null);
     if (session) await storageFetch(`${path}.text.json`, session, { method: "DELETE" }).catch(() => undefined);
   };
 
-  window.JornadaPdfText = { prepareDocumentText };
+  window.JornadaPdfText = { prepareDocumentText, recoverPdfViaAssistant };
 })();

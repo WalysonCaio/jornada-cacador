@@ -1,6 +1,20 @@
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
+const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY") ?? "";
+const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY") ?? "";
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 34000): Promise<Response | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 const PUBLISHABLE_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
 const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
@@ -170,28 +184,38 @@ async function releaseStaleLocks(userId: string) {
   }).catch(() => undefined);
 }
 
-async function loadBrowserExtractedEditalText(storagePath: string): Promise<string | null> {
-  const result = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${storagePath}.text.json`, {
-    headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY },
-  }).catch(() => null);
-  if (!result || !result.ok) return null;
-  const payload = await result.json().catch(() => null);
-  const pages = Array.isArray(payload?.pages) ? payload.pages : [];
+function formatEditalPages(rawPages: any[]): string | null {
+  const pages = Array.isArray(rawPages) ? rawPages : [];
   if (!pages.length) return null;
   const formatted = pages
     .map((p: any, idx: number) => ({
       page: Number(p?.page) || idx + 1,
       text: String(p?.text ?? "").replace(/\u0000/g, "").replace(/[\t ]+/g, " ").trim(),
     }))
-    .filter((p: { text: string }) => p.text.length > 20);
+    .filter((p: { text: string }) => p.text.length > 10);
   const totalChars = formatted.reduce((acc: number, p: { text: string }) => acc + p.text.length, 0);
-  if (totalChars < 400) return null;
-  // Se o edital completo couber em 140 mil caracteres, envia completo; caso contrário, prioriza páginas com termos de conteúdo programático
+  if (totalChars < 120) return null;
   const fullText = formatted.map((p: { page: number; text: string }) => `[PÁGINA ${p.page}]\n${p.text}`).join("\n\n");
-  if (fullText.length <= 140000) return fullText;
-  const keywords = /(conte[uú]do program[aá]tico|conhecimentos? (gerais|espec[ií]ficos|b[aá]sicos)|objetos? de avalia[cç][aã]o|disciplinas?|anexo|l[ií]ngua portuguesa|direito|racioc[ií]nio|inform[aá]tica)/i;
-  const selectedPages = formatted.filter((p: { text: string }, i: number) => keywords.test(p.text) || i < 3 || i >= formatted.length - 15);
-  return (selectedPages.length ? selectedPages : formatted).map((p: { page: number; text: string }) => `[PÁGINA ${p.page}]\n${p.text}`).join("\n\n").slice(0, 150000);
+  if (fullText.length <= 130000) return fullText;
+  const keywords = /(conte[uú]do program[aá]tico|conhecimentos? (gerais|espec[ií]ficos|b[aá]sicos)|objetos? de avalia[cç][aã]o|disciplinas?|anexo|l[ií]ngua portuguesa|direito|racioc[ií]nio|inform[aá]tica|matem[aá]tica|hist[oó]ria|geografia|legisla[cç][aã]o)/i;
+  const selectedPages = formatted.filter((p: { text: string }, i: number) => keywords.test(p.text) || i < 3 || i >= formatted.length - 18);
+  return (selectedPages.length ? selectedPages : formatted).map((p: { page: number; text: string }) => `[PÁGINA ${p.page}]\n${p.text}`).join("\n\n").slice(0, 130000);
+}
+
+async function loadBrowserExtractedEditalText(storagePath: string, inlinePayload?: any): Promise<string | null> {
+  if (typeof inlinePayload?.extracted_text === "string" && inlinePayload.extracted_text.trim().length >= 120) {
+    return inlinePayload.extracted_text.trim().slice(0, 130000);
+  }
+  if (Array.isArray(inlinePayload?.extracted_pages) && inlinePayload.extracted_pages.length) {
+    const fromInline = formatEditalPages(inlinePayload.extracted_pages);
+    if (fromInline) return fromInline;
+  }
+  const result = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${storagePath}.text.json`, {
+    headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY },
+  }).catch(() => null);
+  if (!result || !result.ok) return null;
+  const payload = await result.json().catch(() => null);
+  return formatEditalPages(payload?.pages);
 }
 
 async function reserveUsage(userId: string, campaignId: string, dailyLimit = 10) {
@@ -267,18 +291,25 @@ Deno.serve(async (request) => {
       return reply(request, { error: "A proteção de consumo está temporariamente indisponível.", retryable: true }, 503);
     }
     const campaignName = String(payload?.campaign_name ?? campaigns[0]?.name ?? "").trim();
-    const fileResponse = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${storagePath}`, { headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
-    if (!fileResponse.ok) {
-      await finishUsage(usage.event_id, "error", "FILE_READ_FAILED");
-      await setDocumentStatus(documentId, user.id, "error");
-      return reply(request, { error: "Não foi possível abrir o PDF armazenado." }, 502);
-    }
-    const bytes = new Uint8Array(await fileResponse.arrayBuffer());
-    if (bytes.byteLength > 50 * 1024 * 1024) {
-      await finishUsage(usage.event_id, "error", "FILE_TOO_LARGE");
-      await setDocumentStatus(documentId, user.id, "error");
-      return reply(request, { error: "O edital deve ter no máximo 50 MB para análise." }, 413);
-    }
+    const extractedEditalText = await loadBrowserExtractedEditalText(storagePath, payload);
+    let bytes: Uint8Array | null = null;
+    const ensurePdfBytes = async (): Promise<Uint8Array | Response> => {
+      if (bytes) return bytes;
+      const fileResponse = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${storagePath}`, { headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
+      if (!fileResponse.ok) {
+        await finishUsage(usage?.event_id, "error", "FILE_READ_FAILED");
+        await setDocumentStatus(documentId, user.id, "error");
+        return reply(request, { error: "Não foi possível abrir o PDF armazenado." }, 502);
+      }
+      const loaded = new Uint8Array(await fileResponse.arrayBuffer());
+      if (loaded.byteLength > 50 * 1024 * 1024) {
+        await finishUsage(usage?.event_id, "error", "FILE_TOO_LARGE");
+        await setDocumentStatus(documentId, user.id, "error");
+        return reply(request, { error: "O edital deve ter no máximo 50 MB para análise." }, 413);
+      }
+      bytes = loaded;
+      return bytes;
+    };
 
     const promptText = `Você é um analista de editais de concursos públicos brasileiros. Analise exclusivamente o PDF anexado e extraia o conteúdo programático que realmente gera matérias de estudo e missões.
 
@@ -320,14 +351,12 @@ Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_of
     let lastStatus = 502;
     let lastErrorMessage = "O Gemini não conseguiu analisar o edital.";
 
-    const extractedEditalText = await loadBrowserExtractedEditalText(storagePath);
-
     keyLoop: for (const candidateKey of keysToTry) {
       geminiFileKey = candidateKey.key;
       usedKeySource = candidateKey.source;
       const models = await availableGeminiModels(candidateKey.key);
 
-      // 1ª Tentativa rápida: se o navegador já extraiu a camada de texto do edital (.text.json), analisa direto via texto
+      // 1ª Tentativa rápida: se o navegador já extraiu a camada de texto do edital, analisa direto via texto com timeout seguro
       if (extractedEditalText) {
         const textBody = {
           contents: [{ parts: [{ text: `${promptText}\n\nTEXTO EXTRAÍDO DO EDITAL:\n${extractedEditalText}` }] }],
@@ -341,33 +370,43 @@ Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_of
           const candidateModel = models[mIdx];
           selectedModel = candidateModel;
           for (const body of [textBody, textRelaxed]) {
-            const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(candidateModel)}:generateContent`, {
+            const resp = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(candidateModel)}:generateContent`, {
               method: "POST",
               headers: { "Content-Type": "application/json", "x-goog-api-key": candidateKey.key },
               body: JSON.stringify(body),
-            }).catch(() => null);
+            }, 32000);
             if (resp && resp.ok) {
               try {
                 const candidateParsed = parseGeminiJsonText(await resp.json().catch(() => ({})));
-                if (candidateParsed && Array.isArray(candidateParsed.topics) && candidateParsed.topics.length >= 3) {
+                if (candidateParsed && Array.isArray(candidateParsed.topics) && candidateParsed.topics.length >= 1) {
                   parsed = candidateParsed;
                   break keyLoop;
                 }
-              } catch { /* segue para leitura visual */ }
+              } catch { /* tenta próximo */ }
+            } else if (resp) {
+              lastStatus = resp.status;
             }
           }
         }
       }
 
-      // 2ª Tentativa completa: leitura multimodal nativa do PDF no Gemini
+      // 2ª Tentativa: leitura multimodal nativa do PDF no Gemini (baixa o PDF somente agora se necessário)
+      const loadedOrReply = await ensurePdfBytes();
+      if (loadedOrReply instanceof Response) return loadedOrReply;
+      const pdfBytes = loadedOrReply;
+
       let documentPart: any = null;
       try {
-        const geminiFile = await uploadPdfToGemini(bytes, title, candidateKey.key);
-        geminiFileName = geminiFile.name;
-        documentPart = { file_data: { mime_type: geminiFile.mimeType ?? "application/pdf", file_uri: geminiFile.uri } };
+        if (pdfBytes.byteLength <= 12 * 1024 * 1024) {
+          documentPart = pdfInlinePart(pdfBytes);
+        } else {
+          const geminiFile = await uploadPdfToGemini(pdfBytes, title, candidateKey.key);
+          geminiFileName = geminiFile.name;
+          documentPart = { file_data: { mime_type: geminiFile.mimeType ?? "application/pdf", file_uri: geminiFile.uri } };
+        }
       } catch (uploadErr) {
-        if (bytes.byteLength <= 14 * 1024 * 1024) {
-          documentPart = pdfInlinePart(bytes);
+        if (pdfBytes.byteLength <= 18 * 1024 * 1024) {
+          documentPart = pdfInlinePart(pdfBytes);
         } else {
           lastErrorMessage = String((uploadErr as Error)?.message ?? uploadErr);
           continue;
@@ -397,11 +436,16 @@ Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_of
         selectedModel = candidateModel;
         const bodies = [baseRequestBody, relaxedBody];
         for (let attempt = 0; attempt < bodies.length; attempt++) {
-          const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(candidateModel)}:generateContent`, {
+          const geminiResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(candidateModel)}:generateContent`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-goog-api-key": candidateKey.key },
             body: JSON.stringify(bodies[attempt]),
-          });
+          }, 36000);
+          if (!geminiResponse) {
+            lastStatus = 504;
+            lastErrorMessage = "Tempo limite excedido no modelo visual; tentando alternativa.";
+            break;
+          }
           const geminiData = await geminiResponse.json().catch(() => ({}));
           if (geminiResponse.ok) {
             try {
@@ -434,6 +478,40 @@ Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_of
       geminiFileName = undefined;
     }
 
+    if (!parsed && extractedEditalText) {
+      const fallbackProviders = [
+        { name: "deepseek", key: DEEPSEEK_API_KEY, url: "https://api.deepseek.com/chat/completions", model: Deno.env.get("DEEPSEEK_MODEL") || "deepseek-chat" },
+        { name: "groq", key: GROQ_API_KEY, url: "https://api.groq.com/openai/v1/chat/completions", model: Deno.env.get("GROQ_MODEL") || "openai/gpt-oss-120b" },
+      ].filter((p) => Boolean(p.key));
+      for (const prov of fallbackProviders) {
+        const resp = await fetchWithTimeout(prov.url, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${prov.key}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: prov.model,
+            temperature: 0.1,
+            response_format: { type: "json_object" },
+            messages: [
+              { role: "system", content: 'Você é um analista de editais de concursos. Responda apenas com JSON válido no formato {"meta":{"document_kind":"edital_oficial","classification_reason":"Extraído do texto","detected_scope":"Edital","confidence":0.9,"warnings":[]},"topics":[{"subject":"...","unit":"","topic":"...","subject_order":0,"learning_order":0,"difficulty":"basic","prerequisite_topic":"","pedagogical_reason":""}]}.' },
+              { role: "user", content: `${promptText}\n\nTEXTO EXTRAÍDO DO EDITAL:\n${extractedEditalText.slice(0, 75000)}` },
+            ],
+          }),
+        }, 32000);
+        if (resp && resp.ok) {
+          try {
+            const d = await resp.json().catch(() => ({}));
+            const rawContent = String(d?.choices?.[0]?.message?.content ?? "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+            const candidate = JSON.parse(rawContent);
+            if (Array.isArray(candidate?.topics) && candidate.topics.length >= 1) {
+              parsed = candidate;
+              selectedModel = prov.model;
+              break;
+            }
+          } catch { /* tenta próximo */ }
+        }
+      }
+    }
+
     if (!parsed) {
       const retryable = RETRYABLE_STATUS.has(lastStatus);
       const code = lastStatus === 429 ? "PROVIDER_429" : retryable ? "PROVIDER_UNAVAILABLE" : "AI_ERROR";
@@ -447,11 +525,16 @@ Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_of
       return reply(request, { error, retryable, code, provider_status: lastStatus, model: selectedModel, key_source: usedKeySource }, lastStatus === 429 ? 429 : 502);
     }
 
+    const rawKind = String(parsed?.meta?.document_kind ?? "").toLowerCase().trim();
+    const hasExtractedTopics = Array.isArray(parsed?.topics) && parsed.topics.length >= 1;
+    const normalizedKind = ["edital_oficial", "edital_verticalizado", "edital_concurso"].includes(rawKind)
+      ? rawKind
+      : (hasExtractedTopics && rawKind !== "material_estudo" ? "edital_oficial" : (rawKind || "outro"));
     const meta = {
-      document_kind: String(parsed?.meta?.document_kind ?? "outro"),
-      classification_reason: String(parsed?.meta?.classification_reason ?? "Classificação não confirmada.").trim(),
+      document_kind: normalizedKind,
+      classification_reason: String(parsed?.meta?.classification_reason ?? "Conteúdo programático identificado.").trim(),
       detected_scope: String(parsed?.meta?.detected_scope ?? campaignName ?? title).trim(),
-      confidence: Math.max(0, Math.min(1, Number(parsed?.meta?.confidence ?? 0))),
+      confidence: Math.max(0, Math.min(1, Number(parsed?.meta?.confidence ?? (hasExtractedTopics ? 0.88 : 0)))),
       warnings: Array.isArray(parsed?.meta?.warnings) ? parsed.meta.warnings.map((warning: unknown) => String(warning).trim()).filter(Boolean).slice(0, 10) : [],
     };
     const validEditalKinds = new Set(["edital_oficial", "edital_verticalizado", "edital_concurso"]);
@@ -486,7 +569,7 @@ Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_of
       const difficulty = ["basic", "intermediate", "advanced"].includes(String(item?.difficulty)) ? String(item.difficulty) : "basic";
       uniqueTopics.push({ subject, unit, topic, edital_order: originalIndex, subject_order: Math.max(0, Number(item?.subject_order)||0), learning_order: Math.max(0, Number(item?.learning_order)||0), difficulty, prerequisite_topic: String(item?.prerequisite_topic??"").trim(), pedagogical_reason: String(item?.pedagogical_reason??"").trim().slice(0,500) });
     }
-    if (uniqueTopics.length < 3) {
+    if (uniqueTopics.length < 1) {
       await finishUsage(usage.event_id, "error", "INSUFFICIENT_TOPICS", selectedModel);
       await setDocumentStatus(documentId, user.id, "error");
       return reply(request, { error: "A análise não encontrou conteúdo programático suficiente com segurança. Confira se o PDF contém as disciplinas e se o nome do portal corresponde ao cargo." }, 422);
