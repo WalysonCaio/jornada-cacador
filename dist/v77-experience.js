@@ -26,6 +26,37 @@
     const errors=Object.values(state?.errors||{}).reduce((sum,item)=>sum+Number(item?.misses||0),0);
     if(q('#urgentReviewMeta'))q('#urgentReviewMeta').textContent=errors?`${errors} erro${errors===1?'':'s'} pedindo atenção`:'Nenhum erro urgente no momento';
     if(q('#questionShortcutMeta'))q('#questionShortcutMeta').textContent=`${ALL_QUESTIONS?.length||0} questão${ALL_QUESTIONS?.length===1?'':'ões'} disponíveis`;
+
+    // Adiciona atalho direto no cartão da missão diária para treinar questões da disciplina do dia
+    const dailyBox=q('#dailyMission');
+    if(dailyBox&&mission&&!q('#practiceDailySubjectBtn')){
+      const finishBtn=q('#finishDaily');
+      if(finishBtn){
+        finishBtn.insertAdjacentHTML('afterend',`<button class="ghost" id="practiceDailySubjectBtn" type="button" style="width:100%;margin-top:8px">Treinar questões de ${escText(mission.subject||'esta disciplina')}</button>`);
+        q('#practiceDailySubjectBtn').onclick=()=>{
+          openView('report');
+          const subjSel=q('#questionSubject');
+          if(subjSel){
+            const match=[...subjSel.options].find(opt=>topicKey(opt.value)===topicKey(mission.subject));
+            if(match){subjSel.value=match.value;populateTopicFilter();updateQuestionPool()}
+          }
+        };
+      }
+    }
+  }
+
+  // Busca rápida de tópicos dentro de #topicPanel no Mapa do Edital (#map)
+  function ensureTopicPanelSearch(){
+    const panel=q('#topicPanel'),list=q('#topicList');
+    if(!panel||!list||q('#topicSearchInput'))return;
+    list.insertAdjacentHTML('beforebegin',`<div class="searchBox" style="position:static;margin-bottom:10px;padding:7px 10px"><input id="topicSearchInput" type="search" placeholder="Filtrar tópicos desta disciplina..." aria-label="Filtrar tópicos desta disciplina"></div>`);
+    q('#topicSearchInput').oninput=e=>{
+      const term=topicKey(e.target.value);
+      qa('#topicList .topic').forEach(label=>{
+        const text=topicKey(label.textContent);
+        label.style.display=!term||text.includes(term)?'':'none';
+      });
+    };
   }
 
   // 1. Cronograma Reverso até a Data da Prova
@@ -37,6 +68,7 @@
 
   function renderReverseSchedule(){
     ensureReverseSchedulePanel();
+    ensureTopicPanelSearch();
     const panel=q('#reverseSchedulePanel');
     if(!panel)return;
     const campaign=typeof activeCampaign==='function'?activeCampaign():null;

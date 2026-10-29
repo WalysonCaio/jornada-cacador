@@ -39,6 +39,7 @@ async function availableGeminiModels(geminiKey: string): Promise<string[]> {
       console.log("Gemini edital models", unique);
       return unique;
     } catch (error) {
+      modelDiscovery.delete(geminiKey);
       console.error("Gemini model discovery", String((error as Error)?.message ?? error));
       const fallback = [...new Set([configured, ...FALLBACK_MODELS].filter(Boolean))];
       if (fallback.length) return fallback;
@@ -160,7 +161,41 @@ async function removeGeminiFile(name?: string, geminiKey = GEMINI_API_KEY) {
   }).catch(() => undefined);
 }
 
+async function releaseStaleLocks(userId: string) {
+  const cutoff = new Date(Date.now() - 90 * 1000).toISOString();
+  await fetch(`${SUPABASE_URL}/rest/v1/ai_usage_events?user_id=eq.${encodeURIComponent(userId)}&status=eq.started&created_at=lt.${encodeURIComponent(cutoff)}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "error", error_code: "STALE_RELEASED" }),
+  }).catch(() => undefined);
+}
+
+async function loadBrowserExtractedEditalText(storagePath: string): Promise<string | null> {
+  const result = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${storagePath}.text.json`, {
+    headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY },
+  }).catch(() => null);
+  if (!result || !result.ok) return null;
+  const payload = await result.json().catch(() => null);
+  const pages = Array.isArray(payload?.pages) ? payload.pages : [];
+  if (!pages.length) return null;
+  const formatted = pages
+    .map((p: any, idx: number) => ({
+      page: Number(p?.page) || idx + 1,
+      text: String(p?.text ?? "").replace(/\u0000/g, "").replace(/[\t ]+/g, " ").trim(),
+    }))
+    .filter((p: { text: string }) => p.text.length > 20);
+  const totalChars = formatted.reduce((acc: number, p: { text: string }) => acc + p.text.length, 0);
+  if (totalChars < 400) return null;
+  // Se o edital completo couber em 140 mil caracteres, envia completo; caso contrário, prioriza páginas com termos de conteúdo programático
+  const fullText = formatted.map((p: { page: number; text: string }) => `[PÁGINA ${p.page}]\n${p.text}`).join("\n\n");
+  if (fullText.length <= 140000) return fullText;
+  const keywords = /(conte[uú]do program[aá]tico|conhecimentos? (gerais|espec[ií]ficos|b[aá]sicos)|objetos? de avalia[cç][aã]o|disciplinas?|anexo|l[ií]ngua portuguesa|direito|racioc[ií]nio|inform[aá]tica)/i;
+  const selectedPages = formatted.filter((p: { text: string }, i: number) => keywords.test(p.text) || i < 3 || i >= formatted.length - 15);
+  return (selectedPages.length ? selectedPages : formatted).map((p: { page: number; text: string }) => `[PÁGINA ${p.page}]\n${p.text}`).join("\n\n").slice(0, 150000);
+}
+
 async function reserveUsage(userId: string, campaignId: string, dailyLimit = 10) {
+  await releaseStaleLocks(userId);
   const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reserve_ai_usage`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ p_user_id: userId, p_campaign_id: campaignId, p_operation: "edital", p_daily_limit: dailyLimit }) });
   return result.ok ? await result.json() : { allowed: false, reason: "USAGE_GUARD_UNAVAILABLE" };
 }
@@ -285,9 +320,46 @@ Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_of
     let lastStatus = 502;
     let lastErrorMessage = "O Gemini não conseguiu analisar o edital.";
 
+    const extractedEditalText = await loadBrowserExtractedEditalText(storagePath);
+
     keyLoop: for (const candidateKey of keysToTry) {
       geminiFileKey = candidateKey.key;
       usedKeySource = candidateKey.source;
+      const models = await availableGeminiModels(candidateKey.key);
+
+      // 1ª Tentativa rápida: se o navegador já extraiu a camada de texto do edital (.text.json), analisa direto via texto
+      if (extractedEditalText) {
+        const textBody = {
+          contents: [{ parts: [{ text: `${promptText}\n\nTEXTO EXTRAÍDO DO EDITAL:\n${extractedEditalText}` }] }],
+          generationConfig: { temperature: 0.1, maxOutputTokens: 65536, responseMimeType: "application/json", responseSchema },
+        };
+        const textRelaxed = {
+          contents: textBody.contents,
+          generationConfig: { temperature: 0.1, maxOutputTokens: 65536, responseMimeType: "application/json" },
+        };
+        for (let mIdx = 0; mIdx < Math.min(2, models.length); mIdx++) {
+          const candidateModel = models[mIdx];
+          selectedModel = candidateModel;
+          for (const body of [textBody, textRelaxed]) {
+            const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(candidateModel)}:generateContent`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-goog-api-key": candidateKey.key },
+              body: JSON.stringify(body),
+            }).catch(() => null);
+            if (resp && resp.ok) {
+              try {
+                const candidateParsed = parseGeminiJsonText(await resp.json().catch(() => ({})));
+                if (candidateParsed && Array.isArray(candidateParsed.topics) && candidateParsed.topics.length >= 3) {
+                  parsed = candidateParsed;
+                  break keyLoop;
+                }
+              } catch { /* segue para leitura visual */ }
+            }
+          }
+        }
+      }
+
+      // 2ª Tentativa completa: leitura multimodal nativa do PDF no Gemini
       let documentPart: any = null;
       try {
         const geminiFile = await uploadPdfToGemini(bytes, title, candidateKey.key);
@@ -320,7 +392,6 @@ Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_of
         },
       };
 
-      const models = await availableGeminiModels(candidateKey.key);
       for (let mIdx = 0; mIdx < models.length; mIdx++) {
         const candidateModel = models[mIdx];
         selectedModel = candidateModel;

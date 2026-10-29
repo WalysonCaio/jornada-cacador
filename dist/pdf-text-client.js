@@ -21,7 +21,7 @@
   }
 
   async function extractAndUploadText(doc, session) {
-    if (!doc?.storage_path || isEditalType(doc)) return false;
+    if (!doc?.storage_path) return false;
     if (await sidecarAlreadyExists(doc.storage_path, session)) return true;
 
     toast(`Preparando o texto de “${doc.title}” no navegador. Você pode aguardar nesta tela.`);
@@ -54,12 +54,12 @@
       meaningfulCharacters += text.replace(/\s/g, "").length;
       pages.push({ page: pageNumber, text });
       page.cleanup();
-      // Entrega o controle ao navegador para não travar a interface em PDFs grandes.
       if (pageNumber % 3 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
     }
     await pdf.destroy();
 
-    if (!pages.length || meaningfulCharacters < Math.max(300, pages.length * 35)) {
+    const minChars = isEditalType(doc) ? Math.max(250, pages.length * 20) : Math.max(300, pages.length * 35);
+    if (!pages.length || meaningfulCharacters < minChars) {
       console.info("PDF sem camada de texto suficiente; será usada a leitura visual.", { pages: pages.length, meaningfulCharacters });
       return false;
     }
@@ -71,9 +71,6 @@
       meaningful_characters: meaningfulCharacters,
       pages,
     });
-    // Alguns projetos mantêm o bucket limitado a application/pdf. O conteúdo
-    // continua sendo JSON, mas usamos o MIME permitido pelo bucket para que o
-    // sidecar privado possa ser armazenado ao lado do PDF original.
     const upload = await storageFetch(`${doc.storage_path}.text.json`, session, {
       method: "POST",
       headers: { "Content-Type": "application/pdf", "x-upsert": "true" },
@@ -88,7 +85,7 @@
   }
 
   async function prepareDocumentText(doc, session) {
-    if (!doc || isEditalType(doc)) return false;
+    if (!doc?.storage_path) return false;
     if (!extractionJobs.has(doc.id)) {
       extractionJobs.set(doc.id, extractAndUploadText(doc, session).finally(() => extractionJobs.delete(doc.id)));
     }
@@ -98,7 +95,7 @@
   const originalProcessDocument = processEditalDocument;
   processEditalDocument = async function (id) {
     const doc = cloudDocuments.find((item) => item.id === id);
-    if (doc && !isEditalType(doc)) {
+    if (doc) {
       const session = await validSession();
       if (session) {
         try {

@@ -27,6 +27,8 @@ requireAll("frontend", html, [
   "state._resetEpoch=Date.now()",
   "Number(local._resetEpoch||0)>Number(server._resetEpoch||0)",
   "data.key_source==='personal'",
+  "reconcileCloudCampaigns",
+  "_ownerUserId",
 ]);
 requireAll("v59-enhancements", enhancements, [
   "window.openPersonalAiSettings",
@@ -41,6 +43,8 @@ requireAll("v77-experience", experience, [
   "startTimedSimulado",
   "simuladoSheetGrid",
   "finishTimedSimulado",
+  "topicSearchInput",
+  "practiceDailySubjectBtn",
 ]);
 requireAll("pdf-text-client", pdfClient, [
   '["edital", "edital_concurso"].includes',
@@ -59,6 +63,8 @@ requireAll("edital-gemini", edital, [
   "setDocumentStatus",
   "extractSecretString",
   "personalGeminiKey",
+  "releaseStaleLocks",
+  "loadBrowserExtractedEditalText",
 ]);
 requireAll("material-gemini", material, [
   "parseGeminiJsonText",
@@ -67,6 +73,7 @@ requireAll("material-gemini", material, [
   "CHUNK_SUMMARY_SCHEMA",
   "extractSecretString",
   "personalGeminiKey",
+  "releaseStaleLocks",
 ]);
 requireAll("redacao-gemini", redacao, [
   "parseGeminiJsonText",
@@ -97,4 +104,4 @@ if (material.includes("gemini-3.8-flash") || material.includes("gemini-3.5-flash
   throw new Error("material-gemini ainda referencia identificadores de modelo inexistentes (3.8/3.5).");
 }
 
-console.log("OK: contratos CRUD, chave Gemini pessoal, Cronograma Reverso, Filtro por Tópico e Simulado Cronometrado validados.");
+console.log("OK: contratos CRUD, isolamento multiusuário (3+ contas), chave Gemini pessoal, importação de PDFs e melhorias de UI validados.");

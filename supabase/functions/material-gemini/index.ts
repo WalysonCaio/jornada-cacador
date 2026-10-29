@@ -175,6 +175,7 @@ async function availableGeminiModels(geminiKey = GEMINI_KEY) {
       console.log("Gemini model candidates", unique);
       return unique;
     } catch (error) {
+      discoveredModels.delete(geminiKey);
       console.warn("Gemini model discovery failed", String((error as Error)?.message ?? error));
       return [...new Set([configured, ...GEMINI_TEXT_FALLBACKS].filter(Boolean))];
     }
@@ -188,7 +189,17 @@ async function sha256(bytes: Uint8Array) {
   return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
+async function releaseStaleLocks(userId: string) {
+  const cutoff = new Date(Date.now() - 90 * 1000).toISOString();
+  await fetch(`${SUPABASE_URL}/rest/v1/ai_usage_events?user_id=eq.${encodeURIComponent(userId)}&status=eq.started&created_at=lt.${encodeURIComponent(cutoff)}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "error", error_code: "STALE_RELEASED" }),
+  }).catch(() => undefined);
+}
+
 async function reserveUsage(userId: string, campaignId: string, operation: "material" | "exam", dailyLimit = 10) {
+  await releaseStaleLocks(userId);
   const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reserve_ai_usage`, {
     method: "POST",
     headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" },
@@ -909,13 +920,16 @@ function sanitizeQuestions(value: unknown, fallbackTopic: string) {
     const statement = cleanGeneratedText(raw?.statement, 1200);
     const options = Array.isArray(raw?.options) ? raw.options.map((option: unknown) => cleanGeneratedText(option, 600)) : [];
     const normalizedOptions = options.map((option: string) => option.toLocaleLowerCase("pt-BR"));
-    const correctIndex = Number(raw?.correct_index);
-    const explanation = cleanGeneratedText(raw?.explanation, 3000);
+    const rawIdx = raw?.correct_index;
+    const letterIdx = typeof rawIdx === "string" ? { A: 0, B: 1, C: 2, D: 3 }[rawIdx.trim().toUpperCase()] : undefined;
+    const numIdx = Number(rawIdx);
+    const correctIndex = letterIdx !== undefined ? letterIdx : (numIdx === 4 && !options[4] ? 3 : numIdx);
+    const explanation = cleanGeneratedText(raw?.explanation || "Confira a justificativa no resumo deste tópico.", 3000);
     const difficulty = ["facil", "medio", "dificil"].includes(raw?.difficulty) ? raw.difficulty : "medio";
     const key = statement.toLocaleLowerCase("pt-BR");
-    if (statement.length < 20 || options.length !== 4 || options.some((option: string) => option.length < 2)) continue;
+    if (statement.length < 15 || options.length !== 4 || options.some((option: string) => option.length < 1)) continue;
     if (new Set(normalizedOptions).size !== 4 || !Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
-    if (explanation.length < 20 || seen.has(key)) continue;
+    if (explanation.length < 8 || seen.has(key)) continue;
     seen.add(key);
     valid.push({ statement, options, correct_index: correctIndex, explanation, difficulty, topic: cleanGeneratedText(raw?.topic || fallbackTopic, 300), origin: raw?.origin === "adaptada_do_pdf" ? "adaptada_do_pdf" : "autoral" });
   }
