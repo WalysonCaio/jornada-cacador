@@ -70,7 +70,7 @@
 
     const pdfjs = await import("./pdf.mjs");
     pdfjs.GlobalWorkerOptions.workerSrc = new URL("./pdf.worker.mjs", document.baseURI).href;
-    const loadingTask = pdfjs.getDocument({ data: bytes });
+    const loadingTask = pdfjs.getDocument({ data: bytes, useSystemFonts: true, isEvalSupported: false });
     let pdf;
     try {
       pdf = await withTimeout(loadingTask.promise, 25000, "PDF_OPEN_TIMEOUT");
@@ -180,7 +180,30 @@
     try { return JSON.parse(cleaned); } catch {}
     const s = cleaned.indexOf("{");
     const e = cleaned.lastIndexOf("}");
-    if (s >= 0 && e > s) return JSON.parse(cleaned.slice(s, e + 1));
+    if (s >= 0 && e > s) {
+      try { return JSON.parse(cleaned.slice(s, e + 1)); } catch {}
+    }
+    const keyMatch = cleaned.match(/"(topics|summaries|questions)"\s*:\s*\[/);
+    if (keyMatch) {
+      const key = keyMatch[1];
+      const openB = cleaned.indexOf("[", keyMatch.index);
+      let depth = 0, inStr = false, esc = false, lastEnd = -1;
+      for (let i = openB + 1; i < cleaned.length; i++) {
+        const ch = cleaned[i];
+        if (esc) { esc = false; continue; }
+        if (ch === "\\") { esc = true; continue; }
+        if (ch === '"') { inStr = !inStr; continue; }
+        if (inStr) continue;
+        if (ch === "{") depth++;
+        else if (ch === "}") { depth--; if (depth === 0) lastEnd = i; }
+      }
+      if (lastEnd > openB) {
+        try {
+          const arr = JSON.parse(`[${cleaned.slice(openB + 1, lastEnd + 1)}]`);
+          return { [key]: arr };
+        } catch {}
+      }
+    }
     throw new Error("INVALID_RECOVERY_JSON");
   }
 

@@ -69,6 +69,9 @@ requireAll("v77-experience", experience, [
   "syncSharedQuestionBank",
   "handleParseAndSaveRawQuestions",
   "handleGenerateBoardPack",
+  "renderCutoffThermometer",
+  "exportPrintableQuestionBooklet",
+  "applyLegalHighlightsToTextNodes",
 ]);
 requireAll("pdf-text-client", pdfClient, [
   '["edital", "edital_concurso"].includes',
@@ -80,6 +83,7 @@ requireAll("pdf-text-client", pdfClient, [
   "backupTopics",
   "wasSampled",
   "realLastPage",
+  "useSystemFonts",
 ]);
 requireAll("account-security", security, [
   '"delete_document"', '"delete_campaign"', '"delete_essay"',
@@ -109,6 +113,8 @@ requireAll("material-gemini", material, [
   "releaseStaleLocks",
   "shared_question_bank",
   "validateExtractedPagesList",
+  "repairTruncatedSummariesJson",
+  "preExtractedPages",
 ]);
 requireAll("redacao-gemini", redacao, [
   "parseGeminiJsonText",

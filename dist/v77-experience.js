@@ -296,13 +296,14 @@
     if(trainer&&!q('#trainerQuickActions')){
       const startBtn=q('#startQuestions');
       if(startBtn){
-        startBtn.insertAdjacentHTML('afterend',`<div class="trainerQuickActions" id="trainerQuickActions"><button type="button" class="ghost" id="startProgressiveChallengeBtn">⚡ Desafio Progressivo</button><button type="button" class="ghost" id="startErrorReinforcementBtn">🔥 Reforçar meus erros (0)</button></div>`);
+        startBtn.insertAdjacentHTML('afterend',`<div class="trainerQuickActions" id="trainerQuickActions"><button type="button" class="ghost" id="startProgressiveChallengeBtn">⚡ Desafio Progressivo</button><button type="button" class="ghost" id="startErrorReinforcementBtn">🔥 Reforçar meus erros (0)</button><button type="button" class="ghost" id="printQuestionBookletBtn">🖨️ Imprimir Caderno (PDF)</button></div>`);
         q('#startProgressiveChallengeBtn').onclick=()=>{
           if(q('#questionBattleMode'))q('#questionBattleMode').value='progressive';
           updateQuestionPool();
           startFilteredBattle();
         };
         q('#startErrorReinforcementBtn').onclick=startErrorReinforcementBattle;
+        q('#printQuestionBookletBtn').onclick=exportPrintableQuestionBooklet;
       }
     }
   }
@@ -890,6 +891,9 @@
     const rows=Object.entries(groups).filter(([,data])=>data.total>0).sort((a,b)=>(a[1].correct/a[1].total)-(b[1].correct/b[1].total));
     root.className='performanceChart';root.innerHTML=rows.length?rows.map(([name,data])=>{const rate=Math.round(data.correct/data.total*100),tone=rate<60?'low':rate<80?'mid':'high';return `<div class="performanceBar ${tone}" title="${escText(name)}: ${data.correct}/${data.total}"><span>${escText(name)}</span><div class="performanceTrack"><i style="width:${rate}%"></i></div><b>${rate}%</b></div>`}).join(''):'<div class="empty">Resolva questões para visualizar sua precisão por disciplina.</div>';
     renderTacticalDiagnosis();
+    renderCutoffThermometer();
+    ensureLegalHighlightToggle();
+    if(legalHighlightEnabled)setTimeout(()=>applyLegalHighlightsToTextNodes(q('#summaryList')),50);
   }
 
   // 3. Central de Provas & Alimentação do Banco (#examBankHub)
@@ -1557,6 +1561,120 @@
       q('#simuladoDialog')?.close();
     };
     toast(`Simulado concluído: ${totalCorrect}/${questions.length} (${rawRate}%)`);
+  }
+
+
+  // 5. Termômetro de Nota de Corte Policial (#cutoffThermometerPanel)
+  function ensureCutoffThermometer(){
+    const perfGrid=q('#report #performanceSummary');
+    if(!perfGrid||q('#cutoffThermometerPanel'))return;
+    perfGrid.insertAdjacentHTML('afterend',`<div class="card cutoffThermometerCard" id="cutoffThermometerPanel"><div class="sectionHead"><div><div class="eyebrow">SIMULADOR DE APROVAÇÃO · META DE CORTE</div><h2 id="cutoffStatusTitle" style="margin:3px 0 0">Termômetro de Nota de Corte</h2></div><span class="tag" id="cutoffTierBadge">Em aferição</span></div><div class="cutoffTrackWrap"><div class="cutoffBar"><div class="cutoffFill" id="cutoffFillBar" style="width:0%"></div><span class="cutoffMarker" style="left:60%" title="60% — Habilitação mínima"><i>60%</i></span><span class="cutoffMarker" style="left:72%" title="72% — Corte médio PMPE / Carreiras Policiais"><i>72% Vagas</i></span><span class="cutoffMarker" style="left:80%" title="80% — Zona Caveira / Primeiros Colocados"><i>80% Elite</i></span></div></div><p class="small muted" id="cutoffAdviceText" style="margin:14px 0 0"></p></div>`);
+  }
+
+  function renderCutoffThermometer(){
+    ensureCutoffThermometer();
+    const fillEl=q('#cutoffFillBar'),titleEl=q('#cutoffStatusTitle'),badgeEl=q('#cutoffTierBadge'),adviceEl=q('#cutoffAdviceText');
+    if(!fillEl)return;
+    const scores=(state?.scores||[]).filter(s=>!s.campaignId||s.campaignId===state.activeCampaignId);
+    const total=scores.reduce((n,s)=>n+Number(s.total||0),0);
+    const correct=scores.reduce((n,s)=>n+Number(s.correct||0),0);
+    if(total<5){
+      fillEl.style.width='0%';
+      badgeEl.textContent='Resolva 5+ questões';
+      titleEl.textContent='Resolva sua primeira bateria para medir sua faixa de corte';
+      adviceEl.textContent='As faixas de referência são: 60% (Habilitação), 72% (Zona de Vagas — padrão PMPE/Polícias) e 80%+ (Elite Caveira).';
+      return;
+    }
+    const rate=Math.round(correct/total*100);
+    fillEl.style.width=`${Math.min(100,rate)}%`;
+    if(rate>=80){
+      badgeEl.textContent='🏆 Faixa Elite (≥80%)';
+      titleEl.textContent=`Precisão global: ${rate}% (${correct}/${total}) — Acima do corte de elite!`;
+      adviceEl.textContent='Você está na faixa competitiva dos primeiros colocados. Mantenha o ritmo com simulados na regra líquida e revisão espaçada.';
+    }else if(rate>=72){
+      const neededFor80=Math.max(1,Math.ceil((0.80*total-correct)/0.20));
+      badgeEl.textContent='✓ Zona de Vagas (≥72%)';
+      titleEl.textContent=`Precisão global: ${rate}% (${correct}/${total}) — Dentro da nota de corte!`;
+      adviceEl.textContent=`Você já superou o corte médio de 72%. Acertando mais ${neededFor80} questão(ões) seguida(s), você entra na faixa Elite (80%+).`;
+    }else if(rate>=60){
+      const neededFor72=Math.max(1,Math.ceil((0.72*total-correct)/0.28));
+      badgeEl.textContent='⚡ Habilitado (60–71%)';
+      titleEl.textContent=`Precisão global: ${rate}% (${correct}/${total}) — Rumo à zona de vagas`;
+      adviceEl.textContent=`Faltam cerca de ${neededFor72} acerto(s) seguido(s) para atingir a linha de corte competitiva de 72%. Priorize as matérias do Reforço Prioritário abaixo.`;
+    }else{
+      const neededFor60=Math.max(1,Math.ceil((0.60*total-correct)/0.40));
+      badgeEl.textContent='🎯 Base em construção';
+      titleEl.textContent=`Precisão global: ${rate}% (${correct}/${total}) — Fortalecendo a base`;
+      adviceEl.textContent=`Use o modo Desafio Progressivo e leia as resoluções passo a passo. Mais ${neededFor60} acerto(s) levam você ao primeiro marco de 60%.`;
+    }
+  }
+
+  // 6. Exportação de Caderno de Questões para Impressão / PDF (com Folha de Respostas e Gabarito Comentado)
+  function exportPrintableQuestionBooklet(){
+    const pool=filteredQuestionPool();
+    if(!pool.length)return toast('Não há questões disponíveis neste filtro para imprimir.');
+    const selected=pool.slice(0,30);
+    const campaignName=activeCampaign()?.name||'Jornada do Caçador';
+    const subjectLabel=q('#questionSubject')?.value==='all'?'Todas as Disciplinas':(q('#questionSubject')?.value||'Geral');
+    const w=window.open('','_blank');
+    if(!w)return toast('Permita a abertura de pop-up para gerar o PDF de impressão.');
+    const questionsHtml=selected.map((item,idx)=>{
+      const diff={facil:'Fácil',medio:'Média',dificil:'Difícil'}[normalizedDifficulty(item)]||'Média';
+      const opts=(item.options||[]).map((o,i)=>`<div class="opt"><b>(${String.fromCharCode(65+i)})</b> ${escText(o)}</div>`).join('');
+      return `<article class="qItem"><div class="qHead"><b>QUESTÃO ${String(idx+1).padStart(2,'0')}</b><span>${escText(learningCategory(item.subject))} · ${escText(item.topic||'Geral')} · ${diff}</span></div><p class="qStmt">${escText(item.statement)}</p><div class="qOpts">${opts}</div></article>`;
+    }).join('');
+    const answerKeyHtml=selected.map((item,idx)=>{
+      const letter=String.fromCharCode(65+(Number(item.correct_index)||0));
+      return `<div class="ansItem"><b>${String(idx+1).padStart(2,'0')}: ${letter}</b> — <span>${escText(item.explanation||item.options?.[item.correct_index]||'')}</span></div>`;
+    }).join('');
+    w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Caderno de Questões — ${escText(campaignName)}</title><style>body{font:13.5px/1.5 Inter,Arial,sans-serif;color:#111d2c;max-width:840px;margin:28px auto;padding:0 16px}header{border-bottom:2px solid #0f2942;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-end}h1{font-size:1.25rem;margin:0}.meta{font-size:.8rem;color:#4a6075}.qItem{break-inside:avoid;border:1px solid #d4e0ec;border-radius:8px;padding:12px 14px;margin-bottom:12px}.qHead{display:flex;justify-content:space-between;font-size:.78rem;color:#1d4f7a;border-bottom:1px solid #e6eef5;padding-bottom:5px;margin-bottom:8px}.qStmt{margin:0 0 9px;font-weight:600}.qOpts{display:grid;gap:5px}.opt{font-size:.92rem}.pageBreak{page-break-before:always;margin-top:32px;padding-top:16px;border-top:2px solid #0f2942}.ansItem{margin-bottom:8px;font-size:.86rem;break-inside:avoid}@media print{body{margin:12mm;max-width:none}.noPrint{display:none}}</style></head><body><div class="noPrint" style="margin-bottom:16px;padding:10px;background:#eef6fc;border-radius:8px;display:flex;justify-content:space-between;align-items:center"><span><b>Pronto para impressão ou Salvar como PDF</b> (${selected.length} questões + gabarito comentado)</span><button onclick="window.print()" style="padding:8px 16px;font-weight:bold;cursor:pointer">🖨️ Imprimir / Salvar PDF</button></div><header><div><h1>${escText(campaignName)} — Caderno de Prova</h1><div class="meta">Filtro: ${escText(subjectLabel)} · ${selected.length} questões</div></div><div class="meta">Data: ${new Date().toLocaleDateString('pt-BR')}</div></header>${questionsHtml}<section class="pageBreak"><h2>Gabarito Oficial e Resolução Passo a Passo</h2>${answerKeyHtml}</section></body></html>`);
+    w.document.close();
+  }
+
+  // 7. Modo "Lei Seca Grifada" (Destaque automático de Artigos, Prazos, Penas e Exceções nos Resumos)
+  let legalHighlightEnabled=localStorage.getItem('jornada-legal-hl')!=='0';
+
+  function applyLegalHighlightsToTextNodes(rootEl){
+    if(!rootEl||!legalHighlightEnabled)return;
+    const targets=rootEl.querySelectorAll('.lessonIntro, .lessonBox li, .lessonBox');
+    const lawRegex=/((?:Art\.?\s*\d+[º°ª]?|§\s*\d+[º°ª]?|parágrafo único|Lei\s+(?:Complementar\s+|Federal\s+|Estadual\s+)?n?[º°]?\s*[\d.\/-]+|CF\/88|Súmula\s+(?:Vinculante\s+)?\d+|STF|STJ))/gi;
+    const exceptionRegex=/((?:salvo|exceto|vedad[oa]s?|proibid[oa]s?|inafiançáve(?:l|is)|imprescritíve(?:l|is)|insuscetíveis|insuscetível|nunca|jamais|somente|exclusivamente|independe(?:m|ntemente)?))/gi;
+    const penaltyRegex=/((?:reclusão|detenção|multa|\d+\s*(?:dias?|meses|anos?|horas?)|maioria\s+absoluta|unânime))/gi;
+
+    targets.forEach(el=>{
+      if(el.dataset.hlApplied==='1')return;
+      el.dataset.hlApplied='1';
+      const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT,null);
+      const nodes=[];
+      while(walker.nextNode())nodes.push(walker.currentNode);
+      for(const node of nodes){
+        const val=node.nodeValue||'';
+        if(val.length<4)continue;
+        if(!lawRegex.test(val)&&!exceptionRegex.test(val)&&!penaltyRegex.test(val))continue;
+        lawRegex.lastIndex=0;exceptionRegex.lastIndex=0;penaltyRegex.lastIndex=0;
+        const escaped=escText(val)
+          .replace(lawRegex,'<mark class="hlLaw">$1</mark>')
+          .replace(exceptionRegex,'<mark class="hlException">$1</mark>')
+          .replace(penaltyRegex,'<mark class="hlPenalty">$1</mark>');
+        const span=document.createElement('span');
+        span.innerHTML=escaped;
+        node.parentNode?.replaceChild(span,node);
+      }
+    });
+  }
+
+  function ensureLegalHighlightToggle(){
+    const filters=q('#summaries .summaryFilters');
+    if(!filters||q('#toggleLegalHighlightBtn'))return;
+    filters.insertAdjacentHTML('beforeend',`<button type="button" class="ghost small" id="toggleLegalHighlightBtn" style="white-space:nowrap">${legalHighlightEnabled?'🖍️ Grifo Lei Seca: ON':'🖍️ Grifo Lei Seca: OFF'}</button>`);
+    q('#toggleLegalHighlightBtn').onclick=()=>{
+      legalHighlightEnabled=!legalHighlightEnabled;
+      localStorage.setItem('jornada-legal-hl',legalHighlightEnabled?'1':'0');
+      q('#toggleLegalHighlightBtn').textContent=legalHighlightEnabled?'🖍️ Grifo Lei Seca: ON':'🖍️ Grifo Lei Seca: OFF';
+      if(typeof renderSummaries==='function')renderSummaries(q('#summarySearch')?.value||'');
+      if(legalHighlightEnabled)setTimeout(()=>applyLegalHighlightsToTextNodes(q('#summaryList')),30);
+      toast(legalHighlightEnabled?'Grifo tático de artigos, prazos e exceções ativado!':'Grifo tático desativado.');
+    };
   }
 
   function bindQuestionCenter(){

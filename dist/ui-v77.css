@@ -116,3 +116,16 @@
 @media(max-width:900px){.todayCommand{grid-template-columns:1fr 1fr}.commandPrimary{grid-column:1/-1}.reportColumns,.diagnosisGrid,.studyCycleGrid,.examImportSplit,.examHubTabs{grid-template-columns:1fr}.simuladoConfigGrid{grid-template-columns:1fr}.reverseScheduleGrid{grid-template-columns:repeat(2,1fr)}.sharedBankBanner,.examDocRow{flex-direction:column;align-items:stretch}}
 @media(max-width:719px){.todayCommand{grid-template-columns:1fr 1fr;gap:8px}.commandPrimary{min-height:100px;padding:15px}.commandShortcut{min-height:94px;padding:13px}.commandShortcut b{font-size:.9rem}.commandShortcut span{font-size:.7rem}.questionFilters,.trainerQuickActions{grid-template-columns:1fr}.performanceBar{grid-template-columns:minmax(90px,.8fr) minmax(90px,1.2fr) auto}.questionTrainer .action{position:sticky;bottom:calc(74px + env(safe-area-inset-bottom));z-index:3}.hero{margin-bottom:12px}.simuladoNavRow{grid-template-columns:1fr 1fr}.simuladoNavRow #simuladoSubmitBtn{grid-column:1/-1}.personalBizuRow{flex-direction:column}}
 @media(max-width:390px){.todayCommand{grid-template-columns:1fr}.commandPrimary{grid-column:auto}.commandShortcut{min-height:82px}.performanceBar{grid-template-columns:1fr auto}.performanceBar>span{grid-column:1/-1}.performanceTrack{grid-column:1}.performanceBar b{grid-column:2}}
+
+
+/* Termômetro de Nota de Corte & Modo Lei Seca Grifada */
+.cutoffThermometerCard{border-color:#2d5c7a;background:linear-gradient(145deg,#0e2236,#081523)}
+.cutoffTrackWrap{margin-top:14px;padding-bottom:14px}
+.cutoffBar{position:relative;height:14px;background:#06111c;border:1px solid #26455d;border-radius:99px;overflow:visible}
+.cutoffFill{height:100%;border-radius:99px;background:linear-gradient(90deg,#ff6b7d 0%,#f7bd43 55%,#40d99b 75%,#59e6ff 100%);transition:width .4s}
+.cutoffMarker{position:absolute;top:-5px;bottom:-5px;width:2px;background:#fff;box-shadow:0 0 6px #000}
+.cutoffMarker i{position:absolute;top:19px;left:50%;transform:translateX(-50%);font-style:normal;font-size:.66rem;font-weight:800;color:var(--cyan);white-space:nowrap}
+.trainerQuickActions{grid-template-columns:repeat(3,minmax(0,1fr))}
+mark.hlLaw{background:rgba(247,189,67,.22);color:#ffe08a;padding:1px 5px;border-radius:5px;font-weight:750}
+mark.hlException{background:rgba(255,107,125,.24);color:#ffb3bd;padding:1px 5px;border-radius:5px;font-weight:800}
+mark.hlPenalty{background:rgba(89,230,255,.2);color:#9beeff;padding:1px 5px;border-radius:5px;font-weight:750}

@@ -127,11 +127,45 @@ function parseGeminiJsonText(data: any) {
     }
     return val;
   };
-  try { return normalizeParsed(JSON.parse(unfenced)); } catch { /* tenta extrair o objeto */ }
+  try { return normalizeParsed(JSON.parse(unfenced)); } catch { /* tenta extrair ou reparar o objeto */ }
   const start = unfenced.indexOf("{");
   const end = unfenced.lastIndexOf("}");
-  if (start >= 0 && end > start) return normalizeParsed(JSON.parse(unfenced.slice(start, end + 1)));
+  if (start >= 0 && end > start) {
+    try { return normalizeParsed(JSON.parse(unfenced.slice(start, end + 1))); } catch { /* tenta reparar JSON truncado */ }
+  }
+  const repaired = repairTruncatedSummariesJson(unfenced);
+  if (repaired) return normalizeParsed(repaired);
   throw new Error("INVALID_GEMINI_JSON");
+}
+
+function repairTruncatedSummariesJson(raw: string): any | null {
+  const arrIdx = raw.search(/"(?:summaries|resumos)"\s*:\s*\[/);
+  if (arrIdx < 0) return null;
+  const openBracket = raw.indexOf("[", arrIdx);
+  if (openBracket < 0) return null;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  let lastCompleteObjEnd = -1;
+  for (let i = openBracket + 1; i < raw.length; i++) {
+    const ch = raw[i];
+    if (esc) { esc = false; continue; }
+    if (ch === "\\") { esc = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) lastCompleteObjEnd = i;
+    }
+  }
+  if (lastCompleteObjEnd > openBracket) {
+    const candidate = `${raw.slice(raw.indexOf("{"), lastCompleteObjEnd + 1)}]}`;
+    try { return JSON.parse(candidate); } catch {}
+    const arrayOnly = `[${raw.slice(openBracket + 1, lastCompleteObjEnd + 1)}]`;
+    try { return { summaries: JSON.parse(arrayOnly) }; } catch {}
+  }
+  return null;
 }
 
 function relaxedGenerationBody(body: any, maxOutputTokens = 32768) {
@@ -464,7 +498,11 @@ function jsonFromModelText(value: unknown) {
   try { return JSON.parse(raw); } catch { /* extrai o primeiro objeto completo */ }
   const start = raw.indexOf("{");
   const end = raw.lastIndexOf("}");
-  if (start >= 0 && end > start) return JSON.parse(raw.slice(start, end + 1));
+  if (start >= 0 && end > start) {
+    try { return JSON.parse(raw.slice(start, end + 1)); } catch {}
+  }
+  const repaired = repairTruncatedSummariesJson(raw);
+  if (repaired) return repaired;
   throw new Error("INVALID_PROVIDER_JSON");
 }
 
@@ -930,16 +968,24 @@ function sanitizeQuestions(value: unknown, fallbackTopic: string) {
   const valid = [];
   for (const raw of value) {
     const statement = cleanGeneratedText(raw?.statement, 1200);
-    const options = Array.isArray(raw?.options) ? raw.options.map((option: unknown) => cleanGeneratedText(option, 600)) : [];
-    const normalizedOptions = options.map((option: string) => option.toLocaleLowerCase("pt-BR"));
+    let options = Array.isArray(raw?.options) ? raw.options.map((option: unknown) => cleanGeneratedText(option, 600)).filter(Boolean) : [];
     const rawIdx = raw?.correct_index;
-    const letterIdx = typeof rawIdx === "string" ? { A: 0, B: 1, C: 2, D: 3 }[rawIdx.trim().toUpperCase()] : undefined;
+    const letterIdx = typeof rawIdx === "string" ? ({ A: 0, B: 1, C: 2, D: 3, E: 4 } as Record<string, number>)[rawIdx.trim().toUpperCase()] : undefined;
     const numIdx = Number(rawIdx);
-    const correctIndex = letterIdx !== undefined ? letterIdx : (numIdx === 4 && !options[4] ? 3 : numIdx);
+    let correctIndex = letterIdx !== undefined ? letterIdx : (Number.isInteger(numIdx) ? numIdx : 0);
+    if (correctIndex >= options.length) correctIndex = Math.max(0, options.length - 1);
+    if (options.length > 4) {
+      const correctText = options[correctIndex] ?? options[0];
+      const kept = options.filter((_, idx) => idx === correctIndex || idx < 4).slice(0, 4);
+      if (!kept.includes(correctText)) kept[3] = correctText;
+      options = kept;
+      correctIndex = options.indexOf(correctText);
+    }
+    const normalizedOptions = options.map((option: string) => option.toLocaleLowerCase("pt-BR"));
     const explanation = cleanGeneratedText(raw?.explanation || "Confira a justificativa no resumo deste tópico.", 3000);
     const difficulty = ["facil", "medio", "dificil"].includes(raw?.difficulty) ? raw.difficulty : "medio";
     const key = statement.toLocaleLowerCase("pt-BR");
-    if (statement.length < 15 || options.length !== 4 || options.some((option: string) => option.length < 1)) continue;
+    if (statement.length < 10 || options.length !== 4 || options.some((option: string) => option.length < 1)) continue;
     if (new Set(normalizedOptions).size !== 4 || !Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
     if (explanation.length < 8 || seen.has(key)) continue;
     seen.add(key);
@@ -970,7 +1016,7 @@ function sanitizeSummary(value: any, knownSubjects: string[]) {
     title,
     page_start: Math.max(0, Math.floor(Number(value?.page_start) || 0)),
     page_end: Math.max(0, Math.floor(Number(value?.page_end) || 0)),
-    explanation: normalizeLegalNotation(value?.explanation, 18000),
+    explanation: normalizeLegalNotation(value?.explanation || (Array.isArray(value?.points) ? value.points.join(". ") : ""), 18000),
     points: Array.isArray(value?.points) ? [...new Set(value.points.map((item: unknown) => normalizeLegalNotation(item, 1200)).filter(Boolean))].slice(0, 15) : [],
     example: normalizeLegalNotation(value?.example, 6000),
     bizu: normalizeLegalNotation(value?.bizu, 3000),
@@ -1051,19 +1097,30 @@ Deno.serve(async (request) => {
     const documentType = String(documents[0].document_type || "material");
     const operation = ["prova", "simulado"].includes(documentType) ? "exam" : "material";
     await fetch(`${SUPABASE_URL}/rest/v1/processing_jobs?on_conflict=document_id,job_type`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ user_id: user.id, campaign_id: campaignId, document_id: documentId, job_type: operation, status: "processing", attempts: 1, locked_at: new Date().toISOString(), locked_by: "material-gemini" }) });
-    const file = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${path}`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
-    if (!file.ok) {
-      await setDocumentStatus(documentId, user.id, "error");
-      await updateJob(documentId, { status: "failed", last_error: `STORAGE_${file.status}` });
-      return response({ error: `Não foi possível abrir o PDF salvo (${file.status}). Confirme se a função e o arquivo pertencem ao mesmo projeto Supabase.`, code: "STORAGE_READ_FAILED" }, 502);
+    const preExtractedPages = await loadBrowserExtractedPages(path, input?.extracted_pages);
+    let bytes: Uint8Array | null = null;
+    let byteLength = 0;
+    let fingerprint = "";
+    if (preExtractedPages && preExtractedPages.length) {
+      const textBytes = new TextEncoder().encode(preExtractedPages.map((p) => `${p.page}:${p.text}`).join("\n"));
+      byteLength = textBytes.byteLength;
+      fingerprint = await sha256(textBytes);
+    } else {
+      const file = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${path}`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
+      if (!file.ok) {
+        await setDocumentStatus(documentId, user.id, "error");
+        await updateJob(documentId, { status: "failed", last_error: `STORAGE_${file.status}` });
+        return response({ error: `Não foi possível abrir o PDF salvo (${file.status}). Confirme se a função e o arquivo pertencem ao mesmo projeto Supabase.`, code: "STORAGE_READ_FAILED" }, 502);
+      }
+      bytes = new Uint8Array(await file.arrayBuffer());
+      byteLength = bytes.byteLength;
+      if (bytes.byteLength > 50 * 1024 * 1024) {
+        await setDocumentStatus(documentId, user.id, "error");
+        await updateJob(documentId, { status: "failed", last_error: "FILE_TOO_LARGE" });
+        return response({ error: "O PDF deve ter no máximo 50 MB para geração automática.", code: "FILE_TOO_LARGE" }, 413);
+      }
+      fingerprint = await sha256(bytes);
     }
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    if (bytes.byteLength > 50 * 1024 * 1024) {
-      await setDocumentStatus(documentId, user.id, "error");
-      await updateJob(documentId, { status: "failed", last_error: "FILE_TOO_LARGE" });
-      return response({ error: "O PDF deve ter no máximo 50 MB para geração automática.", code: "FILE_TOO_LARGE" }, 413);
-    }
-    const fingerprint = await sha256(bytes);
     const cacheFilter = ["prova", "simulado"].includes(documentType)
       ? `sha256=eq.${fingerprint}&document_id=neq.${encodeURIComponent(documentId)}&select=document_id&limit=1`
       : `user_id=eq.${encodeURIComponent(user.id)}&sha256=eq.${fingerprint}&document_id=neq.${encodeURIComponent(documentId)}&select=document_id&limit=1`;
@@ -1076,7 +1133,7 @@ Deno.serve(async (request) => {
         const copies = existing.map((row: Record<string, unknown>) => ({ ...row, campaign_id: campaignId, user_id: user.id, source_document_id: documentId, source_refs: [{ document_id: documentId, title }] }));
         const copied = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify(copies) });
         if (copied.ok) {
-          await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ user_id: user.id, document_id: documentId, sha256: fingerprint, byte_size: bytes.byteLength }) });
+          await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ user_id: user.id, document_id: documentId, sha256: fingerprint, byte_size: byteLength }) });
           const cachedSubjects = existing.map((row: any) => cleanGeneratedText(row?.content?.subject || "", 200)).filter(Boolean);
           const cachedSubject = resolveSubject(cachedSubjects[0] || "Conteúdo geral", knownSubjects);
           const cachedDocumentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${cached[0].document_id}&select=metadata&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
@@ -1101,7 +1158,7 @@ Deno.serve(async (request) => {
     let inventory: any = documents[0]?.metadata?.analysis_plan;
     if (!Array.isArray(inventory?.sections)) inventory = { estimated_pages: 0, sections: [], warnings: [], model: "local-text-extraction" };
     await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ metadata: { ...(documents[0]?.metadata || {}), analysis_plan: inventory, analysis_progress: { stage: "extracting_text", percent: 15, completed_sections: 0, total_sections: 0, updated_at: new Date().toISOString() } } }) });
-    const browserPages = await loadBrowserExtractedPages(path, input?.extracted_pages);
+    const browserPages = preExtractedPages;
     if (browserPages) {
       const pages = browserPages;
       inventory = {
@@ -1123,11 +1180,11 @@ Deno.serve(async (request) => {
         throw noOcr;
       }
       console.warn("Browser PDF text unavailable; using Gemini native document vision");
-      const geminiFile = await uploadPdfToGemini(bytes, title, activeGeminiKey);
+      const geminiFile = await uploadPdfToGemini(bytes!, title, activeGeminiKey);
       try {
         inventory = { estimated_pages: 0, sections: [], warnings: ["PDF digitalizado: leitura visual realizada pelo Gemini."], model: "gemini-native-vision" };
         try {
-          generated = await generateStudyPackageStable(geminiFile, title, campaignContext, documentType, bytes.byteLength <= 14 * 1024 * 1024 ? bytes : undefined, activeGeminiKey);
+          generated = await generateStudyPackageStable(geminiFile, title, campaignContext, documentType, bytes && bytes.byteLength <= 14 * 1024 * 1024 ? bytes : undefined, activeGeminiKey);
           generated.provider = "gemini-vision";
           generated.key_source = personalGeminiKey ? "personal" : "shared";
         } catch (visionError) {
@@ -1158,10 +1215,10 @@ Deno.serve(async (request) => {
     const hasDeclaredCoverage = Array.isArray(parsed?.coverage?.sections_detected) && parsed.coverage.sections_detected.length > 0;
     const grosslyIncomplete = hasDeclaredCoverage && ((coverage.sections_detected.length >= 4 && coverage.percent < 25) || coverage.confidence < 0.25);
     if (grosslyIncomplete) {
-      await setDocumentStatus(documentId, user.id, "error");
-      await finishUsage(usage.event_id, "error", generated.provider, generated.model, "LOW_COVERAGE");
-      await updateJob(documentId, { status: "failed", last_error: "LOW_COVERAGE" });
-      return response({ error: "A análise não atingiu a cobertura mínima de segurança e não substituiu nenhum conteúdo anterior. Tente novamente; se o PDF for digitalizado, gere uma versão com OCR ou divida-o por capítulos.", coverage }, 422);
+      coverage.needs_review = true;
+      if (!coverage.warnings.some((w: string) => /cobertura/i.test(w))) {
+        coverage.warnings.unshift("Algumas seções do PDF podem precisar de revisão complementar.");
+      }
     }
     const rows = summaries.map((content: Record<string, unknown>) => ({ campaign_id: campaignId, user_id: user.id, source_document_id: documentId, content_type: "summary", title: String(content.title ?? "Resumo"), content: { ...content, source: title }, source_refs: [{ document_id: documentId, title }] }));
     const saved = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(rows) });
@@ -1181,7 +1238,7 @@ Deno.serve(async (request) => {
     const subjectCounts = summaries.reduce((counts: Record<string, number>, item: Record<string, unknown>) => { const subject = cleanGeneratedText(item.subject || "Conteúdo", 200);counts[subject] = (counts[subject] || 0) + 1;return counts; }, {});
     const detectedSubject = Object.entries(subjectCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "Conteúdo geral";
     await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready", detected_subject: detectedSubject, metadata: { ...(documents[0]?.metadata || {}), primary_subject: detectedSubject, subjects: Object.keys(subjectCounts), analyzed_at: new Date().toISOString(), analysis_plan: inventory, analysis_progress: { stage: "completed", percent: 100, completed_sections: coverage.sections_covered.length, total_sections: coverage.sections_detected.length, updated_at: new Date().toISOString() }, coverage } }) });
-    await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ user_id: user.id, document_id: documentId, sha256: fingerprint, byte_size: bytes.byteLength }) });
+    await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ user_id: user.id, document_id: documentId, sha256: fingerprint, byte_size: byteLength }) });
     if (["prova", "simulado"].includes(documentType)) {
       const sharedQuestions = summaries.flatMap((s: any) =>
         (Array.isArray(s.questions) ? s.questions : []).map((q: any) => ({

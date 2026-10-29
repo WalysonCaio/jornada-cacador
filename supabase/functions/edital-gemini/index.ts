@@ -76,7 +76,29 @@ function parseGeminiJsonText(data: any) {
   } catch {
     const start = unfenced.indexOf("{");
     const end = unfenced.lastIndexOf("}");
-    if (start >= 0 && end > start) return JSON.parse(unfenced.slice(start, end + 1));
+    if (start >= 0 && end > start) {
+      try { return JSON.parse(unfenced.slice(start, end + 1)); } catch {}
+    }
+    const arrIdx = unfenced.search(/"topics"\s*:\s*\[/);
+    if (arrIdx >= 0) {
+      const openB = unfenced.indexOf("[", arrIdx);
+      let depth = 0, inStr = false, esc = false, lastEnd = -1;
+      for (let i = openB + 1; i < unfenced.length; i++) {
+        const ch = unfenced[i];
+        if (esc) { esc = false; continue; }
+        if (ch === "\\") { esc = true; continue; }
+        if (ch === '"') { inStr = !inStr; continue; }
+        if (inStr) continue;
+        if (ch === "{") depth++;
+        else if (ch === "}") { depth--; if (depth === 0) lastEnd = i; }
+      }
+      if (lastEnd > openB) {
+        try {
+          const topicsArr = JSON.parse(`[${unfenced.slice(openB + 1, lastEnd + 1)}]`);
+          return { meta: { document_kind: "edital_oficial", classification_reason: "Recuperado de JSON parcial", detected_scope: "Edital", confidence: 0.85, warnings: ["O edital é muito extenso; parte final recuperada automaticamente."] }, topics: topicsArr };
+        } catch {}
+      }
+    }
     throw new Error("INVALID_GEMINI_JSON");
   }
 }
