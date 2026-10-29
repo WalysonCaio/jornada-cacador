@@ -76,6 +76,10 @@ requireAll("pdf-text-client", pdfClient, [
   "_extractedPagesByDocId",
   "recoverPdfViaAssistant",
   "compactPagesForInlinePayload",
+  "withTimeout",
+  "backupTopics",
+  "wasSampled",
+  "realLastPage",
 ]);
 requireAll("account-security", security, [
   '"delete_document"', '"delete_campaign"', '"delete_essay"',

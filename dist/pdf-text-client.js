@@ -3,7 +3,16 @@
   const isEditalType = (doc) => ["edital", "edital_concurso"].includes(String(doc?.document_type || ""));
   window._recentUploadedPdfBytes = window._recentUploadedPdfBytes || new Map();
   window._extractedPagesByDocId = window._extractedPagesByDocId || new Map();
+  window._extractedPdfMetaByDocId = window._extractedPdfMetaByDocId || new Map();
   window._activeProcessingDocs = window._activeProcessingDocs || new Set();
+
+  function withTimeout(promise, ms, label) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(label)), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
 
   async function storageFetch(path, session, options = {}) {
     return fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${path}`, {
@@ -21,7 +30,13 @@
       const response = await storageFetch(`${path}.text.json`, session);
       if (response.ok) {
         const payload = await response.json().catch(() => null);
-        if (Array.isArray(payload?.pages) && payload.pages.length) return payload.pages;
+        if (Array.isArray(payload?.pages) && payload.pages.length) {
+          return {
+            pages: payload.pages,
+            pdfTotalPages: Number(payload.pdf_total_pages || payload.total_pages || payload.pages.length),
+            truncatedPages: Boolean(payload.truncated_pages),
+          };
+        }
       }
     } catch {}
     return null;
@@ -33,7 +48,11 @@
 
     const existingSidecar = await sidecarAlreadyExists(doc.storage_path, session);
     if (existingSidecar) {
-      window._extractedPagesByDocId.set(doc.id, existingSidecar);
+      window._extractedPagesByDocId.set(doc.id, existingSidecar.pages);
+      window._extractedPdfMetaByDocId.set(doc.id, {
+        pdfTotalPages: existingSidecar.pdfTotalPages,
+        truncatedPages: existingSidecar.truncatedPages,
+      });
       return true;
     }
 
@@ -52,21 +71,23 @@
     const pdfjs = await import("./pdf.mjs");
     pdfjs.GlobalWorkerOptions.workerSrc = new URL("./pdf.worker.mjs", document.baseURI).href;
     const loadingTask = pdfjs.getDocument({ data: bytes });
-    const pdf = await Promise.race([
-      loadingTask.promise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error("PDF_OPEN_TIMEOUT")), 25000)),
-    ]);
+    let pdf;
+    try {
+      pdf = await withTimeout(loadingTask.promise, 25000, "PDF_OPEN_TIMEOUT");
+    } catch (openErr) {
+      try { await loadingTask.destroy(); } catch {}
+      throw openErr;
+    }
 
-    const maxPages = Math.min(pdf.numPages, 220);
+    const pdfTotalPages = Number(pdf.numPages) || 0;
+    const maxPages = Math.min(pdfTotalPages, 220);
+    const truncatedPages = pdfTotalPages > maxPages;
     const pages = [];
     let meaningfulCharacters = 0;
 
     for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
       try {
-        const page = await Promise.race([
-          pdf.getPage(pageNumber),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("PAGE_TIMEOUT")), 4500)),
-        ]);
+        const page = await withTimeout(pdf.getPage(pageNumber), 4500, "PAGE_TIMEOUT");
         const content = await page.getTextContent();
         let text = "";
         for (const item of content.items || []) {
@@ -85,30 +106,45 @@
     }
     try { await pdf.destroy(); } catch {}
 
+    if (truncatedPages) {
+      toast(`Aviso: o PDF possui ${pdfTotalPages} páginas; foram extraídas as primeiras ${maxPages} páginas.`);
+    }
+
     if (!pages.length || meaningfulCharacters < 120) {
       console.info("PDF sem camada de texto selecionável suficiente; será usada a leitura visual.", { pages: pages.length, meaningfulCharacters });
       return false;
     }
 
     window._extractedPagesByDocId.set(doc.id, pages);
+    window._extractedPdfMetaByDocId.set(doc.id, { pdfTotalPages, truncatedPages });
 
     const payload = JSON.stringify({
       version: 1,
       generated_at: new Date().toISOString(),
       total_pages: pages.length,
+      pdf_total_pages: pdfTotalPages,
+      truncated_pages: truncatedPages,
       meaningful_characters: meaningfulCharacters,
       pages,
     });
     try {
-      await storageFetch(`${doc.storage_path}.text.json`, session, {
+      // text/plain é permitido nativamente pela policy do bucket study-documents (20261002_v56_guardrails.sql)
+      let sidecarRes = await storageFetch(`${doc.storage_path}.text.json`, session, {
         method: "POST",
-        headers: { "Content-Type": "application/pdf", "x-upsert": "true" },
+        headers: { "Content-Type": "text/plain; charset=utf-8", "x-upsert": "true" },
         body: payload,
       });
+      if (!sidecarRes.ok) {
+        sidecarRes = await storageFetch(`${doc.storage_path}.text.json`, session, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-upsert": "true" },
+          body: payload,
+        });
+      }
     } catch (sidecarErr) {
       console.warn("Sidecar opcional não salvo no Storage; usando envio inline.", sidecarErr);
     }
-    console.info("Texto do PDF preparado no navegador", { pages: pages.length, meaningfulCharacters });
+    console.info("Texto do PDF preparado no navegador", { pages: pages.length, pdfTotalPages, meaningfulCharacters });
     return true;
   }
 
@@ -150,8 +186,10 @@
 
   async function recoverPdfViaAssistant(doc, pages, session) {
     if (!Array.isArray(pages) || !pages.length) return false;
+    const pdfMeta = window._extractedPdfMetaByDocId.get(doc.id) || {};
     const compactPages = compactPagesForInlinePayload(pages, 45000);
     const fullText = compactPages.map((p) => `[PÁGINA ${p.page}]\n${p.text}`).join("\n\n").slice(0, 45000);
+    const realLastPage = Number(pages[pages.length - 1]?.page || pdfMeta.pdfTotalPages || pages.length);
     toast(`Concluindo análise de “${doc.title}” pelo modo de recuperação inteligente...`);
 
     if (isEditalType(doc)) {
@@ -172,7 +210,13 @@
       const topics = Array.isArray(parsed?.topics) ? parsed.topics.filter((t) => t?.subject && t?.topic).slice(0, 800) : [];
       if (!topics.length) return false;
 
-      await cloudFetch(`campaign_topics?campaign_id=eq.${doc.campaign_id}&user_id=eq.${session.user.id}`, { method: "DELETE" }).catch(() => undefined);
+      const topicsFilter = `campaign_id=eq.${doc.campaign_id}&user_id=eq.${session.user.id}`;
+      let backupTopics = [];
+      try {
+        const backupRes = await cloudFetch(`campaign_topics?${topicsFilter}&select=campaign_id,user_id,subject,unit_name,topic,edital_order,subject_order,learning_order,difficulty,prerequisite_topic,pedagogical_reason`);
+        if (backupRes.ok) backupTopics = await backupRes.json().catch(() => []);
+      } catch {}
+
       const rows = topics.map((item, idx) => ({
         campaign_id: doc.campaign_id,
         user_id: session.user.id,
@@ -184,11 +228,27 @@
         learning_order: idx,
         difficulty: "basic",
       }));
-      await cloudFetch("campaign_topics", {
+
+      const delRes = await cloudFetch(`campaign_topics?${topicsFilter}`, { method: "DELETE" }).catch(() => null);
+      if (!delRes || !delRes.ok) return false;
+
+      const insRes = await cloudFetch("campaign_topics", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(rows),
-      });
+      }).catch(() => null);
+
+      if (!insRes || !insRes.ok) {
+        if (Array.isArray(backupTopics) && backupTopics.length) {
+          await cloudFetch("campaign_topics", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(backupTopics),
+          }).catch(() => undefined);
+        }
+        return false;
+      }
+
       await cloudFetch(`study_documents?id=eq.${doc.id}`, {
         method: "PATCH",
         body: JSON.stringify({ processing_status: "ready" }),
@@ -217,7 +277,7 @@
     // Recuperação inteligente para Material, Lei, Prova ou Simulado
     const isExam = ["prova", "simulado"].includes(String(doc.document_type || ""));
     const prompt = `Com base no PDF "${doc.title}" (${doc.document_type}), gere um pacote de estudo estruturado. Responda EXCLUSIVAMENTE com um objeto JSON puro (sem blocos markdown) no formato:
-{"summaries":[{"subject":"Disciplina","title":"Título específico do assunto","page_start":1,"page_end":${pages.length},"explanation":"Aula escrita detalhada e clara para iniciantes explicando todo o conteúdo e regras","points":["Ponto 1","Ponto 2","Ponto 3","Ponto 4","Ponto 5"],"example":"Exemplo prático aplicado explicado passo a passo","bizu":"Dica rápida de memorização para prova","mnemonic":"Mnemônico ou associação","trap":"Pegadinha frequente de banca sobre este tema","flashcards":[{"question":"Pergunta 1?","answer":"Resposta 1"},{"question":"Pergunta 2?","answer":"Resposta 2"},{"question":"Pergunta 3?","answer":"Resposta 3"}],"questions":[{"statement":"Enunciado da questão 1","options":["Opção A","Opção B","Opção C","Opção D"],"correct_index":0,"explanation":"Conceito-chave: ... | ✅ Correta: ... | ❌ Demais alternativas: ... | ⚠️ Pegadinha: ...","difficulty":"facil","topic":"Assunto","origin":"${isExam ? "adaptada_do_pdf" : "autoral"}"}]}]}
+{"summaries":[{"subject":"Disciplina","title":"Título específico do assunto","page_start":1,"page_end":${realLastPage},"explanation":"Aula escrita detalhada e clara para iniciantes explicando todo o conteúdo e regras","points":["Ponto 1","Ponto 2","Ponto 3","Ponto 4","Ponto 5"],"example":"Exemplo prático aplicado explicado passo a passo","bizu":"Dica rápida de memorização para prova","mnemonic":"Mnemônico ou associação","trap":"Pegadinha frequente de banca sobre este tema","flashcards":[{"question":"Pergunta 1?","answer":"Resposta 1"},{"question":"Pergunta 2?","answer":"Resposta 2"},{"question":"Pergunta 3?","answer":"Resposta 3"}],"questions":[{"statement":"Enunciado da questão 1","options":["Opção A","Opção B","Opção C","Opção D"],"correct_index":0,"explanation":"Conceito-chave: ... | ✅ Correta: ... | ❌ Demais alternativas: ... | ⚠️ Pegadinha: ...","difficulty":"facil","topic":"Assunto","origin":"${isExam ? "adaptada_do_pdf" : "autoral"}"}]}]}
 Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 questões de 4 alternativas em cada assunto.`;
 
     const res = await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`, {
@@ -258,17 +318,25 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
     if (!saveRes.ok) return false;
 
     const primarySubject = dbRows[0]?.content?.subject || "Conteúdo Geral";
+    const sentPages = compactPages.length;
+    const totalPages = Math.max(pages.length, Number(pdfMeta.pdfTotalPages) || pages.length);
+    const coveragePercent = Math.max(1, Math.min(100, Math.round((sentPages / Math.max(1, totalPages)) * 100)));
+    const wasSampled = sentPages < pages.length || Boolean(pdfMeta.truncatedPages);
+    const warnings = [];
+    if (pdfMeta.truncatedPages) warnings.push(`O PDF possui ${pdfMeta.pdfTotalPages} páginas; foram lidas as primeiras 220 páginas.`);
+    if (sentPages < pages.length) warnings.push("Conteúdo gerado a partir de uma amostra do PDF; reprocesse para cobertura completa.");
+
     const coverage = {
-      estimated_pages: pages.length,
+      estimated_pages: totalPages,
       sections_detected: summaries.map((s) => s.title),
       sections_covered: summaries.map((s) => s.title),
-      omissions: [],
-      confidence: 0.9,
-      percent: 100,
+      omissions: wasSampled ? [`Modo de recuperação leu ${sentPages} de ${totalPages} páginas.`] : [],
+      confidence: wasSampled ? 0.6 : 0.88,
+      percent: coveragePercent,
       summary_count: summaries.length,
       shallow_summaries: 0,
-      warnings: [],
-      needs_review: false,
+      warnings,
+      needs_review: wasSampled,
     };
 
     await cloudFetch(`study_documents?id=eq.${doc.id}`, {
@@ -368,6 +436,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
     const doc = cloudDocuments.find((item) => item.id === id);
     const path = doc?.storage_path;
     window._extractedPagesByDocId.delete(id);
+    window._extractedPdfMetaByDocId.delete(id);
     window._activeProcessingDocs.delete(id);
     await originalDeleteDocument(id);
     if (!path || cloudDocuments.some((item) => item.id === id)) return;

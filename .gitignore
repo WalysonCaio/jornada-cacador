@@ -1,5 +1,12 @@
+node_modules/
 desktop/node_modules/
 desktop/release/
+app/android/.gradle/
+app/android/.idea/
+app/android/app/build/
+app/android/build/
+.gradle/
+.idea/
 *.log
 .env
 .env.*

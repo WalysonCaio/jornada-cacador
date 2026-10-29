@@ -1,6 +1,10 @@
--- Migração v79: Catálogo Compartilhado de Questões Oficiais e Pacotes de Prova (Multiusuário)
+-- Migração v79/v81: Catálogo Compartilhado de Questões Oficiais + Permissão JSON no bucket study-documents
 -- Permite que questões extraídas de provas oficiais ou importadas sejam compartilhadas
 -- entre todos os usuários autenticados do projeto, sem duplicar consumo de IA.
+
+update storage.buckets
+set allowed_mime_types = array['application/pdf','image/jpeg','image/png','text/plain','application/json']
+where id = 'study-documents';
 
 create table if not exists public.shared_question_bank (
   id uuid primary key default gen_random_uuid(),
