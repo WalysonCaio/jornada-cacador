@@ -11,6 +11,7 @@ const material = read("../supabase/functions/material-gemini/index.ts");
 const redacao = read("../supabase/functions/redacao-gemini/index.ts");
 const keyManager = read("../supabase/functions/ai-key-manager/index.ts");
 const migration = read("../supabase/migrations/20261017_v74_secure_document_delete.sql");
+const sharedBankMigration = read("../supabase/migrations/20261028_v79_shared_question_bank.sql");
 const assistant = read("../supabase/functions/assistente-pmpe/index.ts");
 
 const requireAll = (name, source, terms) => {
@@ -34,6 +35,8 @@ requireAll("v59-enhancements", enhancements, [
   "window.openPersonalAiSettings",
   "data-open-personal-ai",
   "extracting_text",
+  "is_question_pack",
+  "customQuestionsByCampaign",
 ]);
 requireAll("v77-experience", experience, [
   "renderReverseSchedule",
@@ -45,6 +48,15 @@ requireAll("v77-experience", experience, [
   "finishTimedSimulado",
   "topicSearchInput",
   "practiceDailySubjectBtn",
+  "formatStepByStepResolution",
+  "spawnTwinQuestionForCurrent",
+  "progressiveQuestions",
+  "startErrorReinforcementBattle",
+  "renderTacticalDiagnosis",
+  "ensureExamBankHub",
+  "syncSharedQuestionBank",
+  "handleParseAndSaveRawQuestions",
+  "handleGenerateBoardPack",
 ]);
 requireAll("pdf-text-client", pdfClient, [
   '["edital", "edital_concurso"].includes',
@@ -74,6 +86,7 @@ requireAll("material-gemini", material, [
   "extractSecretString",
   "personalGeminiKey",
   "releaseStaleLocks",
+  "shared_question_bank",
 ]);
 requireAll("redacao-gemini", redacao, [
   "parseGeminiJsonText",
@@ -90,11 +103,19 @@ requireAll("database transaction", migration, [
   "auth.role() <> 'service_role'", "for update", "campaign_topics",
   "study_documents", "document_type in ('edital', 'edital_concurso')",
 ]);
-requireAll("legacy assistant ownership", assistant, [
+requireAll("shared question bank migration", sharedBankMigration, [
+  "shared_question_bank",
+  "fingerprint",
+  "enable row level security",
+]);
+requireAll("legacy assistant ownership & structured questions", assistant, [
   "ownedDocumentResponse", "storage_path=eq.${encodeURIComponent(storagePath)}",
   "user_id=eq.${encodeURIComponent(user.id)}",
   "askGemini(systemPrompt, userPrompt, personalGeminiKey)",
   "extractSecretString",
+  "shared_question_bank",
+  "generate_structured_questions",
+  "askStructuredQuestions",
 ]);
 
 if (/cloudFetch\(`study_(?:campaigns|documents)\?id=eq\.\$\{(?:c\.dbId|id)\}`\s*,\s*\{method:'DELETE'/.test(html)) {
@@ -104,4 +125,4 @@ if (material.includes("gemini-3.8-flash") || material.includes("gemini-3.5-flash
   throw new Error("material-gemini ainda referencia identificadores de modelo inexistentes (3.8/3.5).");
 }
 
-console.log("OK: contratos CRUD, isolamento multiusuário (3+ contas), chave Gemini pessoal, importação de PDFs e melhorias de UI validados.");
+console.log("OK: contratos CRUD, isolamento multiusuário (3+ contas), chave Gemini pessoal, importação de PDFs, recursos boaResposta e Central de Provas validados.");

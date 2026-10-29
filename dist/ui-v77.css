@@ -1,4 +1,4 @@
-/* V77 — navegação orientada à ação, Cronograma Reverso, Filtro por Tópico e Simulado com Folha de Respostas */
+/* V77 — navegação orientada à ação, Cronograma Reverso, Filtro por Tópico, Simulado, Resolução Passo a Passo (estilo boaResposta) e Central de Provas */
 .todayCommand{display:grid;grid-template-columns:minmax(0,1.3fr) repeat(2,minmax(170px,.55fr));gap:12px;margin-bottom:16px}
 .commandPrimary,.commandShortcut{border:1px solid #2c5875;border-radius:18px;color:var(--text);text-align:left;padding:17px;background:linear-gradient(145deg,#10283e,#091725);min-height:112px;transition:transform .18s,border-color .18s,background .18s}
 .commandPrimary{position:relative;overflow:hidden;background:radial-gradient(circle at 92% 8%,rgba(79,224,255,.18),transparent 38%),linear-gradient(145deg,#153650,#0a1a2b)}
@@ -8,6 +8,7 @@
 .commandPrimary span,.commandShortcut span{display:block;color:var(--muted);font-size:.78rem;margin-top:4px}
 .commandShortcut i{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:#143651;color:var(--cyan);font-style:normal;font-weight:900}
 .questionFilters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.questionFilters .field{margin:0}.questionFilters select{width:100%;background:#07131f;border:1px solid #294257;color:white;padding:11px;border-radius:10px}
+.trainerQuickActions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}
 .questionTrust{margin:10px 0 0;padding-left:22px;position:relative}.questionTrust:before{content:'ⓘ';position:absolute;left:0;color:var(--cyan)}
 .reportColumns{display:grid;grid-template-columns:1.1fr .9fr;gap:12px}.reportColumns>.card{margin-bottom:12px}
 .performanceChart{display:grid;gap:12px}.performanceBar{display:grid;grid-template-columns:minmax(110px,.8fr) minmax(120px,1.2fr) auto;align-items:center;gap:10px}.performanceBar>span{font-size:.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.performanceTrack{height:9px;border:1px solid #28445a;border-radius:99px;background:#06101b;overflow:hidden}.performanceTrack i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#238df0,#5be5ff)}.performanceBar.low .performanceTrack i{background:linear-gradient(90deg,#df4d66,#ff8e79)}.performanceBar.mid .performanceTrack i{background:linear-gradient(90deg,#d4972e,#f7c94f)}.performanceBar b{text-align:right;color:var(--cyan);font-size:.8rem;white-space:nowrap}
@@ -32,7 +33,65 @@
 .questionOptions button.selectedOption{border-color:var(--cyan);background:#143550;color:#fff}
 .simuladoNavRow{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:8px;margin-top:12px}
 .viewStateNote{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:.74rem}.viewStateNote:before{content:'✓';color:var(--green)}
-@media(min-width:1040px){#today .desktopGrid{grid-template-columns:minmax(0,1.45fr) minmax(300px,.55fr)}#report .performanceGrid{grid-template-columns:repeat(4,minmax(0,1fr))}.questionFilters{grid-template-columns:1.2fr 1.2fr .8fr .8fr}.questionTrainer{padding:22px}.sourceLinks{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:900px){.todayCommand{grid-template-columns:1fr 1fr}.commandPrimary{grid-column:1/-1}.reportColumns{grid-template-columns:1fr}.simuladoConfigGrid{grid-template-columns:1fr}.reverseScheduleGrid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:719px){.todayCommand{grid-template-columns:1fr 1fr;gap:8px}.commandPrimary{min-height:100px;padding:15px}.commandShortcut{min-height:94px;padding:13px}.commandShortcut b{font-size:.9rem}.commandShortcut span{font-size:.7rem}.questionFilters{grid-template-columns:1fr}.performanceBar{grid-template-columns:minmax(90px,.8fr) minmax(90px,1.2fr) auto}.questionTrainer .action{position:sticky;bottom:calc(74px + env(safe-area-inset-bottom));z-index:3}.hero{margin-bottom:12px}.simuladoNavRow{grid-template-columns:1fr 1fr}.simuladoNavRow #simuladoSubmitBtn{grid-column:1/-1}}
+
+/* Resolução Passo a Passo (Estilo boaResposta) */
+.boaRespostaResolution{display:grid;gap:10px;padding:4px 0}
+.resolutionHeader{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding-bottom:8px;border-bottom:1px solid #25435b}
+.resolutionHeader h4{margin:4px 0 0;font-size:1rem;color:#fff}
+.boaRespostaResolution.isGood .resolutionHeader .eyebrow{color:var(--green)}
+.boaRespostaResolution.isBad .resolutionHeader .eyebrow{color:#ff8695}
+.stepResolutionBlock{padding:11px 13px;border-radius:11px;background:#081724;border-left:4px solid var(--cyan)}
+.stepResolutionBlock b{display:block;font-size:.83rem;margin-bottom:4px;color:var(--cyan)}
+.stepResolutionBlock p{margin:0;font-size:.88rem;line-height:1.55;color:#e3f1fc}
+.stepResolutionBlock.right{border-left-color:var(--green);background:#091f1b}
+.stepResolutionBlock.right b{color:var(--green)}
+.stepResolutionBlock.wrongAnalysis{border-left-color:#ff8596;background:#1d121a}
+.stepResolutionBlock.wrongAnalysis b{color:#ff9aa8}
+.stepResolutionBlock.trap{border-left-color:var(--gold);background:#1f190e}
+.stepResolutionBlock.trap b{color:var(--gold)}
+.resolutionOptionsDetails{border:1px solid #254259;border-radius:11px;padding:9px 12px;background:#07131e}
+.resolutionOptionsDetails summary{cursor:pointer;font-weight:750;font-size:.82rem;color:var(--cyan)}
+.stepOptionsList{display:grid;gap:6px;margin-top:9px}
+.stepOptionItem{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;background:#0b1a28;border:1px solid #1f364a;font-size:.82rem}
+.stepOptionItem.isRight{border-color:#2c8a63;background:#0d261f}
+.stepOptionItem.isWrong{border-color:#8a3544;background:#29141b}
+.stepOptBadge{font-size:.7rem;font-weight:800;padding:3px 7px;border-radius:99px;white-space:nowrap}
+.stepOptBadge.good{background:#123d2b;color:#6bf0b3}
+.stepOptBadge.bad{background:#421822;color:#ff9eab}
+.stepOptBadge.neutral{background:#13283a;color:var(--muted)}
+.resolutionActionBar{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.resolutionActionBar button{flex:1;min-width:190px}
+
+/* Diagnóstico Tático (Pontos Fortes e Fracos) */
+.tacticalDiagnosisCard{border-color:#2b5370;background:linear-gradient(145deg,#0d1f31,#081420)}
+.diagnosisGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:8px}
+.diagnosisCol{border:1px solid #233d53;border-radius:14px;padding:12px;background:#07131f;display:flex;flex-direction:column;gap:8px}
+.diagnosisCol.strong{border-color:#265c47}.diagnosisCol.evolving{border-color:#615025}.diagnosisCol.weak{border-color:#69303d}
+.diagnosisColHead{display:flex;justify-content:space-between;align-items:center;gap:8px;padding-bottom:7px;border-bottom:1px solid #1d3346;font-size:.84rem}
+.diagnosisColHead span{padding:2px 8px;border-radius:99px;background:#11283b;color:var(--cyan);font-weight:800;font-size:.73rem}
+.diagnosisList{display:grid;gap:7px}
+.diagnosisItem{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:#0b1b2b;border:1px solid #1e3548}
+.diagnosisItem b{display:block;font-size:.83rem}
+
+/* Central de Provas & Alimentação do Banco (#examBankHub) */
+.examBankHubCard{border-color:#2f5c7c;background:radial-gradient(circle at 95% 0,rgba(89,230,255,.1),transparent 42%),linear-gradient(145deg,#0e2134,#081421)}
+.examHubTabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}
+.examHubTab{border:1px solid #294963;background:#081624;color:var(--muted);padding:10px 12px;border-radius:12px;font-weight:800;font-size:.82rem;text-align:center}
+.examHubTab.active{background:linear-gradient(90deg,#136fd1,#24b2e5);color:#fff;border-color:#4fd4ff}
+.sharedBankBanner{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 15px;border-radius:14px;border:1px solid #2b5a78;background:#081a2b;margin-bottom:12px}
+.examDocumentsCatalog{display:grid;gap:8px}
+.examDocRow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border-radius:13px;border:1px solid #254258;background:#071421}
+.examDocRow b{display:block;margin:2px 0}
+.examDocActions{display:flex;gap:7px;flex-wrap:wrap}
+.examEmptyState{text-align:center;padding:18px 12px;border:1px dashed #2b4d66;border-radius:14px;background:#07131f}
+.examImportSplit{display:grid;grid-template-columns:1fr 1.25fr;gap:12px}
+.examImportBox,.examGeneratorBox{padding:14px;border-radius:14px;border:1px solid #25435a;background:#07131f}
+.examImportBox input[type=text],.examImportBox textarea,.examGeneratorBox select{width:100%;background:#0b1b2b;border:1px solid #2b4961;color:#fff;padding:10px;border-radius:10px}
+.examImportActionsRow{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.officialSourcesAccordion{margin-top:14px;padding-top:11px;border-top:1px solid #1f3649}
+.officialSourcesAccordion summary{cursor:pointer;font-size:.82rem;font-weight:750;color:var(--cyan)}
+
+@media(min-width:1040px){#today .desktopGrid{grid-template-columns:minmax(0,1.45fr) minmax(300px,.55fr)}#report .performanceGrid{grid-template-columns:repeat(4,minmax(0,1fr))}.questionFilters{grid-template-columns:repeat(5,minmax(0,1fr))}.questionTrainer{padding:22px}.sourceLinks{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:900px){.todayCommand{grid-template-columns:1fr 1fr}.commandPrimary{grid-column:1/-1}.reportColumns,.diagnosisGrid,.examImportSplit,.examHubTabs{grid-template-columns:1fr}.simuladoConfigGrid{grid-template-columns:1fr}.reverseScheduleGrid{grid-template-columns:repeat(2,1fr)}.sharedBankBanner,.examDocRow{flex-direction:column;align-items:stretch}}
+@media(max-width:719px){.todayCommand{grid-template-columns:1fr 1fr;gap:8px}.commandPrimary{min-height:100px;padding:15px}.commandShortcut{min-height:94px;padding:13px}.commandShortcut b{font-size:.9rem}.commandShortcut span{font-size:.7rem}.questionFilters,.trainerQuickActions{grid-template-columns:1fr}.performanceBar{grid-template-columns:minmax(90px,.8fr) minmax(90px,1.2fr) auto}.questionTrainer .action{position:sticky;bottom:calc(74px + env(safe-area-inset-bottom));z-index:3}.hero{margin-bottom:12px}.simuladoNavRow{grid-template-columns:1fr 1fr}.simuladoNavRow #simuladoSubmitBtn{grid-column:1/-1}}
 @media(max-width:390px){.todayCommand{grid-template-columns:1fr}.commandPrimary{grid-column:auto}.commandShortcut{min-height:82px}.performanceBar{grid-template-columns:1fr auto}.performanceBar>span{grid-column:1/-1}.performanceTrack{grid-column:1}.performanceBar b{grid-column:2}}

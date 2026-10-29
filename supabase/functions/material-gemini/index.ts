@@ -328,7 +328,7 @@ PADRÃO OBRIGATÓRIO DAS QUESTÕES:
 4. Todas as quatro alternativas devem pertencer à mesma disciplina, ao mesmo assunto e ao mesmo contexto do enunciado. É proibido usar alternativas de temas alheios apenas para completar a questão.
 5. As alternativas devem possuir estrutura gramatical e extensão semelhantes. Evite pistas como uma alternativa muito mais detalhada, palavras absolutas usadas apenas nos erros ou três opções evidentemente absurdas.
 6. Deve existir uma única resposta inequivocamente correta segundo o PDF. Não invente lei, artigo, dado, jurisprudência ou exceção ausente.
-7. A explicação deve justificar a correta e comentar brevemente por que cada uma das outras está errada.
+7. A explicação (explanation) deve seguir o formato passo a passo que ensina: 'Conceito-chave: ... | ✅ Correta: ... | ❌ Demais alternativas: ... | ⚠️ Pegadinha: ...'.
 8. Varie a posição da resposta correta entre A, B, C e D.
 9. Se o PDF trouxer questões oficiais, crie uma adaptação fiel e marque origin como adaptada_do_pdf. Caso contrário, crie questão autoral e marque origin como autoral. Nunca apresente uma questão autoral como oficial.
 10. Use o estilo de cobrança compatível com concursos policiais e com a banca indicada no próprio material, sem copiar questões externas nem alegar acesso a banco pago.
@@ -606,7 +606,7 @@ Regras:
 - explanation deve ser uma aula detalhada, clara e autossuficiente para iniciante;
 - points deve possuir de 5 a 10 itens;
 - flashcards deve possuir de 5 a 8 objetos com question e answer;
-- questions deve possuir exatamente 5 objetos com statement, options (4 alternativas plausíveis do mesmo assunto), correct_index (0 a 3), explanation, difficulty, topic e origin;
+- questions deve possuir exatamente 5 objetos com statement, options (4 alternativas plausíveis do mesmo assunto), correct_index (0 a 3), explanation (resolução passo a passo com Conceito-chave, justificativa da correta, erro das demais e pegadinha), difficulty, topic e origin;
 - use a progressão: 1 fácil, 2 médias e 2 difíceis;
 - não invente artigo, lei, exceção, banca ou dado ausente;
 - em referências jurídicas use “Art. 4°”, nunca “Art. 4o”;
@@ -1052,7 +1052,10 @@ Deno.serve(async (request) => {
       return response({ error: "O PDF deve ter no máximo 50 MB para geração automática.", code: "FILE_TOO_LARGE" }, 413);
     }
     const fingerprint = await sha256(bytes);
-    const cachedResponse = await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints?user_id=eq.${encodeURIComponent(user.id)}&sha256=eq.${fingerprint}&document_id=neq.${encodeURIComponent(documentId)}&select=document_id&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
+    const cacheFilter = ["prova", "simulado"].includes(documentType)
+      ? `sha256=eq.${fingerprint}&document_id=neq.${encodeURIComponent(documentId)}&select=document_id&limit=1`
+      : `user_id=eq.${encodeURIComponent(user.id)}&sha256=eq.${fingerprint}&document_id=neq.${encodeURIComponent(documentId)}&select=document_id&limit=1`;
+    const cachedResponse = await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints?${cacheFilter}`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
     const cached = cachedResponse.ok ? await cachedResponse.json() : [];
     if (Array.isArray(cached) && cached[0]?.document_id) {
       const contentResponse = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?source_document_id=eq.${cached[0].document_id}&select=content_type,title,content,source_refs,approved`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
@@ -1167,6 +1170,30 @@ Deno.serve(async (request) => {
     const detectedSubject = Object.entries(subjectCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "Conteúdo geral";
     await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready", detected_subject: detectedSubject, metadata: { ...(documents[0]?.metadata || {}), primary_subject: detectedSubject, subjects: Object.keys(subjectCounts), analyzed_at: new Date().toISOString(), analysis_plan: inventory, analysis_progress: { stage: "completed", percent: 100, completed_sections: coverage.sections_covered.length, total_sections: coverage.sections_detected.length, updated_at: new Date().toISOString() }, coverage } }) });
     await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ user_id: user.id, document_id: documentId, sha256: fingerprint, byte_size: bytes.byteLength }) });
+    if (["prova", "simulado"].includes(documentType)) {
+      const sharedQuestions = summaries.flatMap((s: any) =>
+        (Array.isArray(s.questions) ? s.questions : []).map((q: any) => ({
+          fingerprint: `${fingerprint.slice(0, 12)}-${String(q.statement || "").slice(0, 48).replace(/\s+/g, "_").toLowerCase()}`,
+          subject: String(s.subject || detectedSubject || "Conteúdo Geral"),
+          topic: String(q.topic || s.title || "Prova Oficial"),
+          board: String(title || "Prova Oficial").slice(0, 80),
+          difficulty: ["facil", "medio", "dificil"].includes(q.difficulty) ? q.difficulty : "medio",
+          origin: "oficial",
+          statement: String(q.statement || ""),
+          options: Array.isArray(q.options) ? q.options.slice(0, 4) : [],
+          correct_index: Number(q.correct_index) || 0,
+          explanation: String(q.explanation || ""),
+          created_by: user.id,
+        }))
+      ).filter((q: any) => q.statement && q.options.length === 4);
+      if (sharedQuestions.length) {
+        await fetch(`${SUPABASE_URL}/rest/v1/shared_question_bank?on_conflict=fingerprint`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" },
+          body: JSON.stringify(sharedQuestions),
+        }).catch(() => undefined);
+      }
+    }
     await finishUsage(usage.event_id, "success", generated.provider, generated.model);
     await updateJob(documentId, { status: "completed", last_error: null });
     return response({ summaries: summaries.length, flashcards: summaries.reduce((n: number, x: { flashcards?: unknown[] }) => n + (x.flashcards?.length ?? 0), 0), questions: summaries.reduce((n: number, x: { questions?: unknown[] }) => n + (x.questions?.length ?? 0), 0), coverage, provider: generated.provider, model: generated.model, key_source: personalGeminiKey ? "personal" : "shared", chunks: generated.chunks || 1 });
