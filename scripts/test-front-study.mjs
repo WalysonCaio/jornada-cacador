@@ -195,3 +195,16 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   console.log("OK: Central de Revisão Ativa, Raio-X de Véspera, Incidência no Edital e Redação Digitada validados.");
 }
 
+// Teste 13: Biblioteca Compartilhada da Comunidade (Sem Download de PDF + Anti-CPF), Perfis Primário/Secundário no Ranking (Sem TAF) e Responsividade Mobile
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const sqlSrc = readFileSync(new URL("../supabase/migrations/20261030_v91_community_library_and_ranking.sql", import.meta.url), "utf8");
+  assert.ok(htmlSrc.includes('id="communityViewerDialog"') && htmlSrc.includes('data-view-community-doc'), "Deve ter visualizador protegido da comunidade sem botão de download do PDF bruto");
+  assert.ok(v77Src.includes("sanitizePersonalWatermarks") && sqlSrc.includes("sanitize_personal_watermarks"), "Deve higienizar CPF e marcas d'água pessoais no SQL e no JS");
+  assert.ok(v77Src.includes("rankProfileSecRoleInput") && v77Src.includes("renderRoleBadgesHtml") && sqlSrc.includes("secondary_role"), "Ranking deve exibir perfil primário e secundário quando cadastrados");
+  const rankSection = v77Src.slice(v77Src.indexOf("function renderHuntersLeaderboard()"), v77Src.indexOf("function ensureTafAndRankingShortcuts()"));
+  assert.ok(!rankSection.includes("taf_ready"), "Ranking não deve exibir dados de treino do TAF");
+  console.log("OK: Biblioteca da Comunidade (protegida contra download/CPF), Perfis Primário/Secundário no Ranking (sem TAF) e Responsividade Mobile validados.");
+}
+

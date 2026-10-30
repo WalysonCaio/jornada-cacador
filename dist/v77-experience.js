@@ -2548,8 +2548,64 @@
     };
   }
 
-  // 12. Ranking Geral de Caçadores (Leaderboard Social entre Amigos)
+  // 12. Ranking Geral de Caçadores (Perfis Primário + Secundário ex.: PMPE e PPPE, sem TAF no Ranking)
   let leaderboardRows=[],leaderboardBusy=false,leaderboardSort='streak',leaderboardRoleFilter='all',leaderboardSqlMissing=false;
+
+  function normalizeExamSlug(name='',org=''){
+    const raw=topicKey(`${name} ${org}`);
+    if(/\bpmpe\b|policia militar de pernambuco|soldado pmpe|oficial pmpe/.test(raw))return 'pmpe';
+    if(/\bpppe\b|policia penal de pernambuco|policial penal pe|agente penitenciario pe/.test(raw))return 'pppe';
+    if(/\bpcpe\b|policia civil de pernambuco/.test(raw))return 'pcpe';
+    if(/\bcbmpe\b|bombeiro militar de pernambuco|bombeiros pe/.test(raw))return 'cbmpe';
+    if(/\bprf\b|policia rodoviaria federal/.test(raw))return 'prf';
+    if(/\bpf\b|policia federal/.test(raw))return 'pf';
+    if(/\bpmba\b|policia militar da bahia/.test(raw))return 'pmba';
+    if(/\bpmce\b|policia militar do ceara/.test(raw))return 'pmce';
+    if(/\bpmpb\b|policia militar da paraiba/.test(raw))return 'pmpb';
+    if(/\bpmal\b|policia militar de alagoas/.test(raw))return 'pmal';
+    const slug=topicKey(name).replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+    return slug.slice(0,40)||'geral';
+  }
+
+  function formatExamRoleLabel(roleText=''){
+    const clean=String(roleText||'').trim();
+    if(!clean)return '';
+    const slug=normalizeExamSlug(clean);
+    const fullMap={
+      pmpe:'PMPE — Polícia Militar de Pernambuco',
+      pppe:'PPPE — Polícia Penal de Pernambuco',
+      pcpe:'PCPE — Polícia Civil de Pernambuco',
+      cbmpe:'CBMPE — Corpo de Bombeiros Militar de PE',
+      prf:'PRF — Polícia Rodoviária Federal',
+      pf:'PF — Polícia Federal',
+      pmba:'PMBA — Polícia Militar da Bahia',
+      pmce:'PMCE — Polícia Militar do Ceará',
+      pmpb:'PMPB — Polícia Militar da Paraíba',
+      pmal:'PMAL — Polícia Militar de Alagoas'
+    };
+    if(fullMap[slug]&&clean.length<=16)return fullMap[slug];
+    return clean;
+  }
+
+  function detectUserRoles(){
+    const campaigns=Array.isArray(state?.campaigns)?state.campaigns.slice().sort((a,b)=>(Number(a.priority||1)-Number(b.priority||1))):[];
+    const active=typeof activeCampaign==='function'?activeCampaign():campaigns[0];
+    const primaryDefault=active?.name||campaigns[0]?.name||'PMPE — Soldado';
+    const primary=String(state?.publicProfile?.role||primaryDefault).trim()||'PMPE — Soldado';
+    const primarySlug=normalizeExamSlug(primary);
+    let secondaryDefault='';
+    for(const c of campaigns){
+      if(c?.name&&normalizeExamSlug(c.name,c.organization||'')!==primarySlug){
+        secondaryDefault=c.name;
+        break;
+      }
+    }
+    const rawSecondary=state?.publicProfile?.secondaryRole!==undefined
+      ?String(state.publicProfile.secondaryRole||'').trim()
+      :secondaryDefault;
+    const secondary=(rawSecondary&&normalizeExamSlug(rawSecondary)!==primarySlug)?rawSecondary:'';
+    return {primary,secondary};
+  }
 
   function rankLabelForXp(x){
     if(typeof level==='function')return level(Number(x)||0,false)?.label||'E III - Caçador Iniciante';
@@ -2558,22 +2614,37 @@
 
   function localHunterRow(){
     syncHunterStatsSnapshot();
+    const roles=detectUserRoles();
     const hs=state.hunterStats||{};
+    if(state.hunterStats){
+      state.hunterStats.role=roles.primary;
+      state.hunterStats.secondaryRole=roles.secondary;
+    }
     return {
       user_id:cloudSession?.user?.id||'local',
       is_me:true,
       name:hs.name||'Você (Caçador)',
-      role:hs.role||(typeof activeCampaign==='function'?activeCampaign()?.name:'PMPE — Soldado')||'PMPE — Soldado',
+      role:roles.primary,
+      secondary_role:roles.secondary,
       streak:Number(hs.streak||state?.streak||0),
       best_streak:Number(hs.bestStreak||state?.bestStreak||0),
       last_study:state?.lastStudy||'',
       missions_done:Number(hs.missionsDone||0),
       accuracy:Number(hs.accuracy||0),
       xp:Number(hs.xp||0),
-      taf_ready:Number(hs.tafReady||0),
-      taf_total:Number(hs.tafTotal||5),
       updated_at:new Date().toISOString()
     };
+  }
+
+  function renderRoleBadgesHtml(primaryRole,secondaryRole,centered=false){
+    const p=formatExamRoleLabel(primaryRole||'PMPE — Soldado');
+    const s=(secondaryRole&&normalizeExamSlug(secondaryRole)!==normalizeExamSlug(primaryRole))?formatExamRoleLabel(secondaryRole):'';
+    return `
+      <div class="roleBadgesWrap" style="${centered?'justify-content:center':''}">
+        <span class="roleBadgePrimary" title="Concurso Primário">🎯 ${escText(p)}</span>
+        ${s?`<span class="roleBadgeSecondary" title="Concurso Secundário">🛡️ ${escText(s)}</span>`:''}
+      </div>
+    `;
   }
 
   async function loadHuntersLeaderboard(forceToast=false){
@@ -2582,6 +2653,11 @@
     renderHuntersLeaderboard();
     try{
       syncHunterStatsSnapshot();
+      const roles=detectUserRoles();
+      if(state.hunterStats){
+        state.hunterStats.role=roles.primary;
+        state.hunterStats.secondaryRole=roles.secondary;
+      }
       if(!cloudSession){
         leaderboardRows=[localHunterRow()];
         return;
@@ -2595,12 +2671,12 @@
           ...r,
           name:meLocal.name||r.name,
           role:meLocal.role||r.role,
+          secondary_role:meLocal.secondary_role||(r.secondary_role||''),
           streak:Math.max(Number(r.streak||0),meLocal.streak),
           best_streak:Math.max(Number(r.best_streak||0),meLocal.best_streak),
           missions_done:Math.max(Number(r.missions_done||0),meLocal.missions_done),
           accuracy:meLocal.accuracy||Number(r.accuracy||0),
-          xp:Math.max(Number(r.xp||0),meLocal.xp),
-          taf_ready:meLocal.taf_ready
+          xp:Math.max(Number(r.xp||0),meLocal.xp)
         }:r);
         if(forceToast)toast(`Ranking atualizado: ${leaderboardRows.length} caçador(es) na disputa!`);
       }else{
@@ -2623,8 +2699,13 @@
     if(!root)return;
     const me=localHunterRow();
     const list=(leaderboardRows&&leaderboardRows.length?leaderboardRows:[me]).slice();
+    const mySlugs=new Set([normalizeExamSlug(me.role),me.secondary_role?normalizeExamSlug(me.secondary_role):''].filter(Boolean));
     const filtered=leaderboardRoleFilter==='same'
-      ?list.filter(r=>topicKey(r.role)===topicKey(me.role))
+      ?list.filter(r=>{
+        const r1=normalizeExamSlug(r.role);
+        const r2=r.secondary_role?normalizeExamSlug(r.secondary_role):'';
+        return mySlugs.has(r1)||(r2&&mySlugs.has(r2));
+      })
       :list;
 
     filtered.sort((a,b)=>{
@@ -2642,7 +2723,7 @@
         <div>
           <div class="eyebrow">COMUNIDADE E COMPETIÇÃO SAUDÁVEL</div>
           <h2 style="margin:3px 0 0">🏆 Ranking Geral de Caçadores</h2>
-          <p class="small muted" style="margin:3px 0 0">Acompanhe a ofensiva diária, patente, cargo estudado e desempenho de todos os caçadores cadastrados.</p>
+          <p class="small muted" style="margin:3px 0 0">Acompanhe a ofensiva diária, perfil de concurso (primário e secundário) e desempenho nos estudos.</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button type="button" class="ghost small" id="shareAppRankingBtn">📲 Convidar Amigos</button>
@@ -2652,16 +2733,17 @@
 
       ${leaderboardSqlMissing?`
         <div class="card" style="margin-bottom:12px;border-color:var(--gold)">
-          <b>Ative a listagem global de usuários no Supabase (1 vez):</b>
-          <p class="small muted" style="margin:4px 0 0">Para que todos os usuários cadastrados em <code>auth.users</code> apareçam aqui automaticamente, execute o arquivo <code>supabase/migrations/20261030_v89_taf_and_leaderboard.sql</code> no SQL Editor do seu Supabase.</p>
+          <b>Ative o Ranking e a Biblioteca da Comunidade no Supabase (1 vez):</b>
+          <p class="small muted" style="margin:4px 0 0">Execute o arquivo <code>supabase/migrations/20261030_v91_community_library_and_ranking.sql</code> no SQL Editor do Supabase para listar todos os usuários e compartilhar materiais por concurso.</p>
         </div>
       `:''}
 
       <div class="card" style="margin-bottom:12px">
         <div class="sectionHead" style="margin-bottom:8px">
           <div>
-            <div class="eyebrow">SEU CARTÃO NO RANKING</div>
-            <strong>${escText(me.name)} · <span style="color:var(--cyan)">${escText(me.role)}</span></strong>
+            <div class="eyebrow">SEU PERFIL NO RANKING (PRIMÁRIO E SECUNDÁRIO)</div>
+            <strong style="font-size:1.02rem">${escText(me.name)}</strong>
+            ${renderRoleBadgesHtml(me.role,me.secondary_role,false)}
           </div>
           <span class="tag">🔥 ${me.streak}d ofensiva · ${me.xp} XP</span>
         </div>
@@ -2669,8 +2751,11 @@
           <label class="field">Seu Nome no Ranking
             <input type="text" id="rankProfileNameInput" maxlength="50" value="${escText(state.publicProfile?.name||me.name)}" placeholder="Ex.: Walyson Caio">
           </label>
-          <label class="field">Concurso / Cargo que está estudando
-            <input type="text" id="rankProfileRoleInput" maxlength="60" value="${escText(state.publicProfile?.role||me.role)}" placeholder="Ex.: PMPE — Soldado">
+          <label class="field">1º Concurso (Perfil Primário)
+            <input type="text" id="rankProfileRoleInput" maxlength="60" value="${escText(state.publicProfile?.role||me.role)}" placeholder="Ex.: PMPE — Polícia Militar de PE">
+          </label>
+          <label class="field" style="grid-column:1/-1">2º Concurso (Perfil Secundário — Opcional: só aparece se preenchido ou se você tiver 2 portais)
+            <input type="text" id="rankProfileSecRoleInput" maxlength="60" value="${escText(me.secondary_role||'')}" placeholder="Ex.: PPPE — Polícia Penal de PE (deixe em branco se estudar só para 1 concurso)">
           </label>
         </div>
         <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -2678,7 +2763,7 @@
             <input type="checkbox" id="rankProfileHideToggle" ${state.publicProfile?.hidden?'checked':''}>
             Ocultar meu perfil para outros usuários
           </label>
-          <button type="button" class="ghost small" id="saveRankProfileBtn">Salvar meu cartão no Ranking</button>
+          <button type="button" class="ghost small" id="saveRankProfileBtn">Salvar meu perfil no Ranking</button>
         </div>
       </div>
 
@@ -2688,9 +2773,9 @@
           <button type="button" class="ghost small ${leaderboardSort==='xp'?'active':''}" data-rank-sort="xp">⚡ Por XP / Patente</button>
           <button type="button" class="ghost small ${leaderboardSort==='accuracy'?'active':''}" data-rank-sort="accuracy">🎯 Por Desempenho</button>
         </div>
-        <select id="rankRoleFilterSelect" style="max-width:250px">
-          <option value="all" ${leaderboardRoleFilter==='all'?'selected':''}>Todos os cargos (${list.length} caçadores)</option>
-          <option value="same" ${leaderboardRoleFilter==='same'?'selected':''}>Mesmo cargo: ${escText(me.role)}</option>
+        <select id="rankRoleFilterSelect" style="max-width:260px">
+          <option value="all" ${leaderboardRoleFilter==='all'?'selected':''}>Todos os concursos (${list.length} caçadores)</option>
+          <option value="same" ${leaderboardRoleFilter==='same'?'selected':''}>Mesmo concurso que o meu (${escText(me.role)}${me.secondary_role?` / ${escText(me.secondary_role)}`:''})</option>
         </select>
       </div>
 
@@ -2703,10 +2788,10 @@
                 <span class="rankAvatar">${escText((item.name||'C').trim().slice(0,1).toUpperCase())}</span>
               </div>
               <strong style="font-size:1rem">${escText(item.name)}${item.is_me?' (Você)':''}</strong>
-              <span class="tag" style="justify-self:center">${escText(item.role||'PMPE')}</span>
-              <div style="font-size:1.25rem;font-weight:900;color:var(--gold);margin-top:4px">🔥 ${Number(item.streak||0)} dia${Number(item.streak||0)===1?'':'s'}</div>
+              ${renderRoleBadgesHtml(item.role,item.secondary_role,true)}
+              <div style="font-size:1.25rem;font-weight:900;color:var(--gold);margin-top:4px">🔥 ${Number(item.streak||0)} dia${Number(item.streak||0)===1?'':'s'} de ofensiva</div>
               <div class="small muted">${escText(rankLabelForXp(item.xp))} · ${Number(item.xp||0)} XP</div>
-              <div class="small muted">🎯 ${Number(item.accuracy||0)}% acertos · ${Number(item.missions_done||0)} missões · 💪 TAF ${Number(item.taf_ready||0)}/${Number(item.taf_total||5)}</div>
+              <div class="small muted">🎯 ${Number(item.accuracy||0)}% acertos · ✓ ${Number(item.missions_done||0)} missões concluídas</div>
             </div>
           `).join('')}
         </div>
@@ -2730,15 +2815,13 @@
                       ${escText(item.name)}${item.is_me?' <span class="tag" style="padding:2px 6px;font-size:.68rem">Você</span>':''}
                       ${studiedToday?' <span style="color:#4ade80;font-size:.75rem;font-weight:700">● Estudou hoje</span>':''}
                     </div>
-                    <div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                      Cargo: <b style="color:#e2e8f0">${escText(item.role||'PMPE — Soldado')}</b> · ${escText(rankLabelForXp(item.xp))}
-                    </div>
+                    ${renderRoleBadgesHtml(item.role,item.secondary_role,false)}
+                    <div class="small muted" style="margin-top:2px">${escText(rankLabelForXp(item.xp))}</div>
                   </div>
                 </div>
                 <div class="rankRowMetrics small muted">
                   <span>🎯 <b>${Number(item.accuracy||0)}%</b> acertos</span> ·
-                  <span>✓ <b>${Number(item.missions_done||0)}</b> missões</span> ·
-                  <span>💪 TAF <b>${Number(item.taf_ready||0)}/${Number(item.taf_total||5)}</b></span>
+                  <span>✓ <b>${Number(item.missions_done||0)}</b> missões</span>
                 </div>
                 <div style="text-align:right">
                   <div style="font-weight:900;color:var(--gold);font-size:1rem">🔥 ${Number(item.streak||0)}d</div>
@@ -2753,7 +2836,8 @@
 
     q('#refreshRankingBtn').onclick=()=>loadHuntersLeaderboard(true);
     q('#shareAppRankingBtn').onclick=async()=>{
-      const shareText=`🔥 Estou treinando no Jornada do Caçador para ${me.role} (${me.streak} dias de ofensiva e ${me.xp} XP)! Entre no app e dispute comigo no Ranking: https://jornada.wcaio.workers.dev`;
+      const rolesText=me.secondary_role?`${me.role} e ${me.secondary_role}`:me.role;
+      const shareText=`🔥 Estou estudando no Jornada do Caçador para ${rolesText} (${me.streak} dias de ofensiva e ${me.xp} XP)! Entre no app, compartilhe materiais da prova e dispute no Ranking: https://jornada.wcaio.workers.dev`;
       if(navigator.share){
         try{await navigator.share({title:'Jornada do Caçador — Ranking',text:shareText,url:'https://jornada.wcaio.workers.dev'});return}catch{}
       }
@@ -2763,12 +2847,18 @@
       state.publicProfile=state.publicProfile||{};
       state.publicProfile.name=q('#rankProfileNameInput')?.value?.trim()||me.name;
       state.publicProfile.role=q('#rankProfileRoleInput')?.value?.trim()||me.role;
+      state.publicProfile.secondaryRole=q('#rankProfileSecRoleInput')?.value?.trim()||'';
       state.publicProfile.hidden=!!q('#rankProfileHideToggle')?.checked;
       syncHunterStatsSnapshot();
+      const roles=detectUserRoles();
+      if(state.hunterStats){
+        state.hunterStats.role=roles.primary;
+        state.hunterStats.secondaryRole=roles.secondary;
+      }
       save();
       if(cloudSession&&navigator.onLine)await pushCloudState();
       await loadHuntersLeaderboard(true);
-      toast('Seu cartão no Ranking foi atualizado e sincronizado!');
+      toast('Seu perfil primário e secundário no Ranking foi salvo!');
     };
     qa('[data-rank-sort]').forEach(btn=>{
       btn.onclick=()=>{
@@ -2798,6 +2888,257 @@
     if(q('#rankingShortcutMeta'))q('#rankingShortcutMeta').textContent=`🔥 ${state?.streak||0}d ofensiva · ver caçadores`;
   }
 
+  // 15. Biblioteca Compartilhada da Comunidade por Concurso (Sem Download do PDF Bruto + Sanitização Anti-CPF)
+  let communityCache={slug:'',documents:[],summaries:[],editalTopics:[],loadedAt:0};
+
+  function sanitizePersonalWatermarks(text=''){
+    return String(text??'')
+      .replace(/\b\d{3}\.?\d{3}\.?\d{3}\s*[-/]\s*\d{2}\b/g,'[CPF PROTEGIDO]')
+      .replace(/(cpf|inscrito|licenciado para|aluno\(a\)|comprador)\s*[:\-]?\s*[0-9.\-]{8,18}/gi,'$1: [DADO PROTEGIDO]')
+      .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,'[EMAIL PROTEGIDO]');
+  }
+
+  async function syncCommunityLibraryForActivePortal(){
+    if(!cloudSession)return;
+    const campaign=typeof activeCampaign==='function'?activeCampaign():null;
+    if(!campaign)return;
+    const slug=normalizeExamSlug(campaign.name||'',campaign.organization||'');
+    try{
+      const res=await cloudFetch('rpc/get_community_exam_library',{
+        method:'POST',
+        body:JSON.stringify({p_exam_name:campaign.name||'',p_exam_org:campaign.organization||''})
+      });
+      const data=await res.json().catch(()=>null);
+      if(!res.ok||!data)return;
+      const commDocs=Array.isArray(data.documents)?data.documents:[];
+      const commSums=Array.isArray(data.summaries)?data.summaries:[];
+      const commTopics=Array.isArray(data.edital_topics)?data.edital_topics:[];
+      communityCache={slug:data.exam_slug||slug,documents:commDocs,summaries:commSums,editalTopics:commTopics,loadedAt:Date.now()};
+
+      // 1) Mesclar documentos da comunidade em cloudDocuments (SEM storage_path para impedir download de PDF)
+      const ownTitles=new Set((cloudDocuments||[]).filter(d=>!d.is_community).map(d=>`${d.document_type}|${topicKey(d.title)}`));
+      const existingIds=new Set((cloudDocuments||[]).map(d=>d.id));
+      let addedDocs=0;
+      for(const cDoc of commDocs){
+        const dedupKey=`${cDoc.document_type}|${topicKey(cDoc.title)}`;
+        if(existingIds.has(cDoc.id)||ownTitles.has(dedupKey))continue;
+        cloudDocuments.push({
+          ...cDoc,
+          title:sanitizePersonalWatermarks(cDoc.title),
+          storage_path:null,
+          source_url:null,
+          is_community:true,
+          processing_status:'ready'
+        });
+        existingIds.add(cDoc.id);
+        ownTitles.add(dedupKey);
+        addedDocs++;
+      }
+
+      // 2) Mesclar resumos, flashcards e questões higienizados nas funções de estudo (ALL_SUMMARIES, ALL_FLASHCARDS, ALL_QUESTIONS)
+      const existingSumKeys=new Set((ALL_SUMMARIES||[]).map(s=>`${topicKey(s.category)}|${topicKey(s.title)}`));
+      const existingCardKeys=new Set((ALL_FLASHCARDS||[]).map(c=>`${topicKey(c[0])}|${topicKey(c[1])}`));
+      const existingQKeys=new Set((ALL_QUESTIONS||[]).map(qItem=>topicKey(qItem.statement).slice(0,80)));
+
+      for(const row of commSums){
+        const cat=canonicalSubjectName(row.content?.subject||'Conteúdo geral');
+        const cleanTitle=sanitizePersonalWatermarks(row.title||'Assunto da Comunidade');
+        const sumKey=`${topicKey(cat)}|${topicKey(cleanTitle)}`;
+        if(!existingSumKeys.has(sumKey)){
+          ALL_SUMMARIES.push({
+            id:row.id,
+            documentId:row.source_document_id,
+            title:cleanTitle,
+            source:`🤝 Comunidade (${sanitizePersonalWatermarks(row.content?.source||'Material compartilhado')})`,
+            category:cat,
+            explanation:sanitizePersonalWatermarks(row.content?.explanation||''),
+            points:(row.content?.points||[]).map(sanitizePersonalWatermarks),
+            example:sanitizePersonalWatermarks(row.content?.example||''),
+            bizu:sanitizePersonalWatermarks(row.content?.bizu||''),
+            mnemonic:sanitizePersonalWatermarks(row.content?.mnemonic||''),
+            trap:sanitizePersonalWatermarks(row.content?.trap||''),
+            is_community:true
+          });
+          existingSumKeys.add(sumKey);
+        }
+
+        for(const card of (row.content?.flashcards||[])){
+          const qText=sanitizePersonalWatermarks(card.question||'');
+          const aText=sanitizePersonalWatermarks(card.answer||'');
+          const cKey=`${topicKey(cat)}|${topicKey(qText)}`;
+          if(qText&&aText&&!existingCardKeys.has(cKey)){
+            ALL_FLASHCARDS.push([cat,qText,aText]);
+            existingCardKeys.add(cKey);
+          }
+        }
+
+        for(const qObj of (row.content?.questions||[])){
+          if(!Array.isArray(qObj.options)||qObj.options.length!==4||!Number.isInteger(qObj.correct_index))continue;
+          const stText=sanitizePersonalWatermarks(qObj.statement||'');
+          const qKey=topicKey(stText).slice(0,80);
+          if(stText&&!existingQKeys.has(qKey)){
+            ALL_QUESTIONS.push({
+              subject:cat,
+              topic:sanitizePersonalWatermarks(qObj.topic||cleanTitle),
+              statement:stText,
+              options:qObj.options.map(sanitizePersonalWatermarks),
+              correct_index:qObj.correct_index,
+              explanation:sanitizePersonalWatermarks(qObj.explanation||''),
+              difficulty:qObj.difficulty||'medio',
+              origin:qObj.origin||'autoral',
+              documentId:row.source_document_id,
+              is_community:true
+            });
+            existingQKeys.add(qKey);
+          }
+        }
+      }
+
+      LEARNING_SUBJECTS=[...new Set([...ALL_SUMMARIES.map(x=>x.category),...ALL_FLASHCARDS.map(x=>x[0]),...ALL_QUESTIONS.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+
+      if(addedDocs>0||commSums.length>0||commTopics.length>0){
+        if(typeof renderUserDocuments==='function')renderUserDocuments();
+        if(typeof renderStudy==='function')renderStudy();
+        if(typeof renderLearning==='function')renderLearning();
+        if(typeof renderQuestionFilters==='function')renderQuestionFilters();
+        renderCommunityCoopBanner();
+      }
+    }catch{}
+  }
+
+  function applyCommunityEditalToPortal(){
+    const campaign=typeof activeCampaign==='function'?activeCampaign():null;
+    const rows=communityCache.editalTopics||[];
+    if(!campaign||!rows.length)return toast('Nenhum edital da comunidade encontrado para este concurso.');
+    const unpacked=typeof window.unpackEditalTopicsList==='function'?window.unpackEditalTopicsList(rows,campaign.name):rows;
+    const missions=unpacked.map((row,i)=>({
+      id:`edital-comm-${i}`,
+      dbId:null,
+      si:null,
+      ti:i,
+      name:sanitizePersonalWatermarks(row.topic),
+      subject:canonicalSubjectName(row.subject||'Edital'),
+      editalOrder:row.edital_order??i,
+      subjectOrder:row.subject_order??0,
+      learningOrder:row.learning_order??i,
+      difficulty:row.difficulty||'basic',
+      prerequisite:row.prerequisite_topic||'',
+      pedagogicalReason:row.pedagogical_reason||''
+    }));
+    state.customCampaign={name:campaign.name,missions};
+    campaign.customCampaign=state.customCampaign;
+    save();
+    render();
+    toast(`🤝 Mapa do edital de ${campaign.name} (${missions.length} tópicos) sincronizado da comunidade!`);
+  }
+
+  function openProtectedCommunityViewer(docId){
+    const doc=(cloudDocuments||[]).find(d=>String(d.id)===String(docId));
+    const dlg=q('#communityViewerDialog'),titleEl=q('#communityViewerTitle'),bodyEl=q('#communityViewerBody');
+    if(!doc||!dlg||!bodyEl)return;
+    const docSummaries=(ALL_SUMMARIES||[]).filter(s=>String(s.documentId)===String(doc.id));
+    const docQuestions=(ALL_QUESTIONS||[]).filter(qItem=>String(qItem.documentId)===String(doc.id));
+    titleEl.textContent=sanitizePersonalWatermarks(doc.title||'Material da Comunidade');
+
+    bodyEl.innerHTML=`
+      <div class="card" style="margin-bottom:12px;background:#071524;border-color:#264f73">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <div>
+            <span class="tag">🤝 Compartilhado por ${escText(doc.author_name||'Colega do concurso')}</span>
+            <span class="tag">🔒 Download de PDF bloqueado (Proteção de CPF e Direitos)</span>
+          </div>
+          <span class="small muted">${docSummaries.length} resumo(s) · ${docQuestions.length} questão(ões) extraída(s)</span>
+        </div>
+        <p class="small muted" style="margin:8px 0 0">Este material faz parte da rede colaborativa do seu concurso. O arquivo PDF bruto não pode ser baixado para proteger o CPF de quem enviou, mas todo o conteúdo pedagógico abaixo já está integrado aos seus Resumos, Flashcards, Questões e Caderno IA.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          ${docQuestions.length?`<button type="button" class="action small" id="commViewerStartQuizBtn">🎯 Resolver ${docQuestions.length} Questão(ões) deste Material</button>`:''}
+          <button type="button" class="ghost small" id="commViewerOpenSmartBtn">✦ Usar como Fonte no Caderno IA</button>
+          <button type="button" class="ghost small" id="commViewerOpenSummariesBtn">📖 Ir para Resumos e Flashcards</button>
+        </div>
+      </div>
+
+      ${docSummaries.length?docSummaries.map((s,idx)=>`
+        <article class="card" style="margin-bottom:10px">
+          <div class="eyebrow">${escText(s.category||'Disciplina')} · Tópico ${idx+1}</div>
+          <h3 style="margin:3px 0 8px">${escText(s.title)}</h3>
+          <p style="line-height:1.6">${escText(s.explanation||'')}</p>
+          ${(s.points||[]).length?`<div class="lessonBox"><b>Pontos essenciais</b><ul>${s.points.map(p=>`<li>${escText(p)}</li>`).join('')}</ul></div>`:''}
+          ${s.bizu?`<div class="lessonBox bizu"><b>⚡ Bizu de Prova</b><p>${escText(s.bizu)}</p></div>`:''}
+          ${s.mnemonic?`<div class="lessonBox"><b>🧠 Mnemônico</b><p>${escText(s.mnemonic)}</p></div>`:''}
+          ${s.trap?`<div class="lessonBox trap"><b>⚠️ Pegadinha da Banca</b><p>${escText(s.trap)}</p></div>`:''}
+        </article>
+      `).join(''):'<div class="empty">Os tópicos e questões deste arquivo já estão integrados ao seu banco de estudo.</div>'}
+    `;
+
+    q('#closeCommunityViewer').onclick=()=>dlg.close();
+    if(q('#commViewerStartQuizBtn'))q('#commViewerStartQuizBtn').onclick=()=>{
+      dlg.close();
+      activeQuestions={
+        mode:'battle',
+        subject:doc.title,
+        questions:docQuestions.slice(0,10).map(prepareQuestion),
+        current:0,
+        correct:0,
+        answered:false
+      };
+      q('#questionDialogTitle').textContent=`🤝 Questões: ${doc.title}`;
+      q('#questionDialog').showModal();
+      showQuestion();
+    };
+    if(q('#commViewerOpenSmartBtn'))q('#commViewerOpenSmartBtn').onclick=()=>{
+      dlg.close();
+      openView('study');
+      const smartTab=q('[data-study="smart"]');
+      if(smartTab)smartTab.click();
+    };
+    if(q('#commViewerOpenSummariesBtn'))q('#commViewerOpenSummariesBtn').onclick=()=>{
+      dlg.close();
+      openView('study');
+    };
+    dlg.showModal();
+  }
+
+  function renderCommunityCoopBanner(){
+    const campaign=typeof activeCampaign==='function'?activeCampaign():null;
+    const commDocs=(cloudDocuments||[]).filter(d=>d.is_community);
+    const commSums=(ALL_SUMMARIES||[]).filter(s=>s.is_community);
+    const commQs=(ALL_QUESTIONS||[]).filter(qItem=>qItem.is_community);
+    const commTopics=communityCache.editalTopics||[];
+    const libSection=q('#library');
+    if(libSection){
+      let banner=q('#communityCoopBanner');
+      if(!banner){
+        const uploadZone=libSection.querySelector('.uploadZone');
+        if(uploadZone){
+          uploadZone.insertAdjacentHTML('afterend','<div class="communityBanner" id="communityCoopBanner"></div>');
+          banner=q('#communityCoopBanner');
+        }
+      }
+      if(banner){
+        const slugUpper=(communityCache.slug||normalizeExamSlug(campaign?.name||'')).toUpperCase();
+        banner.innerHTML=`
+          <div>
+            <div class="eyebrow">🤝 REDE COOPERATIVA DO CONCURSO · PERFIL ${escText(slugUpper)}</div>
+            <b>Biblioteca Compartilhada da Comunidade (${escText(campaign?.name||'Concurso')})</b>
+            <div class="small muted">Materiais, leis, provas e editais analisados por colegas do mesmo concurso ficam disponíveis para visualização protegida e estudo (Resumos, Flashcards, Questões e Caderno IA), com bloqueio de download do PDF original para proteger o CPF.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <span class="tag">${commDocs.length} arquivo(s) da comunidade · ${commSums.length} resumos · ${commQs.length} questões</span>
+            ${commTopics.length&&!(state?.customCampaign?.missions||[]).length?`<button type="button" class="action small" id="useCommunityEditalBtn">📋 Usar Edital da Comunidade (${commTopics.length} tópicos)</button>`:''}
+            <button type="button" class="ghost small" id="syncCommunityNowBtn">↻ Sincronizar Acervo</button>
+          </div>
+        `;
+        if(q('#syncCommunityNowBtn'))q('#syncCommunityNowBtn').onclick=async()=>{
+          await syncCommunityLibraryForActivePortal();
+          toast('Acervo compartilhado da comunidade sincronizado!');
+        };
+        if(q('#useCommunityEditalBtn'))q('#useCommunityEditalBtn').onclick=applyCommunityEditalToPortal;
+      }
+    }
+    qa('[data-view-community-doc]').forEach(btn=>{
+      btn.onclick=()=>openProtectedCommunityViewer(btn.dataset.viewCommunityDoc);
+    });
+  }
 
   // 13. Central de Revisão Inteligente (Ciclo 1-7-30, Revisão Ativa por Questões, Resumo Inline e Raio-X de Véspera Imprimível)
   const HIGH_INCIDENCE_PATTERNS=/direitos e garantias|art\.?\s*5|art\.?\s*144|seguranca publica|inquerito policial|prisao|flagrante|crimes contra a administracao|crimes contra a pessoa|crimes contra o patrimonio|maria da penha|tortura|abuso de autoridade|estatuto do desarmamento|drogas|concordancia|regencia|crase|interpretacao|compreensao|pontuacao|proposicoes|tabela-verdade|porcentagem| atos administrativos|poderes administrativos|licitacoes/i;
@@ -3175,7 +3516,7 @@
   }
 
   const baseOpenView=openView;
-  openView=function(id){baseOpenView(id);try{sessionStorage.setItem(viewKey,id)}catch{}if(id==='report'){populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()}if(id==='today'){updateTodayCommand();ensureTafAndRankingShortcuts()}if(id==='map'){renderReverseSchedule();decorateEditalIncidenceBadges()}if(id==='review')enhanceReviewCenter();if(id==='essay')enhanceTypedEssayOption();if(id==='taf')renderTafPanel();if(id==='ranking'){renderHuntersLeaderboard();loadHuntersLeaderboard()}};
+  openView=function(id){baseOpenView(id);try{sessionStorage.setItem(viewKey,id)}catch{}if(id==='report'){populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()}if(id==='today'){updateTodayCommand();ensureTafAndRankingShortcuts()}if(id==='map'){renderReverseSchedule();decorateEditalIncidenceBadges()}if(id==='review')enhanceReviewCenter();if(id==='essay')enhanceTypedEssayOption();if(id==='taf')renderTafPanel();if(id==='library'){renderCommunityCoopBanner();syncCommunityLibraryForActivePortal()}if(id==='ranking'){renderHuntersLeaderboard();loadHuntersLeaderboard()}};
   const baseTickClock=typeof tickClock==='function'?tickClock:null;
   if(baseTickClock){
     window.tickClock=function(){
@@ -3185,12 +3526,21 @@
     };
   }
   const baseRender=render;
-  render=function(){syncHunterStatsSnapshot();baseRender();enhanceFlashcardsSpacedRepetition();enhanceEssayCenter();enhanceTypedEssayOption();enhanceReviewCenter();decorateEditalIncidenceBadges();updateFlashcardSpacedStats();updateTodayCommand();ensureTafAndRankingShortcuts();renderReverseSchedule();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub();if(q('#taf')?.classList.contains('active'))renderTafPanel();if(q('#ranking')?.classList.contains('active'))renderHuntersLeaderboard()};
+  render=function(){syncHunterStatsSnapshot();baseRender();enhanceFlashcardsSpacedRepetition();enhanceEssayCenter();enhanceTypedEssayOption();enhanceReviewCenter();decorateEditalIncidenceBadges();renderCommunityCoopBanner();updateFlashcardSpacedStats();updateTodayCommand();ensureTafAndRankingShortcuts();renderReverseSchedule();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub();if(q('#taf')?.classList.contains('active'))renderTafPanel();if(q('#ranking')?.classList.contains('active'))renderHuntersLeaderboard()};
   const baseRenderReport=renderReport;
   renderReport=function(){baseRenderReport();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()};
 
   addTodayCommand();ensureReverseSchedulePanel();bindQuestionCenter();updateTodayCommand();renderReverseSchedule();
   qa('[data-menu-view]').forEach(button=>button.onclick=()=>{q('#moreDialog')?.close();openView(button.dataset.menuView)});
+  const baseLoadGenForComm=typeof loadGeneratedContent==='function'?loadGeneratedContent:null;
+  if(baseLoadGenForComm){
+    loadGeneratedContent=async function(){
+      const res=await baseLoadGenForComm();
+      await syncCommunityLibraryForActivePortal();
+      return res;
+    };
+  }
+  setTimeout(()=>syncCommunityLibraryForActivePortal(),1200);
   const remembered=(()=>{try{return sessionStorage.getItem(viewKey)}catch{return null}})();
   if(remembered&&q(`#${CSS.escape(remembered)}`)?.classList.contains('view'))openView(remembered);
   q('#aboutDialog .tag')&&(q('#aboutDialog .tag').textContent='Versão 78 · experiência orientada ao estudo');
