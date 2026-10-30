@@ -137,3 +137,10 @@ mark.hlPenalty{background:rgba(89,230,255,.2);color:#9beeff;padding:1px 5px;bord
 .essayHelperBar button{flex:1;min-width:210px}
 
 @media(max-width:719px){#report .performanceGrid,.performanceGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px}.weeklyGrid{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px}.trainerQuickActions{grid-template-columns:1fr!important}}
+
+.essayMotivatingCard{margin:0 0 14px;padding:14px 16px;border-radius:14px;border:1px solid #284b68;background:linear-gradient(160deg,#091929,#07121e);display:grid;gap:10px}
+.essayMotivatingHead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.essaySupportBox{padding:11px 13px;border-radius:10px;background:#0b1d2e;border-left:3px solid var(--cyan);font-size:.88rem;line-height:1.55;color:#dbeafe}
+.essaySupportBox b{display:block;color:var(--cyan);font-size:.76rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.essaySupportSource{display:block;margin-top:6px;font-size:.74rem;color:var(--muted);font-style:italic}
+.essayCommandBox{padding:11px 13px;border-radius:10px;background:#102334;border-left:3px solid var(--gold);font-size:.88rem;line-height:1.5;color:#f1f5f9;white-space:pre-line}

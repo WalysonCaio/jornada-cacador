@@ -1709,37 +1709,216 @@
     statsEl.textContent=`Total: ${cards.length} cartões · ${due} para revisar agora · ${hard} difíceis · ${mastered} dominados (Atalhos: 1, 2, 3)`;
   }
 
-  // 9. Gerador de Temas Policiais + Folha de Redação 30 Linhas para Impressão (#essay)
+  // 9. Gerador de Temas Policiais com Textos de Apoio (Texto I e II) + IA + Folha de Redação 30 Linhas (#essay)
   const POLICE_ESSAY_THEMES=[
-    {title:'Redação PMPE — Segurança e Direitos Humanos',theme:'O equilíbrio entre o uso progressivo da força policial e a garantia dos direitos fundamentais na segurança pública brasileira',board:'AOCP'},
-    {title:'Redação Policial — Tecnologia e Combate ao Crime',theme:'O papel da inteligência policial, câmeras corporais e tecnologia no enfrentamento à criminalidade violenta',board:'Cebraspe'},
-    {title:'Redação Segurança Pública — Violência Doméstica',theme:'Desafios das forças de segurança na proteção de grupos vulneráveis e no cumprimento efetivo da Lei Maria da Penha',board:'AOCP'},
-    {title:'Redação Policial — Polícia Comunitária',theme:'A importância do policiamento comunitário e da confiança social para a prevenção primária da violência urbana',board:'FGV'},
-    {title:'Redação Segurança — Sistema Prisional e Reincidência',theme:'Caminhos para reduzir a reincidência criminal e combater a atuação de organizações criminosas no Brasil',board:'Cebraspe'},
-    {title:'Redação Policial — Crimes Cibernéticos',theme:'A evolução dos crimes digitais e a necessidade de modernização investigativa e ostensiva das polícias estaduais',board:'FGV'},
-    {title:'Redação PMPE — Patrimônio Histórico e Cidadania',theme:'Preservação da ordem pública, cultura regional e proteção do patrimônio histórico em grandes eventos populares',board:'AOCP'}
+    {
+      title:'Redação PMPE — Segurança e Direitos Humanos',
+      theme:'O equilíbrio entre o uso progressivo da força policial e a garantia dos direitos fundamentais na segurança pública brasileira',
+      board:'AOCP',
+      text1:'A Constituição Federal de 1988, em seu artigo 144, estabelece que a segurança pública é dever do Estado, direito e responsabilidade de todos, sendo exercida para a preservação da ordem pública e da incolumidade das pessoas e do patrimônio. Nesse cenário, a atuação das polícias militares exige preparo técnico contínuo para conter condutas ilícitas sem violar garantias individuais previstas no artigo 5º do texto constitucional.',
+      source1:'Fonte adaptada: Constituição da República Federativa do Brasil de 1988 (arts. 5º e 144).',
+      text2:'A Lei nº 13.060/2014 disciplina o uso dos instrumentos de menor potencial ofensivo pelos agentes de segurança pública em todo o território nacional, determinando que o emprego da força deve obedecer aos princípios da legalidade, necessidade, razoabilidade e proporcionalidade. Segundo diretrizes da SENASP, a qualificação operacional reduz a letalidade e fortalece a legitimidade jurídica das abordagens policiais perante o Poder Judiciário e a sociedade.',
+      source2:'Fonte adaptada: Brasil, Lei Federal nº 13.060/2014 e Diretrizes Nacionais sobre Uso da Força (SENASP/MJSP).',
+      command:'A partir da leitura dos textos motivadores e com base nos conhecimentos construídos ao longo de sua formação, redija um texto dissertativo-argumentativo, de 20 a 30 linhas, sobre o tema proposto. Ao desenvolver seu texto, aborde necessariamente:\n1) o papel constitucional das forças policiais na preservação da ordem pública e da dignidade humana;\n2) a importância dos princípios da necessidade e proporcionalidade (Lei nº 13.060/2014) na atuação ostensiva;\n3) medidas práticas de capacitação e fiscalização para aprimorar a atuação policial.'
+    },
+    {
+      title:'Redação Policial — Tecnologia e Combate ao Crime',
+      theme:'O papel da inteligência policial, câmeras corporais e tecnologia no enfrentamento à criminalidade violenta',
+      board:'Cebraspe',
+      text1:'O avanço das organizações criminosas e a interiorização dos delitos patrimoniais e letais impuseram às forças estaduais de segurança a transição do policiamento meramente reativo para o policiamento orientado pela inteligência. Ferramentas como mapeamento criminal georreferenciado, reconhecimento óptico de placas e integração de bancos de dados permitem alocar viaturas e efetivo nos horários e manchas criminais de maior risco.',
+      source1:'Fonte adaptada: Fórum Brasileiro de Segurança Pública (FBSP) — Estudos sobre Gestão e Tecnologia Policial.',
+      text2:'Paralelamente ao uso de sistemas analíticos, a implementação de câmeras corporais (bodycams) no fardamento policial consolidou-se como instrumento de transparência e produção de provas. Estudos indicam que o registro audiovisual protege o bom policial contra falsas acusações, qualifica o flagrante delito enviado ao Ministério Público e diminui episódios de confronto desnecessário.',
+      source2:'Fonte adaptada: Diretrizes do Ministério da Justiça e Segurança Pública sobre Câmeras Corporais (2024).',
+      command:'Considerando que os textos acima têm caráter unicamente motivador, redija um texto dissertativo acerca do tema proposto. Em seu texto, aborde obrigatoriamente os seguintes aspectos:\n1) o impacto da inteligência policial e do policiamento orientado por dados na prevenção de crimes violentos;\n2) os benefícios das câmeras corporais para a cadeia de custódia da prova e para a proteção jurídica do agente;\n3) desafios orçamentários e operacionais para modernizar as polícias estaduais.'
+    },
+    {
+      title:'Redação Segurança Pública — Violência Doméstica',
+      theme:'Desafios das forças de segurança na proteção de grupos vulneráveis e no cumprimento efetivo da Lei Maria da Penha',
+      board:'AOCP',
+      text1:'Promulgada em 2006, a Lei nº 11.340 (Lei Maria da Penha) criou mecanismos para coibir e prevenir a violência doméstica e familiar contra a mulher, reconhecendo-a como uma forma de violação dos direitos humanos. O atendimento policial imediato e o acompanhamento do cumprimento das medidas protetivas de urgência, por meio de patrulhas especializadas, figuram entre os principais fatores de redução do feminicídio.',
+      source1:'Fonte adaptada: Lei Federal nº 11.340/2006 e Relatórios do Instituto de Pesquisa Econômica Aplicada (IPEA).',
+      text2:'Apesar dos avanços legislativos — incluindo a tipificação do crime de descumprimento de medida protetiva (art. 24-A) e a possibilidade de concessão de medidas urgentes em municípios sem sede de comarca —, a subnotificação, a dependência econômica e a necessidade de acolhimento humanizado nas ocorrências ainda desafiam o policiamento ostensivo e judiciário.',
+      source2:'Fonte adaptada: Conselho Nacional de Justiça (CNJ) — Protocolo para Julgamento e Atendimento com Perspectiva de Gênero.',
+      command:'Com base nos textos de apoio e em seu repertório sociocultural e jurídico, redija um texto dissertativo-argumentativo sobre o tema. Aborde necessariamente:\n1) a relevância das patrulhas especializadas no monitoramento das medidas protetivas de urgência;\n2) os entraves sociais e institucionais que dificultam o rompimento do ciclo da violência doméstica;\n3) ações integradas entre polícia ostensiva, rede de assistência e Justiça para prevenir o feminicídio.'
+    },
+    {
+      title:'Redação Policial — Polícia Comunitária',
+      theme:'A importância do policiamento comunitário e da confiança social para a prevenção primária da violência urbana',
+      board:'FGV',
+      text1:'A filosofia de Polícia Comunitária baseia-se na premissa de que a segurança pública não se resume à repressão pós-delito, mas requer parceria permanente entre os agentes estatais e os moradores de cada território. Quando a comunidade confia na guarnição local, há maior compartilhamento de informações preventivas, recuperação de espaços públicos degradados e redução da sensação de medo.',
+      source1:'Fonte adaptada: Curso Nacional de Polícia Comunitária — Secretaria Nacional de Segurança Pública (SENASP).',
+      text2:'Em contrapartida, a ausência de diálogo entre instituições policiais e populações periféricas costuma ser explorada por grupos criminosos para impor a chamada "lei do silêncio". Superar esse distanciamento demanda presença territorial contínua, respeito ao cidadão durante a abordagem e articulação com escolas, conselhos comunitários de segurança e serviços municipais.',
+      source2:'Fonte adaptada: Estudos contemporâneos de Sociologia da Violência e Prevenção Criminal.',
+      command:'A partir da análise dos textos motivadores, elabore uma dissertação argumentativa sobre o tema proposto, contemplando:\n1) a diferença entre o policiamento estritamente reativo e a filosofia de polícia comunitária;\n2) o papel da confiança mútua entre cidadão e policial no enfraquecimento do controle territorial do crime;\n3) propostas concretas para aproximar as forças de segurança da sociedade civil.'
+    },
+    {
+      title:'Redação Segurança — Sistema Prisional e Reincidência',
+      theme:'Caminhos para reduzir a reincidência criminal e combater a atuação de organizações criminosas no Brasil',
+      board:'Cebraspe',
+      text1:'A Lei de Execução Penal (Lei nº 7.210/1984) dispõe que a execução penal tem por objetivo efetivar as disposições de sentença ou decisão criminal e proporcionar condições para a harmônica integração social do condenado. Todavia, a superlotação carcerária e o déficit de vagas de estudo e trabalho intramuros dificultam a ressocialização e favorecem o recrutamento de detentos por facções.',
+      source1:'Fonte adaptada: Lei nº 7.210/1984 (LEP) e Levantamento Nacional de Informações Penitenciárias (SENAPPEN).',
+      text2:'O enfrentamento às organizações criminosas que operam a partir de unidades prisionais exige duplo movimento do Estado: de um lado, rigor no isolamento de lideranças, bloqueio de comunicações ilícitas e asfixia financeira da lavagem de dinheiro; de outro, cumprimento dos direitos básicos e oferta de educação e remição de pena aos apenados de menor potencial ofensivo.',
+      source2:'Fonte adaptada: Conselho Nacional do Ministério Público (CNMP) — Diagnóstico do Sistema Prisional Brasileiro.',
+      command:'Redija um texto dissertativo-argumentativo sobre o tema acima, abordando obrigatoriamente:\n1) as causas estruturais da elevada reincidência criminal no país;\n2) medidas de inteligência penitenciária e financeira para conter o comando de facções nos presídios;\n3) o papel do trabalho e da educação na execução penal conforme a Lei nº 7.210/1984.'
+    },
+    {
+      title:'Redação Policial — Crimes Cibernéticos',
+      theme:'A evolução dos crimes digitais e a necessidade de modernização investigativa e ostensiva das polícias estaduais',
+      board:'FGV',
+      text1:'A digitalização acelerada dos serviços bancários e das relações sociais no Brasil foi acompanhada pelo crescimento expressivo de estelionatos eletrônicos, invasão de dispositivos informáticos (Lei nº 14.155/2021), extorsões mediante sequestro de dados e golpes aplicados por meio de engenharia social e aplicativos de mensagens.',
+      source1:'Fonte adaptada: Anuário Brasileiro de Segurança Pública — Evolução dos Estelionatos por Meio Eletrônico.',
+      text2:'Diferentemente dos crimes patrimoniais tradicionais, os delitos cibernéticos frequentemente ultrapassam divisas estaduais em segundos e deixam vestígios voláteis. Isso exige que tanto o policial que realiza o primeiro atendimento quanto os núcleos especializados dominem protocolos de preservação da prova digital e atuem em cooperação interestadual.',
+      source2:'Fonte adaptada: Manual de Investigação Cibernética e Cadeia de Custódia Digital (MJSP).',
+      command:'Com base nos textos motivadores, escreva uma redação dissertativo-argumentativa posicionando-se sobre o tema. Aborde:\n1) os impactos sociais e econômicos da migração da criminalidade para o ambiente digital;\n2) a importância da preservação de vestígios digitais e da atualização legislativa (Lei nº 14.155/2021);\n3) estratégias de prevenção, educação digital da população e capacitação policial.'
+    },
+    {
+      title:'Redação PMPE — Patrimônio Histórico e Grandes Eventos',
+      theme:'Preservação da ordem pública, cultura regional e proteção do patrimônio histórico em grandes eventos populares',
+      board:'AOCP',
+      text1:'O Estado de Pernambuco abriga manifestações culturais e sítios históricos reconhecidos mundialmente, como o Carnaval de Olinda e do Recife, o São João do interior e conjuntos arquitetônicos tombados. O planejamento operacional da Polícia Militar nesses eventos demanda policiamento preventivo de grandes multidões aliado à proteção de bens culturais insubstituíveis.',
+      source1:'Fonte adaptada: Diretrizes de Planejamento Operacional em Grandes Eventos e Proteção do Patrimônio Cultural (PMPE/IPHAN).',
+      text2:'O artigo 216 da Constituição Federal define o patrimônio cultural brasileiro como os bens de natureza material e imaterial portadores de referência à identidade e à memória dos diferentes grupos formadores da sociedade. Vandalismo, furtos e tumultos em festas de grande porte exigem atuação integrada entre forças estaduais, guardas municipais, defesa civil e órgãos de cultura.',
+      source2:'Fonte adaptada: Constituição Federal de 1988 (art. 216) e Lei nº 9.605/1998 (Crimes contra o Ordenamento Urbano e o Patrimônio Cultural).',
+      command:'A partir dos textos motivadores, redija um texto dissertativo-argumentativo de 20 a 30 linhas sobre o tema proposto, contemplando:\n1) a relação entre segurança pública, direito ao lazer e valorização da identidade cultural regional;\n2) os desafios táticos do policiamento ostensivo em eventos de massa e sítios históricos;\n3) ações preventivas e tecnológicas para coibir delitos sem comprometer as manifestações populares.'
+    },
+    {
+      title:'Redação Segurança Pública — Saúde Mental do Policial',
+      theme:'A valorização profissional e o cuidado com a saúde física e mental dos agentes de segurança pública',
+      board:'AOCP',
+      text1:'O exercício da atividade policial expõe o servidor a níveis elevados de estresse ocupacional, risco iminente à vida, turnos noturnos e contato diário com situações traumáticas. Pesquisas na área de saúde do trabalhador apontam que a ausência de acompanhamento psicológico periódico impacta não apenas o bem-estar familiar do agente, mas também sua tomada de decisão sob pressão nas ruas.',
+      source1:'Fonte adaptada: Programa Pró-Vida — Programa Nacional de Qualidade de Vida para Profissionais de Segurança Pública (Lei nº 13.675/2018).',
+      text2:'Instituído pelo Sistema Único de Segurança Pública (SUSP), o programa de atenção biopsicossocial aos operadores de segurança reconhece que a eficiência do policiamento depende diretamente da saúde integral do efetivo. Superar o estigma interno na busca por apoio psiquiátrico e psicológico é considerado passo decisivo pelas corporações modernas.',
+      source2:'Fonte adaptada: Lei Federal nº 13.675/2018 (SUSP) e Cadernos Técnicos de Saúde Mental Policial.',
+      command:'A partir dos textos de apoio, elabore um texto dissertativo-argumentativo sobre o tema. Aborde obrigatoriamente:\n1) os principais fatores de desgaste físico e emocional inerentes à carreira policial;\n2) a relação direta entre a saúde mental do agente e a qualidade do serviço prestado ao cidadão;\n3) políticas institucionais efetivas de prevenção, acolhimento e valorização nos órgãos de segurança.'
+    }
   ];
+
+  let lastPickedEssayIndex=-1;
+
+  function formatProposalInstructions(pick){
+    const parts=[];
+    if(pick.text1)parts.push(`TEXTO MOTIVADOR I:\n${pick.text1}${pick.source1?`\n(${pick.source1})`:''}`);
+    if(pick.text2)parts.push(`TEXTO MOTIVADOR II:\n${pick.text2}${pick.source2?`\n(${pick.source2})`:''}`);
+    if(pick.command)parts.push(`PROPOSTA E CRITÉRIOS DA BANCA:\n${pick.command}`);
+    return parts.join('\n\n').slice(0,3000);
+  }
+
+  function renderEssayMotivatingBox(pick){
+    let box=q('#essayMotivatingBox');
+    const helperBar=q('#essayHelperBar');
+    if(!helperBar)return;
+    if(!box){
+      helperBar.insertAdjacentHTML('afterend','<div class="essayMotivatingCard" id="essayMotivatingBox" hidden></div>');
+      box=q('#essayMotivatingBox');
+    }
+    if(!pick||(!pick.text1&&!pick.text2&&!pick.command)){
+      box.hidden=true;
+      box.innerHTML='';
+      return;
+    }
+    box.hidden=false;
+    box.innerHTML=`
+      <div class="essayMotivatingHead">
+        <div>
+          <span class="eyebrow">CADERNO DE PROPOSTA ESTILO PROVA · ${escText((pick.board||'PADRÃO OFICIAL').toUpperCase())}</span>
+          <h3 style="margin:2px 0 0;font-size:1rem">${escText(pick.theme||'Tema da Redação')}</h3>
+        </div>
+        <span class="tag">${escText(pick.originLabel||'Textos Motivadores I e II')}</span>
+      </div>
+      ${pick.text1?`<div class="essaySupportBox"><b>Texto Motivador I</b><div>${escText(pick.text1)}</div>${pick.source1?`<span class="essaySupportSource">${escText(pick.source1)}</span>`:''}</div>`:''}
+      ${pick.text2?`<div class="essaySupportBox"><b>Texto Motivador II</b><div>${escText(pick.text2)}</div>${pick.source2?`<span class="essaySupportSource">${escText(pick.source2)}</span>`:''}</div>`:''}
+      ${pick.command?`<div class="essayCommandBox"><b style="color:var(--gold);display:block;font-size:.76rem;text-transform:uppercase;margin-bottom:4px">Proposta de Redação / Aspectos Obrigatórios</b>${escText(pick.command)}</div>`:''}
+    `;
+  }
+
+  function applyEssayProposal(pick, originLabel='Banco de Provas'){
+    if(!pick)return;
+    if(q('#essayTitle'))q('#essayTitle').value=pick.title||'Redação Simulada';
+    if(q('#essayTheme'))q('#essayTheme').value=pick.theme||'';
+    if(q('#essayBoard')&&pick.board){
+      const hasOpt=[...q('#essayBoard').options].some(o=>o.value===pick.board);
+      if(hasOpt)q('#essayBoard').value=pick.board;
+    }
+    if(q('#essayLines')&&!q('#essayLines').value)q('#essayLines').value='30';
+    const fullInstructions=formatProposalInstructions(pick);
+    if(q('#essayInstructions')&&fullInstructions)q('#essayInstructions').value=fullInstructions;
+    renderEssayMotivatingBox({...pick,originLabel});
+  }
+
+  async function generateAiEssayProposal(){
+    const btn=q('#generateAiEssayThemeBtn');
+    const board=q('#essayBoard')?.value||'AOCP';
+    const campaignName=(typeof activeCampaign==='function'?activeCampaign()?.name:'Concurso Policial')||'Concurso Policial';
+    const missions=(typeof missionPool==='function'?missionPool():[]).filter(m=>!String(m.id).startsWith('setup-'));
+    const subjects=[...new Set(missions.map(m=>m.subject).filter(Boolean))].slice(0,8).join(', ')||'Direito Constitucional, Direitos Humanos, Legislação Penal e Segurança Pública';
+    if(btn){btn.disabled=true;btn.textContent='⏳ Gerando proposta + textos de apoio...'}
+    try{
+      const session=typeof validSession==='function'?await validSession().catch(()=>null):null;
+      if(!session)throw new Error('OFFLINE_OR_NO_SESSION');
+      const prompt=`Crie uma proposta completa de prova discursiva/redação inédita no estilo da banca ${board} voltada para o concurso "${campaignName}" (disciplinas do edital: ${subjects}).\nResponda EXCLUSIVAMENTE em JSON válido com as chaves:\n{\n  "title": "Título curto da proposta",\n  "theme": "Frase-tema oficial da redação",\n  "board": "${board}",\n  "text1": "Texto motivador I completo (4 a 6 frases densas com dados estatísticos, contexto social ou doutrina sobre o tema)",\n  "source1": "Fonte adaptada do Texto I",\n  "text2": "Texto motivador II completo (4 a 6 frases com base na Constituição Federal, legislação específica ou caso concreto complementar ao Texto I)",\n  "source2": "Fonte adaptada do Texto II",\n  "command": "Comando da proposta exigindo texto de 20 a 30 linhas e listando 3 itens obrigatórios (1, 2 e 3) que o candidato deve abordar."\n}`;
+      const res=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{
+        method:'POST',
+        headers:authHeaders(session.access_token),
+        body:JSON.stringify({
+          question:prompt,
+          context:`Portal: ${campaignName}. Disciplinas: ${subjects}. Banca: ${board}.`,
+          mode:'gerador de proposta de redacao com textos motivadores',
+          campaign_id:typeof activeCampaign==='function'?activeCampaign()?.dbId:null,
+          campaign:campaignName
+        })
+      });
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok||!data?.answer)throw new Error(data?.error||'IA_UNAVAILABLE');
+      const raw=String(data.answer).trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/i,'');
+      const s=raw.indexOf('{'),e=raw.lastIndexOf('}');
+      if(s<0||e<=s)throw new Error('INVALID_JSON');
+      const parsed=JSON.parse(raw.slice(s,e+1));
+      if(!parsed.theme||!parsed.text1||!parsed.text2)throw new Error('INCOMPLETE_PROPOSAL');
+      applyEssayProposal({
+        title:String(parsed.title||`Redação ${campaignName}`),
+        theme:String(parsed.theme),
+        board:String(parsed.board||board),
+        text1:String(parsed.text1),
+        source1:String(parsed.source1||'Fonte adaptada: Coletânea da Banca Examinadora.'),
+        text2:String(parsed.text2),
+        source2:String(parsed.source2||'Fonte adaptada: Legislação e Jurisprudência Aplicada.'),
+        command:String(parsed.command||'Redija um texto dissertativo-argumentativo de 20 a 30 linhas abordando: 1) contextualização do problema; 2) fundamentos constitucionais e legais; 3) propostas de enfrentamento.')
+      },'Gerado por IA para o seu Edital');
+      toast('Proposta inédita com Textos Motivadores I e II criada pela IA!');
+    }catch{
+      let idx=Math.floor(Math.random()*POLICE_ESSAY_THEMES.length);
+      if(idx===lastPickedEssayIndex&&POLICE_ESSAY_THEMES.length>1)idx=(idx+1)%POLICE_ESSAY_THEMES.length;
+      lastPickedEssayIndex=idx;
+      applyEssayProposal(POLICE_ESSAY_THEMES[idx],'Proposta Oficial com Textos I e II');
+      toast('Tema com Textos Motivadores I e II carregado!');
+    }finally{
+      if(btn){btn.disabled=false;btn.textContent='✨ Criar Tema + Textos de Apoio (IA)'}
+    }
+  }
 
   function enhanceEssayCenter(){
     const essayCard=q('#essay .card');
     if(!essayCard||q('#essayHelperBar'))return;
-    essayCard.insertAdjacentHTML('afterbegin',`<div class="essayHelperBar" id="essayHelperBar"><button type="button" class="ghost small" id="suggestEssayThemeBtn">🎲 Sortear Tema Policial de Alta Incidência</button><button type="button" class="ghost small" id="printBlankEssaySheetBtn">🖨️ Imprimir Folha Oficial de 30 Linhas</button></div>`);
+    essayCard.insertAdjacentHTML('afterbegin',`<div class="essayHelperBar" id="essayHelperBar"><button type="button" class="ghost small" id="suggestEssayThemeBtn">🎲 Sortear Tema + Textos de Apoio (Prova)</button><button type="button" class="ghost small" id="generateAiEssayThemeBtn">✨ Criar Tema + Textos de Apoio (IA)</button><button type="button" class="ghost small" id="printBlankEssaySheetBtn">🖨️ Imprimir Folha Oficial de 30 Linhas</button></div>`);
     q('#suggestEssayThemeBtn').onclick=()=>{
-      const pick=POLICE_ESSAY_THEMES[Math.floor(Math.random()*POLICE_ESSAY_THEMES.length)];
-      if(q('#essayTitle')&&!q('#essayTitle').value)q('#essayTitle').value=pick.title;
-      if(q('#essayTheme'))q('#essayTheme').value=pick.theme;
-      if(q('#essayBoard'))q('#essayBoard').value=pick.board;
-      if(q('#essayLines')&&!q('#essayLines').value)q('#essayLines').value='30';
-      toast('Tema policial sorteado e preenchido!');
+      let idx=Math.floor(Math.random()*POLICE_ESSAY_THEMES.length);
+      if(idx===lastPickedEssayIndex&&POLICE_ESSAY_THEMES.length>1)idx=(idx+1)%POLICE_ESSAY_THEMES.length;
+      lastPickedEssayIndex=idx;
+      const pick=POLICE_ESSAY_THEMES[idx];
+      applyEssayProposal(pick,'Banco de Provas (Textos I e II)');
+      toast('Tema, Texto Motivador I, Texto Motivador II e Comando preenchidos!');
     };
+    q('#generateAiEssayThemeBtn').onclick=generateAiEssayProposal;
     q('#printBlankEssaySheetBtn').onclick=()=>{
       const theme=q('#essayTheme')?.value?.trim()||'Tema livre / Defina o tema antes de iniciar a escrita';
       const board=q('#essayBoard')?.value||'Padrão Oficial';
+      const instructions=q('#essayInstructions')?.value?.trim()||'';
       const maxLines=Math.min(60,Math.max(15,Number(q('#essayLines')?.value)||30));
       const w=window.open('','_blank');
       if(!w)return toast('Permita pop-ups para abrir a folha pautada de 30 linhas.');
       const linesHtml=Array.from({length:maxLines},(_,i)=>`<div class="rLine"><span>${String(i+1).padStart(2,'0')}</span><i></i></div>`).join('');
-      w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Folha de Redação (${maxLines} linhas)</title><style>body{font:13px/1.45 Inter,Arial,sans-serif;color:#111d2c;max-width:780px;margin:20px auto;padding:0 16px}header{border:2px solid #10253a;border-radius:8px;padding:12px 14px;margin-bottom:14px}h1{font-size:1.05rem;margin:0 0 6px}.theme{font-size:.9rem;background:#f4f8fb;padding:8px 10px;border-left:4px solid #1768ac;margin-top:6px}.rLine{display:grid;grid-template-columns:28px 1fr;align-items:end;height:26px}.rLine span{font-size:.75rem;color:#5a7186;font-weight:700;padding-bottom:2px}.rLine i{display:block;border-bottom:1px solid #8ea4b8;height:100%}@media print{body{margin:10mm;max-width:none}.noPrint{display:none}}</style></head><body><div class="noPrint" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;background:#eef6fc;padding:10px;border-radius:8px"><span><b>Folha de Redação Pautada (${maxLines} linhas)</b> — imprima, escreva à mão e envie foto/PDF para correção na IA</span><button onclick="window.print()" style="padding:8px 14px;font-weight:bold;cursor:pointer">🖨️ Imprimir Folha</button></div><header><h1>FOLHA DE TEXTO DEFINITIVO · BANCA: ${escText(board.toUpperCase())}</h1><div style="font-size:.78rem;color:#4a6075">Respeite as margens, escreva com caneta esferográfica preta ou azul e observe o limite de ${maxLines} linhas.</div><div class="theme"><b>PROPOSTA / TEMA:</b> ${escText(theme)}</div></header><div>${linesHtml}</div></body></html>`);
+      const supportHtml=instructions?`<div class="support">${escText(instructions).replace(/\n/g,'<br>')}</div>`:'';
+      w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Folha de Redação (${maxLines} linhas)</title><style>body{font:13px/1.45 Inter,Arial,sans-serif;color:#111d2c;max-width:780px;margin:20px auto;padding:0 16px}header{border:2px solid #10253a;border-radius:8px;padding:12px 14px;margin-bottom:14px}h1{font-size:1.05rem;margin:0 0 6px}.theme{font-size:.9rem;background:#f4f8fb;padding:8px 10px;border-left:4px solid #1768ac;margin-top:6px}.support{font-size:.82rem;line-height:1.45;background:#f9fbfd;border:1px solid #cbd5e1;border-radius:6px;padding:10px 12px;margin-top:8px}.rLine{display:grid;grid-template-columns:28px 1fr;align-items:end;height:26px}.rLine span{font-size:.75rem;color:#5a7186;font-weight:700;padding-bottom:2px}.rLine i{display:block;border-bottom:1px solid #8ea4b8;height:100%}@media print{body{margin:10mm;max-width:none}.noPrint{display:none}}</style></head><body><div class="noPrint" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;background:#eef6fc;padding:10px;border-radius:8px"><span><b>Caderno de Proposta + Folha de Redação (${maxLines} linhas)</b> — imprima, escreva à mão e envie foto/PDF para correção na IA</span><button onclick="window.print()" style="padding:8px 14px;font-weight:bold;cursor:pointer">🖨️ Imprimir Folha</button></div><header><h1>FOLHA DE TEXTO DEFINITIVO · BANCA: ${escText(board.toUpperCase())}</h1><div style="font-size:.78rem;color:#4a6075">Leia atentamente os textos motivadores, respeite as margens, escreva com caneta esferográfica preta ou azul e observe o limite de ${maxLines} linhas.</div><div class="theme"><b>PROPOSTA / TEMA:</b> ${escText(theme)}</div>${supportHtml}</header><div>${linesHtml}</div></body></html>`);
       w.document.close();
     };
   }

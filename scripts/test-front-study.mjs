@@ -164,3 +164,14 @@ console.log("OK: ofensiva adaptativa e caderno de erros por questão individual 
   assert(subjects.includes("Língua Portuguesa") && subjects.includes("Direito Constitucional") && subjects.includes("Informática"));
 }
 console.log("OK: desdobramento automático de disciplinas do edital validado.");
+
+// Teste 10: Redação esconde hero da tela inicial e sorteia tema com Textos Motivadores I e II + Comando
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  assert.ok(htmlSrc.includes("if(hero)hero.hidden=(id!=='today')"), "openView deve ocultar .hero fora da tela inicial (today)");
+  assert.ok(v77Src.includes("TEXTO MOTIVADOR I:") && v77Src.includes("TEXTO MOTIVADOR II:") && v77Src.includes("PROPOSTA E CRITÉRIOS DA BANCA:"), "Sorteio de redação deve incluir Texto Motivador I, Texto Motivador II e Comando da Banca");
+  assert.ok(v77Src.includes("generateAiEssayThemeBtn") && v77Src.includes("essayMotivatingBox"), "Central de Redação deve ter gerador IA de proposta com textos de apoio e painel visual de leitura");
+  console.log("OK: tela de redação sem hero inicial e propostas com Textos Motivadores I e II validadas.");
+}
+
