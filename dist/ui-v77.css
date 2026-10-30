@@ -163,3 +163,19 @@ mark.hlPenalty{background:rgba(89,230,255,.2);color:#9beeff;padding:1px 5px;bord
 .rankPos{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-weight:900;background:#0e2236;color:var(--cyan);font-size:.92rem}
 .rankAvatar{width:36px;height:36px;border-radius:50%;display:inline-grid;place-items:center;font-weight:850;background:linear-gradient(135deg,#1d4ed8,#0ea5e9);color:#fff;flex-shrink:0}
 @media(max-width:719px){.podiumGrid{grid-template-columns:1fr}.rankRow{grid-template-columns:36px 1fr;gap:8px}.rankRowMetrics{grid-column:1/-1;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;padding-top:6px;border-top:1px solid #172d42}}
+
+.reviewHubCard{margin-bottom:12px;padding:15px 16px;border-radius:16px;border:1px solid #264866;background:linear-gradient(155deg,#0b1d2e,#07121e);display:grid;gap:12px}
+.reviewStatsGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.reviewStatBox{padding:11px 12px;border-radius:12px;background:#071320;border:1px solid #1d364d}
+.reviewStatBox b{display:block;font-size:1.3rem;color:var(--cyan)}
+.reviewStatBox span{font-size:.75rem;color:var(--muted)}
+.reviewActionsBar{display:flex;gap:8px;flex-wrap:wrap}
+.reviewActionsBar button{flex:1;min-width:200px}
+.reviewScheduleRow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.reviewDayChip{padding:8px 6px;border-radius:10px;background:#081624;border:1px solid #1b344a;text-align:center;font-size:.75rem}
+.reviewDayChip.hasDue{border-color:var(--gold);background:#1c1a0e}
+.reviewDayChip b{display:block;font-size:.95rem;margin-top:2px;color:#f8fafc}
+.incidenceBadge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:.68rem;font-weight:800;margin-left:6px}
+.incidenceBadge.high{background:#2d1215;color:#fca5a5;border:1px solid #ef444466}
+.incidenceBadge.med{background:#2b210d;color:#fcd34d;border:1px solid #f59e0b66}
+@media(max-width:719px){.reviewStatsGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.reviewScheduleRow{grid-template-columns:repeat(4,minmax(0,1fr))}}

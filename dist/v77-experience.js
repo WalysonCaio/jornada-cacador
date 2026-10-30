@@ -2798,8 +2798,384 @@
     if(q('#rankingShortcutMeta'))q('#rankingShortcutMeta').textContent=`🔥 ${state?.streak||0}d ofensiva · ver caçadores`;
   }
 
+
+  // 13. Central de Revisão Inteligente (Ciclo 1-7-30, Revisão Ativa por Questões, Resumo Inline e Raio-X de Véspera Imprimível)
+  const HIGH_INCIDENCE_PATTERNS=/direitos e garantias|art\.?\s*5|art\.?\s*144|seguranca publica|inquerito policial|prisao|flagrante|crimes contra a administracao|crimes contra a pessoa|crimes contra o patrimonio|maria da penha|tortura|abuso de autoridade|estatuto do desarmamento|drogas|concordancia|regencia|crase|interpretacao|compreensao|pontuacao|proposicoes|tabela-verdade|porcentagem| atos administrativos|poderes administrativos|licitacoes/i;
+
+  function topicIncidenceLevel(mission){
+    const text=`${mission?.subject||''} ${mission?.name||''}`;
+    if(HIGH_INCIDENCE_PATTERNS.test(normalizeText(text)))return 'high';
+    const relatedQ=(ALL_QUESTIONS||[]).filter(qItem=>topicKey(qItem.subject)===topicKey(mission?.subject)&&normalizeText(qItem.statement||'').includes(normalizeText(mission?.name||'').slice(0,18))).length;
+    if(relatedQ>=2)return 'high';
+    if(relatedQ===1||/direito|portugues|legislacao|penal|constitucional/i.test(normalizeText(mission?.subject||'')))return 'med';
+    return 'low';
+  }
+
+  function decorateEditalIncidenceBadges(){
+    const missions=typeof missionPool==='function'?missionPool():[];
+    if(!missions.length)return;
+    qa('#topicList .topic').forEach(row=>{
+      if(row.querySelector('.incidenceBadge'))return;
+      const chk=row.querySelector('input[data-id]');
+      const m=missions.find(item=>String(item.id)===String(chk?.dataset?.id||''));
+      if(!m)return;
+      const lvl=topicIncidenceLevel(m);
+      const titleEl=row.querySelector('b')||row.querySelector('span');
+      if(titleEl&&lvl!=='low'){
+        titleEl.insertAdjacentHTML('beforeend',lvl==='high'
+          ?'<span class="incidenceBadge high" title="Tópico de altíssima incidência em provas policiais">🔥 Alta incidência</span>'
+          :'<span class="incidenceBadge med" title="Tópico frequente em provas">⚡ Frequente</span>');
+      }
+    });
+  }
+
+  function forecastNext7DaysReviews(){
+    const days=[];
+    const labels=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+    const pool=typeof missionPool==='function'?missionPool():[];
+    const intervals=[1,7,30];
+    const now=new Date();
+    now.setHours(0,0,0,0);
+    for(let offset=0;offset<7;offset++){
+      const d=new Date(now);
+      d.setDate(now.getDate()+offset);
+      const dStart=d.getTime(),dEnd=dStart+86399999;
+      let count=0;
+      for(const m of pool){
+        const doneAt=state?.done?.[m.id];
+        if(!doneAt)continue;
+        for(const step of intervals){
+          const key=`${m.id}-${step}`;
+          if(state?.reviews?.[key])continue;
+          const dueTime=new Date(doneAt).getTime()+step*86400000;
+          if(offset===0?(dueTime<=dEnd):(dueTime>=dStart&&dueTime<=dEnd))count++;
+        }
+      }
+      for(const [,err] of Object.entries(state?.errors||{})){
+        if(err?.campaignId&&err.campaignId!==state?.activeCampaignId)continue;
+        const dueTime=new Date(err?.nextReview||err?.last||0).getTime();
+        if(offset===0?(dueTime<=dEnd):(dueTime>=dStart&&dueTime<=dEnd))count++;
+      }
+      days.push({
+        label:offset===0?'Hoje':offset===1?'Amanhã':labels[d.getDay()],
+        dateStr:d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}),
+        count
+      });
+    }
+    return days;
+  }
+
+  function startActiveReviewSession(targetSubject=''){
+    const due=typeof dueReviews==='function'?dueReviews():[];
+    const dueSubjects=new Set(due.map(x=>topicKey(x.kind==='mission'?x.m?.subject:x.e?.subject)).filter(Boolean));
+    let pool=(ALL_QUESTIONS||[]).filter(qItem=>{
+      if(targetSubject)return topicKey(qItem.subject)===topicKey(targetSubject);
+      return dueSubjects.size?dueSubjects.has(topicKey(qItem.subject)):true;
+    });
+    if(pool.length<3)pool=(ALL_QUESTIONS||[]);
+    if(!pool.length)return toast('Envie um material ou gere questões para iniciar a Revisão Ativa.');
+    const count=Math.min(5,pool.length);
+    const chosen=typeof balancedQuestions==='function'?balancedQuestions(pool,count):pool.slice(0,count);
+    activeQuestions={
+      mode:'battle',
+      subject:targetSubject?`Revisão Ativa · ${targetSubject}`:'Revisão Ativa dos Tópicos Vencidos',
+      questions:chosen.map(prepareQuestion),
+      current:0,
+      correct:0,
+      answered:false
+    };
+    q('#questionDialogTitle').textContent=targetSubject?`⚡ Revisão Ativa: ${targetSubject}`:'⚡ Sessão de Revisão Ativa';
+    q('#questionDialog').showModal();
+    showQuestion();
+  }
+
+  function exportVesperaRaioX(subjectFilter='all'){
+    const campaignName=(typeof activeCampaign==='function'?activeCampaign()?.name:'Meu Concurso')||'Meu Concurso';
+    const errors=Object.values(state?.errors||{}).filter(e=>(!e.campaignId||e.campaignId===state?.activeCampaignId)&&(subjectFilter==='all'||topicKey(e.subject)===topicKey(subjectFilter)));
+    const summaries=(ALL_SUMMARIES||[]).filter(s=>subjectFilter==='all'||topicKey(s.category)===topicKey(subjectFilter));
+    const cards=(ALL_FLASHCARDS||[]).map((c,i)=>({c,i,key:typeof fcKey==='function'?fcKey(c):String(i)})).filter(x=>{
+      if(subjectFilter!=='all'&&topicKey(x.c.subject)!==topicKey(subjectFilter))return false;
+      const p=typeof fcProgress==='function'?fcProgress(x):null;
+      return !p||p.level==='hard'||p.level==='medium';
+    });
+    const notes=(state?.userNotes||[]).filter(n=>subjectFilter==='all'||topicKey(n.subject||'')===topicKey(subjectFilter));
+
+    const w=window.open('','_blank');
+    if(!w)return toast('Permita pop-ups para abrir o Raio-X de Revisão de Véspera.');
+    w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Raio-X de Revisão Final — ${escText(campaignName)}</title>
+      <style>
+        body{font:13px/1.5 Inter,Segoe UI,Arial,sans-serif;color:#0f172a;max-width:860px;margin:20px auto;padding:0 16px}
+        header{border:2px solid #0f172a;border-radius:10px;padding:14px 16px;margin-bottom:16px;background:#f8fafc}
+        h1{margin:0 0 4px;font-size:1.2rem}
+        h2{margin:18px 0 8px;font-size:1rem;border-bottom:2px solid #cbd5e1;padding-bottom:4px;color:#0369a1;text-transform:uppercase}
+        .box{border:1px solid #cbd5e1;border-radius:8px;padding:10px 12px;margin-bottom:8px;break-inside:avoid}
+        .bizu{background:#f0fdf4;border-left:4px solid #16a34a}
+        .trap{background:#fef2f2;border-left:4px solid #dc2626}
+        .err{background:#fffbeb;border-left:4px solid #d97706}
+        .tag{display:inline-block;padding:2px 7px;border-radius:99px;font-size:.72rem;font-weight:700;background:#e2e8f0;margin-right:6px}
+        @media print{.noPrint{display:none}body{margin:8mm;max-width:none}}
+      </style>
+    </head><body>
+      <div class="noPrint" style="display:flex;justify-content:space-between;align-items:center;background:#e0f2fe;padding:10px 14px;border-radius:8px;margin-bottom:14px">
+        <span><b>Raio-X de Revisão de Véspera (${escText(subjectFilter==='all'?'Todas as Disciplinas':subjectFilter)})</b> — pronto para imprimir ou salvar em PDF</span>
+        <button onclick="window.print()" style="padding:8px 14px;font-weight:700;cursor:pointer">🖨️ Imprimir / Salvar PDF</button>
+      </div>
+      <header>
+        <h1>RAIO-X DE REVISÃO DE VÉSPERA · ${escText(campaignName.toUpperCase())}</h1>
+        <div>Disciplina: <b>${escText(subjectFilter==='all'?'Todas as disciplinas do portal':subjectFilter)}</b> · Gerado em ${new Date().toLocaleDateString('pt-BR')}</div>
+        <div style="font-size:.8rem;color:#475569;margin-top:4px">Resumo tático personalizado contendo seus erros recorrentes, bizus de prova, pegadinhas de banca, flashcards críticos e anotações.</div>
+      </header>
+
+      <h2>1. Pontos Críticos do Seu Caderno de Erros (${errors.length})</h2>
+      ${errors.length?errors.map(e=>`
+        <div class="box err">
+          <div><span class="tag">${escText(e.subject||'Disciplina')}</span><b>${escText(e.topic||'Tópico')}</b> (${Number(e.misses||1)} erro(s))</div>
+          ${e.question?`<div style="margin-top:4px"><b>Questão:</b> ${escText(e.question)}</div>`:''}
+          ${e.correctAnswer?`<div style="margin-top:2px;color:#15803d"><b>Gabarito / Conceito correto:</b> ${escText(e.correctAnswer)}</div>`:''}
+          ${e.explanation?`<div style="margin-top:3px"><b>Bizu de correção:</b> ${escText(e.explanation)}</div>`:''}
+        </div>
+      `).join(''):'<p>Nenhum erro ativo registrado para este filtro.</p>'}
+
+      <h2>2. Bizus, Mnemônicos e Pegadinhas de Banca (${summaries.length})</h2>
+      ${summaries.length?summaries.slice(0,40).map(s=>`
+        <div class="box bizu">
+          <div><span class="tag">${escText(s.category||'Matéria')}</span><b>${escText(s.title||'Assunto')}</b></div>
+          ${s.bizu?`<div style="margin-top:4px"><b>⚡ Bizu:</b> ${escText(s.bizu)}</div>`:''}
+          ${s.mnemonic?`<div style="margin-top:2px"><b>🧠 Mnemônico:</b> ${escText(s.mnemonic)}</div>`:''}
+          ${s.trap?`<div class="trap" style="padding:6px 8px;margin-top:4px"><b>⚠️ Pegadinha de prova:</b> ${escText(s.trap)}</div>`:''}
+          ${!s.bizu&&!s.trap&&s.explanation?`<div style="margin-top:4px">${escText(String(s.explanation).slice(0,260))}</div>`:''}
+        </div>
+      `).join(''):'<p>Envie PDFs na Biblioteca para extrair bizus e pegadinhas das matérias.</p>'}
+
+      <h2>3. Flashcards Prioritários de Memorização (${Math.min(30,cards.length)})</h2>
+      ${cards.length?cards.slice(0,30).map(x=>`
+        <div class="box">
+          <div><span class="tag">${escText(x.c.subject||'Disciplina')}</span><b>P: ${escText(x.c.front)}</b></div>
+          <div style="margin-top:3px"><b>R:</b> ${escText(x.c.back)}</div>
+        </div>
+      `).join(''):'<p>Nenhum flashcard pendente neste filtro.</p>'}
+
+      ${notes.length?`
+        <h2>4. Suas Anotações e Bizus Pessoais (${notes.length})</h2>
+        ${notes.map(n=>`<div class="box"><b>${escText(n.title||'Nota')}</b><div>${escText(n.text||n.content||'')}</div></div>`).join('')}
+      `:''}
+    </body></html>`);
+    w.document.close();
+  }
+
+  function enhanceReviewCenter(){
+    const reviewSection=q('#review');
+    if(!reviewSection)return;
+    let hub=q('#smartReviewHub');
+    if(!hub){
+      const firstCard=reviewSection.querySelector('.card');
+      if(firstCard){
+        firstCard.insertAdjacentHTML('beforebegin','<div class="reviewHubCard" id="smartReviewHub"></div>');
+        hub=q('#smartReviewHub');
+      }
+    }
+    if(!hub)return;
+
+    const dueList=typeof dueReviews==='function'?dueReviews():[];
+    const now=Date.now();
+    const fcDueCount=(ALL_FLASHCARDS||[]).map((c,i)=>({c,i,key:typeof fcKey==='function'?fcKey(c):String(i)})).filter(x=>typeof fcDue==='function'?fcDue(fcProgress(x),now):false).length;
+    const activeErrors=Object.values(state?.errors||{}).filter(e=>!e.campaignId||e.campaignId===state?.activeCampaignId).length;
+    const doneRevs=Object.keys(state?.reviews||{}).length;
+    const forecast=forecastNext7DaysReviews();
+    const subjects=[...new Set([
+      ...(typeof missionPool==='function'?missionPool().map(m=>m.subject):[]),
+      ...(ALL_SUMMARIES||[]).map(s=>s.category),
+      ...Object.values(state?.errors||{}).map(e=>e.subject)
+    ].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+
+    hub.innerHTML=`
+      <div class="sectionHead" style="margin:0">
+        <div>
+          <div class="eyebrow">SISTEMA DE RETENÇÃO ESPAÇADA (1 · 7 · 30 DIAS + CADERNO DE ERROS)</div>
+          <h3 style="margin:2px 0 0">Central de Revisão Ativa e Raio-X de Véspera</h3>
+        </div>
+        <span class="tag">${dueList.length+fcDueCount} itens para revisar hoje</span>
+      </div>
+
+      <div class="reviewStatsGrid">
+        <div class="reviewStatBox"><b>${dueList.length}</b><span>tópicos/erros vencidos hoje</span></div>
+        <div class="reviewStatBox"><b>${fcDueCount}</b><span>flashcards para revisar agora</span></div>
+        <div class="reviewStatBox"><b>${activeErrors}</b><span>erros ativos no caderno</span></div>
+        <div class="reviewStatBox"><b>${doneRevs}</b><span>revisões já concluídas</span></div>
+      </div>
+
+      <div>
+        <div class="small muted" style="margin-bottom:6px;font-weight:700">PREVISÃO DE REVISÕES DOS PRÓXIMOS 7 DIAS</div>
+        <div class="reviewScheduleRow">
+          ${forecast.map(d=>`
+            <div class="reviewDayChip ${d.count>0?'hasDue':''}">
+              <span>${escText(d.label)} (${escText(d.dateStr)})</span>
+              <b>${d.count} ${d.count===1?'item':'itens'}</b>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="reviewActionsBar">
+        <button type="button" class="action small" id="startActiveReviewQuizBtn">⚡ Revisão Ativa (Questões dos Vencidos)</button>
+        <button type="button" class="ghost small" id="openDueFlashcardsFromRevBtn">🃏 Revisar Flashcards (${fcDueCount})</button>
+        <div style="display:flex;gap:6px;flex:1.2;min-width:250px">
+          <select id="vesperaSubjectSelect" style="flex:1">
+            <option value="all">Raio-X: Todas as matérias</option>
+            ${subjects.map(s=>`<option value="${escText(s)}">${escText(s)}</option>`).join('')}
+          </select>
+          <button type="button" class="ghost small" id="exportVesperaRaioXBtn" style="min-width:170px">🖨️ Raio-X de Véspera</button>
+        </div>
+      </div>
+    `;
+
+    q('#startActiveReviewQuizBtn').onclick=()=>startActiveReviewSession('');
+    q('#openDueFlashcardsFromRevBtn').onclick=()=>{
+      openView('study');
+      const cardTab=q('[data-study="cards"]');
+      if(cardTab)cardTab.click();
+      const dueToggle=q('#flashDueOnlyToggle');
+      if(dueToggle&&!dueToggle.checked){dueToggle.checked=true;dueToggle.dispatchEvent(new Event('change'))}
+    };
+    q('#exportVesperaRaioXBtn').onclick=()=>{
+      exportVesperaRaioX(q('#vesperaSubjectSelect')?.value||'all');
+    };
+
+    // Enriquecer cada item do #reviewList com botão de Resumo Rápido e Treinar 3 Questões
+    qa('#reviewList .topic').forEach(itemEl=>{
+      if(itemEl.querySelector('[data-rev-quick-quiz]'))return;
+      const titleText=itemEl.querySelector('b')?.textContent?.trim()||'';
+      const metaText=itemEl.querySelector('.small.muted')?.textContent||'';
+      const subjGuess=subjects.find(s=>metaText.includes(s))||'';
+      const btnWrap=document.createElement('div');
+      btnWrap.style.cssText='display:flex;gap:6px;flex-wrap:wrap;align-items:center';
+      const existingBtn=itemEl.querySelector('button');
+      if(!existingBtn)return;
+      existingBtn.parentNode.insertBefore(btnWrap,existingBtn);
+      btnWrap.appendChild(existingBtn);
+      const quizBtn=document.createElement('button');
+      quizBtn.type='button';
+      quizBtn.className='ghost small';
+      quizBtn.dataset.revQuickQuiz='1';
+      quizBtn.textContent='🎯 Testar questões';
+      quizBtn.onclick=()=>startActiveReviewSession(subjGuess);
+      btnWrap.insertBefore(quizBtn,existingBtn);
+
+      const relatedSum=(ALL_SUMMARIES||[]).find(s=>
+        (subjGuess&&topicKey(s.category)===topicKey(subjGuess)&&normalizeText(s.title).includes(normalizeText(titleText).slice(0,16)))||
+        normalizeText(s.title).includes(normalizeText(titleText).slice(0,22))
+      );
+      if(relatedSum){
+        const sumBtn=document.createElement('button');
+        sumBtn.type='button';
+        sumBtn.className='ghost small';
+        sumBtn.textContent='📖 Ver resumo';
+        sumBtn.onclick=()=>{
+          let preview=itemEl.querySelector('.revInlineSummary');
+          if(preview){preview.remove();return}
+          preview=document.createElement('div');
+          preview.className='lessonBox bizu revInlineSummary';
+          preview.style.cssText='width:100%;margin-top:8px';
+          preview.innerHTML=`<b>${escText(relatedSum.title)}</b><p style="margin:4px 0">${escText(relatedSum.explanation||'')}</p>${relatedSum.bizu?`<div class="small"><b>⚡ Bizu:</b> ${escText(relatedSum.bizu)}</div>`:''}`;
+          itemEl.style.flexWrap='wrap';
+          itemEl.appendChild(preview);
+        };
+        btnWrap.insertBefore(sumBtn,quizBtn);
+      }
+    });
+  }
+
+  // 14. Modo Redação Digitada na Tela (gera folha PNG automaticamente se o aluno preferir digitar em vez de enviar foto/PDF)
+  function enhanceTypedEssayOption(){
+    const fileInput=q('#essayFile');
+    if(!fileInput||q('#typedEssayBox'))return;
+    const fieldLabel=fileInput.closest('label');
+    if(!fieldLabel)return;
+    fieldLabel.insertAdjacentHTML('afterend',`
+      <div class="card" id="typedEssayBox" style="padding:12px 14px;margin:8px 0 12px;background:#071320;border:1px solid #1e3a54">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+          <b style="font-size:.88rem">✍️ Opcional: Digitar redação direto na tela (sem precisar de foto/PDF)</b>
+          <span class="tag" id="typedEssayCounter">0 linhas · 0 palavras</span>
+        </div>
+        <textarea id="typedEssayText" rows="7" maxlength="4500" placeholder="Se você estiver sem papel agora, digite sua redação aqui (de 20 a 30 linhas). Ao clicar em 'Converter texto digitado em folha para correção', ela será anexada automaticamente no campo de arquivo acima!"></textarea>
+        <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="small muted">Dica: ~75 caracteres equivalem a 1 linha manuscrita na folha oficial.</span>
+          <button type="button" class="ghost small" id="attachTypedEssayBtn">📄 Converter texto digitado para correção</button>
+        </div>
+      </div>
+    `);
+    const ta=q('#typedEssayText'),counter=q('#typedEssayCounter');
+    ta.oninput=()=>{
+      const text=ta.value.trim();
+      const words=text?text.split(/\s+/).length:0;
+      const estLines=text?Math.max(1,Math.ceil(text.length/75)):0;
+      counter.textContent=`~${estLines} linha${estLines===1?'':'s'} · ${words} palavra${words===1?'':'s'}`;
+    };
+    q('#attachTypedEssayBtn').onclick=async()=>{
+      const text=ta.value.trim();
+      if(text.length<80)return toast('Digite ao menos um parágrafo completo antes de converter para folha de correção.');
+      const canvas=document.createElement('canvas');
+      canvas.width=1240;
+      canvas.height=1754;
+      const ctx=canvas.getContext('2d');
+      ctx.fillStyle='#ffffff';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle='#0f172a';
+      ctx.font='bold 24px Arial, sans-serif';
+      const title=q('#essayTitle')?.value?.trim()||'Redação Simulada';
+      const theme=q('#essayTheme')?.value?.trim()||'Tema Oficial';
+      ctx.fillText(`FOLHA DE REDAÇÃO — ${title.slice(0,55)}`,60,60);
+      ctx.font='18px Arial, sans-serif';
+      ctx.fillStyle='#334155';
+      ctx.fillText(`Tema: ${theme.slice(0,85)}`,60,92);
+
+      // Quebrar texto em linhas de até 82 caracteres respeitando parágrafos
+      const wrapped=[];
+      for(const para of text.split(/\n+/)){
+        const words=para.trim().split(/\s+/).filter(Boolean);
+        let line='    ';
+        for(const w of words){
+          if((line+' '+w).length>84){
+            wrapped.push(line);
+            line=w;
+          }else{
+            line=line==='    '?`    ${w}`:`${line} ${w}`;
+          }
+        }
+        if(line.trim())wrapped.push(line);
+      }
+
+      ctx.font='21px Georgia, serif';
+      for(let i=0;i<35;i++){
+        const y=145+i*43;
+        ctx.strokeStyle='#cbd5e1';
+        ctx.beginPath();
+        ctx.moveTo(60,y+8);
+        ctx.lineTo(1180,y+8);
+        ctx.stroke();
+        ctx.fillStyle='#64748b';
+        ctx.font='bold 16px Arial, sans-serif';
+        ctx.fillText(String(i+1).padStart(2,'0'),24,y);
+        if(wrapped[i]){
+          ctx.fillStyle='#0f172a';
+          ctx.font='21px Georgia, serif';
+          ctx.fillText(wrapped[i],66,y);
+        }
+      }
+
+      const blob=await new Promise(res=>canvas.toBlob(res,'image/png',0.95));
+      if(!blob)return toast('Não foi possível gerar a folha da redação.');
+      const file=new File([blob],'redacao-digitada.png',{type:'image/png'});
+      const dt=new DataTransfer();
+      dt.items.add(file);
+      fileInput.files=dt.files;
+      if(q('#essayLines')&&!q('#essayLines').value)q('#essayLines').value='30';
+      toast(`Redação digitada convertida (${wrapped.length} linhas) e pronta! Agora clique em "Enviar e corrigir redação".`);
+    };
+  }
+
   const baseOpenView=openView;
-  openView=function(id){baseOpenView(id);try{sessionStorage.setItem(viewKey,id)}catch{}if(id==='report'){populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()}if(id==='today'){updateTodayCommand();ensureTafAndRankingShortcuts()}if(id==='map')renderReverseSchedule();if(id==='taf')renderTafPanel();if(id==='ranking'){renderHuntersLeaderboard();loadHuntersLeaderboard()}};
+  openView=function(id){baseOpenView(id);try{sessionStorage.setItem(viewKey,id)}catch{}if(id==='report'){populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()}if(id==='today'){updateTodayCommand();ensureTafAndRankingShortcuts()}if(id==='map'){renderReverseSchedule();decorateEditalIncidenceBadges()}if(id==='review')enhanceReviewCenter();if(id==='essay')enhanceTypedEssayOption();if(id==='taf')renderTafPanel();if(id==='ranking'){renderHuntersLeaderboard();loadHuntersLeaderboard()}};
   const baseTickClock=typeof tickClock==='function'?tickClock:null;
   if(baseTickClock){
     window.tickClock=function(){
@@ -2809,7 +3185,7 @@
     };
   }
   const baseRender=render;
-  render=function(){syncHunterStatsSnapshot();baseRender();enhanceFlashcardsSpacedRepetition();enhanceEssayCenter();updateFlashcardSpacedStats();updateTodayCommand();ensureTafAndRankingShortcuts();renderReverseSchedule();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub();if(q('#taf')?.classList.contains('active'))renderTafPanel();if(q('#ranking')?.classList.contains('active'))renderHuntersLeaderboard()};
+  render=function(){syncHunterStatsSnapshot();baseRender();enhanceFlashcardsSpacedRepetition();enhanceEssayCenter();enhanceTypedEssayOption();enhanceReviewCenter();decorateEditalIncidenceBadges();updateFlashcardSpacedStats();updateTodayCommand();ensureTafAndRankingShortcuts();renderReverseSchedule();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub();if(q('#taf')?.classList.contains('active'))renderTafPanel();if(q('#ranking')?.classList.contains('active'))renderHuntersLeaderboard()};
   const baseRenderReport=renderReport;
   renderReport=function(){baseRenderReport();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()};
 

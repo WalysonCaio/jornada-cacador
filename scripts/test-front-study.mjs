@@ -187,3 +187,11 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   console.log("OK: Painel TAF Policial e Ranking Geral de Caçadores validados.");
 }
 
+// Teste 12: Central de Revisão Ativa + Raio-X de Véspera + Incidência no Edital + Redação Digitada
+{
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  assert.ok(v77Src.includes("enhanceReviewCenter") && v77Src.includes("exportVesperaRaioX") && v77Src.includes("startActiveReviewSession"), "Central de Revisão deve ter Raio-X de Véspera e Revisão Ativa por questões");
+  assert.ok(v77Src.includes("decorateEditalIncidenceBadges") && v77Src.includes("enhanceTypedEssayOption"), "Deve conter etiquetas de incidência no edital e modo de redação digitada");
+  console.log("OK: Central de Revisão Ativa, Raio-X de Véspera, Incidência no Edital e Redação Digitada validados.");
+}
+
