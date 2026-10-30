@@ -217,28 +217,50 @@
     toast(`Concluindo análise de “${doc.title}” pelo modo de recuperação inteligente...`);
 
     if (isEditalType(doc)) {
-      const fullChars = pages.reduce((sum, p) => sum + String(p.text || "").length, 0);
-      if (fullChars > 45000) {
-        // O modo de recuperação lê só ~45 mil caracteres. Gerar o mapa a partir de uma amostra
-        // deixaria disciplinas de fora e ainda marcaria o edital como concluído.
+      const progRe = /conte[uú]do(s)? program[aá]tico|conhecimentos (gerais|b[aá]sicos|espec[ií]ficos)|objetos de avalia[cç][aã]o|l[ií]ngua portuguesa|racioc[ií]nio l[oó]gico|matem[aá]tica|inform[aá]tica|direito (constitucional|administrativo|penal|processual)|legisla[cç][aã]o|hist[oó]ria|geografia|atualidades|[eé]tica/i;
+      const progPages = pages.length <= 18 ? pages : pages.filter((p) => progRe.test(String(p.text || "")));
+      const targetPages = progPages.length >= 2 ? progPages : pages;
+      const chunks = [];
+      let cur = "", curChars = 0;
+      for (const p of targetPages) {
+        const block = `[PÁGINA ${p.page}]\n${String(p.text || "").slice(0, 9000)}`;
+        if (curChars > 0 && curChars + block.length > 14000) {
+          chunks.push(cur);
+          cur = "";
+          curChars = 0;
+        }
+        cur += (cur ? "\n\n" : "") + block;
+        curChars += block.length;
+      }
+      if (cur) chunks.push(cur);
+      if (chunks.length > 6) {
         toast("O edital é extenso demais para o modo de recuperação. O mapa atual foi mantido; tente reprocessar em instantes.");
         return false;
       }
-      const prompt = `Extraia o conteúdo programático (disciplinas e tópicos de estudo) deste edital de concurso ("${doc.title}"). Ignore regras de inscrição, taxas e datas administrativas. Responda EXCLUSIVAMENTE um JSON válido no formato {"topics":[{"subject":"Nome da Disciplina","unit":"","topic":"Tópico de estudo"}]}.`;
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`, {
-        method: "POST",
-        headers: { ...authHeaders(session.access_token) },
-        body: JSON.stringify({
-          question: prompt,
-          context: fullText,
-          mode: "resumo",
-          campaign_id: doc.campaign_id,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.answer) return false;
-      const parsed = parseJsonBlock(data.answer);
-      const topics = Array.isArray(parsed?.topics) ? parsed.topics.filter((t) => t?.subject && t?.topic).slice(0, 800) : [];
+      const rawTopics = [];
+      for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
+        const prompt = `Extraia TODAS as disciplinas e tópicos do conteúdo programático presentes neste trecho (${cIdx + 1}/${chunks.length}) do edital "${doc.title}". IMPORTANTE: o campo "subject" DEVE ser o nome individual de cada disciplina (ex.: "Língua Portuguesa", "Matemática", "Informática", "Direito Constitucional", "Direito Penal", etc.) — NUNCA use "Conhecimentos Gerais", "Conteúdo Programático" ou "Edital" como subject. Ignore regras administrativas. Responda EXCLUSIVAMENTE um JSON válido no formato {"topics":[{"subject":"Nome da Disciplina","unit":"","topic":"Tópico de estudo"}]}.`;
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`, {
+          method: "POST",
+          headers: { ...authHeaders(session.access_token) },
+          body: JSON.stringify({
+            question: prompt,
+            context: chunks[cIdx],
+            mode: "resumo",
+            campaign_id: doc.campaign_id,
+          }),
+        }).catch(() => null);
+        const data = res ? await res.json().catch(() => ({})) : {};
+        if (res?.ok && data?.answer) {
+          try {
+            const parsed = parseJsonBlock(data.answer);
+            if (Array.isArray(parsed?.topics)) rawTopics.push(...parsed.topics);
+          } catch {}
+        }
+      }
+      const topics = typeof window.unpackEditalTopicsList === "function"
+        ? window.unpackEditalTopicsList(rawTopics)
+        : rawTopics.filter((t) => t?.subject && t?.topic).slice(0, 1200);
       if (!topics.length) return false;
 
       const topicsFilter = `campaign_id=eq.${doc.campaign_id}&user_id=eq.${session.user.id}`;
@@ -248,17 +270,32 @@
         if (backupRes.ok) backupTopics = await backupRes.json().catch(() => []);
       } catch {}
 
-      const rows = topics.map((item, idx) => ({
-        campaign_id: doc.campaign_id,
-        user_id: session.user.id,
-        subject: String(item.subject || "Edital").trim(),
-        unit_name: String(item.unit || "").trim(),
-        topic: String(item.topic || "").trim(),
-        edital_order: idx,
-        subject_order: 0,
-        learning_order: idx,
-        difficulty: "basic",
-      }));
+      const newSubjects = new Set(topics.map((t) => String(t.subject || "").toLowerCase()));
+      const oldSubjects = new Set((backupTopics || []).map((t) => String(t.subject || "").toLowerCase()));
+      if (oldSubjects.size > newSubjects.size && backupTopics.length > topics.length) {
+        toast("A recuperação parcial encontrou menos disciplinas que o mapa atual; o mapa anterior foi preservado.");
+        return false;
+      }
+
+      const subjOrderMap = new Map();
+      const subjLearnCounter = new Map();
+      const rows = topics.map((item, idx) => {
+        const subj = typeof canonicalSubjectName === "function" ? canonicalSubjectName(item.subject || "Edital") : String(item.subject || "Edital").trim();
+        if (!subjOrderMap.has(subj)) subjOrderMap.set(subj, subjOrderMap.size);
+        const lOrder = subjLearnCounter.get(subj) || 0;
+        subjLearnCounter.set(subj, lOrder + 1);
+        return {
+          campaign_id: doc.campaign_id,
+          user_id: session.user.id,
+          subject: subj,
+          unit_name: String(item.unit || item.unit_name || "").trim(),
+          topic: String(item.topic || item.name || "").trim(),
+          edital_order: idx,
+          subject_order: subjOrderMap.get(subj) || 0,
+          learning_order: lOrder,
+          difficulty: "basic",
+        };
+      });
 
       const delRes = await cloudFetch(`campaign_topics?${topicsFilter}`, { method: "DELETE" }).catch(() => null);
       if (!delRes || !delRes.ok) return false;

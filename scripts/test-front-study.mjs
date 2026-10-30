@@ -143,3 +143,24 @@ console.log("OK: reanálise preserva/arquiva progresso.");
   assert.equal(Object.keys(ctx.state.errors).length, 2, "duas questões diferentes da mesma missão geram dois registros separados no caderno de erros");
 }
 console.log("OK: ofensiva adaptativa e caderno de erros por questão individual validados.");
+
+// 10) edital com todos os tópicos sob 1 único subject genérico ("Conhecimentos Gerais" ou "Edital") é desdobrado em todas as disciplinas reais
+{
+  const uc = [
+    slice("function normalizeText(", "function missionForQuestion("),
+    slice("window.unpackEditalTopicsList=function(", "window._activeProcessingDocs="),
+  ].join("\n");
+  const ctx = { window: {} };
+  vm.createContext(ctx); vm.runInContext(uc, ctx);
+  const rawFromDb = [
+    { id: 1, subject: "Conhecimentos Gerais", unit_name: "Língua Portuguesa", topic: "Compreensão e interpretação de textos" },
+    { id: 2, subject: "Conhecimentos Gerais", unit_name: "Raciocínio Lógico", topic: "Estruturas lógicas e diagramas" },
+    { id: 3, subject: "Conhecimentos Gerais", unit_name: "Direito Constitucional", topic: "Direitos e garantias fundamentais" },
+    { id: 4, subject: "Edital", unit_name: "", topic: "Informática: 1. Conceitos de internet e intranet. 2. Segurança da informação. 3. Correio eletrônico e navegadores." },
+  ];
+  const unpacked = ctx.window.unpackEditalTopicsList(rawFromDb, "PMPE — Soldado");
+  const subjects = [...new Set(unpacked.map((x) => x.subject))];
+  assert(subjects.length >= 4, `esperava ao menos 4 disciplinas separadas, obteve ${subjects.length}: ${subjects.join(", ")}`);
+  assert(subjects.includes("Língua Portuguesa") && subjects.includes("Direito Constitucional") && subjects.includes("Informática"));
+}
+console.log("OK: desdobramento automático de disciplinas do edital validado.");

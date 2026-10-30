@@ -80,16 +80,19 @@ export function buildChunks(pages: EditalPage[], target = CHUNK_TARGET_CHARS, ma
   return chunks;
 }
 
-const STRONG = /conte[uú]do program[aá]tico|programa(s)? (das|de|da|do) (prova|provas|disciplina|disciplinas|mat[eé]ria|materias|concurso)|conhecimentos (gerais|espec[ií]ficos|b[aá]sicos|profissionais|t[eé]cnicos)|objetos? de avalia[cç][aã]o|anexo [ivxlc\d]+\W.{0,80}(conte[uú]do|programa|disciplina|mat[eé]ria)/i;
+const STRONG = /conte[uú]do(s)? program[aá]tico(s)?|programa(s)? (das|de|da|do) (prova|provas|disciplina|disciplinas|mat[eé]ria|materias|concurso)|conhecimentos (gerais|espec[ií]ficos|b[aá]sicos|profissionais|t[eé]cnicos|complementares)|objetos? de avalia[cç][aã]o|anexo [ivxlcdm\d]+\W.{0,120}(conte[uú]do|programa|disciplina|mat[eé]ria|descri[cç][aã]o)/i;
 const SUBJECTS = [
-  /l[ií]ngua portuguesa|portugu[eê]s/i, /racioc[ií]nio l[oó]gico/i, /matem[aá]tica/i, /inform[aá]tica/i,
-  /direito constitucional/i, /direito administrativo/i, /direito penal/i, /direito processual/i, /direito civil/i,
-  /direitos? humanos/i, /legisla[cç][aã]o/i, /no[cç][oõ]es de/i, /atualidades/i, /hist[oó]ria/i, /geografia/i,
-  /ingl[eê]s/i, /ci[eê]ncias/i, /biologia|f[ií]sica|qu[ií]mica/i, /contabilidade|administra[cç][aã]o|economia/i, /[eé]tica/i,
+  /l[ií]ngua portuguesa|portugu[eê]s|interpreta[cç][aã]o de texto/i, /racioc[ií]nio l[oó]gico/i, /matem[aá]tica/i, /inform[aá]tica|tecnologia da informa[cç][aã]o/i,
+  /direito constitucional/i, /direito administrativo/i, /direito penal/i, /direito processual/i, /direito civil|direito tribut[aá]rio|direito previdenci[aá]rio|direito eleitoral/i,
+  /direito penal militar|processual penal militar|estatuto dos policiais|legisla[cç][aã]o institucional/i,
+  /direitos? humanos/i, /legisla[cç][aã]o|leis? extravagantes|maria da penha|crimes hediondos/i, /no[cç][oõ]es de/i, /atualidades/i, /hist[oó]ria/i, /geografia/i,
+  /ingl[eê]s|espanhol/i, /ci[eê]ncias/i, /biologia|f[ií]sica|qu[ií]mica/i, /contabilidade|administra[cç][aã]o|economia|arquivologia|afo/i, /[eé]tica|redac[aã]o oficial|criminologia|medicina legal|tr[aâ]nsito/i,
 ];
+const NUMBERED_SYLLABUS = /(?:^|\n)\s*(?:1|I)\s*[.\-)]\s+[^\n]{4,}[\s\S]{5,600}(?:^|\n)\s*(?:2|II)\s*[.\-)]\s+[^\n]{4,}/;
 
 export function chunkScore(text: string): number {
   let score = STRONG.test(text) ? 3 : 0;
+  if (NUMBERED_SYLLABUS.test(text)) score += 2;
   for (const re of SUBJECTS) if (re.test(text)) score += 1;
   return score;
 }
@@ -99,9 +102,14 @@ export function chunkScore(text: string): number {
  * analisados inteiros. Trechos vizinhos de um acerto também entram (o programa continua).
  */
 export function selectProgrammeChunks(chunks: EditalChunk[], maxChunks = MAX_CHUNKS) {
-  if (chunks.length <= 6) return { selected: chunks, skipped: 0 };
+  if (chunks.length <= 8) return { selected: chunks, skipped: 0 };
   const scores = chunks.map((c) => chunkScore(c.text));
-  const hits = scores.map((score, i) => (score >= 4 ? i : -1)).filter((i) => i >= 0);
+  let hits = scores.map((score, i) => (score >= 4 ? i : -1)).filter((i) => i >= 0);
+  // Se só houve acerto nas páginas iniciais (quadro de provas/sumário), inclui também trechos posteriores com score >= 2
+  if (!hits.length || hits.every((h) => h <= 1)) {
+    const secondary = scores.map((score, i) => (score >= 2 ? i : -1)).filter((i) => i >= 0);
+    if (secondary.length) hits = [...new Set([...hits, ...secondary])].sort((a, b) => a - b);
+  }
   let indexes: number[];
   if (!hits.length) {
     indexes = chunks.map((_, i) => i);
@@ -164,13 +172,33 @@ export async function runChunked(
 const normalizeKey = (value: unknown) => String(value ?? "").normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase("pt-BR");
 const normalizeSearch = (value: unknown) => normalizeKey(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 const ADMIN_ONLY = /^(inscri(c|ç)(a|ã)o|cronograma|remunera(c|ç)(a|ã)o|vagas?|isen(c|ç)(a|ã)o|taxa de inscri(c|ç)(a|ã)o|resultado|recursos?|exame m[eé]dico|teste de aptid(a|ã)o f[ií]sica|investiga(c|ç)(a|ã)o social|documentos?|matr[ií]cula|curso de forma(c|ç)(a|ã)o)$/i;
+const GENERIC_SUBJECT = /^(edital|edital do concurso|conte[uú]do(s)?\s*program[aá]tico(s)?|conhecimentos?\s*(gerais|b[aá]sicos|espec[ií]ficos|complementares|t[eé]cnicos|profissionais)?|objetos?\s*de\s*avalia[cç][aã]o|disciplinas?|mat[eé]rias?|programa(s)?|anexo\s*[ivxlcdm\d]*|bloco\s*[ivxlcdm\d]*|m[oó]dulo\s*[ivxlcdm\d]*|parte\s*[ivxlcdm\d]*|geral|comum\s+a\s+todos.*|cargo\s*\d*.*)$/i;
+
+export function isGenericSubjectName(value: unknown): boolean {
+  const s = normalizeSearch(value);
+  return !s || GENERIC_SUBJECT.test(s);
+}
+
+export function splitNumberedTopicBlock(topic: string): string[] {
+  const cleanTopic = String(topic ?? "").replace(/\s+/g, " ").trim();
+  if (cleanTopic.length <= 160) return [cleanTopic];
+  const has1 = /(?:^|[\s.;:])1\s*[.\-)]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/i.test(cleanTopic);
+  const has2 = /[\s.;:]2\s*[.\-)]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/i.test(cleanTopic);
+  const has3 = /[\s.;:]3\s*[.\-)]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/i.test(cleanTopic);
+  if (!has1 || !has2 || !has3) return [cleanTopic];
+  const parts = cleanTopic
+    .split(/(?=(?:^|[\s.;:])\d{1,2}\s*[.\-)]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ])/g)
+    .map((p) => p.replace(/^[\s.;:]+|[\s.;]+$/g, "").trim())
+    .filter((p) => p.length >= 3);
+  return parts.length >= 3 ? parts : [cleanTopic];
+}
 
 export type MergedTopic = {
   subject: string; unit: string; topic: string; edital_order: number; subject_order: number; learning_order: number;
   difficulty: string; prerequisite_topic: string; pedagogical_reason: string;
 };
 
-/** Junta os resultados dos trechos, remove duplicatas e recalcula as ordens globais. */
+/** Junta os resultados dos trechos, remove duplicatas, desdobra disciplinas agrupadas sob rótulo genérico e recalcula as ordens globais. */
 export function mergeChunkResults(results: ChunkResult[], maxTopics = 4000) {
   const subjectDisplay = new Map<string, string>();
   const seen = new Set<string>();
@@ -182,6 +210,13 @@ export function mergeChunkResults(results: ChunkResult[], maxTopics = 4000) {
   let scope = "";
   let seq = 0;
 
+  // Verifica se todos os tópicos vieram sob apenas 1 subject mas possuem múltiplos units distintos (ex.: modelo colocou o cargo em subject e a matéria em unit)
+  const allItems = results.flatMap((r) => (Array.isArray(r.parsed?.topics) ? r.parsed.topics : []));
+  const distinctRawSubjects = new Set(allItems.map((it: any) => normalizeSearch(it?.subject)).filter(Boolean));
+  const distinctRawUnits = new Set(allItems.map((it: any) => normalizeSearch(it?.unit ?? it?.unit_name)).filter((u: string) => u.length >= 3 && !isGenericSubjectName(u)));
+  const promoteUnitGlobally = distinctRawSubjects.size <= 1 && distinctRawUnits.size >= 2;
+
+  let lastValidSubject = "";
   for (const { index, parsed } of results) {
     const meta = parsed?.meta ?? {};
     const topics = Array.isArray(parsed?.topics) ? parsed.topics : [];
@@ -195,24 +230,46 @@ export function mergeChunkResults(results: ChunkResult[], maxTopics = 4000) {
       if (Array.isArray(meta.warnings)) for (const w of meta.warnings) { const t = String(w).trim(); if (t && !warnings.includes(t)) warnings.push(t); }
     }
     for (const item of topics) {
-      let subject = String(item?.subject ?? "Edital").replace(/\s+/g, " ").trim().slice(0, 200) || "Edital";
-      const topic = String(item?.topic ?? "").replace(/\s+/g, " ").trim().slice(0, 700);
-      if (topic.length < 3) continue;
-      const subjectKey = normalizeSearch(subject);
-      if (subjectKey === normalizeSearch(topic)) continue;
-      if (ADMIN_ONLY.test(normalizeSearch(topic))) continue;
-      if (!subjectDisplay.has(subjectKey)) subjectDisplay.set(subjectKey, subject);
-      subject = subjectDisplay.get(subjectKey)!;
-      const key = `${subjectKey}\u0000${normalizeSearch(topic)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const difficulty = ["basic", "intermediate", "advanced"].includes(String(item?.difficulty)) ? String(item.difficulty) : "basic";
-      raw.push({
-        subject, unit: String(item?.unit ?? "").replace(/\s+/g, " ").trim(), topic, edital_order: 0, subject_order: 0, learning_order: 0,
-        difficulty, prerequisite_topic: String(item?.prerequisite_topic ?? "").replace(/\s+/g, " ").trim(),
-        pedagogical_reason: String(item?.pedagogical_reason ?? "").trim().slice(0, 500),
-        chunk: index, modelOrder: Math.max(0, Number(item?.learning_order) || 0), seq: seq++, subjectKey,
-      });
+      let subject = String(item?.subject ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+      let unit = String(item?.unit ?? item?.unit_name ?? "").replace(/\s+/g, " ").trim();
+      let rawTopic = String(item?.topic ?? item?.name ?? "").replace(/\s+/g, " ").trim();
+      if (rawTopic.length < 3) continue;
+
+      if ((promoteUnitGlobally || isGenericSubjectName(subject)) && unit && !isGenericSubjectName(unit)) {
+        subject = unit;
+        unit = "";
+      } else if (isGenericSubjectName(subject) || distinctRawSubjects.size <= 1) {
+        const prefixMatch = rawTopic.match(/^([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-záéíóúâêôãõçÁÉÍÓÚÂÊÔÃÕÇ\s\-\/]{2,55}?)\s*(?::|\s[–—-]\s)\s*(.+)$/);
+        if (prefixMatch && !/^\d/.test(prefixMatch[1]) && !isGenericSubjectName(prefixMatch[1]) && SUBJECTS.some((re) => re.test(prefixMatch[1]))) {
+          subject = prefixMatch[1].trim();
+          rawTopic = prefixMatch[2].trim();
+        } else if (isGenericSubjectName(subject) && lastValidSubject) {
+          subject = lastValidSubject;
+        }
+      }
+      if (!subject) subject = lastValidSubject || "Edital";
+      if (!isGenericSubjectName(subject)) lastValidSubject = subject;
+
+      const subTopics = splitNumberedTopicBlock(rawTopic);
+      for (const piece of subTopics) {
+        const topic = piece.slice(0, 700).trim();
+        if (topic.length < 3) continue;
+        const subjectKey = normalizeSearch(subject);
+        if (subjectKey === normalizeSearch(topic)) continue;
+        if (ADMIN_ONLY.test(normalizeSearch(topic))) continue;
+        if (!subjectDisplay.has(subjectKey)) subjectDisplay.set(subjectKey, subject);
+        const finalSubject = subjectDisplay.get(subjectKey)!;
+        const key = `${subjectKey}\u0000${normalizeSearch(topic)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const difficulty = ["basic", "intermediate", "advanced"].includes(String(item?.difficulty)) ? String(item.difficulty) : "basic";
+        raw.push({
+          subject: finalSubject, unit, topic, edital_order: 0, subject_order: 0, learning_order: 0,
+          difficulty, prerequisite_topic: String(item?.prerequisite_topic ?? "").replace(/\s+/g, " ").trim(),
+          pedagogical_reason: String(item?.pedagogical_reason ?? "").trim().slice(0, 500),
+          chunk: index, modelOrder: Math.max(0, Number(item?.learning_order) || 0), seq: seq++, subjectKey,
+        });
+      }
     }
   }
 
@@ -245,7 +302,6 @@ export function mergeChunkResults(results: ChunkResult[], maxTopics = 4000) {
     },
   };
 }
-
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -596,8 +652,8 @@ Nome do arquivo: ${title}
 REGRAS OBRIGATÓRIAS:
 1. Localize primeiro as seções intituladas Conteúdo Programático, Conhecimentos Gerais, Conhecimentos Específicos, Objetos de Avaliação ou equivalentes.
 2. Se o PDF possuir vários cargos, use somente o cargo que corresponda ao nome do portal ou do arquivo. Se não for possível identificar com segurança, registre um aviso em meta.warnings; não misture silenciosamente cargos diferentes.
-3. subject deve ser o nome da disciplina conforme o edital, apenas corrigindo espaços, caixa e erros óbvios de OCR.
-4. unit representa bloco, unidade ou seção intermediária quando existir. Não invente unidade.
+3. ATENÇÃO CRÍTICA SOBRE DISCIPLINAS (subject): subject DEVE ser o nome individual de cada matéria/disciplina (ex.: "Língua Portuguesa", "Raciocínio Lógico-Matemático", "Informática", "História de Pernambuco", "Direito Constitucional", "Direito Administrativo", "Direito Penal", "Direito Processual Penal", "Legislação Extravagante"). NUNCA agrupe várias disciplinas sob um único subject genérico como "Conhecimentos Gerais", "Conhecimentos Básicos", "Conhecimentos Específicos", "Conteúdo Programático", "Edital" ou o nome do cargo. Cada disciplina do edital precisa ter seu próprio subject separado.
+4. unit representa apenas bloco intermediário dentro daquela disciplina quando existir. Se o edital tiver "Conhecimentos Gerais > Língua Portuguesa", o subject é "Língua Portuguesa" (e NÃO "Conhecimentos Gerais").
 5. topic deve ser um item de estudo atômico e fiel. Separe enumerações apenas quando o próprio edital apresentar conteúdos distintos; preserve artigos, leis, decretos, intervalos e qualificadores.
 6. Não transforme título de disciplina em tópico e não crie subassuntos ausentes.
 7. Ignore inscrições, vagas, cotas, salários, datas, etapas, TAF, exames médicos, recursos, documentação e demais regras administrativas, salvo quando fizerem parte expressa de uma disciplina cobrada.
@@ -719,12 +775,32 @@ ${chunk.text}`;
       const models = await availableGeminiModels(candidateKey.key);
 
       // 1ª Tentativa: texto extraído no navegador, analisado em trechos (todas as páginas, sem amostragem)
+      let partialChunkAttempt: any = null;
       if (selectedChunks.length) {
-        const run = await runChunked(selectedChunks, makeChunkPrompt, geminiChunkCaller(candidateKey.key, models), { concurrency: 3, deadline });
+        const caller = geminiChunkCaller(candidateKey.key, models);
+        const run = await runChunked(selectedChunks, makeChunkPrompt, caller, { concurrency: 2, deadline });
+        // Se alguns trechos falharam (ex.: limite de taxa temporário) e ainda há tempo, tenta novamente em sequência
+        if (run.failed > 0 && deadline - Date.now() > 16000) {
+          await wait(1200);
+          const succeededIndexes = new Set(run.results.map((r) => r.index));
+          const missingChunks = selectedChunks.filter((c) => !succeededIndexes.has(c.index));
+          if (missingChunks.length) {
+            const retryRun = await runChunked(missingChunks, (c, pos) => makeChunkPrompt(c, selectedChunks.findIndex((x) => x.index === c.index), selectedChunks.length), caller, { concurrency: 1, deadline });
+            if (retryRun.results.length) {
+              run.results.push(...retryRun.results);
+              run.results.sort((a, b) => a.index - b.index);
+              run.failed = Math.max(0, run.failed - retryRun.results.length);
+            }
+          }
+        }
         const attempt = buildChunkedParsed(run);
         if (attempt) {
-          parsed = attempt;
-          break keyLoop;
+          const subjectCount = new Set((attempt.topics || []).map((t: any) => normalizeSearch(t.subject))).size;
+          if (subjectCount >= 2 || (selectedChunks.length === 1 && run.failed === 0)) {
+            parsed = attempt;
+            break keyLoop;
+          }
+          partialChunkAttempt = attempt;
         }
       }
 
@@ -824,6 +900,10 @@ ${chunk.text}`;
       }
       await removeGeminiFile(geminiFileName, candidateKey.key);
       geminiFileName = undefined;
+      if (!parsed && partialChunkAttempt) {
+        parsed = partialChunkAttempt;
+        break keyLoop;
+      }
     }
 
     if (!parsed && selectedChunks.length && deadline - Date.now() > 20000) {
@@ -897,31 +977,8 @@ ${chunk.text}`;
       return reply(request, { error: `Este PDF não parece ser um edital oficial nem um edital verticalizado. ${meta.classification_reason} Exclua-o desta categoria e envie novamente como Material de estudo, Lei ou norma, Prova ou Simulado.`, code: "NOT_AN_EDITAL" }, 422);
     }
     if (meta.document_kind === "edital_verticalizado" && !meta.warnings.some((warning: string) => /verticalizado/i.test(warning))) meta.warnings.unshift("Edital verticalizado aceito como base do mapa. Confira os tópicos com o edital oficial quando ele estiver disponível.");
-    const topics = Array.isArray(parsed.topics) ? parsed.topics.slice(0, 4000) : [];
-    const uniqueTopics: Array<{ subject: string; unit: string; topic: string; edital_order: number; subject_order: number; learning_order: number; difficulty: string; prerequisite_topic: string; pedagogical_reason: string }> = [];
-    const seenTopics = new Set<string>();
-    const normalizeKey = (value: unknown) => String(value ?? "")
-      .normalize("NFKC")
-      .replace(/\s+/g, " ")
-      .trim()
-      .toLocaleLowerCase("pt-BR");
-    const normalizeSearch = (value: unknown) => normalizeKey(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const administrativeOnly = /^(inscri(c|ç)(a|ã)o|cronograma|remunera(c|ç)(a|ã)o|vagas?|isen(c|ç)(a|ã)o|taxa de inscri(c|ç)(a|ã)o|resultado|recursos?|exame m[eé]dico|teste de aptid(a|ã)o f[ií]sica|investiga(c|ç)(a|ã)o social|documentos?|matr[ií]cula|curso de forma(c|ç)(a|ã)o)$/i;
-
-    for (const [originalIndex, item] of topics.entries()) {
-      const subject = String(item?.subject ?? "Edital").replace(/\s+/g, " ").trim().slice(0, 200) || "Edital";
-      const unit = String(item?.unit ?? "").replace(/\s+/g, " ").trim();
-      const topic = String(item?.topic ?? "").replace(/\s+/g, " ").trim().slice(0, 700);
-      if (!topic || topic.length < 3) continue;
-      if (normalizeSearch(subject) === normalizeSearch(topic)) continue;
-      if (administrativeOnly.test(normalizeSearch(topic))) continue;
-
-      const key = `${normalizeKey(subject)}\u0000${normalizeKey(topic)}`;
-      if (seenTopics.has(key)) continue;
-      seenTopics.add(key);
-      const difficulty = ["basic", "intermediate", "advanced"].includes(String(item?.difficulty)) ? String(item.difficulty) : "basic";
-      uniqueTopics.push({ subject, unit, topic, edital_order: originalIndex, subject_order: Math.max(0, Number(item?.subject_order)||0), learning_order: Math.max(0, Number(item?.learning_order)||0), difficulty, prerequisite_topic: String(item?.prerequisite_topic??"").trim(), pedagogical_reason: String(item?.pedagogical_reason??"").trim().slice(0,500) });
-    }
+    const normalizedMerged = mergeChunkResults([{ index: 0, parsed }], 4000);
+    const uniqueTopics = normalizedMerged.topics;
     if (uniqueTopics.length < 1) {
       await finishUsage(usage.event_id, "error", "INSUFFICIENT_TOPICS", selectedModel);
       await setDocumentStatus(documentId, user.id, "error");
