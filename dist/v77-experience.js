@@ -3649,12 +3649,15 @@
     const completed=(Array.isArray(duelHubData.completed_duels)?duelHubData.completed_duels:[]).slice().sort((a,b)=>new Date(a.completed_at||a.created_at).getTime()-new Date(b.completed_at||b.created_at).getTime());
 
     const statsByUser=new Map();
+    const meLocal=localHunterRow();
     for(const p of players){
+      const isMe=p.is_me||p.user_id===myId;
       statsByUser.set(p.user_id,{
         user_id:p.user_id,
         name:p.name,
-        role:p.role,
-        is_me:p.is_me||p.user_id===myId,
+        role:p.role||'PMPE — Soldado',
+        xp:isMe?Math.max(Number(p.xp||0),Number(meLocal.xp||0)):Number(p.xp||0),
+        is_me:isMe,
         is_online:p.is_online,
         wins:0,
         losses:0,
@@ -4137,7 +4140,7 @@
                       ${r.is_me?'<span class="tag" style="padding:2px 6px;font-size:.68rem">Você</span>':''}
                       ${r.streak>=2?`<span class="dominationBadge">🔥 ${r.streak} vitórias seguidas</span>`:''}
                     </div>
-                    <div class="small muted">${r.is_online?'🟢 Online agora no navegador':'Pode receber desafio (joga quando entrar)'}</div>
+                    <div class="small muted">${escText(rankLabelForXp(r.xp||0))} · <b>${Number(r.xp||0)} XP</b> · ${r.is_online?'🟢 Online agora':'Pode receber desafio'}</div>
                   </div>
                 </div>
                 <div class="rankRowMetrics small muted">

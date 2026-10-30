@@ -702,6 +702,7 @@ begin
         nullif(trim(us.state->'hunterStats'->>'role'), ''),
         'PMPE — Soldado'
       ) as role,
+      greatest(0, coalesce((us.state->'hunterStats'->>'xp')::int, 0)) as xp,
       coalesce(us.server_updated_at, u.last_sign_in_at, u.created_at, now()) as last_seen,
       (coalesce(us.server_updated_at, u.last_sign_in_at, u.created_at, now()) > now() - interval '5 minutes') as is_online
     from auth.users u
@@ -729,6 +730,7 @@ begin
         'is_me', (rh.user_id = uid),
         'name', rh.name,
         'role', rh.role,
+        'xp', rh.xp,
         'is_online', rh.is_online,
         'last_seen', rh.last_seen
       )

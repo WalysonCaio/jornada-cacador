@@ -274,3 +274,11 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   console.log("OK: Tela de Login Multiplataforma com banner oficial Solo Leveling validada.");
 }
 
+// Teste 19: Clique nas abas principais (.tab) restaura sempre o card Hero (Patente Atual / Classe do Caçador e XP) na aba Hoje
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  assert.ok(htmlSrc.includes("$$('.tab').forEach(b=>{if(b.dataset.view)b.onclick=()=>openView(b.dataset.view)})"), "Abas principais devem chamar openView para restaurar o card de Patente/XP ao voltar para Hoje");
+  assert.ok(htmlSrc.includes("if(heroEl&&$('#today'))heroEl.hidden=!$('#today').classList.contains('active')"), "renderHero deve garantir que o card de Patente/XP esteja visível na aba Hoje");
+  console.log("OK: Card de Patente (Classe do Caçador) e contagem de XP sempre visíveis na aba Hoje validados.");
+}
+
