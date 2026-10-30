@@ -12,7 +12,7 @@
     if(!today||!streak||q('#todayCommand'))return;
     const panel=document.createElement('div');
     panel.id='todayCommand';panel.className='todayCommand';
-    panel.innerHTML=`<button class="commandPrimary" id="continueJourney"><span class="eyebrow">PRÓXIMA AÇÃO</span><b id="continueJourneyTitle">Continuar missão diária</b><span id="continueJourneyMeta">Retome exatamente de onde parou.</span></button><button class="commandShortcut" id="openUrgentReview"><i>↻</i><b>Revisar agora</b><span id="urgentReviewMeta">Confira suas revisões pendentes</span></button><button class="commandShortcut" id="openQuestionCenter"><i>◎</i><b>Resolver questões</b><span id="questionShortcutMeta">Treino por disciplina e tópico</span></button>`;
+    panel.innerHTML=`<button class="commandPrimary" id="continueJourney"><span class="eyebrow">⚡ PRÓXIMA AÇÃO DO DIA</span><b id="continueJourneyTitle">Continuar missão diária</b><span id="continueJourneyMeta">Retome exatamente de onde parou.</span></button><button class="commandShortcut" id="openUrgentReview"><div class="cmdHead"><i>↻</i><span class="cmdPill" id="urgentReviewPill">Ciclo 1·7·30</span></div><div><b>Revisar agora</b><span id="urgentReviewMeta">Confira suas revisões pendentes</span></div></button><button class="commandShortcut" id="openQuestionCenter"><div class="cmdHead"><i>◎</i><span class="cmdPill" id="questionShortcutPill">Treino ativo</span></div><div><b>Resolver questões</b><span id="questionShortcutMeta">Treino por disciplina e tópico</span></div></button>`;
     today.insertBefore(panel,streak);
     q('#continueJourney').onclick=()=>{q('#dailyMission')?.scrollIntoView({behavior:'smooth',block:'center'});q('#dailyMission button:not([disabled]),#dailyMission input:not([disabled])')?.focus({preventScroll:true})};
     q('#openUrgentReview').onclick=()=>openView('review');
@@ -2694,11 +2694,27 @@
     }
   }
 
+  function deduplicateHunterRows(rows=[]){
+    const byName=new Map();
+    for(const item of rows){
+      const key=topicKey(item?.name||'cacador')||String(item?.user_id||Math.random());
+      const prev=byName.get(key);
+      if(!prev){
+        byName.set(key,item);
+        continue;
+      }
+      const prevScore=(prev.is_me?1000000:0)+Number(prev.xp||0)*10+Number(prev.streak||0)*100+Number(prev.missions_done||0)*50+Number(prev.accuracy||0);
+      const curScore=(item.is_me?1000000:0)+Number(item.xp||0)*10+Number(item.streak||0)*100+Number(item.missions_done||0)*50+Number(item.accuracy||0);
+      if(curScore>prevScore)byName.set(key,item);
+    }
+    return [...byName.values()];
+  }
+
   function renderHuntersLeaderboard(){
     const root=q('#rankingRoot');
     if(!root)return;
     const me=localHunterRow();
-    const list=(leaderboardRows&&leaderboardRows.length?leaderboardRows:[me]).slice();
+    const list=deduplicateHunterRows((leaderboardRows&&leaderboardRows.length?leaderboardRows:[me]).slice());
     const mySlugs=new Set([normalizeExamSlug(me.role),me.secondary_role?normalizeExamSlug(me.secondary_role):''].filter(Boolean));
     const filtered=leaderboardRoleFilter==='same'
       ?list.filter(r=>{
@@ -2725,8 +2741,9 @@
           <h2 style="margin:3px 0 0">🏆 Ranking Geral de Caçadores</h2>
           <p class="small muted" style="margin:3px 0 0">Acompanhe a ofensiva diária, perfil de concurso (primário e secundário) e desempenho nos estudos.</p>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div class="rankHeaderActions">
           <button type="button" class="ghost small" id="shareAppRankingBtn">📲 Convidar Amigos</button>
+          <button type="button" class="ghost small" id="dedupRankingBtn" title="Verifica e remove perfis duplicados sem progresso no banco">🧹 Limpar Duplicados</button>
           <button type="button" class="action small" id="refreshRankingBtn">${leaderboardBusy?'⏳ Atualizando...':'↻ Atualizar Ranking'}</button>
         </div>
       </div>
@@ -2835,6 +2852,18 @@
     `;
 
     q('#refreshRankingBtn').onclick=()=>loadHuntersLeaderboard(true);
+    if(q('#dedupRankingBtn'))q('#dedupRankingBtn').onclick=async()=>{
+      try{
+        const res=await cloudFetch('rpc/cleanup_duplicate_hunter_profiles',{method:'POST',body:JSON.stringify({})});
+        const data=await res.json().catch(()=>({}));
+        const removed=Number(data?.removed_count||0);
+        await loadHuntersLeaderboard(false);
+        toast(removed>0?`✓ ${removed} perfil(is) duplicado(s) excluído(s) do banco!`:'✓ Nenhum perfil duplicado pendente no banco (apenas 1 conta por participante).');
+      }catch{
+        await loadHuntersLeaderboard(false);
+        toast('Lista deduplicada! Execute a migração v92 no SQL Editor do Supabase para excluir duplicados do banco.');
+      }
+    };
     q('#shareAppRankingBtn').onclick=async()=>{
       const rolesText=me.secondary_role?`${me.role} e ${me.secondary_role}`:me.role;
       const shareText=`🔥 Estou estudando no Jornada do Caçador para ${rolesText} (${me.streak} dias de ofensiva e ${me.xp} XP)! Entre no app, compartilhe materiais da prova e dispute no Ranking: https://jornada.wcaio.workers.dev`;
@@ -2876,16 +2905,20 @@
     const todayCmd=q('#todayCommand');
     if(todayCmd&&!q('#openTafShortcut')){
       todayCmd.insertAdjacentHTML('beforeend',`
-        <button class="commandShortcut" id="openTafShortcut" type="button"><i>💪</i><b>Painel TAF</b><span id="tafShortcutMeta">Índices físicos até a prova</span></button>
-        <button class="commandShortcut" id="openRankingShortcut" type="button"><i>🏆</i><b>Ranking</b><span id="rankingShortcutMeta">Ofensiva e amigos no banco</span></button>
+        <button class="commandShortcut" id="openTafShortcut" type="button"><div class="cmdHead"><i>💪</i><span class="cmdPill" id="tafShortcutPill">Aptidão Física</span></div><div><b>Painel TAF</b><span id="tafShortcutMeta">Índices físicos até a prova</span></div></button>
+        <button class="commandShortcut" id="openRankingShortcut" type="button"><div class="cmdHead"><i>🏆</i><span class="cmdPill" id="rankingShortcutPill">Comunidade</span></div><div><b>Ranking Geral</b><span id="rankingShortcutMeta">Ofensiva e amigos no banco</span></div></button>
+        <button class="commandShortcut" id="openEssayShortcut" type="button"><div class="cmdHead"><i>✍️</i><span class="cmdPill" id="essayShortcutPill">Textos I e II</span></div><div><b>Redação & Temas</b><span id="essayShortcutMeta">Propostas de prova e correção IA</span></div></button>
       `);
       q('#openTafShortcut').onclick=()=>openView('taf');
       q('#openRankingShortcut').onclick=()=>openView('ranking');
+      q('#openEssayShortcut').onclick=()=>openView('essay');
     }
     const taf=ensureTafState();
     const readyCount=TAF_ORDER.map(k=>taf.tests[k]).filter(t=>tafMetTarget(t)===true).length;
     if(q('#tafShortcutMeta'))q('#tafShortcutMeta').textContent=`${readyCount}/5 índices aptos no edital`;
+    if(q('#tafShortcutPill'))q('#tafShortcutPill').textContent=`${readyCount}/5 aptos`;
     if(q('#rankingShortcutMeta'))q('#rankingShortcutMeta').textContent=`🔥 ${state?.streak||0}d ofensiva · ver caçadores`;
+    if(q('#essayShortcutMeta'))q('#essayShortcutMeta').textContent=`${(cloudEssays||[]).length} enviada(s) · sortear tema + textos`;
   }
 
   // 15. Biblioteca Compartilhada da Comunidade por Concurso (Sem Download do PDF Bruto + Sanitização Anti-CPF)

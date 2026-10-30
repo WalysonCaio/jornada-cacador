@@ -208,3 +208,15 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   console.log("OK: Biblioteca da Comunidade (protegida contra download/CPF), Perfis Primário/Secundário no Ranking (sem TAF) e Responsividade Mobile validados.");
 }
 
+// Teste 14: Alinhamento do ícone de perfil mobile, 6 cards sem buraco em Hoje, bloqueio de e-mail duplicado e deduplicação do Ranking
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const sqlSrc = readFileSync(new URL("../supabase/migrations/20261030_v92_dedup_accounts_and_ui.sql", import.meta.url), "utf8");
+  assert.ok(!htmlSrc.includes(".accountArea #accountBtn{grid-column:1/3}"), "Regra legada que desalinhava o botão de perfil no mobile deve ter sido removida");
+  assert.ok(htmlSrc.includes("checkEmailAlreadyRegistered") && htmlSrc.includes("translateAuthError") && htmlSrc.includes("token_hash"), "Autenticação deve verificar e-mail já cadastrado e suportar recuperação de senha completa");
+  assert.ok(v77Src.includes("openEssayShortcut") && v77Src.includes("deduplicateHunterRows") && v77Src.includes("dedupRankingBtn"), "Painel Hoje deve ter o 6º card preenchendo a grade e Ranking deve deduplicar perfis");
+  assert.ok(sqlSrc.includes("cleanup_duplicate_hunter_profiles") && sqlSrc.includes("select distinct on (c.norm_name)"), "SQL v92 deve limpar contas duplicadas em auth.users e deduplicar o Ranking");
+  console.log("OK: Alinhamento mobile do perfil, grade 6 cards em Hoje, proteção contra conta duplicada e limpeza do Ranking validados.");
+}
+

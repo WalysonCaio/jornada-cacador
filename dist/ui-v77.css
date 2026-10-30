@@ -201,3 +201,28 @@ mark.hlPenalty{background:rgba(89,230,255,.2);color:#9beeff;padding:1px 5px;bord
   .uploadGrid,.essayGrid{grid-template-columns:1fr!important}
   dialog{width:calc(100vw - 16px)!important;max-width:calc(100vw - 16px)!important;max-height:calc(100dvh - 20px)!important;padding:14px!important;overflow-y:auto}
 }
+
+/* V92 — Alinhamento perfeito do cabeçalho mobile, preenchimento de espaço no painel Hoje, ícones táticos e botões do Ranking */
+.cmdHead{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%}
+.cmdPill{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:.68rem;font-weight:800;background:rgba(56,189,248,.12);color:var(--cyan);border:1px solid rgba(56,189,248,.28);white-space:nowrap}
+.commandShortcut{display:flex;flex-direction:column;justify-content:space-between}
+.rankHeaderActions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.rankHeaderActions .action,.rankHeaderActions .ghost{width:auto!important;min-width:0}
+@media(min-width:901px){
+  .todayCommand{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  .commandPrimary{grid-column:1}
+}
+@media(max-width:719px){
+  .top{display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;padding:8px 11px!important;min-height:58px!important}
+  .brand{display:flex!important;align-items:center!important;gap:8px!important;min-width:0;flex:1 1 auto}
+  .accountArea{display:inline-flex!important;flex-direction:row!important;align-items:center!important;justify-content:flex-end!important;gap:7px!important;flex-wrap:nowrap!important;flex-shrink:0!important}
+  .accountArea .syncDot{flex-shrink:0;margin:0 2px}
+  .accountArea .bellButton,.accountArea #accountBtn{grid-column:auto!important;width:40px!important;max-width:40px!important;height:40px!important;min-height:40px!important;padding:0!important;margin:0!important;display:inline-grid!important;place-items:center!important;border-radius:12px!important;line-height:1!important}
+  .accountArea #accountBtn{font-size:0!important}
+  .accountArea #accountBtn:before{content:"👤"!important;font-size:1.05rem!important;line-height:1!important;display:block}
+  .todayCommand{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+  .todayCommand .commandPrimary{grid-column:1/-1!important}
+  .todayCommand>.commandShortcut:last-child:nth-child(even){grid-column:1/-1!important}
+  .rankHeaderActions{width:100%;display:grid!important;grid-template-columns:1fr 1fr;gap:8px}
+  .rankHeaderActions button:last-child:nth-child(odd){grid-column:1/-1}
+}
