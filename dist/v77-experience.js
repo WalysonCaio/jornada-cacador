@@ -1964,8 +1964,842 @@
     };
   }
 
+
+  // 11. Painel TAF Policial (inspirado no Forma Fit: Barra/Isometria, Corrida 2.400m, Natação 50m, Salto e Abdominal) + Ranking Geral de Caçadores
+  const TAF_PRESETS={
+    pmpe_m:{
+      label:'PMPE / Polícias Militares — Masculino',
+      tests:{
+        bar:{type:'bar',mode:'reps',name:'Barra Fixa (Pronada)',min_reps:5,min_sec:20,unit:'repetições',rules:'Pegada pronada, queixo ultrapassando a barra e extensão total dos cotovelos.'},
+        abs:{type:'abs',name:'Abdominal Remador (1 min)',min_reps:36,time_limit_s:60,unit:'repetições',rules:'Execução contínua em 60 segundos no padrão remador.'},
+        jump:{type:'jump',name:'Impulsão Horizontal (Salto)',distance_m:1.80,unit:'metros',rules:'Salto parado sem corrida de aproximação, medido pelo calcanhar mais próximo.'},
+        swim:{type:'swim',name:'Natação 50m Livre',distance_m:50,time_limit_s:60,unit:'segundos',rules:'50 metros nado livre sem apoiar nas bordas, raias ou fundo da piscina.'},
+        run:{type:'run',name:'Corrida de 2.400m (Cooper)',distance_m:2400,time_limit_s:720,unit:'metros',rules:'Percorrer 2.400 metros no tempo máximo de 12min00s (720s).'}
+      }
+    },
+    pmpe_f:{
+      label:'PMPE / Polícias Militares — Feminino',
+      tests:{
+        bar:{type:'bar',mode:'isometry',name:'Isometria na Barra Fixa',min_reps:3,min_sec:15,unit:'segundos',rules:'Sustentação isométrica na barra fixa com queixo acima da barra por no mínimo 15 segundos.'},
+        abs:{type:'abs',name:'Abdominal Remador (1 min)',min_reps:28,time_limit_s:60,unit:'repetições',rules:'Execução contínua em 60 segundos no padrão remador.'},
+        jump:{type:'jump',name:'Impulsão Horizontal (Salto)',distance_m:1.45,unit:'metros',rules:'Salto parado sem corrida de aproximação, medido pelo calcanhar mais próximo.'},
+        swim:{type:'swim',name:'Natação 50m Livre',distance_m:50,time_limit_s:70,unit:'segundos',rules:'50 metros nado livre em até 1min10s (70s) sem apoio.'},
+        run:{type:'run',name:'Corrida de 2.400m / 2.000m',distance_m:2000,time_limit_s:720,unit:'metros',rules:'Percorrer a distância mínima exigida no tempo máximo de 12min00s.'}
+      }
+    },
+    policial_m:{
+      label:'Carreiras Policiais (PRF / PF / PC) — Masculino',
+      tests:{
+        bar:{type:'bar',mode:'reps',name:'Barra Fixa',min_reps:6,min_sec:25,unit:'repetições',rules:'Mínimo de 6 flexões dinâmicas na barra fixa.'},
+        abs:{type:'abs',name:'Abdominal Remador (1 min)',min_reps:40,time_limit_s:60,unit:'repetições',rules:'Mínimo de 40 repetições válidas em 60 segundos.'},
+        jump:{type:'jump',name:'Impulsão Horizontal',distance_m:2.00,unit:'metros',rules:'Salto horizontal mínimo de 2,00 metros.'},
+        swim:{type:'swim',name:'Natação 50m',distance_m:50,time_limit_s:54,unit:'segundos',rules:'50 metros em até 54 segundos.'},
+        run:{type:'run',name:'Corrida 2.400m (12 min)',distance_m:2400,time_limit_s:720,unit:'metros',rules:'Mínimo de 2.400 metros em 12min00s.'}
+      }
+    },
+    policial_f:{
+      label:'Carreiras Policiais (PRF / PF / PC) — Feminino',
+      tests:{
+        bar:{type:'bar',mode:'isometry',name:'Isometria na Barra Fixa',min_reps:3,min_sec:20,unit:'segundos',rules:'Sustentação em isometria na barra por no mínimo 20 segundos.'},
+        abs:{type:'abs',name:'Abdominal Remador (1 min)',min_reps:32,time_limit_s:60,unit:'repetições',rules:'Mínimo de 32 repetições válidas em 60 segundos.'},
+        jump:{type:'jump',name:'Impulsão Horizontal',distance_m:1.60,unit:'metros',rules:'Salto horizontal mínimo de 1,60 metros.'},
+        swim:{type:'swim',name:'Natação 50m',distance_m:50,time_limit_s:64,unit:'segundos',rules:'50 metros em até 64 segundos.'},
+        run:{type:'run',name:'Corrida 2.000m (12 min)',distance_m:2000,time_limit_s:720,unit:'metros',rules:'Mínimo de 2.000 metros em 12min00s.'}
+      }
+    }
+  };
+
+  const TAF_ORDER=['bar','abs','jump','swim','run'];
+
+  function formatTafTime(sec){
+    const n=Math.max(0,Math.round(Number(sec)||0));
+    const m=Math.floor(n/60),s=n%60;
+    return m>0?`${m}min${String(s).padStart(2,'0')}s`:`${s}s`;
+  }
+
+  function formatStopwatchClock(sec){
+    const n=Math.max(0,Math.floor(Number(sec)||0));
+    const m=Math.floor(n/60),s=n%60;
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+  // Funções trazidas do Forma Fit (fitness.js): activeSeconds, togglePause e metTarget
+  function tafActiveSeconds(d,now=Date.now()){
+    if(!d||!d.started_at)return 0;
+    return Math.max(0,Math.floor(((d.paused_at||now)-d.started_at-(d.paused_ms||0))/1000));
+  }
+
+  function tafTogglePause(d,now=Date.now()){
+    if(!d)return d;
+    if(d.paused_at){
+      d.paused_ms=(d.paused_ms||0)+(now-d.paused_at);
+      d.paused_at=null;
+    }else{
+      d.paused_at=now;
+    }
+    return d;
+  }
+
+  function ensureTafState(){
+    if(!state.taf||typeof state.taf!=='object')state.taf={preset:'pmpe_m',tests:{},history:[]};
+    if(!state.taf.preset||!TAF_PRESETS[state.taf.preset])state.taf.preset='pmpe_m';
+    if(!state.taf.tests||typeof state.taf.tests!=='object')state.taf.tests={};
+    if(!Array.isArray(state.taf.history))state.taf.history=[];
+    const base=TAF_PRESETS[state.taf.preset].tests;
+    for(const key of TAF_ORDER){
+      if(!state.taf.tests[key]||typeof state.taf.tests[key]!=='object'){
+        state.taf.tests[key]=JSON.parse(JSON.stringify(base[key]));
+      }else{
+        state.taf.tests[key]={...JSON.parse(JSON.stringify(base[key])),...state.taf.tests[key]};
+      }
+    }
+    return state.taf;
+  }
+
+  function tafMetTarget(test){
+    if(!test||!test.result)return null;
+    const r=test.result;
+    if(test.type==='bar'){
+      return test.mode==='isometry'?Number(r.time_s||0)>=Number(test.min_sec||15):Number(r.reps||0)>=Number(test.min_reps||5);
+    }
+    if(test.type==='abs'){
+      return Number(r.reps||0)>=Number(test.min_reps||35)&&Number(r.time_s||60)<=Number(test.time_limit_s||60);
+    }
+    if(test.type==='jump'){
+      return Number(r.distance_m||0)>=Number(test.distance_m||1.8);
+    }
+    return Number(r.distance_m||0)>=Number(test.distance_m||50)&&Number(r.time_s||9999)<=Number(test.time_limit_s||60);
+  }
+
+  function tafProgressPercent(test){
+    if(!test||!test.result)return 0;
+    const r=test.result;
+    if(test.type==='bar'){
+      const cur=test.mode==='isometry'?Number(r.time_s||0):Number(r.reps||0);
+      const goal=test.mode==='isometry'?Number(test.min_sec||15):Number(test.min_reps||5);
+      return Math.min(100,Math.max(0,Math.round((cur/Math.max(1,goal))*100)));
+    }
+    if(test.type==='abs'){
+      return Math.min(100,Math.max(0,Math.round((Number(r.reps||0)/Math.max(1,Number(test.min_reps||35)))*100)));
+    }
+    if(test.type==='jump'){
+      return Math.min(100,Math.max(0,Math.round((Number(r.distance_m||0)/Math.max(0.1,Number(test.distance_m||1.8)))*100)));
+    }
+    const distRatio=Number(r.distance_m||0)/Math.max(1,Number(test.distance_m||50));
+    const timeRatio=Number(test.time_limit_s||60)/Math.max(1,Number(r.time_s||test.time_limit_s||60));
+    return Math.min(100,Math.max(0,Math.round(Math.min(distRatio,timeRatio)*100)));
+  }
+
+  function tafRuleLabel(test){
+    if(test.type==='bar'){
+      return test.mode==='isometry'
+        ?`Meta do edital: mín. ${test.min_sec||15}s em isometria`
+        :`Meta do edital: mín. ${test.min_reps||5} repetições dinâmicas`;
+    }
+    if(test.type==='abs')return `Meta do edital: mín. ${test.min_reps||35} rep em ${formatTafTime(test.time_limit_s||60)}`;
+    if(test.type==='jump')return `Meta do edital: mín. ${Number(test.distance_m||1.8).toFixed(2).replace('.',',')} m`;
+    return `Meta do edital: ${Number(test.distance_m||50).toLocaleString('pt-BR')} m em até ${formatTafTime(test.time_limit_s||60)}`;
+  }
+
+  function tafResultLabel(test){
+    const r=test?.result;
+    if(!r)return 'Ainda não registrado';
+    if(test.type==='bar'){
+      return test.mode==='isometry'?`${r.time_s||0}s sustentados`:`${r.reps||0} repetições`;
+    }
+    if(test.type==='abs')return `${r.reps||0} rep em ${formatTafTime(r.time_s||60)}`;
+    if(test.type==='jump')return `${Number(r.distance_m||0).toFixed(2).replace('.',',')} m`;
+    if(test.type==='run'){
+      const pace=r.distance_m>0&&r.time_s>0?formatStopwatchClock(Math.round((r.time_s)/(r.distance_m/1000))):null;
+      return `${Number(r.distance_m||0).toLocaleString('pt-BR')} m em ${formatTafTime(r.time_s||0)}${pace?` (Pace ${pace}/km)`:''}`;
+    }
+    return `${Number(r.distance_m||0).toLocaleString('pt-BR')} m em ${formatTafTime(r.time_s||0)}`;
+  }
+
+  function tafGapAdvice(test,weeksLeft){
+    const met=tafMetTarget(test);
+    if(met===null)return 'Faça um simulado diagnóstico para calcular sua meta semanal até a prova.';
+    if(met)return '✓ Índice aprovado! Mantenha 2 treinos semanais de manutenção sem sobrecarga articular.';
+    const r=test.result||{};
+    const w=Math.max(1,weeksLeft||8);
+    if(test.type==='bar'){
+      if(test.mode==='isometry'){
+        const diff=Math.max(1,Number(test.min_sec||15)-Number(r.time_s||0));
+        return `Faltam ${diff}s na barra · evolua +${Math.max(1,Math.ceil(diff/w))}s por semana até a prova.`;
+      }
+      const diff=Math.max(1,Number(test.min_reps||5)-Number(r.reps||0));
+      return `Falta${diff===1?'':'m'} ${diff} repetiç${diff===1?'ão':'ões'} · ganhe +1 repetição a cada ${Math.max(1,Math.floor(w/diff))} semana(s).`;
+    }
+    if(test.type==='abs'){
+      const diff=Math.max(1,Number(test.min_reps||35)-Number(r.reps||0));
+      return `Faltam ${diff} abdominais · aumente +${Math.max(1,Math.ceil(diff/w))} rep por semana.`;
+    }
+    if(test.type==='jump'){
+      const diffCm=Math.max(1,Math.round((Number(test.distance_m||1.8)-Number(r.distance_m||0))*100));
+      return `Faltam ${diffCm} cm no salto · ganhe +${Math.max(1,Math.ceil(diffCm/w))} cm por semana (pliometria e impulsão).`;
+    }
+    const distDiff=Math.max(0,Number(test.distance_m||50)-Number(r.distance_m||0));
+    const timeDiff=Math.max(0,Number(r.time_s||0)-Number(test.time_limit_s||60));
+    const parts=[];
+    if(distDiff>0)parts.push(`+${Math.round(distDiff)} m de distância`);
+    if(timeDiff>0)parts.push(`baixar ${formatTafTime(timeDiff)} no tempo (~${Math.max(1,Math.ceil(timeDiff/w))}s/semana)`);
+    return `Para bater o índice: ${parts.join(' e ')}.`;
+  }
+
+  function syncHunterStatsSnapshot(){
+    try{
+      const taf=ensureTafState();
+      const tests=TAF_ORDER.map(k=>taf.tests[k]).filter(Boolean);
+      const readyCount=tests.filter(t=>tafMetTarget(t)===true).length;
+      const pool=typeof missionPool==='function'?missionPool():[];
+      const doneCount=pool.filter(m=>state?.done?.[m.id]).length;
+      const editalComplete=pool.length>0&&doneCount===pool.length;
+      const curXp=typeof xp==='function'?xp():0;
+      const curRank=typeof level==='function'?level(curXp,editalComplete)?.label||'E III - Caçador Iniciante':'E III - Caçador Iniciante';
+      const totalQ=(state?.scores||[]).reduce((a,s)=>a+Number(s.total||0),0);
+      const corrQ=(state?.scores||[]).reduce((a,s)=>a+Number(s.correct||0),0);
+      const acc=totalQ?Math.round((corrQ/totalQ)*100):0;
+      const user=cloudSession?.user;
+      const defaultName=user?.user_metadata?.full_name||user?.user_metadata?.name||(user?.email?user.email.split('@')[0]:'')||'Caçador';
+      const defaultRole=(typeof activeCampaign==='function'?activeCampaign()?.name:'')||'PMPE — Soldado';
+      state.publicProfile=state.publicProfile||{};
+      state.hunterStats={
+        name:state.publicProfile.name||defaultName,
+        role:state.publicProfile.role||defaultRole,
+        xp:curXp,
+        rank:curRank,
+        streak:Number(state?.streak||0),
+        bestStreak:Math.max(Number(state?.bestStreak||0),Number(state?.streak||0)),
+        missionsDone:doneCount,
+        accuracy:acc,
+        tafReady:readyCount,
+        tafTotal:tests.length||5,
+        updatedAt:new Date().toISOString()
+      };
+    }catch{}
+  }
+
+  let tafTimerState=null,tafTimerInterval=null;
+
+  function updateTafStopwatchDisplay(){
+    const timeEl=q('#tafSwClock'),statusEl=q('#tafSwTargetInfo');
+    if(!timeEl)return;
+    const elapsed=tafActiveSeconds(tafTimerState);
+    timeEl.textContent=formatStopwatchClock(elapsed);
+    if(tafTimerState?.targetSec&&elapsed>=tafTimerState.targetSec&&!tafTimerState.notified){
+      tafTimerState.notified=true;
+      playCompletionChime();
+      toast(`⏱️ Tempo do simulado atingido (${formatTafTime(tafTimerState.targetSec)})!`);
+    }
+    if(statusEl){
+      statusEl.textContent=tafTimerState?.label
+        ?`${tafTimerState.label} · ${tafTimerState.paused_at?'Pausado':'Em andamento'}${tafTimerState.targetSec?` (Alvo: ${formatTafTime(tafTimerState.targetSec)})`:''}`
+        :'Escolha um teste (1 min Abdominal, 12 min Corrida, 60s Natação ou Isometria Barra) para cronometrar.';
+    }
+  }
+
+  function startTafStopwatch(label,targetSec=0){
+    tafTimerState={label,targetSec:Number(targetSec)||0,started_at:Date.now(),paused_at:null,paused_ms:0,notified:false};
+    if(tafTimerInterval)clearInterval(tafTimerInterval);
+    tafTimerInterval=setInterval(updateTafStopwatchDisplay,250);
+    updateTafStopwatchDisplay();
+  }
+
+  function renderTafPanel(){
+    const root=q('#tafRoot');
+    if(!root)return;
+    const taf=ensureTafState();
+    syncHunterStatsSnapshot();
+    const campaign=typeof activeCampaign==='function'?activeCampaign():null;
+    const examDateStr=campaign?.examDate||state?.examDate||null;
+    const daysLeft=examDateStr?Math.max(0,Math.ceil((new Date(`${examDateStr}T12:00:00`).getTime()-Date.now())/86400000)):null;
+    const weeksLeft=daysLeft!==null?Math.max(1,Math.ceil(daysLeft/7)):8;
+    const tests=TAF_ORDER.map(k=>({key:k,...taf.tests[k]}));
+    const readyCount=tests.filter(t=>tafMetTarget(t)===true).length;
+    const testedCount=tests.filter(t=>tafMetTarget(t)!==null).length;
+    const overallStatus=readyCount===tests.length?'APTO EM TODOS OS ÍNDICES':readyCount>=3?'QUASE LÁ · FOCO NOS PENDENTES':testedCount>0?'EM EVOLUÇÃO FÍSICA':'AGUARDANDO 1º SIMULADO';
+
+    root.innerHTML=`
+      <div class="sectionHead">
+        <div>
+          <div class="eyebrow">PREPARAÇÃO FÍSICA POLICIAL · INSPIRADO NO FORMA FIT</div>
+          <h2 style="margin:3px 0 0">Painel TAF (${escText(campaign?.name||'Carreira Policial')})</h2>
+          <p class="small muted" style="margin:3px 0 0">Acompanhe Barra Fixa/Isometria, Corrida de 2.400m, Natação 50m, Impulsão Horizontal e Abdominal com metas até o dia da prova.</p>
+        </div>
+        <span class="tag">${readyCount}/${tests.length} índices aptos</span>
+      </div>
+
+      <div class="card" style="margin-bottom:12px">
+        <div class="sectionHead" style="margin-bottom:10px">
+          <div>
+            <div class="eyebrow">DIAGNÓSTICO ATÉ A PROVA ${daysLeft!==null?`· FALTAM ${daysLeft} DIAS (${weeksLeft} SEMANAS)`:''}</div>
+            <h3 style="margin:3px 0 0">${overallStatus}</h3>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <select id="tafPresetSelect" style="min-width:240px">
+              ${Object.entries(TAF_PRESETS).map(([k,v])=>`<option value="${k}" ${taf.preset===k?'selected':''}>Tabela: ${escText(v.label)}</option>`).join('')}
+            </select>
+            <button type="button" class="ghost small" id="applyTafPresetBtn">Aplicar tabela padrão</button>
+          </div>
+        </div>
+        <div class="bar"><div class="fill" style="width:${Math.round((readyCount/tests.length)*100)}%"></div></div>
+        <div class="small muted" style="margin-top:8px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <span>Progresso global no TAF: <b>${Math.round((readyCount/tests.length)*100)}% dos testes aprovados</b></span>
+          <span>${daysLeft!==null?`Data da prova: ${new Date(`${examDateStr}T12:00:00`).toLocaleDateString('pt-BR')} · Planejamento dividido em ${weeksLeft} semanas`:'Defina a data da prova na aba Portais para calcular a evolução semanal.'}</span>
+        </div>
+      </div>
+
+      <div class="tafStopwatch">
+        <div>
+          <div class="eyebrow">CRONÔMETRO OFICIAL DE SIMULADO TAF</div>
+          <div class="tafStopwatchTime" id="tafSwClock">${formatStopwatchClock(tafActiveSeconds(tafTimerState))}</div>
+          <div class="small muted" id="tafSwTargetInfo">Escolha um teste (1 min Abdominal, 12 min Corrida, 60s Natação ou Isometria Barra) para cronometrar.</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" class="ghost small" data-taf-sw="Abdominal (1 min)|60">⏱️ 1 min (Abdominal)</button>
+          <button type="button" class="ghost small" data-taf-sw="Isometria Barra|20">⏱️ Isometria Barra</button>
+          <button type="button" class="ghost small" data-taf-sw="Natação 50m|60">⏱️ 60s (Natação)</button>
+          <button type="button" class="ghost small" data-taf-sw="Corrida 2.400m (12 min)|720">⏱️ 12 min (Corrida)</button>
+          <button type="button" class="action small" id="tafSwPauseBtn">${tafTimerState?.paused_at?'Retomar':'Pausar'}</button>
+          <button type="button" class="ghost danger small" id="tafSwResetBtn">Zerar</button>
+        </div>
+      </div>
+
+      <div class="tafGrid">
+        ${tests.map(t=>{
+          const met=tafMetTarget(t);
+          const pct=tafProgressPercent(t);
+          const statusClass=met===true?'ready':pct>=75?'near':'prep';
+          const statusText=met===true?'✓ APTO NO EDITAL':met===false?(pct>=75?'⚡ QUASE LÁ':'EM PREPARAÇÃO'):'SEM SIMULADO';
+          return `
+            <article class="tafCard ${statusClass}">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                <div>
+                  <div class="eyebrow">${escText(t.type.toUpperCase())}</div>
+                  <h3 style="margin:2px 0 0;font-size:1.02rem">${escText(t.name)}</h3>
+                </div>
+                <span class="tafStatusPill ${statusClass}">${statusText}</span>
+              </div>
+              <div class="small"><b>${escText(tafRuleLabel(t))}</b></div>
+              <div class="small muted">${escText(t.rules||'')}</div>
+              <div style="background:#06111d;padding:9px 11px;border-radius:10px;border:1px solid #1a334a">
+                <div class="small muted">Último resultado (${escText(t.result?.date?new Date(`${t.result.date}T12:00:00`).toLocaleDateString('pt-BR'):'—')})</div>
+                <strong style="font-size:1.05rem;color:#f8fafc">${escText(tafResultLabel(t))}</strong>
+                <div class="bar" style="margin-top:6px;height:7px"><div class="fill" style="width:${pct}%"></div></div>
+              </div>
+              <div class="small muted">${escText(tafGapAdvice(t,weeksLeft))}</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto">
+                <button type="button" class="action small" style="flex:1" data-taf-record="${t.key}">Registrar simulado</button>
+                <button type="button" class="ghost small" data-taf-edit="${t.key}">Editar meta</button>
+              </div>
+            </article>
+          `;
+        }).join('')}
+      </div>
+
+      <div class="card" id="tafFormCard" hidden style="margin-top:14px"></div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="sectionHead">
+          <div>
+            <h2>Histórico de Simulados TAF</h2>
+            <p class="small muted" style="margin:2px 0 0">Todos os seus treinos e simulados físicos ficam salvos e sincronizados na nuvem.</p>
+          </div>
+          <span class="tag">${taf.history.length} registro${taf.history.length===1?'':'s'}</span>
+        </div>
+        <div class="list">
+          ${taf.history.length?taf.history.slice(0,20).map(item=>`
+            <div class="card" style="padding:11px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+              <div>
+                <b>${escText(item.name)}</b> · <span class="tafStatusPill ${item.passed?'ready':'near'}">${item.passed?'Apto':'Em evolução'}</span>
+                <div class="small muted">${escText(item.summary)} · ${escText(item.date?new Date(`${item.date}T12:00:00`).toLocaleDateString('pt-BR'):'')}</div>
+                ${item.notes?`<div class="small" style="margin-top:3px">${escText(item.notes)}</div>`:''}
+              </div>
+              <button type="button" class="ghost danger small" data-taf-del-hist="${escText(item.id)}">Excluir</button>
+            </div>
+          `).join(''):'<div class="empty">Nenhum simulado TAF registrado ainda. Clique em "Registrar simulado" em qualquer modalidade acima para começar.</div>'}
+        </div>
+      </div>
+    `;
+
+    q('#applyTafPresetBtn').onclick=()=>{
+      const chosen=q('#tafPresetSelect').value;
+      if(!TAF_PRESETS[chosen])return;
+      taf.preset=chosen;
+      for(const k of TAF_ORDER){
+        const prevResult=taf.tests[k]?.result||null;
+        taf.tests[k]={...JSON.parse(JSON.stringify(TAF_PRESETS[chosen].tests[k])),result:prevResult};
+      }
+      save();
+      if(cloudSession&&navigator.onLine)pushCloudState();
+      renderTafPanel();
+      renderReverseSchedule();
+      toast(`Tabela ${TAF_PRESETS[chosen].label} aplicada!`);
+    };
+
+    qa('[data-taf-sw]').forEach(btn=>{
+      btn.onclick=()=>{
+        const [label,sec]=btn.dataset.tafSw.split('|');
+        startTafStopwatch(label,Number(sec)||0);
+      };
+    });
+    if(q('#tafSwPauseBtn'))q('#tafSwPauseBtn').onclick=()=>{
+      if(!tafTimerState)return startTafStopwatch('Cronômetro Livre TAF',0);
+      tafTogglePause(tafTimerState);
+      updateTafStopwatchDisplay();
+      q('#tafSwPauseBtn').textContent=tafTimerState.paused_at?'Retomar':'Pausar';
+    };
+    if(q('#tafSwResetBtn'))q('#tafSwResetBtn').onclick=()=>{
+      if(tafTimerInterval){clearInterval(tafTimerInterval);tafTimerInterval=null}
+      tafTimerState=null;
+      updateTafStopwatchDisplay();
+    };
+
+    qa('[data-taf-record]').forEach(btn=>{
+      btn.onclick=()=>openTafRecordForm(btn.dataset.tafRecord);
+    });
+    qa('[data-taf-edit]').forEach(btn=>{
+      btn.onclick=()=>openTafGoalEditor(btn.dataset.tafEdit);
+    });
+    qa('[data-taf-del-hist]').forEach(btn=>{
+      btn.onclick=()=>{
+        const id=btn.dataset.tafDelHist;
+        taf.history=taf.history.filter(h=>h.id!==id);
+        save();
+        if(cloudSession&&navigator.onLine)pushCloudState();
+        renderTafPanel();
+        toast('Registro excluído do histórico.');
+      };
+    });
+  }
+
+  function openTafRecordForm(key){
+    const taf=ensureTafState(),test=taf.tests[key],formCard=q('#tafFormCard');
+    if(!test||!formCard)return;
+    const swSec=tafActiveSeconds(tafTimerState);
+    const prev=test.result||{};
+    const defSec=swSec>0?swSec:(prev.time_s||test.time_limit_s||60);
+    formCard.hidden=false;
+    formCard.innerHTML=`
+      <div class="sectionHead">
+        <h3>Registrar Simulado — ${escText(test.name)}</h3>
+        <button type="button" class="ghost small" id="closeTafFormBtn">Fechar</button>
+      </div>
+      <div class="essayGrid">
+        ${test.type==='bar'?`
+          <label class="field">Modalidade da Barra
+            <select id="tafRecBarMode">
+              <option value="reps" ${test.mode!=='isometry'?'selected':''}>Repetições dinâmicas (Masculino / Geral)</option>
+              <option value="isometry" ${test.mode==='isometry'?'selected':''}>Sustentação em Isometria — Segundos (Feminino)</option>
+            </select>
+          </label>
+          <label class="field">Valor alcançado (repetições ou segundos)
+            <input type="number" id="tafRecVal1" min="0" max="300" value="${test.mode==='isometry'?(swSec||prev.time_s||0):(prev.reps||0)}">
+          </label>
+        `:test.type==='abs'?`
+          <label class="field">Repetições realizadas
+            <input type="number" id="tafRecVal1" min="0" max="200" value="${prev.reps||0}">
+          </label>
+          <label class="field">Tempo gasto (segundos)
+            <input type="number" id="tafRecTimeSec" min="1" max="300" value="${defSec}">
+          </label>
+        `:test.type==='jump'?`
+          <label class="field">Distância alcançada no salto (metros, ex.: 1.85)
+            <input type="number" id="tafRecDist" min="0.3" max="4.5" step="0.01" value="${prev.distance_m||test.distance_m||1.80}">
+          </label>
+        `:`
+          <label class="field">Distância percorrida (metros)
+            <input type="number" id="tafRecDist" min="10" max="15000" step="10" value="${prev.distance_m||test.distance_m||2400}">
+          </label>
+          <label class="field">Tempo realizado (minutos : segundos)
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <input type="number" id="tafRecMin" min="0" max="120" placeholder="Minutos" value="${Math.floor(defSec/60)}">
+              <input type="number" id="tafRecSec" min="0" max="59" placeholder="Segundos" value="${defSec%60}">
+            </div>
+          </label>
+        `}
+        <label class="field">Data do simulado
+          <input type="date" id="tafRecDate" value="${typeof localDayKey==='function'?localDayKey():new Date().toISOString().slice(0,10)}">
+        </label>
+        <label class="field">Observação (pista, academia, fadiga, tênis...)
+          <input type="text" id="tafRecNotes" maxlength="160" placeholder="Ex.: Pista oficial, sol forte, sobrou gás no final">
+        </label>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <button type="button" class="action" id="saveTafRecordBtn">Salvar resultado no TAF</button>
+      </div>
+    `;
+    formCard.scrollIntoView({behavior:'smooth',block:'center'});
+    q('#closeTafFormBtn').onclick=()=>{formCard.hidden=true};
+    q('#saveTafRecordBtn').onclick=()=>{
+      const date=q('#tafRecDate')?.value||(typeof localDayKey==='function'?localDayKey():new Date().toISOString().slice(0,10));
+      const notes=q('#tafRecNotes')?.value?.trim()||'';
+      const result={date};
+      if(test.type==='bar'){
+        const mode=q('#tafRecBarMode')?.value||'reps';
+        test.mode=mode;
+        const val=Math.max(0,Number(q('#tafRecVal1')?.value||0));
+        if(mode==='isometry')result.time_s=val;
+        else result.reps=val;
+      }else if(test.type==='abs'){
+        result.reps=Math.max(0,Number(q('#tafRecVal1')?.value||0));
+        result.time_s=Math.max(1,Number(q('#tafRecTimeSec')?.value||60));
+      }else if(test.type==='jump'){
+        result.distance_m=Math.max(0,Number(q('#tafRecDist')?.value||0));
+      }else{
+        result.distance_m=Math.max(0,Number(q('#tafRecDist')?.value||0));
+        const m=Math.max(0,Number(q('#tafRecMin')?.value||0));
+        const s=Math.max(0,Number(q('#tafRecSec')?.value||0));
+        result.time_s=Math.max(1,m*60+s);
+      }
+      test.result=result;
+      const passed=tafMetTarget(test)===true;
+      taf.history.unshift({
+        id:'taf-'+Date.now(),
+        key,
+        name:test.name,
+        date,
+        passed,
+        summary:tafResultLabel(test),
+        notes,
+        createdAt:new Date().toISOString()
+      });
+      syncHunterStatsSnapshot();
+      save();
+      if(cloudSession&&navigator.onLine)pushCloudState();
+      renderTafPanel();
+      renderReverseSchedule();
+      toast(passed?`🏆 Parabéns! Índice de ${test.name} aprovado no padrão do edital!`:`Simulado de ${test.name} salvo! Continue evoluindo até a meta.`);
+    };
+  }
+
+  function openTafGoalEditor(key){
+    const taf=ensureTafState(),test=taf.tests[key],formCard=q('#tafFormCard');
+    if(!test||!formCard)return;
+    formCard.hidden=false;
+    formCard.innerHTML=`
+      <div class="sectionHead">
+        <h3>Editar Meta do Edital — ${escText(test.name)}</h3>
+        <button type="button" class="ghost small" id="closeTafFormBtn">Fechar</button>
+      </div>
+      <div class="essayGrid">
+        ${test.type==='bar'?`
+          <label class="field">Tipo exigido no seu edital
+            <select id="tafGoalBarMode">
+              <option value="reps" ${test.mode!=='isometry'?'selected':''}>Repetições dinâmicas (Barra Fixa)</option>
+              <option value="isometry" ${test.mode==='isometry'?'selected':''}>Isometria em segundos (Sustentação)</option>
+            </select>
+          </label>
+          <label class="field">Mínimo de repetições (se dinâmica)
+            <input type="number" id="tafGoalReps" min="1" max="50" value="${test.min_reps||5}">
+          </label>
+          <label class="field">Mínimo de segundos (se isometria)
+            <input type="number" id="tafGoalSec" min="5" max="180" value="${test.min_sec||15}">
+          </label>
+        `:test.type==='abs'?`
+          <label class="field">Mínimo de repetições exigidas
+            <input type="number" id="tafGoalReps" min="5" max="120" value="${test.min_reps||35}">
+          </label>
+          <label class="field">Tempo limite (segundos)
+            <input type="number" id="tafGoalSec" min="15" max="300" value="${test.time_limit_s||60}">
+          </label>
+        `:test.type==='jump'?`
+          <label class="field">Distância mínima do salto (metros, ex.: 1.80)
+            <input type="number" id="tafGoalDist" min="0.5" max="4.0" step="0.01" value="${test.distance_m||1.80}">
+          </label>
+        `:`
+          <label class="field">Distância exigida no edital (metros)
+            <input type="number" id="tafGoalDist" min="25" max="10000" step="25" value="${test.distance_m||2400}">
+          </label>
+          <label class="field">Tempo máximo permitido (segundos — ex.: 720 = 12min)
+            <input type="number" id="tafGoalSec" min="20" max="3600" value="${test.time_limit_s||720}">
+          </label>
+        `}
+        <label class="field" style="grid-column:1/-1">Regra / Observação do Edital
+          <input type="text" id="tafGoalRules" maxlength="240" value="${escText(test.rules||'')}">
+        </label>
+      </div>
+      <div style="margin-top:10px">
+        <button type="button" class="action" id="saveTafGoalBtn">Salvar meta do edital</button>
+      </div>
+    `;
+    formCard.scrollIntoView({behavior:'smooth',block:'center'});
+    q('#closeTafFormBtn').onclick=()=>{formCard.hidden=true};
+    q('#saveTafGoalBtn').onclick=()=>{
+      if(test.type==='bar'){
+        test.mode=q('#tafGoalBarMode')?.value||'reps';
+        test.min_reps=Math.max(1,Number(q('#tafGoalReps')?.value||5));
+        test.min_sec=Math.max(5,Number(q('#tafGoalSec')?.value||15));
+      }else if(test.type==='abs'){
+        test.min_reps=Math.max(1,Number(q('#tafGoalReps')?.value||35));
+        test.time_limit_s=Math.max(15,Number(q('#tafGoalSec')?.value||60));
+      }else if(test.type==='jump'){
+        test.distance_m=Math.max(0.5,Number(q('#tafGoalDist')?.value||1.8));
+      }else{
+        test.distance_m=Math.max(25,Number(q('#tafGoalDist')?.value||2400));
+        test.time_limit_s=Math.max(20,Number(q('#tafGoalSec')?.value||720));
+      }
+      test.rules=q('#tafGoalRules')?.value?.trim()||test.rules;
+      syncHunterStatsSnapshot();
+      save();
+      if(cloudSession&&navigator.onLine)pushCloudState();
+      renderTafPanel();
+      toast('Meta do edital atualizada!');
+    };
+  }
+
+  // 12. Ranking Geral de Caçadores (Leaderboard Social entre Amigos)
+  let leaderboardRows=[],leaderboardBusy=false,leaderboardSort='streak',leaderboardRoleFilter='all',leaderboardSqlMissing=false;
+
+  function rankLabelForXp(x){
+    if(typeof level==='function')return level(Number(x)||0,false)?.label||'E III - Caçador Iniciante';
+    return 'E III - Caçador Iniciante';
+  }
+
+  function localHunterRow(){
+    syncHunterStatsSnapshot();
+    const hs=state.hunterStats||{};
+    return {
+      user_id:cloudSession?.user?.id||'local',
+      is_me:true,
+      name:hs.name||'Você (Caçador)',
+      role:hs.role||(typeof activeCampaign==='function'?activeCampaign()?.name:'PMPE — Soldado')||'PMPE — Soldado',
+      streak:Number(hs.streak||state?.streak||0),
+      best_streak:Number(hs.bestStreak||state?.bestStreak||0),
+      last_study:state?.lastStudy||'',
+      missions_done:Number(hs.missionsDone||0),
+      accuracy:Number(hs.accuracy||0),
+      xp:Number(hs.xp||0),
+      taf_ready:Number(hs.tafReady||0),
+      taf_total:Number(hs.tafTotal||5),
+      updated_at:new Date().toISOString()
+    };
+  }
+
+  async function loadHuntersLeaderboard(forceToast=false){
+    if(leaderboardBusy)return;
+    leaderboardBusy=true;
+    renderHuntersLeaderboard();
+    try{
+      syncHunterStatsSnapshot();
+      if(!cloudSession){
+        leaderboardRows=[localHunterRow()];
+        return;
+      }
+      const response=await cloudFetch('rpc/get_hunters_leaderboard',{method:'POST',body:JSON.stringify({})});
+      const rows=await response.json();
+      if(Array.isArray(rows)&&rows.length){
+        leaderboardSqlMissing=false;
+        const meLocal=localHunterRow();
+        leaderboardRows=rows.map(r=>r.is_me?{
+          ...r,
+          name:meLocal.name||r.name,
+          role:meLocal.role||r.role,
+          streak:Math.max(Number(r.streak||0),meLocal.streak),
+          best_streak:Math.max(Number(r.best_streak||0),meLocal.best_streak),
+          missions_done:Math.max(Number(r.missions_done||0),meLocal.missions_done),
+          accuracy:meLocal.accuracy||Number(r.accuracy||0),
+          xp:Math.max(Number(r.xp||0),meLocal.xp),
+          taf_ready:meLocal.taf_ready
+        }:r);
+        if(forceToast)toast(`Ranking atualizado: ${leaderboardRows.length} caçador(es) na disputa!`);
+      }else{
+        leaderboardRows=[localHunterRow()];
+      }
+    }catch(err){
+      const msg=String(err?.message||err||'');
+      if(/get_hunters_leaderboard|Could not find the function|PGRST202/i.test(msg)){
+        leaderboardSqlMissing=true;
+      }
+      leaderboardRows=[localHunterRow()];
+    }finally{
+      leaderboardBusy=false;
+      renderHuntersLeaderboard();
+    }
+  }
+
+  function renderHuntersLeaderboard(){
+    const root=q('#rankingRoot');
+    if(!root)return;
+    const me=localHunterRow();
+    const list=(leaderboardRows&&leaderboardRows.length?leaderboardRows:[me]).slice();
+    const filtered=leaderboardRoleFilter==='same'
+      ?list.filter(r=>topicKey(r.role)===topicKey(me.role))
+      :list;
+
+    filtered.sort((a,b)=>{
+      if(leaderboardSort==='xp')return (b.xp-a.xp)||(b.streak-a.streak)||(b.accuracy-a.accuracy);
+      if(leaderboardSort==='accuracy')return (b.accuracy-a.accuracy)||(b.missions_done-a.missions_done)||(b.streak-a.streak);
+      return (b.streak-a.streak)||(b.xp-a.xp)||(b.accuracy-a.accuracy);
+    });
+
+    const todayStr=typeof localDayKey==='function'?localDayKey():new Date().toISOString().slice(0,10);
+    const top3=filtered.slice(0,3);
+    const medals=['🥇 1º Lugar','🥈 2º Lugar','🥉 3º Lugar'];
+
+    root.innerHTML=`
+      <div class="sectionHead">
+        <div>
+          <div class="eyebrow">COMUNIDADE E COMPETIÇÃO SAUDÁVEL</div>
+          <h2 style="margin:3px 0 0">🏆 Ranking Geral de Caçadores</h2>
+          <p class="small muted" style="margin:3px 0 0">Acompanhe a ofensiva diária, patente, cargo estudado e desempenho de todos os caçadores cadastrados.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="ghost small" id="shareAppRankingBtn">📲 Convidar Amigos</button>
+          <button type="button" class="action small" id="refreshRankingBtn">${leaderboardBusy?'⏳ Atualizando...':'↻ Atualizar Ranking'}</button>
+        </div>
+      </div>
+
+      ${leaderboardSqlMissing?`
+        <div class="card" style="margin-bottom:12px;border-color:var(--gold)">
+          <b>Ative a listagem global de usuários no Supabase (1 vez):</b>
+          <p class="small muted" style="margin:4px 0 0">Para que todos os usuários cadastrados em <code>auth.users</code> apareçam aqui automaticamente, execute o arquivo <code>supabase/migrations/20261030_v89_taf_and_leaderboard.sql</code> no SQL Editor do seu Supabase.</p>
+        </div>
+      `:''}
+
+      <div class="card" style="margin-bottom:12px">
+        <div class="sectionHead" style="margin-bottom:8px">
+          <div>
+            <div class="eyebrow">SEU CARTÃO NO RANKING</div>
+            <strong>${escText(me.name)} · <span style="color:var(--cyan)">${escText(me.role)}</span></strong>
+          </div>
+          <span class="tag">🔥 ${me.streak}d ofensiva · ${me.xp} XP</span>
+        </div>
+        <div class="essayGrid" style="align-items:end">
+          <label class="field">Seu Nome no Ranking
+            <input type="text" id="rankProfileNameInput" maxlength="50" value="${escText(state.publicProfile?.name||me.name)}" placeholder="Ex.: Walyson Caio">
+          </label>
+          <label class="field">Concurso / Cargo que está estudando
+            <input type="text" id="rankProfileRoleInput" maxlength="60" value="${escText(state.publicProfile?.role||me.role)}" placeholder="Ex.: PMPE — Soldado">
+          </label>
+        </div>
+        <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <label class="small muted" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="rankProfileHideToggle" ${state.publicProfile?.hidden?'checked':''}>
+            Ocultar meu perfil para outros usuários
+          </label>
+          <button type="button" class="ghost small" id="saveRankProfileBtn">Salvar meu cartão no Ranking</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" class="ghost small ${leaderboardSort==='streak'?'active':''}" data-rank-sort="streak">🔥 Por Ofensiva</button>
+          <button type="button" class="ghost small ${leaderboardSort==='xp'?'active':''}" data-rank-sort="xp">⚡ Por XP / Patente</button>
+          <button type="button" class="ghost small ${leaderboardSort==='accuracy'?'active':''}" data-rank-sort="accuracy">🎯 Por Desempenho</button>
+        </div>
+        <select id="rankRoleFilterSelect" style="max-width:250px">
+          <option value="all" ${leaderboardRoleFilter==='all'?'selected':''}>Todos os cargos (${list.length} caçadores)</option>
+          <option value="same" ${leaderboardRoleFilter==='same'?'selected':''}>Mesmo cargo: ${escText(me.role)}</option>
+        </select>
+      </div>
+
+      ${top3.length?`
+        <div class="podiumGrid">
+          ${top3.map((item,idx)=>`
+            <div class="podiumCard ${idx===0?'first':''}">
+              <div class="eyebrow">${medals[idx]}</div>
+              <div style="display:flex;justify-content:center;margin:4px 0">
+                <span class="rankAvatar">${escText((item.name||'C').trim().slice(0,1).toUpperCase())}</span>
+              </div>
+              <strong style="font-size:1rem">${escText(item.name)}${item.is_me?' (Você)':''}</strong>
+              <span class="tag" style="justify-self:center">${escText(item.role||'PMPE')}</span>
+              <div style="font-size:1.25rem;font-weight:900;color:var(--gold);margin-top:4px">🔥 ${Number(item.streak||0)} dia${Number(item.streak||0)===1?'':'s'}</div>
+              <div class="small muted">${escText(rankLabelForXp(item.xp))} · ${Number(item.xp||0)} XP</div>
+              <div class="small muted">🎯 ${Number(item.accuracy||0)}% acertos · ${Number(item.missions_done||0)} missões · 💪 TAF ${Number(item.taf_ready||0)}/${Number(item.taf_total||5)}</div>
+            </div>
+          `).join('')}
+        </div>
+      `:''}
+
+      <div class="card">
+        <div class="sectionHead">
+          <h3>Classificação Geral</h3>
+          <span class="tag">${filtered.length} participante${filtered.length===1?'':'s'}</span>
+        </div>
+        <div>
+          ${filtered.map((item,idx)=>{
+            const studiedToday=item.last_study===todayStr;
+            return `
+              <div class="rankRow ${item.is_me?'isMe':''}">
+                <div class="rankPos">#${idx+1}</div>
+                <div style="display:flex;align-items:center;gap:10px;min-width:0">
+                  <span class="rankAvatar">${escText((item.name||'C').trim().slice(0,1).toUpperCase())}</span>
+                  <div style="min-width:0">
+                    <div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                      ${escText(item.name)}${item.is_me?' <span class="tag" style="padding:2px 6px;font-size:.68rem">Você</span>':''}
+                      ${studiedToday?' <span style="color:#4ade80;font-size:.75rem;font-weight:700">● Estudou hoje</span>':''}
+                    </div>
+                    <div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                      Cargo: <b style="color:#e2e8f0">${escText(item.role||'PMPE — Soldado')}</b> · ${escText(rankLabelForXp(item.xp))}
+                    </div>
+                  </div>
+                </div>
+                <div class="rankRowMetrics small muted">
+                  <span>🎯 <b>${Number(item.accuracy||0)}%</b> acertos</span> ·
+                  <span>✓ <b>${Number(item.missions_done||0)}</b> missões</span> ·
+                  <span>💪 TAF <b>${Number(item.taf_ready||0)}/${Number(item.taf_total||5)}</b></span>
+                </div>
+                <div style="text-align:right">
+                  <div style="font-weight:900;color:var(--gold);font-size:1rem">🔥 ${Number(item.streak||0)}d</div>
+                  <div class="small muted">${Number(item.xp||0)} XP (Rec: ${Number(item.best_streak||0)}d)</div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+
+    q('#refreshRankingBtn').onclick=()=>loadHuntersLeaderboard(true);
+    q('#shareAppRankingBtn').onclick=async()=>{
+      const shareText=`🔥 Estou treinando no Jornada do Caçador para ${me.role} (${me.streak} dias de ofensiva e ${me.xp} XP)! Entre no app e dispute comigo no Ranking: https://jornada.wcaio.workers.dev`;
+      if(navigator.share){
+        try{await navigator.share({title:'Jornada do Caçador — Ranking',text:shareText,url:'https://jornada.wcaio.workers.dev'});return}catch{}
+      }
+      try{await navigator.clipboard.writeText(shareText);toast('Convite copiado! Cole no WhatsApp dos seus amigos.')}catch{toast('Compartilhe o link: https://jornada.wcaio.workers.dev')}
+    };
+    q('#saveRankProfileBtn').onclick=async()=>{
+      state.publicProfile=state.publicProfile||{};
+      state.publicProfile.name=q('#rankProfileNameInput')?.value?.trim()||me.name;
+      state.publicProfile.role=q('#rankProfileRoleInput')?.value?.trim()||me.role;
+      state.publicProfile.hidden=!!q('#rankProfileHideToggle')?.checked;
+      syncHunterStatsSnapshot();
+      save();
+      if(cloudSession&&navigator.onLine)await pushCloudState();
+      await loadHuntersLeaderboard(true);
+      toast('Seu cartão no Ranking foi atualizado e sincronizado!');
+    };
+    qa('[data-rank-sort]').forEach(btn=>{
+      btn.onclick=()=>{
+        leaderboardSort=btn.dataset.rankSort;
+        renderHuntersLeaderboard();
+      };
+    });
+    if(q('#rankRoleFilterSelect'))q('#rankRoleFilterSelect').onchange=e=>{
+      leaderboardRoleFilter=e.target.value;
+      renderHuntersLeaderboard();
+    };
+  }
+
+  function ensureTafAndRankingShortcuts(){
+    const todayCmd=q('#todayCommand');
+    if(todayCmd&&!q('#openTafShortcut')){
+      todayCmd.insertAdjacentHTML('beforeend',`
+        <button class="commandShortcut" id="openTafShortcut" type="button"><i>💪</i><b>Painel TAF</b><span id="tafShortcutMeta">Índices físicos até a prova</span></button>
+        <button class="commandShortcut" id="openRankingShortcut" type="button"><i>🏆</i><b>Ranking</b><span id="rankingShortcutMeta">Ofensiva e amigos no banco</span></button>
+      `);
+      q('#openTafShortcut').onclick=()=>openView('taf');
+      q('#openRankingShortcut').onclick=()=>openView('ranking');
+    }
+    const taf=ensureTafState();
+    const readyCount=TAF_ORDER.map(k=>taf.tests[k]).filter(t=>tafMetTarget(t)===true).length;
+    if(q('#tafShortcutMeta'))q('#tafShortcutMeta').textContent=`${readyCount}/5 índices aptos no edital`;
+    if(q('#rankingShortcutMeta'))q('#rankingShortcutMeta').textContent=`🔥 ${state?.streak||0}d ofensiva · ver caçadores`;
+  }
+
   const baseOpenView=openView;
-  openView=function(id){baseOpenView(id);try{sessionStorage.setItem(viewKey,id)}catch{}if(id==='report'){populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()}if(id==='today')updateTodayCommand();if(id==='map')renderReverseSchedule()};
+  openView=function(id){baseOpenView(id);try{sessionStorage.setItem(viewKey,id)}catch{}if(id==='report'){populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()}if(id==='today'){updateTodayCommand();ensureTafAndRankingShortcuts()}if(id==='map')renderReverseSchedule();if(id==='taf')renderTafPanel();if(id==='ranking'){renderHuntersLeaderboard();loadHuntersLeaderboard()}};
   const baseTickClock=typeof tickClock==='function'?tickClock:null;
   if(baseTickClock){
     window.tickClock=function(){
@@ -1975,7 +2809,7 @@
     };
   }
   const baseRender=render;
-  render=function(){baseRender();enhanceFlashcardsSpacedRepetition();enhanceEssayCenter();updateFlashcardSpacedStats();updateTodayCommand();renderReverseSchedule();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()};
+  render=function(){syncHunterStatsSnapshot();baseRender();enhanceFlashcardsSpacedRepetition();enhanceEssayCenter();updateFlashcardSpacedStats();updateTodayCommand();ensureTafAndRankingShortcuts();renderReverseSchedule();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub();if(q('#taf')?.classList.contains('active'))renderTafPanel();if(q('#ranking')?.classList.contains('active'))renderHuntersLeaderboard()};
   const baseRenderReport=renderReport;
   renderReport=function(){baseRenderReport();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()};
 

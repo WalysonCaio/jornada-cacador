@@ -175,3 +175,15 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   console.log("OK: tela de redação sem hero inicial e propostas com Textos Motivadores I e II validadas.");
 }
 
+// Teste 11: Painel TAF Policial (Forma Fit) e Ranking Geral de Caçadores
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const sqlSrc = readFileSync(new URL("../supabase/migrations/20261030_v89_taf_and_leaderboard.sql", import.meta.url), "utf8");
+  assert.ok(htmlSrc.includes('id="taf"') && htmlSrc.includes('id="ranking"'), "Views #taf e #ranking devem existir no index.html");
+  assert.ok(htmlSrc.includes('data-menu-view="taf"') && htmlSrc.includes('data-menu-view="ranking"'), "Botões do Menu para TAF e Ranking devem existir");
+  assert.ok(v77Src.includes("TAF_PRESETS") && v77Src.includes("tafMetTarget") && v77Src.includes("tafActiveSeconds"), "Painel TAF deve conter presets policiais, cálculo de aptidão e cronômetro do Forma Fit");
+  assert.ok(v77Src.includes("get_hunters_leaderboard") && sqlSrc.includes("create or replace function public.get_hunters_leaderboard()"), "Ranking deve consultar get_hunters_leaderboard no Supabase listando todos os usuários cadastrados");
+  console.log("OK: Painel TAF Policial e Ranking Geral de Caçadores validados.");
+}
+
