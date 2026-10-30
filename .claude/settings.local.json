@@ -1,0 +1,7 @@
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://localhost:20128",
+    "ANTHROPIC_AUTH_TOKEN": "sk-f7b526042624b04d-2a90d5-848c2dc2",
+    "ANTHROPIC_MODEL": "combo/meu-combo"
+  }
+}

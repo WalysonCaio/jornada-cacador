@@ -1689,23 +1689,7 @@
       head.insertAdjacentHTML('afterend',`<div class="flashSpacedBar" id="flashcardSpacedBar"><span class="small muted" id="flashSpacedStats">Repetição espaçada ativa (1=Difícil · 2=Rever · 3=Fácil · Espaço=Virar)</span><label class="small" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="flashDueOnlyToggle"> Apenas pendentes/difíceis</label></div>`);
       q('#flashDueOnlyToggle').onchange=()=>{if(typeof renderCard==='function')renderCard();updateFlashcardSpacedStats()};
     }
-    const baseGradeCard=typeof gradeCard==='function'?gradeCard:null;
-    if(baseGradeCard){
-      window.gradeCard=function(level){
-        const id=q('#flashcard')?.dataset?.card;
-        const prev=state?.flashProgress?.[id]||{};
-        const streak=level==='easy'?(Number(prev.streak||0)+1):0;
-        const intervalDays=level==='hard'?1:level==='medium'?3:Math.min(30,Math.max(7,streak*7));
-        const nextDue=new Date(Date.now()+intervalDays*86400000).toISOString();
-        baseGradeCard(level);
-        if(id!==undefined&&state?.flashProgress?.[id]){
-          state.flashProgress[id].streak=streak;
-          state.flashProgress[id].nextDue=nextDue;
-          save();
-        }
-        updateFlashcardSpacedStats();
-      };
-    }
+    document.addEventListener('flashcards:graded',updateFlashcardSpacedStats);
     document.addEventListener('keydown',e=>{
       if(!q('#study')?.classList.contains('active')||!q('#cards')?.classList.contains('active'))return;
       if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName||''))return;
@@ -1719,15 +1703,10 @@
   function updateFlashcardSpacedStats(){
     const statsEl=q('#flashSpacedStats');
     if(!statsEl)return;
-    const total=(ALL_FLASHCARDS||[]).length;
-    const now=Date.now();
-    let due=0,hardCount=0;
-    for(let i=0;i<total;i++){
-      const p=state?.flashProgress?.[i];
-      if(!p||!p.nextDue||Date.parse(p.nextDue)<=now)due++;
-      if(p?.level==='hard')hardCount++;
-    }
-    statsEl.textContent=`Total: ${total} cartões · ${due} para revisar hoje · ${hardCount} marcados como difícil (Atalhos: 1, 2, 3)`;
+    const now=Date.now(),cards=(ALL_FLASHCARDS||[]).map((c,i)=>({c,i,key:fcKey(c)}));
+    let due=0,hard=0,mastered=0;
+    for(const x of cards){const p=fcProgress(x);if(fcDue(p,now))due++;if(p?.level==='hard')hard++;if(p&&Number(p.streak||0)>=3)mastered++}
+    statsEl.textContent=`Total: ${cards.length} cartões · ${due} para revisar agora · ${hard} difíceis · ${mastered} dominados (Atalhos: 1, 2, 3)`;
   }
 
   // 9. Gerador de Temas Policiais + Folha de Redação 30 Linhas para Impressão (#essay)
