@@ -326,3 +326,128 @@ $$;
 
 revoke all on function public.get_hunters_leaderboard() from public;
 grant execute on function public.get_hunters_leaderboard() to authenticated, service_role;
+
+-- Atualização v93: Não compartilha arquivos do tipo 'edital' na Biblioteca da Comunidade (apenas materiais, leis, provas, simulados e anotações)
+-- e padroniza títulos removendo prefixos UUID em caixa alta.
+
+create or replace function public.clean_standard_doc_title(p_title text)
+returns text
+language sql
+immutable
+as $$
+  select upper(
+    trim(
+      regexp_replace(
+        regexp_replace(
+          public.sanitize_personal_watermarks(coalesce(p_title, '')),
+          '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}[-_\s]*',
+          '',
+          'g'
+        ),
+        '\.pdf$',
+        '',
+        'i'
+      )
+    )
+  );
+$$;
+
+create or replace function public.get_community_exam_library(
+  p_exam_name text,
+  p_exam_org text default ''
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  v_slug text := public.normalize_exam_slug(p_exam_name, p_exam_org);
+  v_docs jsonb;
+  v_summaries jsonb;
+begin
+  if uid is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  -- Somente materiais de estudo, leis, provas, simulados e anotações (NUNCA 'edital' / 'edital_concurso')
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', d.id,
+        'campaign_id', d.campaign_id,
+        'title', public.clean_standard_doc_title(d.title),
+        'document_type', d.document_type,
+        'detected_subject', d.detected_subject,
+        'processing_status', 'ready',
+        'page_count', d.page_count,
+        'metadata', jsonb_build_object(
+          'primary_subject', d.metadata->>'primary_subject',
+          'coverage', d.metadata->'coverage'
+        ),
+        'created_at', d.created_at,
+        'is_community', true,
+        'exam_slug', v_slug,
+        'portal_name', sc.name,
+        'author_name', coalesce(
+          nullif(trim(u.raw_user_meta_data->>'full_name'), ''),
+          nullif(trim(u.raw_user_meta_data->>'name'), ''),
+          'Colega de ' || upper(v_slug)
+        )
+      )
+      order by d.created_at desc
+    ),
+    '[]'::jsonb
+  )
+  into v_docs
+  from public.study_documents d
+  join public.study_campaigns sc on sc.id = d.campaign_id
+  left join auth.users u on u.id = d.user_id
+  where d.user_id <> uid
+    and d.processing_status = 'ready'
+    and d.document_type not in ('edital', 'edital_concurso')
+    and public.normalize_exam_slug(sc.name, coalesce(sc.organization, '')) = v_slug;
+
+  -- Conteúdos gerados (resumos, flashcards, questões, bizus) higienizados contra CPF/dados pessoais
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', g.id,
+        'source_document_id', g.source_document_id,
+        'title', public.sanitize_personal_watermarks(g.title),
+        'content', public.sanitize_generated_jsonb(g.content),
+        'source_refs', g.source_refs,
+        'created_at', g.created_at,
+        'is_community', true,
+        'exam_slug', v_slug
+      )
+      order by g.created_at asc
+    ),
+    '[]'::jsonb
+  )
+  into v_summaries
+  from (
+    select g.*
+    from public.generated_study_content g
+    join public.study_campaigns sc on sc.id = g.campaign_id
+    left join public.study_documents sd on sd.id = g.source_document_id
+    where g.user_id <> uid
+      and g.content_type = 'summary'
+      and (sd.id is null or sd.document_type not in ('edital', 'edital_concurso'))
+      and public.normalize_exam_slug(sc.name, coalesce(sc.organization, '')) = v_slug
+    order by g.created_at desc
+    limit 250
+  ) g;
+
+  return jsonb_build_object(
+    'exam_slug', v_slug,
+    'documents', v_docs,
+    'summaries', v_summaries,
+    'edital_topics', '[]'::jsonb
+  );
+end;
+$$;
+
+revoke all on function public.get_community_exam_library(text, text) from public;
+grant execute on function public.get_community_exam_library(text, text) to authenticated, service_role;

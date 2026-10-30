@@ -2943,21 +2943,30 @@
       });
       const data=await res.json().catch(()=>null);
       if(!res.ok||!data)return;
-      const commDocs=Array.isArray(data.documents)?data.documents:[];
+      // Filtrar estritamente: NUNCA compartilhar 'edital' / 'edital_concurso' de outros usuários
+      const commDocs=(Array.isArray(data.documents)?data.documents:[]).filter(d=>!['edital','edital_concurso'].includes(d.document_type));
       const commSums=Array.isArray(data.summaries)?data.summaries:[];
-      const commTopics=Array.isArray(data.edital_topics)?data.edital_topics:[];
-      communityCache={slug:data.exam_slug||slug,documents:commDocs,summaries:commSums,editalTopics:commTopics,loadedAt:Date.now()};
+      communityCache={slug:data.exam_slug||slug,documents:commDocs,summaries:commSums,editalTopics:[],loadedAt:Date.now()};
 
-      // 1) Mesclar documentos da comunidade em cloudDocuments (SEM storage_path para impedir download de PDF)
-      const ownTitles=new Set((cloudDocuments||[]).filter(d=>!d.is_community).map(d=>`${d.document_type}|${topicKey(d.title)}`));
+      // Remover qualquer edital da comunidade que estivesse em memória
+      for(let i=cloudDocuments.length-1;i>=0;i--){
+        if(cloudDocuments[i]?.is_community&&['edital','edital_concurso'].includes(cloudDocuments[i].document_type)){
+          cloudDocuments.splice(i,1);
+        }
+      }
+
+      // 1) Mesclar apenas materiais, leis, provas, simulados e anotações da comunidade em cloudDocuments (SEM storage_path)
+      const stdTitle=t=>typeof window.standardizeDocumentTitle==='function'?window.standardizeDocumentTitle(sanitizePersonalWatermarks(t)):sanitizePersonalWatermarks(t).toUpperCase();
+      const ownTitles=new Set((cloudDocuments||[]).filter(d=>!d.is_community).map(d=>`${d.document_type}|${topicKey(stdTitle(d.title))}`));
       const existingIds=new Set((cloudDocuments||[]).map(d=>d.id));
       let addedDocs=0;
       for(const cDoc of commDocs){
-        const dedupKey=`${cDoc.document_type}|${topicKey(cDoc.title)}`;
+        const formattedTitle=stdTitle(cDoc.title);
+        const dedupKey=`${cDoc.document_type}|${topicKey(formattedTitle)}`;
         if(existingIds.has(cDoc.id)||ownTitles.has(dedupKey))continue;
         cloudDocuments.push({
           ...cDoc,
-          title:sanitizePersonalWatermarks(cDoc.title),
+          title:formattedTitle,
           storage_path:null,
           source_url:null,
           is_community:true,
@@ -3153,11 +3162,10 @@
           <div>
             <div class="eyebrow">🤝 REDE COOPERATIVA DO CONCURSO · PERFIL ${escText(slugUpper)}</div>
             <b>Biblioteca Compartilhada da Comunidade (${escText(campaign?.name||'Concurso')})</b>
-            <div class="small muted">Materiais, leis, provas e editais analisados por colegas do mesmo concurso ficam disponíveis para visualização protegida e estudo (Resumos, Flashcards, Questões e Caderno IA), com bloqueio de download do PDF original para proteger o CPF.</div>
+            <div class="small muted">Materiais de estudo, leis, provas e simulados analisados por colegas do mesmo concurso ficam disponíveis para visualização protegida e estudo (o Edital permanece individual de cada usuário e o PDF original fica bloqueado contra download).</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <span class="tag">${commDocs.length} arquivo(s) da comunidade · ${commSums.length} resumos · ${commQs.length} questões</span>
-            ${commTopics.length&&!(state?.customCampaign?.missions||[]).length?`<button type="button" class="action small" id="useCommunityEditalBtn">📋 Usar Edital da Comunidade (${commTopics.length} tópicos)</button>`:''}
+            <span class="tag">${commDocs.length} material(is) da comunidade · ${commSums.length} resumos · ${commQs.length} questões</span>
             <button type="button" class="ghost small" id="syncCommunityNowBtn">↻ Sincronizar Acervo</button>
           </div>
         `;
@@ -3171,6 +3179,30 @@
     qa('[data-view-community-doc]').forEach(btn=>{
       btn.onclick=()=>openProtectedCommunityViewer(btn.dataset.viewCommunityDoc);
     });
+    qa('[data-title-example]').forEach(el=>{
+      el.onclick=()=>{
+        const input=q('#documentTitle');
+        if(input){input.value=el.dataset.titleExample;input.focus()}
+      };
+    });
+    const docFile=q('#documentFile'),docTitle=q('#documentTitle');
+    if(docFile&&!docFile.dataset.stdBound){
+      docFile.dataset.stdBound='1';
+      docFile.addEventListener('change',()=>{
+        const f=docFile.files?.[0];
+        if(f&&docTitle&&!docTitle.value.trim()&&typeof window.standardizeDocumentTitle==='function'){
+          docTitle.value=window.standardizeDocumentTitle(f.name);
+        }
+      });
+    }
+    if(docTitle&&!docTitle.dataset.stdBound){
+      docTitle.dataset.stdBound='1';
+      docTitle.addEventListener('blur',()=>{
+        if(docTitle.value.trim()&&typeof window.standardizeDocumentTitle==='function'){
+          docTitle.value=window.standardizeDocumentTitle(docTitle.value);
+        }
+      });
+    }
   }
 
   // 13. Central de Revisão Inteligente (Ciclo 1-7-30, Revisão Ativa por Questões, Resumo Inline e Raio-X de Véspera Imprimível)

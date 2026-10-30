@@ -220,3 +220,14 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   console.log("OK: Alinhamento mobile do perfil, grade 6 cards em Hoje, proteção contra conta duplicada e limpeza do Ranking validados.");
 }
 
+// Teste 15: Edital individual (não compartilhado na comunidade), estabilidade da lista sem piscar e padronização de nomes (ex.: DIREITOS INDIVIDUAIS E COLETIVOS-ART.5)
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const sqlSrc = readFileSync(new URL("../supabase/migrations/20261030_v92_dedup_accounts_and_ui.sql", import.meta.url), "utf8");
+  assert.ok(htmlSrc.includes("DIREITOS INDIVIDUAIS E COLETIVOS-ART.5") && htmlSrc.includes("standardizeDocumentTitle"), "Deve sugerir e padronizar nomes de arquivos na Biblioteca");
+  assert.ok(htmlSrc.includes("preservedCommunity"), "loadCloudDocuments deve preservar arquivos da comunidade para não piscar na tela");
+  assert.ok(v77Src.includes("!['edital','edital_concurso'].includes(d.document_type)") && sqlSrc.includes("d.document_type not in ('edital', 'edital_concurso')"), "Edital não deve ser compartilhado entre usuários na Biblioteca da Comunidade");
+  console.log("OK: Edital exclusivo por usuário, lista estável sem piscar e padronização de títulos na Biblioteca validados.");
+}
+
