@@ -1,4 +1,5 @@
 (function () {
+  const MAX_EXTRACT_PAGES = 600;
   const extractionJobs = new Map();
   const isEditalType = (doc) => ["edital", "edital_concurso"].includes(String(doc?.document_type || ""));
   window._recentUploadedPdfBytes = window._recentUploadedPdfBytes || new Map();
@@ -80,7 +81,7 @@
     }
 
     const pdfTotalPages = Number(pdf.numPages) || 0;
-    const maxPages = Math.min(pdfTotalPages, 220);
+    const maxPages = Math.min(pdfTotalPages, MAX_EXTRACT_PAGES);
     const truncatedPages = pdfTotalPages > maxPages;
     const pages = [];
     let meaningfulCharacters = 0;
@@ -216,6 +217,13 @@
     toast(`Concluindo análise de “${doc.title}” pelo modo de recuperação inteligente...`);
 
     if (isEditalType(doc)) {
+      const fullChars = pages.reduce((sum, p) => sum + String(p.text || "").length, 0);
+      if (fullChars > 45000) {
+        // O modo de recuperação lê só ~45 mil caracteres. Gerar o mapa a partir de uma amostra
+        // deixaria disciplinas de fora e ainda marcaria o edital como concluído.
+        toast("O edital é extenso demais para o modo de recuperação. O mapa atual foi mantido; tente reprocessar em instantes.");
+        return false;
+      }
       const prompt = `Extraia o conteúdo programático (disciplinas e tópicos de estudo) deste edital de concurso ("${doc.title}"). Ignore regras de inscrição, taxas e datas administrativas. Responda EXCLUSIVAMENTE um JSON válido no formato {"topics":[{"subject":"Nome da Disciplina","unit":"","topic":"Tópico de estudo"}]}.`;
       const res = await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`, {
         method: "POST",
@@ -346,7 +354,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
     const coveragePercent = Math.max(1, Math.min(100, Math.round((sentPages / Math.max(1, totalPages)) * 100)));
     const wasSampled = sentPages < pages.length || Boolean(pdfMeta.truncatedPages);
     const warnings = [];
-    if (pdfMeta.truncatedPages) warnings.push(`O PDF possui ${pdfMeta.pdfTotalPages} páginas; foram lidas as primeiras 220 páginas.`);
+    if (pdfMeta.truncatedPages) warnings.push(`O PDF possui ${pdfMeta.pdfTotalPages} páginas; foram lidas as primeiras ${MAX_EXTRACT_PAGES} páginas.`);
     if (sentPages < pages.length) warnings.push("Conteúdo gerado a partir de uma amostra do PDF; reprocesse para cobertura completa.");
 
     const coverage = {
@@ -384,26 +392,37 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
     return true;
   }
 
-  // Intercepta chamadas fetch para edital-gemini e material-gemini para anexar extracted_pages inline e aplicar timeout seguro de 80s
+  // Intercepta chamadas fetch para edital-gemini e material-gemini.
+  // Edital: envia TODAS as páginas extraídas (sem amostragem) e o servidor analisa em trechos.
+  // Material: mantém o envio compactado e o limite de 80 s.
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async function (input, init) {
     const url = typeof input === "string" ? input : input?.url || "";
-    if (init?.method === "POST" && (url.includes("/functions/v1/edital-gemini") || url.includes("/functions/v1/material-gemini"))) {
+    const isEditalCall = url.includes("/functions/v1/edital-gemini");
+    const isMaterialCall = url.includes("/functions/v1/material-gemini");
+    if (init?.method === "POST" && (isEditalCall || isMaterialCall)) {
       try {
         const bodyObj = JSON.parse(init.body || "{}");
         const docId = bodyObj?.document_id;
         const pages = docId ? window._extractedPagesByDocId.get(docId) : null;
         if (Array.isArray(pages) && pages.length) {
-          const compact = compactPagesForInlinePayload(pages, 110000);
-          bodyObj.extracted_pages = compact;
-          if (url.includes("/functions/v1/edital-gemini")) {
-            bodyObj.extracted_text = compact.map((p) => `[PÁGINA ${p.page}]\n${p.text}`).join("\n\n").slice(0, 110000);
+          if (isEditalCall) {
+            const meta = window._extractedPdfMetaByDocId.get(docId) || {};
+            const totalChars = pages.reduce((sum, p) => sum + String(p?.text || "").length, 0);
+            // Acima de ~1,5 milhão de caracteres o servidor lê o arquivo .text.json salvo no Storage.
+            if (totalChars <= 1500000) bodyObj.extracted_pages = pages;
+            delete bodyObj.extracted_text;
+            bodyObj.pdf_total_pages = Number(meta.pdfTotalPages) || pages.length;
+            bodyObj.truncated_pages = Boolean(meta.truncatedPages);
+          } else {
+            const totalChars = pages.reduce((sum, p) => sum + String(p?.text || "").length, 0);
+            bodyObj.extracted_pages = totalChars <= 1500000 ? pages : compactPagesForInlinePayload(pages, 350000);
           }
           init = { ...init, body: JSON.stringify(bodyObj) };
         }
       } catch {}
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 80000);
+      const timer = setTimeout(() => controller.abort(), isEditalCall ? 140000 : 130000);
       try {
         return await nativeFetch(input, { ...init, signal: controller.signal });
       } finally {

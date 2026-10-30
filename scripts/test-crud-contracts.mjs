@@ -99,7 +99,11 @@ requireAll("edital-gemini", edital, [
   "extractSecretString",
   "personalGeminiKey",
   "releaseStaleLocks",
-  "loadBrowserExtractedEditalText",
+  "loadEditalPages",
+  "runChunked",
+  "mergeChunkResults",
+  "PARTIAL_RESULT",
+  "restoreBackup",
   "fetchWithTimeout",
   "ensurePdfBytes",
 ]);

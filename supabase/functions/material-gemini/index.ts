@@ -17,7 +17,7 @@ const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const FALLBACK_STATUS = new Set([400, 404]);
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const TEXT_CHUNK_TARGET = 28000;
-const MAX_TEXT_CHUNKS = 4;
+const MAX_TEXT_CHUNKS = 8;
 
 const GEMINI_TEXT_FALLBACKS = [...GEMINI_MODEL_FALLBACKS];
 
@@ -224,7 +224,7 @@ async function sha256(bytes: Uint8Array) {
 }
 
 async function releaseStaleLocks(userId: string) {
-  const cutoff = new Date(Date.now() - 90 * 1000).toISOString();
+  const cutoff = new Date(Date.now() - 170 * 1000).toISOString();
   await fetch(`${SUPABASE_URL}/rest/v1/ai_usage_events?user_id=eq.${encodeURIComponent(userId)}&status=eq.started&created_at=lt.${encodeURIComponent(cutoff)}`, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" },
@@ -526,19 +526,20 @@ function validateExtractedPagesList(rawPages: unknown): TextPage[] | null {
 
 async function loadBrowserExtractedPages(storagePath: string, inlinePages?: unknown): Promise<TextPage[] | null> {
   const fromInline = validateExtractedPagesList(inlinePages);
-  if (fromInline) {
-    console.log("Using inline browser-extracted PDF text", fromInline.length);
-    return fromInline;
-  }
+  let fromSidecar: TextPage[] | null = null;
   const sidecarPath = `${storagePath}.text.json`;
   const result = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${sidecarPath}`, {
     headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY },
   }).catch(() => null);
-  if (!result || result.status === 400 || result.status === 404 || !result.ok) return null;
-  const payload = await result.json().catch(() => null);
-  const validated = validateExtractedPagesList(payload?.pages);
-  if (validated) console.log("Using sidecar browser-extracted PDF text", validated.length);
-  return validated;
+  if (result && result.ok) {
+    const payload = await result.json().catch(() => null);
+    fromSidecar = validateExtractedPagesList(payload?.pages);
+  }
+  const inlineChars = (fromInline || []).reduce((s, p) => s + p.text.length, 0);
+  const sidecarChars = (fromSidecar || []).reduce((s, p) => s + p.text.length, 0);
+  const best = sidecarChars >= inlineChars ? (fromSidecar || fromInline) : (fromInline || fromSidecar);
+  if (best) console.log("Using browser-extracted PDF text", best.length, Math.max(inlineChars, sidecarChars));
+  return best;
 }
 
 function pageHeadings(text: string) {
@@ -763,7 +764,7 @@ async function generateStudyPackageFromText(
   let nextIndex = 0;
   let completed = 0;
   let lastChunkError: any = null;
-  const deadline = Date.now() + 45000;
+  const deadline = Date.now() + 105000;
   const worker = async (workerIndex: number) => {
     if (workerIndex > 0) await wait(650 * workerIndex);
     while (true) {

@@ -1,3 +1,252 @@
+// Análise de editais em trechos: nenhuma página é descartada por amostragem e cada trecho
+// é enviado ao modelo separadamente, evitando o corte por limite de tokens/tempo de uma
+// única chamada gigante.
+
+export type EditalPage = { page: number; text: string };
+export type EditalChunk = { index: number; pageStart: number; pageEnd: number; text: string; chars: number };
+
+export const CHUNK_TARGET_CHARS = 24000;
+export const CHUNK_MAX_CHARS = 30000;
+export const MAX_CHUNKS = 18;
+
+const clean = (value: unknown) => String(value ?? "")
+  .replace(/\u0000/g, "")
+  .replace(/[\t ]+/g, " ")
+  .replace(/\n{3,}/g, "\n\n")
+  .trim();
+
+/** Normaliza páginas vindas do navegador ou do arquivo .text.json. */
+export function normalizePages(raw: unknown): EditalPage[] {
+  const list = Array.isArray(raw) ? raw : [];
+  const byPage = new Map<number, string>();
+  list.forEach((item: any, idx: number) => {
+    const page = Number(item?.page) || idx + 1;
+    const text = clean(item?.text);
+    if (text.length <= 10) return;
+    byPage.set(page, byPage.has(page) ? `${byPage.get(page)}\n${text}` : text);
+  });
+  return [...byPage.entries()].sort((a, b) => a[0] - b[0]).map(([page, text]) => ({ page, text }));
+}
+
+/** Converte o texto antigo "[PÁGINA n]\n..." em páginas. */
+export function pagesFromMarkedText(raw: unknown): EditalPage[] {
+  const text = String(raw ?? "");
+  const parts = text.split(/\[P[ÁA]GINA\s+(\d+)\]\s*/i);
+  if (parts.length < 3) return normalizePages(text.trim() ? [{ page: 1, text }] : []);
+  const pages: Array<{ page: number; text: string }> = [];
+  for (let i = 1; i < parts.length; i += 2) pages.push({ page: Number(parts[i]), text: parts[i + 1] ?? "" });
+  return normalizePages(pages);
+}
+
+export const totalChars = (pages: EditalPage[]) => pages.reduce((sum, p) => sum + p.text.length, 0);
+
+function splitLongText(text: string, maxChars: number): string[] {
+  if (text.length <= maxChars) return [text];
+  const pieces: string[] = [];
+  let rest = text;
+  while (rest.length > maxChars) {
+    let cut = rest.lastIndexOf("\n", maxChars);
+    if (cut < maxChars * 0.5) cut = rest.lastIndexOf(" ", maxChars);
+    if (cut < maxChars * 0.5) cut = maxChars;
+    pieces.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  if (rest) pieces.push(rest);
+  return pieces;
+}
+
+/** Divide TODAS as páginas em trechos de ~24 mil caracteres, sem perder nenhuma. */
+export function buildChunks(pages: EditalPage[], target = CHUNK_TARGET_CHARS, max = CHUNK_MAX_CHARS): EditalChunk[] {
+  const blocks: Array<{ page: number; text: string }> = [];
+  for (const page of pages) {
+    for (const piece of splitLongText(page.text, max - 40)) blocks.push({ page: page.page, text: `[PÁGINA ${page.page}]\n${piece}` });
+  }
+  const chunks: EditalChunk[] = [];
+  let current: typeof blocks = [];
+  let size = 0;
+  const flush = () => {
+    if (!current.length) return;
+    const text = current.map((b) => b.text).join("\n\n");
+    chunks.push({ index: chunks.length, pageStart: current[0].page, pageEnd: current[current.length - 1].page, text, chars: text.length });
+    current = [];
+    size = 0;
+  };
+  for (const block of blocks) {
+    if (size > 0 && size + block.text.length > target) flush();
+    current.push(block);
+    size += block.text.length + 2;
+  }
+  flush();
+  return chunks;
+}
+
+const STRONG = /conte[uú]do program[aá]tico|programa(s)? (das|de|da|do) (prova|provas|disciplina|disciplinas|mat[eé]ria|materias|concurso)|conhecimentos (gerais|espec[ií]ficos|b[aá]sicos|profissionais|t[eé]cnicos)|objetos? de avalia[cç][aã]o|anexo [ivxlc\d]+\W.{0,80}(conte[uú]do|programa|disciplina|mat[eé]ria)/i;
+const SUBJECTS = [
+  /l[ií]ngua portuguesa|portugu[eê]s/i, /racioc[ií]nio l[oó]gico/i, /matem[aá]tica/i, /inform[aá]tica/i,
+  /direito constitucional/i, /direito administrativo/i, /direito penal/i, /direito processual/i, /direito civil/i,
+  /direitos? humanos/i, /legisla[cç][aã]o/i, /no[cç][oõ]es de/i, /atualidades/i, /hist[oó]ria/i, /geografia/i,
+  /ingl[eê]s/i, /ci[eê]ncias/i, /biologia|f[ií]sica|qu[ií]mica/i, /contabilidade|administra[cç][aã]o|economia/i, /[eé]tica/i,
+];
+
+export function chunkScore(text: string): number {
+  let score = STRONG.test(text) ? 3 : 0;
+  for (const re of SUBJECTS) if (re.test(text)) score += 1;
+  return score;
+}
+
+/**
+ * Escolhe os trechos que provavelmente contêm conteúdo programático. Editais curtos são
+ * analisados inteiros. Trechos vizinhos de um acerto também entram (o programa continua).
+ */
+export function selectProgrammeChunks(chunks: EditalChunk[], maxChunks = MAX_CHUNKS) {
+  if (chunks.length <= 6) return { selected: chunks, skipped: 0 };
+  const scores = chunks.map((c) => chunkScore(c.text));
+  const hits = scores.map((score, i) => (score >= 4 ? i : -1)).filter((i) => i >= 0);
+  let indexes: number[];
+  if (!hits.length) {
+    indexes = chunks.map((_, i) => i);
+  } else {
+    // Faixa contínua do primeiro ao último acerto (+1 trecho): o programa pode ter disciplinas
+    // fora da lista de palavras-chave e elas ficam no meio da faixa.
+    const first = hits[0];
+    let last = Math.min(chunks.length - 1, hits[hits.length - 1] + 1);
+    while (last + 1 < chunks.length && scores[last + 1] >= 1 && (last + 1 - first + 1) <= maxChunks) {
+      last += 1;
+    }
+    if (last - first + 1 <= maxChunks) {
+      indexes = Array.from({ length: last - first + 1 }, (_, k) => first + k);
+    } else {
+      const wanted = new Set<number>();
+      hits.forEach((i) => { wanted.add(i); if (i + 1 < chunks.length) wanted.add(i + 1); });
+      indexes = [...wanted];
+    }
+  }
+  if (indexes.length > maxChunks) {
+    indexes = indexes.sort((a, b) => scores[b] - scores[a] || a - b).slice(0, maxChunks);
+  }
+  indexes.sort((a, b) => a - b);
+  return { selected: indexes.map((i) => chunks[i]), skipped: chunks.length - indexes.length };
+}
+
+export type ChunkCaller = (prompt: string, timeoutMs: number) => Promise<any | null>;
+export type ChunkResult = { index: number; parsed: any };
+
+/** Executa os trechos com concorrência limitada e prazo total. */
+export async function runChunked(
+  chunks: EditalChunk[],
+  makePrompt: (chunk: EditalChunk, position: number, total: number) => string,
+  caller: ChunkCaller,
+  options: { concurrency?: number; deadline: number; perCallMs?: number; now?: () => number } ,
+) {
+  const now = options.now ?? Date.now;
+  const results: ChunkResult[] = [];
+  let failed = 0;
+  let notRun = 0;
+  let cursor = 0;
+  const worker = async () => {
+    while (true) {
+      const position = cursor++;
+      if (position >= chunks.length) return;
+      const remaining = options.deadline - now();
+      if (remaining < 12000) { notRun++; continue; }
+      const timeout = Math.min(options.perCallMs ?? 50000, remaining - 4000);
+      let parsed: any = null;
+      try { parsed = await caller(makePrompt(chunks[position], position, chunks.length), timeout); } catch { parsed = null; }
+      if (parsed && Array.isArray(parsed.topics)) results.push({ index: chunks[position].index, parsed });
+      else failed++;
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(options.concurrency ?? 3, chunks.length)) }, worker));
+  results.sort((a, b) => a.index - b.index);
+  return { results, failed, notRun };
+}
+
+const normalizeKey = (value: unknown) => String(value ?? "").normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase("pt-BR");
+const normalizeSearch = (value: unknown) => normalizeKey(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const ADMIN_ONLY = /^(inscri(c|ç)(a|ã)o|cronograma|remunera(c|ç)(a|ã)o|vagas?|isen(c|ç)(a|ã)o|taxa de inscri(c|ç)(a|ã)o|resultado|recursos?|exame m[eé]dico|teste de aptid(a|ã)o f[ií]sica|investiga(c|ç)(a|ã)o social|documentos?|matr[ií]cula|curso de forma(c|ç)(a|ã)o)$/i;
+
+export type MergedTopic = {
+  subject: string; unit: string; topic: string; edital_order: number; subject_order: number; learning_order: number;
+  difficulty: string; prerequisite_topic: string; pedagogical_reason: string;
+};
+
+/** Junta os resultados dos trechos, remove duplicatas e recalcula as ordens globais. */
+export function mergeChunkResults(results: ChunkResult[], maxTopics = 4000) {
+  const subjectDisplay = new Map<string, string>();
+  const seen = new Set<string>();
+  const raw: Array<MergedTopic & { chunk: number; modelOrder: number; seq: number; subjectKey: string }> = [];
+  const kinds: string[] = [];
+  const confidences: number[] = [];
+  const warnings: string[] = [];
+  let reason = "";
+  let scope = "";
+  let seq = 0;
+
+  for (const { index, parsed } of results) {
+    const meta = parsed?.meta ?? {};
+    const topics = Array.isArray(parsed?.topics) ? parsed.topics : [];
+    if (topics.length) {
+      const kind = String(meta.document_kind ?? "").toLowerCase().trim();
+      if (kind) kinds.push(kind);
+      const conf = Number(meta.confidence);
+      if (Number.isFinite(conf)) confidences.push(Math.max(0, Math.min(1, conf)));
+      if (!reason && meta.classification_reason) reason = String(meta.classification_reason).trim();
+      if (!scope && meta.detected_scope) scope = String(meta.detected_scope).trim();
+      if (Array.isArray(meta.warnings)) for (const w of meta.warnings) { const t = String(w).trim(); if (t && !warnings.includes(t)) warnings.push(t); }
+    }
+    for (const item of topics) {
+      let subject = String(item?.subject ?? "Edital").replace(/\s+/g, " ").trim().slice(0, 200) || "Edital";
+      const topic = String(item?.topic ?? "").replace(/\s+/g, " ").trim().slice(0, 700);
+      if (topic.length < 3) continue;
+      const subjectKey = normalizeSearch(subject);
+      if (subjectKey === normalizeSearch(topic)) continue;
+      if (ADMIN_ONLY.test(normalizeSearch(topic))) continue;
+      if (!subjectDisplay.has(subjectKey)) subjectDisplay.set(subjectKey, subject);
+      subject = subjectDisplay.get(subjectKey)!;
+      const key = `${subjectKey}\u0000${normalizeSearch(topic)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const difficulty = ["basic", "intermediate", "advanced"].includes(String(item?.difficulty)) ? String(item.difficulty) : "basic";
+      raw.push({
+        subject, unit: String(item?.unit ?? "").replace(/\s+/g, " ").trim(), topic, edital_order: 0, subject_order: 0, learning_order: 0,
+        difficulty, prerequisite_topic: String(item?.prerequisite_topic ?? "").replace(/\s+/g, " ").trim(),
+        pedagogical_reason: String(item?.pedagogical_reason ?? "").trim().slice(0, 500),
+        chunk: index, modelOrder: Math.max(0, Number(item?.learning_order) || 0), seq: seq++, subjectKey,
+      });
+    }
+  }
+
+  const limited = raw.slice(0, maxTopics);
+  const subjectOrder = new Map<string, number>();
+  limited.forEach((t) => { if (!subjectOrder.has(t.subjectKey)) subjectOrder.set(t.subjectKey, subjectOrder.size); });
+  const bySubject = new Map<string, typeof limited>();
+  limited.forEach((t) => { const list = bySubject.get(t.subjectKey) ?? []; list.push(t); bySubject.set(t.subjectKey, list); });
+  for (const list of bySubject.values()) {
+    [...list].sort((a, b) => a.chunk - b.chunk || a.modelOrder - b.modelOrder || a.seq - b.seq).forEach((t, i) => { t.learning_order = i; });
+    const titles = new Set(list.map((t) => normalizeSearch(t.topic)));
+    for (const t of list) {
+      if (t.prerequisite_topic && (!titles.has(normalizeSearch(t.prerequisite_topic)) || normalizeSearch(t.prerequisite_topic) === normalizeSearch(t.topic))) t.prerequisite_topic = "";
+    }
+  }
+  const topics: MergedTopic[] = limited.map((t, i) => ({
+    subject: t.subject, unit: t.unit, topic: t.topic, edital_order: i, subject_order: subjectOrder.get(t.subjectKey) ?? 0,
+    learning_order: t.learning_order, difficulty: t.difficulty, prerequisite_topic: t.prerequisite_topic, pedagogical_reason: t.pedagogical_reason,
+  }));
+
+  const officialKinds = ["edital_oficial", "edital_verticalizado", "edital_concurso"];
+  const kind = officialKinds.find((k) => kinds.includes(k)) ?? (kinds.find((k) => k !== "material_estudo") ?? kinds[0] ?? "");
+  const confidence = confidences.length ? confidences.reduce((a, b) => a + b, 0) / confidences.length : 0.85;
+  return {
+    topics,
+    truncatedByLimit: raw.length > maxTopics,
+    meta: {
+      document_kind: kind, classification_reason: reason || "Conteúdo programático identificado.",
+      detected_scope: scope, confidence, warnings: warnings.slice(0, 10),
+    },
+  };
+}
+
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
@@ -95,7 +344,7 @@ function parseGeminiJsonText(data: any) {
       if (lastEnd > openB) {
         try {
           const topicsArr = JSON.parse(`[${unfenced.slice(openB + 1, lastEnd + 1)}]`);
-          return { meta: { document_kind: "edital_oficial", classification_reason: "Recuperado de JSON parcial", detected_scope: "Edital", confidence: 0.85, warnings: ["O edital é muito extenso; parte final recuperada automaticamente."] }, topics: topicsArr };
+          return { _partial: true, meta: { document_kind: "edital_oficial", classification_reason: "Recuperado de JSON parcial", detected_scope: "Edital", confidence: 0.85, warnings: ["A resposta da IA foi cortada; parte final recuperada automaticamente."] }, topics: topicsArr };
         } catch {}
       }
     }
@@ -110,6 +359,22 @@ async function setDocumentStatus(documentId: string, userId: string, processingS
     headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({ processing_status: processingStatus }),
   }).catch(() => undefined);
+}
+
+async function saveEditalCoverage(documentId: string, userId: string, info: { percent: number; topics: number; pages: number; needsReview: boolean; warnings: string[] }) {
+  if (!documentId || !userId) return;
+  const base = `${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(userId)}`;
+  const auth = { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY };
+  try {
+    const current = await fetch(`${base}&select=metadata`, { headers: auth });
+    const rows = current.ok ? await current.json().catch(() => []) : [];
+    const metadata = rows?.[0]?.metadata && typeof rows[0].metadata === "object" ? rows[0].metadata : {};
+    await fetch(base, {
+      method: "PATCH",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ metadata: { ...metadata, coverage: { percent: info.percent, summary_count: info.topics, estimated_pages: info.pages, needs_review: info.needsReview, warnings: info.warnings.slice(0, 5) } } }),
+    });
+  } catch { /* informativo: não deve derrubar a análise */ }
 }
 
 const ALLOWED_ORIGINS = new Set([
@@ -198,7 +463,7 @@ async function removeGeminiFile(name?: string, geminiKey = GEMINI_API_KEY) {
 }
 
 async function releaseStaleLocks(userId: string) {
-  const cutoff = new Date(Date.now() - 90 * 1000).toISOString();
+  const cutoff = new Date(Date.now() - 170 * 1000).toISOString();
   await fetch(`${SUPABASE_URL}/rest/v1/ai_usage_events?user_id=eq.${encodeURIComponent(userId)}&status=eq.started&created_at=lt.${encodeURIComponent(cutoff)}`, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" },
@@ -206,38 +471,26 @@ async function releaseStaleLocks(userId: string) {
   }).catch(() => undefined);
 }
 
-function formatEditalPages(rawPages: any[]): string | null {
-  const pages = Array.isArray(rawPages) ? rawPages : [];
-  if (!pages.length) return null;
-  const formatted = pages
-    .map((p: any, idx: number) => ({
-      page: Number(p?.page) || idx + 1,
-      text: String(p?.text ?? "").replace(/\u0000/g, "").replace(/[\t ]+/g, " ").trim(),
-    }))
-    .filter((p: { text: string }) => p.text.length > 10);
-  const totalChars = formatted.reduce((acc: number, p: { text: string }) => acc + p.text.length, 0);
-  if (totalChars < 120) return null;
-  const fullText = formatted.map((p: { page: number; text: string }) => `[PÁGINA ${p.page}]\n${p.text}`).join("\n\n");
-  if (fullText.length <= 130000) return fullText;
-  const keywords = /(conte[uú]do program[aá]tico|conhecimentos? (gerais|espec[ií]ficos|b[aá]sicos)|objetos? de avalia[cç][aã]o|disciplinas?|anexo|l[ií]ngua portuguesa|direito|racioc[ií]nio|inform[aá]tica|matem[aá]tica|hist[oó]ria|geografia|legisla[cç][aã]o)/i;
-  const selectedPages = formatted.filter((p: { text: string }, i: number) => keywords.test(p.text) || i < 3 || i >= formatted.length - 18);
-  return (selectedPages.length ? selectedPages : formatted).map((p: { page: number; text: string }) => `[PÁGINA ${p.page}]\n${p.text}`).join("\n\n").slice(0, 130000);
-}
-
-async function loadBrowserExtractedEditalText(storagePath: string, inlinePayload?: any): Promise<string | null> {
-  if (typeof inlinePayload?.extracted_text === "string" && inlinePayload.extracted_text.trim().length >= 120) {
-    return inlinePayload.extracted_text.trim().slice(0, 130000);
-  }
-  if (Array.isArray(inlinePayload?.extracted_pages) && inlinePayload.extracted_pages.length) {
-    const fromInline = formatEditalPages(inlinePayload.extracted_pages);
-    if (fromInline) return fromInline;
-  }
+async function loadEditalPages(storagePath: string, inlinePayload?: any): Promise<{ pages: EditalPage[]; pdfTotalPages: number; truncatedPages: boolean }> {
+  let inline: EditalPage[] = [];
+  if (Array.isArray(inlinePayload?.extracted_pages) && inlinePayload.extracted_pages.length) inline = normalizePages(inlinePayload.extracted_pages);
+  if (!inline.length && typeof inlinePayload?.extracted_text === "string") inline = pagesFromMarkedText(inlinePayload.extracted_text);
+  let stored: EditalPage[] = [];
+  let pdfTotalPages = Number(inlinePayload?.pdf_total_pages) || 0;
+  let truncatedPages = Boolean(inlinePayload?.truncated_pages);
   const result = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${storagePath}.text.json`, {
     headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY },
   }).catch(() => null);
-  if (!result || !result.ok) return null;
-  const payload = await result.json().catch(() => null);
-  return formatEditalPages(payload?.pages);
+  if (result?.ok) {
+    const payload = await result.json().catch(() => null);
+    stored = normalizePages(payload?.pages);
+    pdfTotalPages = Number(payload?.pdf_total_pages) || pdfTotalPages;
+    if (payload?.truncated_pages) truncatedPages = true;
+  }
+  // Usa a versão mais completa (o arquivo salvo no Storage ou o que o navegador enviou).
+  const best = totalChars(stored) >= totalChars(inline) ? stored : inline;
+  if (totalChars(best) < 120) return { pages: [], pdfTotalPages, truncatedPages };
+  return { pages: best, pdfTotalPages, truncatedPages };
 }
 
 async function reserveUsage(userId: string, campaignId: string, dailyLimit = 10) {
@@ -268,6 +521,7 @@ async function userGeminiKey(userId: string) {
 }
 
 Deno.serve(async (request) => {
+  const deadline = Date.now() + 115000; // Edge Functions encerram por volta de 150 s
   if (request.method === "OPTIONS") return new Response("ok", { headers: headers(request) });
   if (request.method !== "POST") return reply(request, { error: "Método não permitido." }, 405);
   const authorization = request.headers.get("authorization") ?? "";
@@ -313,7 +567,8 @@ Deno.serve(async (request) => {
       return reply(request, { error: "A proteção de consumo está temporariamente indisponível.", retryable: true }, 503);
     }
     const campaignName = String(payload?.campaign_name ?? campaigns[0]?.name ?? "").trim();
-    const extractedEditalText = await loadBrowserExtractedEditalText(storagePath, payload);
+    const editalLoad = await loadEditalPages(storagePath, payload);
+    const editalPages = editalLoad.pages;
     let bytes: Uint8Array | null = null;
     const ensurePdfBytes = async (): Promise<Uint8Array | Response> => {
       if (bytes) return bytes;
@@ -372,47 +627,113 @@ Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_of
     let parsed: any = null;
     let lastStatus = 502;
     let lastErrorMessage = "O Gemini não conseguiu analisar o edital.";
+    let providerUsed = "gemini";
+
+    // ── Análise por trechos: TODAS as páginas são lidas; nada é amostrado ou cortado ──
+    const allChunks = buildChunks(editalPages);
+    const { selected: selectedChunks, skipped: skippedChunks } = selectProgrammeChunks(allChunks);
+    const contextHead = editalPages.slice(0, 2).map((p) => p.text).join("\n").slice(0, 2500);
+    const chunkBasePrompt = promptText.replace("Analise exclusivamente o PDF anexado", "Analise exclusivamente o texto fornecido");
+    const makeChunkPrompt = (chunk: { pageStart: number; pageEnd: number; text: string }, position: number, total: number) => `${chunkBasePrompt}
+
+ANÁLISE POR TRECHOS:
+- Este é o trecho ${position + 1} de ${total} do edital, cobrindo as páginas ${chunk.pageStart} a ${chunk.pageEnd}. Os demais trechos são analisados separadamente.
+- Extraia SOMENTE os tópicos de conteúdo programático que aparecem neste trecho, sem omitir nenhum item e sem repetir tópicos de outras partes.
+- Se o trecho só tiver regras administrativas, devolva {"meta":{"document_kind":"edital_oficial","classification_reason":"Trecho sem conteúdo programático","detected_scope":"","confidence":0.5,"warnings":[]},"topics":[]}.
+- Se uma disciplina começar no trecho anterior ou continuar no seguinte, use o nome exato da disciplina como aparece e extraia apenas os itens presentes aqui.
+- Mantenha cada item completo e literal; não resuma listas nem junte vários itens em um só.
+
+INÍCIO DO EDITAL (apenas para identificar concurso e cargo):
+${contextHead}
+
+TEXTO DO TRECHO:
+${chunk.text}`;
+
+    const geminiChunkCaller = (key: string, models: string[]): ChunkCaller => async (prompt, timeoutMs) => {
+      const started = Date.now();
+      for (let mIdx = 0; mIdx < Math.min(2, models.length); mIdx++) {
+        for (const useSchema of [true, false]) {
+          const left = timeoutMs - (Date.now() - started);
+          if (left < 8000) return null;
+          selectedModel = models[mIdx];
+          const resp = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(models[mIdx])}:generateContent`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.1, maxOutputTokens: 32768, responseMimeType: "application/json", ...(useSchema ? { responseSchema } : {}) },
+            }),
+          }, left);
+          if (!resp) { lastStatus = 504; continue; }
+          if (!resp.ok) {
+            lastStatus = resp.status;
+            lastErrorMessage = `O Gemini não conseguiu analisar o edital (${resp.status}).`;
+            if (resp.status === 429 || resp.status === 503) await wait(2500);
+            continue;
+          }
+          try {
+            const data = await resp.json();
+            const result = parseGeminiJsonText(data);
+            if (result && Array.isArray(result.topics)) {
+              if (data?.candidates?.[0]?.finishReason === "MAX_TOKENS") result._partial = true;
+              return result;
+            }
+          } catch { /* tenta a próxima variação */ }
+        }
+      }
+      return null;
+    };
+
+    const buildChunkedParsed = (run: { results: Array<{ index: number; parsed: any }>; failed: number; notRun: number }) => {
+      if (!run.results.length) return null;
+      const merged = mergeChunkResults(run.results);
+      if (!merged.topics.length) return null;
+      const missing = run.failed + run.notRun;
+      const partialChunks = run.results.filter((r) => r.parsed?._partial).length;
+      const warnings = [...merged.meta.warnings];
+      if (editalLoad.truncatedPages) warnings.unshift(`O PDF tem ${editalLoad.pdfTotalPages || "mais"} páginas e só as primeiras ${editalPages.length} com texto foram lidas. O restante do edital não entrou no mapa.`);
+      if (partialChunks > 0) warnings.unshift(`${partialChunks} trecho(s) tiveram a resposta da IA cortada; alguns tópicos podem estar ausentes.`);
+      if (missing > 0) warnings.unshift(`Análise parcial: ${missing} de ${selectedChunks.length} trechos do edital não puderam ser lidos. Reprocesse o edital para completar o mapa.`);
+      if (merged.truncatedByLimit) warnings.push("O edital tem mais tópicos do que o limite de 4000 do mapa; os últimos foram ignorados.");
+      return {
+        meta: { ...merged.meta, warnings: warnings.slice(0, 10) },
+        topics: merged.topics,
+        _coverage: {
+          pdf_total_pages: editalLoad.pdfTotalPages || editalPages.length,
+          pages_with_text: editalPages.length,
+          chunks_total: allChunks.length,
+          chunks_selected: selectedChunks.length,
+          chunks_ok: run.results.length,
+          chunks_failed: run.failed,
+          chunks_not_run: run.notRun,
+          chunks_partial: partialChunks,
+          chunks_skipped: skippedChunks,
+          incomplete: missing > 0 || partialChunks > 0 || merged.truncatedByLimit || editalLoad.truncatedPages,
+        },
+      };
+    };
 
     keyLoop: for (const candidateKey of keysToTry) {
       geminiFileKey = candidateKey.key;
       usedKeySource = candidateKey.source;
       const models = await availableGeminiModels(candidateKey.key);
 
-      // 1ª Tentativa rápida: se o navegador já extraiu a camada de texto do edital, analisa direto via texto com timeout seguro
-      if (extractedEditalText) {
-        const textBody = {
-          contents: [{ parts: [{ text: `${promptText}\n\nTEXTO EXTRAÍDO DO EDITAL:\n${extractedEditalText}` }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 65536, responseMimeType: "application/json", responseSchema },
-        };
-        const textRelaxed = {
-          contents: textBody.contents,
-          generationConfig: { temperature: 0.1, maxOutputTokens: 65536, responseMimeType: "application/json" },
-        };
-        for (let mIdx = 0; mIdx < Math.min(2, models.length); mIdx++) {
-          const candidateModel = models[mIdx];
-          selectedModel = candidateModel;
-          for (const body of [textBody, textRelaxed]) {
-            const resp = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(candidateModel)}:generateContent`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "x-goog-api-key": candidateKey.key },
-              body: JSON.stringify(body),
-            }, 32000);
-            if (resp && resp.ok) {
-              try {
-                const candidateParsed = parseGeminiJsonText(await resp.json().catch(() => ({})));
-                if (candidateParsed && Array.isArray(candidateParsed.topics) && candidateParsed.topics.length >= 1) {
-                  parsed = candidateParsed;
-                  break keyLoop;
-                }
-              } catch { /* tenta próximo */ }
-            } else if (resp) {
-              lastStatus = resp.status;
-            }
-          }
+      // 1ª Tentativa: texto extraído no navegador, analisado em trechos (todas as páginas, sem amostragem)
+      if (selectedChunks.length) {
+        const run = await runChunked(selectedChunks, makeChunkPrompt, geminiChunkCaller(candidateKey.key, models), { concurrency: 3, deadline });
+        const attempt = buildChunkedParsed(run);
+        if (attempt) {
+          parsed = attempt;
+          break keyLoop;
         }
       }
 
       // 2ª Tentativa: leitura multimodal nativa do PDF no Gemini (baixa o PDF somente agora se necessário)
+      if (deadline - Date.now() < 45000) {
+        lastStatus = 504;
+        lastErrorMessage = "O tempo limite da análise foi atingido antes da leitura visual do PDF. Tente novamente.";
+        break;
+      }
       const loadedOrReply = await ensurePdfBytes();
       if (loadedOrReply instanceof Response) return loadedOrReply;
       const pdfBytes = loadedOrReply;
@@ -473,6 +794,11 @@ Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_of
             try {
               parsed = parseGeminiJsonText(geminiData);
               if (parsed && (Array.isArray(parsed.topics) || parsed.meta)) {
+                if (geminiData?.candidates?.[0]?.finishReason === "MAX_TOKENS" || parsed._partial) {
+                  parsed._coverage = { mode: "pdf_visual", incomplete: true };
+                  parsed.meta = parsed.meta || {};
+                  parsed.meta.warnings = [...(Array.isArray(parsed.meta.warnings) ? parsed.meta.warnings : []), "A resposta da IA foi cortada por tamanho; o mapa pode estar incompleto. Reprocesse ou envie o edital verticalizado."];
+                }
                 await removeGeminiFile(geminiFileName, candidateKey.key);
                 geminiFileName = undefined;
                 break keyLoop;
@@ -500,36 +826,41 @@ Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_of
       geminiFileName = undefined;
     }
 
-    if (!parsed && extractedEditalText) {
+    if (!parsed && selectedChunks.length && deadline - Date.now() > 20000) {
       const fallbackProviders = [
         { name: "deepseek", key: DEEPSEEK_API_KEY, url: "https://api.deepseek.com/chat/completions", model: Deno.env.get("DEEPSEEK_MODEL") || "deepseek-chat" },
         { name: "groq", key: GROQ_API_KEY, url: "https://api.groq.com/openai/v1/chat/completions", model: Deno.env.get("GROQ_MODEL") || "openai/gpt-oss-120b" },
       ].filter((p) => Boolean(p.key));
       for (const prov of fallbackProviders) {
-        const resp = await fetchWithTimeout(prov.url, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${prov.key}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: prov.model,
-            temperature: 0.1,
-            response_format: { type: "json_object" },
-            messages: [
-              { role: "system", content: 'Você é um analista de editais de concursos. Responda apenas com JSON válido no formato {"meta":{"document_kind":"edital_oficial","classification_reason":"Extraído do texto","detected_scope":"Edital","confidence":0.9,"warnings":[]},"topics":[{"subject":"...","unit":"","topic":"...","subject_order":0,"learning_order":0,"difficulty":"basic","prerequisite_topic":"","pedagogical_reason":""}]}.' },
-              { role: "user", content: `${promptText}\n\nTEXTO EXTRAÍDO DO EDITAL:\n${extractedEditalText.slice(0, 75000)}` },
-            ],
-          }),
-        }, 32000);
-        if (resp && resp.ok) {
+        const providerCaller: ChunkCaller = async (prompt, timeoutMs) => {
+          const resp = await fetchWithTimeout(prov.url, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${prov.key}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: prov.model,
+              temperature: 0.1,
+              response_format: { type: "json_object" },
+              messages: [
+                { role: "system", content: 'Você é um analista de editais de concursos. Responda apenas com JSON válido no formato {"meta":{"document_kind":"edital_oficial","classification_reason":"Extraído do texto","detected_scope":"Edital","confidence":0.9,"warnings":[]},"topics":[{"subject":"...","unit":"","topic":"...","subject_order":0,"learning_order":0,"difficulty":"basic","prerequisite_topic":"","pedagogical_reason":""}]}.' },
+                { role: "user", content: prompt },
+              ],
+            }),
+          }, timeoutMs);
+          if (!resp || !resp.ok) return null;
           try {
             const d = await resp.json().catch(() => ({}));
             const rawContent = String(d?.choices?.[0]?.message?.content ?? "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
             const candidate = JSON.parse(rawContent);
-            if (Array.isArray(candidate?.topics) && candidate.topics.length >= 1) {
-              parsed = candidate;
-              selectedModel = prov.model;
-              break;
-            }
-          } catch { /* tenta próximo */ }
+            return Array.isArray(candidate?.topics) ? candidate : null;
+          } catch { return null; }
+        };
+        const run = await runChunked(selectedChunks, makeChunkPrompt, providerCaller, { concurrency: 2, deadline });
+        const attempt = buildChunkedParsed(run);
+        if (attempt) {
+          parsed = attempt;
+          selectedModel = prov.model;
+          providerUsed = prov.name;
+          break;
         }
       }
     }
@@ -566,7 +897,7 @@ Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_of
       return reply(request, { error: `Este PDF não parece ser um edital oficial nem um edital verticalizado. ${meta.classification_reason} Exclua-o desta categoria e envie novamente como Material de estudo, Lei ou norma, Prova ou Simulado.`, code: "NOT_AN_EDITAL" }, 422);
     }
     if (meta.document_kind === "edital_verticalizado" && !meta.warnings.some((warning: string) => /verticalizado/i.test(warning))) meta.warnings.unshift("Edital verticalizado aceito como base do mapa. Confira os tópicos com o edital oficial quando ele estiver disponível.");
-    const topics = Array.isArray(parsed.topics) ? parsed.topics.slice(0, 1500) : [];
+    const topics = Array.isArray(parsed.topics) ? parsed.topics.slice(0, 4000) : [];
     const uniqueTopics: Array<{ subject: string; unit: string; topic: string; edital_order: number; subject_order: number; learning_order: number; difficulty: string; prerequisite_topic: string; pedagogical_reason: string }> = [];
     const seenTopics = new Set<string>();
     const normalizeKey = (value: unknown) => String(value ?? "")
@@ -578,10 +909,10 @@ Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_of
     const administrativeOnly = /^(inscri(c|ç)(a|ã)o|cronograma|remunera(c|ç)(a|ã)o|vagas?|isen(c|ç)(a|ã)o|taxa de inscri(c|ç)(a|ã)o|resultado|recursos?|exame m[eé]dico|teste de aptid(a|ã)o f[ií]sica|investiga(c|ç)(a|ã)o social|documentos?|matr[ií]cula|curso de forma(c|ç)(a|ã)o)$/i;
 
     for (const [originalIndex, item] of topics.entries()) {
-      const subject = String(item?.subject ?? "Edital").replace(/\s+/g, " ").trim() || "Edital";
+      const subject = String(item?.subject ?? "Edital").replace(/\s+/g, " ").trim().slice(0, 200) || "Edital";
       const unit = String(item?.unit ?? "").replace(/\s+/g, " ").trim();
-      const topic = String(item?.topic ?? "").replace(/\s+/g, " ").trim();
-      if (!topic || topic.length < 3 || topic.length > 600) continue;
+      const topic = String(item?.topic ?? "").replace(/\s+/g, " ").trim().slice(0, 700);
+      if (!topic || topic.length < 3) continue;
       if (normalizeSearch(subject) === normalizeSearch(topic)) continue;
       if (administrativeOnly.test(normalizeSearch(topic))) continue;
 
@@ -598,6 +929,24 @@ Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_of
     }
     if (meta.confidence < 0.65) meta.warnings.unshift("A IA indicou baixa confiança na identificação do cargo ou do conteúdo programático. Revise o mapa antes de iniciar as missões.");
 
+    const coverage = parsed?._coverage ?? null;
+    const topicsFilter = `campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}`;
+    const serviceHeaders = { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY };
+    let backupRows: any[] = [];
+    try {
+      const backup = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?${topicsFilter}&select=campaign_id,user_id,subject,unit_name,topic,edital_order,subject_order,learning_order,difficulty,prerequisite_topic,pedagogical_reason&limit=5000`, { headers: serviceHeaders });
+      if (backup.ok) backupRows = await backup.json().catch(() => []);
+    } catch { /* sem backup */ }
+    if (coverage?.incomplete && Array.isArray(backupRows) && backupRows.length > uniqueTopics.length) {
+      await finishUsage(usage.event_id, "error", "PARTIAL_RESULT", selectedModel);
+      await setDocumentStatus(documentId, user.id, "pending");
+      return reply(request, { error: `A análise leu só parte do edital (${uniqueTopics.length} tópicos contra ${backupRows.length} já salvos). O mapa atual foi mantido; tente novamente em instantes.`, retryable: true, code: "PARTIAL_RESULT", coverage, warnings: meta.warnings }, 503);
+    }
+    const restoreBackup = async () => {
+      if (Array.isArray(backupRows) && backupRows.length) {
+        await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics`, { method: "POST", headers: { ...serviceHeaders, "Content-Type": "application/json" }, body: JSON.stringify(backupRows) }).catch(() => undefined);
+      }
+    };
     const cleared = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "DELETE", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
     if (!cleared.ok) {
       console.error("campaign_topics delete", cleared.status, await cleared.text());
@@ -606,23 +955,34 @@ Retorne somente o JSON solicitado no formato {"meta":{"document_kind":"edital_of
       return reply(request, { error: "Não foi possível preparar o mapa anterior para a nova análise.", retryable: true }, 502);
     }
     const rows = uniqueTopics.map((item) => ({ campaign_id: campaignId, user_id: user.id, subject: item.subject, unit_name: item.unit, topic: item.topic, edital_order: item.edital_order, subject_order: item.subject_order, learning_order: item.learning_order, difficulty: item.difficulty, prerequisite_topic: item.prerequisite_topic || null, pedagogical_reason: item.pedagogical_reason || null }));
-    const inserted = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics`, { method: "POST", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify(rows) });
+    const inserted = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?on_conflict=campaign_id,subject,topic`, { method: "POST", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json", "Prefer": "return=representation,resolution=ignore-duplicates" }, body: JSON.stringify(rows) });
     if (!inserted.ok) {
       const detail = await inserted.text();
       console.error("campaign_topics insert", inserted.status, detail);
+      await restoreBackup();
       await finishUsage(usage.event_id, "error", "TOPICS_SAVE_FAILED", selectedModel);
       await setDocumentStatus(documentId, user.id, "pending");
       return reply(request, { error: `O edital foi analisado, mas os tópicos não puderam ser salvos (${inserted.status}).`, detail, retryable: true }, 502);
     }
     const savedTopics = await inserted.json();
     if (!Array.isArray(savedTopics) || savedTopics.length === 0) {
+      await restoreBackup();
       await finishUsage(usage.event_id, "error", "TOPICS_EMPTY", selectedModel);
       await setDocumentStatus(documentId, user.id, "pending");
       return reply(request, { error: "O edital foi analisado, mas nenhum tópico foi confirmado no banco.", retryable: true }, 502);
     }
+    const chunkPct = coverage?.chunks_selected ? Math.round((coverage.chunks_ok / coverage.chunks_selected) * 100) : 100;
+    const pagesPct = coverage?.pdf_total_pages && coverage?.pages_with_text ? Math.round((coverage.pages_with_text / coverage.pdf_total_pages) * 100) : 100;
+    await saveEditalCoverage(documentId, user.id, {
+      percent: Math.max(1, Math.min(100, chunkPct, pagesPct)),
+      topics: savedTopics.length,
+      pages: Number(coverage?.pdf_total_pages) || editalPages.length,
+      needsReview: Boolean(coverage?.incomplete) || meta.confidence < 0.65,
+      warnings: meta.warnings,
+    });
     await setDocumentStatus(documentId, user.id, "ready");
     await finishUsage(usage.event_id, "success", undefined, selectedModel);
-    return reply(request, { topics: uniqueTopics, saved: savedTopics.length, provider: "gemini", model: selectedModel, key_source: usedKeySource, meta });
+    return reply(request, { topics: uniqueTopics, saved: savedTopics.length, provider: providerUsed, model: selectedModel, key_source: usedKeySource, meta, coverage });
   } catch (error) {
     console.error("edital-gemini", error);
     await finishUsage(usage?.event_id, "error", "PROCESSING_FAILED", selectedModel);
