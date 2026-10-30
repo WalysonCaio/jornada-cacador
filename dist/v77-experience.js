@@ -36,6 +36,27 @@
       if(finishBtn){
         finishBtn.insertAdjacentHTML('afterend',`<div class="dailyExtraRow" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px"><button class="ghost" id="practiceDailySubjectBtn" type="button">◎ Questões de ${escText(mission.subject||'hoje')}</button><button class="ghost" id="startSprint5MinBtn" type="button">⚡ Sprint Rápido (5 min)</button></div>`);
         q('#practiceDailySubjectBtn').onclick=()=>{
+          const allQ=ALL_QUESTIONS||[];
+          const subjPool=allQ.filter(x=>topicKey(learningCategory(x.subject))===topicKey(mission.subject));
+          const topicMatches=subjPool.filter(x=>normalizeText(`${x.topic||''} ${x.statement||''}`).includes(normalizeText(mission.name||'').slice(0,18)));
+          const pool=topicMatches.length>=3?topicMatches:(subjPool.length?subjPool:allQ);
+          if(pool.length){
+            const targetCount=Math.min(20,pool.length);
+            const chosen=typeof balancedQuestions==='function'?balancedQuestions(pool,targetCount):pool.slice(0,targetCount);
+            activeQuestions={
+              mode:'battle',
+              subject:mission.subject||'Missão Diária',
+              missionId:mission.id,
+              questions:chosen.map(prepareQuestion),
+              current:0,
+              correct:0,
+              answered:false
+            };
+            q('#questionDialogTitle').textContent=`◎ Missão Diária: ${mission.name}`;
+            q('#questionDialog').showModal();
+            showQuestion();
+            return;
+          }
           openView('report');
           const subjSel=q('#questionSubject');
           if(subjSel){
@@ -4224,6 +4245,224 @@
     });
   }
 
+
+  // 17. Automação Inteligente das Etapas da Missão Diária (Teoria, Resumo/Flashcards, Questões e Revisão/Erros)
+  function ensureDailyTracker(){
+    const today=typeof localDayKey==='function'?localDayKey():new Date().toISOString().slice(0,10);
+    const curMissionId=state?.daily||null;
+    if(!state.dailyTracker||state.dailyTracker.date!==today||state.dailyTracker.missionId!==curMissionId){
+      state.dailyTracker={
+        date:today,
+        missionId:curMissionId,
+        theoryRead:false,
+        summaryCreated:false,
+        flashcardsAnswered:0,
+        questionsAnswered:0,
+        errorsReviewed:0
+      };
+    }
+    return state.dailyTracker;
+  }
+
+  function requiredQuestionsForStepLabel(label=''){
+    const m=String(label||'').match(/(\d+)\s*quest/i);
+    const wanted=m?Number(m[1]):20;
+    const avail=(ALL_QUESTIONS||[]).length;
+    if(avail>0&&avail<wanted)return Math.max(1,avail);
+    return wanted;
+  }
+
+  function requiredFlashcardsForStepLabel(label=''){
+    const m=String(label||'').match(/(\d+)\s*flashcard/i);
+    const wanted=m?Number(m[1]):5;
+    const avail=(ALL_FLASHCARDS||[]).length;
+    if(avail>0&&avail<wanted)return Math.max(1,avail);
+    return wanted;
+  }
+
+  function evaluateAndAutoCheckDailySteps(reason=''){
+    if(!state?.daily)return;
+    const tracker=ensureDailyTracker();
+    const steps=typeof dailyStepsFor==='function'?dailyStepsFor(state.settings?.dailyMinutes||180):[];
+    if(!steps.length)return;
+    state.dailySteps=state.dailySteps||{};
+    let newlyChecked=[];
+
+    steps.forEach((label,idx)=>{
+      if(state.dailySteps[idx])return;
+      const norm=normalizeText(label);
+      if(/teoria|revisar o resumo principal/.test(norm)){
+        if(tracker.theoryRead||Number(state.studyByDay?.[tracker.date]||0)>=600){
+          state.dailySteps[idx]=true;
+          newlyChecked.push(label);
+        }
+      }else if(/flashcard/.test(norm)){
+        const reqFc=requiredFlashcardsForStepLabel(label);
+        if(tracker.flashcardsAnswered>=reqFc){
+          state.dailySteps[idx]=true;
+          newlyChecked.push(label);
+        }
+      }else if(/criar um resumo/.test(norm)){
+        if(tracker.summaryCreated||tracker.flashcardsAnswered>=5){
+          state.dailySteps[idx]=true;
+          newlyChecked.push(label);
+        }
+      }else if(/questoes|questao/.test(norm)){
+        const reqQ=requiredQuestionsForStepLabel(label);
+        if(tracker.questionsAnswered>=reqQ){
+          state.dailySteps[idx]=true;
+          newlyChecked.push(label);
+        }
+      }else if(/corrigir.*erro|revisao final/.test(norm)){
+        if(tracker.errorsReviewed>=1){
+          state.dailySteps[idx]=true;
+          newlyChecked.push(label);
+        }
+      }
+    });
+
+    if(newlyChecked.length){
+      save();
+      if(typeof renderDaily==='function')renderDaily();
+      updateTodayCommand();
+      decorateDailyStepProgressLabels();
+      const allDone=steps.every((_,i)=>Boolean(state.dailySteps[i]));
+      if(allDone&&!state.done?.[state.daily]){
+        complete(state.daily);
+        toast('🏆 Todas as etapas da Missão Diária foram cumpridas! Missão concluída automaticamente (+100 XP)!');
+      }else{
+        toast(`✓ Etapa da missão marcada automaticamente: "${newlyChecked[0]}"!`);
+        if(cloudSession&&navigator.onLine&&typeof pushCloudState==='function')pushCloudState();
+      }
+    }else{
+      decorateDailyStepProgressLabels();
+    }
+  }
+
+  function decorateDailyStepProgressLabels(){
+    const box=q('#dailyMission');
+    if(!box||!state?.daily)return;
+    const tracker=ensureDailyTracker();
+    const steps=typeof dailyStepsFor==='function'?dailyStepsFor(state.settings?.dailyMinutes||180):[];
+    qa('#dailyMission [data-step]').forEach(chk=>{
+      const idx=Number(chk.dataset.step);
+      const baseLabel=steps[idx]||'';
+      const span=chk.parentElement?.querySelector('span');
+      if(!span||!baseLabel)return;
+      const norm=normalizeText(baseLabel);
+      let badge='';
+      if(/questoes|questao/.test(norm)){
+        const reqQ=requiredQuestionsForStepLabel(baseLabel);
+        const curQ=Math.min(reqQ,Number(tracker.questionsAnswered||0));
+        badge=` (${curQ}/${reqQ} respondidas hoje)`;
+      }else if(/flashcard/.test(norm)){
+        const reqFc=requiredFlashcardsForStepLabel(baseLabel);
+        const curFc=Math.min(reqFc,Number(tracker.flashcardsAnswered||0));
+        badge=` (${curFc}/${reqFc} hoje)`;
+      }else if(/corrigir.*erro|revisao final/.test(norm)){
+        badge=chk.checked?' (revisado hoje)':' (marca ao concluir bateria/revisão)';
+      }else if(/teoria|revisar o resumo/.test(norm)){
+        badge=chk.checked?' (estudado hoje)':' (marca ao ler resumo/PDF ou 10min foco)';
+      }else if(/criar um resumo/.test(norm)){
+        badge=chk.checked?' (resumo salvo)':' (marca ao salvar nota/bizu ou 5 flashcards)';
+      }
+      span.innerHTML=`${escText(baseLabel)} <small class="muted" style="font-weight:600;color:var(--cyan)">${escText(badge)}</small>`;
+    });
+  }
+
+  function hookAutomaticDailyStepTracking(){
+    // 1) Hook em recordQuestionResult: cada questão respondida conta para a meta diária de questões
+    const baseRecordQ=typeof recordQuestionResult==='function'?recordQuestionResult:null;
+    if(baseRecordQ&&!baseRecordQ._dailyHooked){
+      window.recordQuestionResult=recordQuestionResult=function(qItem,ok,chosen=null){
+        const res=baseRecordQ(qItem,ok,chosen);
+        const tracker=ensureDailyTracker();
+        tracker.questionsAnswered=(Number(tracker.questionsAnswered)||0)+1;
+        save();
+        evaluateAndAutoCheckDailySteps('question_answered');
+        return res;
+      };
+      recordQuestionResult._dailyHooked=true;
+    }
+
+    // 2) Hook em nextQuestion: ao concluir uma bateria de questões (vendo os gabaritos comentados),
+    //    se foi uma bateria da missão ou se atingiu a meta, marca a revisão/correção de erros (Etapa 4)
+    const baseNextQ=typeof nextQuestion==='function'?nextQuestion:null;
+    if(baseNextQ&&!baseNextQ._dailyHooked){
+      window.nextQuestion=nextQuestion=function(){
+        const finishing=activeQuestions&&activeQuestions.current>=activeQuestions.questions.length-1;
+        const wasMissionBattle=activeQuestions&&(activeQuestions.missionId===state?.daily||Number(activeQuestions.questions?.length||0)>=4);
+        const res=baseNextQ();
+        if(finishing){
+          const tracker=ensureDailyTracker();
+          tracker.errorsReviewed=(Number(tracker.errorsReviewed)||0)+1;
+          if(wasMissionBattle){
+            // Se concluiu a bateria completa da missão diária e o banco tinha menos de 20 questões, garante a etapa de questões também
+            const steps=typeof dailyStepsFor==='function'?dailyStepsFor(state.settings?.dailyMinutes||180):[];
+            const qStepIdx=steps.findIndex(s=>/questoes|questao/i.test(normalizeText(s)));
+            if(qStepIdx>=0&&!state.dailySteps?.[qStepIdx]&&tracker.questionsAnswered>=4){
+              state.dailySteps[qStepIdx]=true;
+            }
+          }
+          save();
+          evaluateAndAutoCheckDailySteps('battle_finished');
+          if(cloudSession&&navigator.onLine&&typeof pushCloudState==='function')pushCloudState();
+        }
+        return res;
+      };
+      nextQuestion._dailyHooked=true;
+    }
+
+    // 3) Hook em gradeCard (Flashcards): conta flashcards avaliados e marca etapa de flashcards/resumo ativo
+    const baseGradeCard=typeof gradeCard==='function'?gradeCard:null;
+    if(baseGradeCard&&!baseGradeCard._dailyHooked){
+      window.gradeCard=gradeCard=function(levelName){
+        const res=baseGradeCard(levelName);
+        const tracker=ensureDailyTracker();
+        tracker.flashcardsAnswered=(Number(tracker.flashcardsAnswered)||0)+1;
+        save();
+        evaluateAndAutoCheckDailySteps('flashcard_graded');
+        return res;
+      };
+      gradeCard._dailyHooked=true;
+    }
+
+    // 4) Hook em saveUserNote: ao salvar um resumo/anotação no caderno, marca "Criar um resumo detalhado"
+    const baseSaveNote=typeof saveUserNote==='function'?saveUserNote:null;
+    if(baseSaveNote&&!baseSaveNote._dailyHooked){
+      window.saveUserNote=saveUserNote=function(){
+        const res=baseSaveNote();
+        const tracker=ensureDailyTracker();
+        tracker.summaryCreated=true;
+        save();
+        evaluateAndAutoCheckDailySteps('note_saved');
+        return res;
+      };
+      saveUserNote._dailyHooked=true;
+    }
+
+    // 5) Hook ao abrir qualquer Resumo Teórico ([data-summary]) ou PDF da Biblioteca: marca "Estudar a teoria do tópico"
+    document.addEventListener('click',e=>{
+      const sumBtn=e.target?.closest?.('[data-summary],[data-open-doc],[data-view-community-doc],#smartGuide,#smartAsk');
+      if(sumBtn){
+        const tracker=ensureDailyTracker();
+        if(!tracker.theoryRead){
+          tracker.theoryRead=true;
+          save();
+          evaluateAndAutoCheckDailySteps('theory_opened');
+        }
+      }
+      const revBtn=e.target?.closest?.('[data-review],[data-error-review],[data-mastered-error],#savePersonalBizuBtn');
+      if(revBtn){
+        const tracker=ensureDailyTracker();
+        tracker.errorsReviewed=(Number(tracker.errorsReviewed)||0)+1;
+        if(revBtn.id==='savePersonalBizuBtn')tracker.summaryCreated=true;
+        save();
+        setTimeout(()=>evaluateAndAutoCheckDailySteps('error_reviewed'),60);
+      }
+    });
+  }
+
   const baseOpenView=openView;
   openView=function(id){baseOpenView(id);try{sessionStorage.setItem(viewKey,id)}catch{}if(id==='report'){populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()}if(id==='today'){updateTodayCommand();ensureTafAndRankingShortcuts()}if(id==='map'){renderReverseSchedule();decorateEditalIncidenceBadges()}if(id==='review')enhanceReviewCenter();if(id==='essay')enhanceTypedEssayOption();if(id==='taf')renderTafPanel();if(id==='library'){renderCommunityCoopBanner();syncCommunityLibraryForActivePortal()}if(id==='ranking'){renderHuntersLeaderboard();loadHuntersLeaderboard()}if(id==='duel'){renderDuelArena();loadDuelArenaHub()}};
   const baseTickClock=typeof tickClock==='function'?tickClock:null;
@@ -4235,11 +4474,11 @@
     };
   }
   const baseRender=render;
-  render=function(){syncHunterStatsSnapshot();baseRender();enhanceFlashcardsSpacedRepetition();enhanceEssayCenter();enhanceTypedEssayOption();enhanceReviewCenter();decorateEditalIncidenceBadges();renderCommunityCoopBanner();updateFlashcardSpacedStats();updateTodayCommand();ensureTafAndRankingShortcuts();renderReverseSchedule();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub();if(q('#taf')?.classList.contains('active'))renderTafPanel();if(q('#ranking')?.classList.contains('active'))renderHuntersLeaderboard()};
+  render=function(){syncHunterStatsSnapshot();baseRender();enhanceFlashcardsSpacedRepetition();enhanceEssayCenter();enhanceTypedEssayOption();enhanceReviewCenter();decorateEditalIncidenceBadges();renderCommunityCoopBanner();decorateDailyStepProgressLabels();updateFlashcardSpacedStats();updateTodayCommand();ensureTafAndRankingShortcuts();renderReverseSchedule();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub();if(q('#taf')?.classList.contains('active'))renderTafPanel();if(q('#ranking')?.classList.contains('active'))renderHuntersLeaderboard()};
   const baseRenderReport=renderReport;
   renderReport=function(){baseRenderReport();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()};
 
-  addTodayCommand();ensureReverseSchedulePanel();bindQuestionCenter();updateTodayCommand();renderReverseSchedule();
+  hookAutomaticDailyStepTracking();addTodayCommand();ensureReverseSchedulePanel();bindQuestionCenter();updateTodayCommand();decorateDailyStepProgressLabels();renderReverseSchedule();
   qa('[data-menu-view]').forEach(button=>button.onclick=()=>{q('#moreDialog')?.close();openView(button.dataset.menuView)});
   function realignStudyDisciplinesWithLibrary(){
     if(!Array.isArray(cloudDocuments)||!cloudDocuments.length||typeof window.resolveDocumentDiscipline!=='function')return;

@@ -282,3 +282,12 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   console.log("OK: Card de Patente (Classe do Caçador) e contagem de XP sempre visíveis na aba Hoje validados.");
 }
 
+// Teste 20: Automação das 4 etapas da Missão Diária (Teoria, Resumo/Flashcards, Questões e Revisão/Erros) e sincronia de missões
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  assert.ok(v77Src.includes("evaluateAndAutoCheckDailySteps") && v77Src.includes("hookAutomaticDailyStepTracking") && v77Src.includes("decorateDailyStepProgressLabels"), "Deve conter automação em tempo real das 4 etapas da missão diária");
+  assert.ok(htmlSrc.includes("syncCampaignTopicStatus") && htmlSrc.includes("merged.dailyTracker="), "Conclusão/desmarcação de missões deve sincronizar campaign_topics e mesclar dailySteps/dailyTracker entre dispositivos");
+  console.log("OK: Automação das caixas da Missão Diária e sincronia completa de missões validadas.");
+}
+
