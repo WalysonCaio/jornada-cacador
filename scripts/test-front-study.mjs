@@ -231,3 +231,25 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   console.log("OK: Edital exclusivo por usuário, lista estável sem piscar e padronização de títulos na Biblioteca validados.");
 }
 
+// Teste 16: Agrupamento da Central de Estudo (Resumos/Flashcards) pelas Disciplinas da Biblioteca (sem fragmentar subtópicos no seletor)
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const scriptSrc = htmlSrc.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const a = scriptSrc.indexOf("function normalizeText(");
+  const b = scriptSrc.indexOf("function missionForQuestion(");
+  const fnSlice = scriptSrc.slice(a, b);
+  const ctx = { cloudDocuments: [], window: {} };
+  vm.createContext(ctx);
+  vm.runInContext(fnSlice, ctx);
+
+  assert.equal(ctx.canonicalSubjectName("Aplicação Prática e Exceções", "MINI+SIMULADO-LEI Nº 9.455-1997-CRIMES DE TORTURA"), "Legislação Extravagante");
+  assert.equal(ctx.canonicalSubjectName("Assistência, Acompanhante, Obrigações Hospitalares e Adoção", "ECA-ESTATUTO DA CRIANÇA E DO ADOLESCENTE LEI Nº 8.069"), "Legislação Extravagante");
+  assert.equal(ctx.canonicalSubjectName("Atuação Institucional e Disposições Finais", "MARIA DA PENHA LEI Nº 11.340-2006"), "Legislação Extravagante");
+  assert.equal(ctx.canonicalSubjectName("Casamento dos Policiais Militares", "Estatuto PMPE"), "Direito Militar");
+  assert.equal(ctx.canonicalSubjectName("Direito Militar - Licenças, Afastamentos e Uniformes"), "Direito Militar");
+  assert.equal(ctx.canonicalSubjectName("Conceito e Abrangência da Lei 7.716/1989"), "Legislação Extravagante");
+  assert.equal(ctx.canonicalSubjectName("Crimes Hediondos – Conceitos e Tipificação"), "Legislação Extravagante");
+  assert.equal(ctx.canonicalSubjectName("Conceitos e Sujeitos do Crime de Abuso de Autoridade"), "Legislação Extravagante");
+  console.log("OK: Central de Estudo agrupada pelas Disciplinas da Biblioteca (e subpastas por Arquivo) validada.");
+}
+
