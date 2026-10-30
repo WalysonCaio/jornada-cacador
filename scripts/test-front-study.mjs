@@ -265,3 +265,12 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   console.log("OK: Responsividade mobile (Ranking e Revisão), quebras de linha nas questões e Arena de Duelos X1 validados.");
 }
 
+// Teste 18: Banner de Login Multiplataforma (Desktop Split-Screen + Mobile 16:9 sem cortes)
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const swSrc = readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
+  assert.ok(htmlSrc.includes('src="login-banner.jpg"') && htmlSrc.includes("loginHeroArt") && htmlSrc.includes("loginFormPane"), "Tela de login deve conter o banner oficial e layout responsivo multiplataforma");
+  assert.ok(swSrc.includes("./login-banner.jpg"), "Service Worker deve fazer cache offline de login-banner.jpg");
+  console.log("OK: Tela de Login Multiplataforma com banner oficial Solo Leveling validada.");
+}
+

@@ -261,6 +261,106 @@ mark.hlPenalty{background:rgba(89,230,255,.2);color:#9beeff;padding:1px 5px;bord
 .reviewCardActions button{flex:1 1 130px}
 
 /* Arena Duelo X1 (Estilo Perguntados) */
+
+/* V96 — Tela de Login Multiplataforma com Arte Oficial Solo Leveling / Tropa Operacional (PC Split-Screen + Mobile 16:9 Top Hero) */
+.loginGate{
+  background:
+    radial-gradient(circle at 50% 15%,rgba(14,34,58,.58) 0%,rgba(5,12,22,.92) 70%,#03070e 100%),
+    url('login-banner.jpg') center center / cover no-repeat!important;
+  padding:clamp(10px,2.5vw,24px)!important;
+}
+.loginShell{
+  padding:0!important;
+  overflow:hidden!important;
+  border:1px solid rgba(72,168,228,.42)!important;
+  background:linear-gradient(155deg,rgba(11,26,42,.96),rgba(6,14,24,.98))!important;
+  box-shadow:0 32px 95px rgba(0,0,0,.78),0 0 40px rgba(56,189,248,.14)!important;
+}
+.loginBannerFrame{
+  position:relative;
+  width:100%;
+  aspect-ratio:16/9;
+  background:#050c16;
+  overflow:hidden;
+}
+.loginBannerImg{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  object-position:center center;
+  display:block;
+}
+.loginFeaturePills{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+@media(min-width:860px){
+  .loginShell{
+    width:min(95vw,980px)!important;
+    display:grid!important;
+    grid-template-columns:1.18fr 0.92fr!important;
+    align-items:stretch!important;
+    border-radius:26px!important;
+  }
+  .loginHeroArt{
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+    background:linear-gradient(165deg,#09192b,#050e19);
+    border-right:1px solid #1e3b56;
+  }
+  .loginBannerFrame{
+    border-bottom:1px solid #1e3b56;
+  }
+  .loginHeroFeatures{
+    padding:18px 22px 22px;
+  }
+  .loginFormPane{
+    padding:26px 28px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+  }
+  .loginBrand{
+    text-align:left!important;
+    margin-bottom:16px!important;
+  }
+  .loginBrand h1{
+    font-size:1.65rem!important;
+    margin:4px 0 4px!important;
+  }
+}
+@media(max-width:859px){
+  .loginShell{
+    width:min(96vw,440px)!important;
+    display:flex!important;
+    flex-direction:column!important;
+    border-radius:22px!important;
+  }
+  .loginBannerFrame{
+    aspect-ratio:16/9;
+    border-bottom:1px solid #21425e;
+  }
+  .loginHeroFeatures{
+    display:none!important;
+  }
+  .loginFormPane{
+    padding:16px 18px 18px!important;
+  }
+  .loginBrand{
+    text-align:center!important;
+    margin-bottom:12px!important;
+  }
+  .loginBrand h1{
+    display:none!important;
+  }
+  .loginBrand p{
+    font-size:.82rem!important;
+    margin-top:2px!important;
+  }
+}
+
 .duelHero{border-color:#4f46e588;background:radial-gradient(circle at 92% 10%,rgba(168,85,247,.16),transparent 42%),linear-gradient(145deg,#131b36,#081221)}
 .duelWheelCats{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}
 .duelCatChip{padding:5px 11px;border-radius:999px;font-size:.75rem;font-weight:800;border:1px solid #334e68;background:#0a1929;color:#bae6fd}
@@ -387,7 +487,43 @@ mark.hlPenalty{background:rgba(89,230,255,.2);color:#9beeff;padding:1px 5px;bord
 </head>
 <body>
 <section class="loginGate" id="loginGate" aria-label="Acesso à Jornada do Caçador">
-  <div class="loginShell"><div class="loginBrand"><img src="icon.svg" onerror="this.onerror=null;this.src='data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22112%22 fill=%22%2307111f%22/%3E%3Cpath d=%22M256 70 416 135v112c0 103-66 162-160 198C162 409 96 350 96 247V135z%22 fill=%22%230d2b44%22 stroke=%22%2359e6ff%22 stroke-width=%2218%22/%3E%3Cpath d=%22m256 139 29 74 80 5-62 51 20 77-67-43-67 43 20-77-62-51 80-5z%22 fill=%22%2359e6ff%22/%3E%3C/svg%3E'" alt=""><div class="eyebrow">PLATAFORMA DE ESTUDOS</div><h1>Jornada do Caçador</h1><p class="muted">Seu progresso em uma única jornada.</p></div><div class="loginMode"><button class="active" id="gateLoginMode">Entrar</button><button id="gateSignupMode">Criar conta</button></div><form class="authForm" id="gateAuthForm"><label class="field" id="gateNameField" hidden>Seu nome<input id="gateName" type="text" autocomplete="name" maxlength="60" placeholder="Como deseja ser chamado"></label><label class="field">E-mail<input id="gateEmail" type="email" autocomplete="email" required placeholder="voce@email.com"></label><label class="field">Senha<span class="passwordWrap"><input id="gatePassword" type="password" autocomplete="current-password" minlength="6" required placeholder="Mínimo de 6 caracteres"><button class="passwordToggle" type="button" data-password-toggle="gatePassword" aria-label="Mostrar senha" title="Mostrar senha">◉</button></span></label><div class="authMessage" id="gateMessage"></div><button class="action" id="gateSubmit" type="submit">Entrar na jornada</button></form><div class="loginHelp"><button class="textButton" id="forgotPassword" type="button">Esqueci minha senha</button><span class="small muted">Progresso sincronizado</span></div><div class="loginDivider">ou</div><button class="ghost" id="guestAccess" style="width:100%">Continuar sem conta</button><p class="small muted" style="text-align:center;margin-bottom:0">No modo visitante, os dados ficam somente neste aparelho.</p></div>
+  <div class="loginShell">
+    <div class="loginHeroArt">
+      <div class="loginBannerFrame">
+        <img src="login-banner.jpg" alt="Jornada do Caçador — Rumo à Aprovação" class="loginBannerImg">
+      </div>
+      <div class="loginHeroFeatures">
+        <div class="eyebrow" style="color:var(--cyan)">SISTEMA TÁTICO DE ESTUDOS · SOLO LEVELING</div>
+        <h2 style="margin:4px 0 6px;font-size:1.22rem">Suba de Patente até a Aprovação</h2>
+        <p class="small muted" style="margin:0 0 10px;line-height:1.5">Transforme seu edital em missões diárias, domine questões, redação, TAF e dispute no Ranking e na Arena X1 com seus amigos.</p>
+        <div class="loginFeaturePills">
+          <span class="cmdPill">⚡ Edital Verticalizado IA</span>
+          <span class="cmdPill">⚔️ Arena Duelo X1</span>
+          <span class="cmdPill">🏆 Ranking & Ofensiva</span>
+          <span class="cmdPill">💪 Painel TAF & Redação</span>
+        </div>
+      </div>
+    </div>
+    <div class="loginFormPane">
+      <div class="loginBrand">
+        <div class="eyebrow">ACESSO AO SISTEMA</div>
+        <h1>Jornada do Caçador</h1>
+        <p class="muted">Entre na sua conta para sincronizar seu progresso no celular e no computador.</p>
+      </div>
+      <div class="loginMode"><button class="active" id="gateLoginMode" type="button">Entrar</button><button id="gateSignupMode" type="button">Criar conta</button></div>
+      <form class="authForm" id="gateAuthForm">
+        <label class="field" id="gateNameField" hidden>Seu nome<input id="gateName" type="text" autocomplete="name" maxlength="60" placeholder="Como deseja ser chamado"></label>
+        <label class="field">E-mail<input id="gateEmail" type="email" autocomplete="email" required placeholder="voce@email.com"></label>
+        <label class="field">Senha<span class="passwordWrap"><input id="gatePassword" type="password" autocomplete="current-password" minlength="6" required placeholder="Mínimo de 6 caracteres"><button class="passwordToggle" type="button" data-password-toggle="gatePassword" aria-label="Mostrar senha" title="Mostrar senha">◉</button></span></label>
+        <div class="authMessage" id="gateMessage"></div>
+        <button class="action" id="gateSubmit" type="submit">Entrar na jornada</button>
+      </form>
+      <div class="loginHelp"><button class="textButton" id="forgotPassword" type="button">Esqueci minha senha</button><span class="small muted">Progresso sincronizado</span></div>
+      <div class="loginDivider">ou</div>
+      <button class="ghost" id="guestAccess" type="button" style="width:100%">Continuar sem conta</button>
+      <p class="small muted" style="text-align:center;margin-bottom:0">No modo visitante, os dados ficam somente neste aparelho.</p>
+    </div>
+  </div>
 </section>
 <main class="app">
   <header class="top"><div class="brand"><img src="icon.svg" onerror="this.onerror=null;this.src='data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 rx=%22112%22 fill=%22%2307111f%22/%3E%3Cpath d=%22M256 70 416 135v112c0 103-66 162-160 198C162 409 96 350 96 247V135z%22 fill=%22%230d2b44%22 stroke=%22%2359e6ff%22 stroke-width=%2218%22/%3E%3Cpath d=%22m256 139 29 74 80 5-62 51 20 77-67-43-67 43 20-77-62-51 80-5z%22 fill=%22%2359e6ff%22/%3E%3C/svg%3E'" alt=""><div><div class="eyebrow">PLATAFORMA DE ESTUDOS</div><h1>Jornada do Caçador</h1><button class="textButton" id="campaignBtn">Portal PMPE ▾</button></div></div><div class="accountArea"><span class="syncDot" id="syncDot" title="Dados somente neste aparelho"></span><button class="ghost bellButton" id="notificationBtn" aria-label="Abrir notificações">♢<span class="notificationBadge" id="notificationBadge" hidden>0</span></button><button class="ghost" id="accountBtn">Entrar e sincronizar</button><button class="install" id="installBtn" hidden>Instalar</button></div></header>
@@ -429,7 +565,7 @@ mark.hlPenalty{background:rgba(89,230,255,.2);color:#9beeff;padding:1px 5px;bord
 
 <dialog id="scoreDialog"><h2>Registrar questões</h2><div class="field"><label for="scoreTopic">Tópico</label><select id="scoreTopic"></select></div><div class="formrow"><div class="field"><label for="scoreQuestions">Questões</label><input id="scoreQuestions" type="number" min="1" value="10"></div><div class="field"><label for="scoreCorrect">Acertos</label><input id="scoreCorrect" type="number" min="0" value="7"></div></div><div class="modalActions"><button class="ghost" id="cancelScore">Cancelar</button><button class="action" id="saveScore">Salvar resultado</button></div></dialog>
 <dialog id="readerDialog" class="reader"><div class="readerHead"><div><div class="eyebrow" id="readerDoc">MATERIAL</div><h2 id="readerTitle">Leitura</h2></div><button class="ghost" id="closeReader">Fechar</button></div><div class="readerTools"><div class="field"><label for="readerPage">Página atual</label><input id="readerPage" type="number" min="1"></div><label class="favorite"><input id="readerFavorite" type="checkbox"> Favoritar trecho</label></div><iframe id="pdfFrame" title="Leitor do material em PDF"></iframe><div class="materialProgress"><label class="small muted" for="readerNotes">Minhas anotações desta seção</label><textarea class="notes" id="readerNotes" placeholder="Escreva um resumo, dúvida ou artigo importante..."></textarea><button class="action" id="saveReading" style="margin-top:8px">Salvar leitura e anotações</button></div></dialog>
-<dialog id="accountDialog"><div id="signedOutPanel"><h2>Sincronizar seus estudos</h2><p class="muted">Use a mesma conta no computador, iPad e Android para manter progresso, flashcards e anotações juntos.</p><div class="authForm"><label class="field" id="authNameField" hidden>Seu nome<input id="authName" type="text" autocomplete="name" maxlength="60" placeholder="Como deseja ser chamado"></label><input id="authEmail" type="email" autocomplete="email" placeholder="Seu e-mail"><span class="passwordWrap"><input id="authPassword" type="password" autocomplete="current-password" minlength="6" placeholder="Sua senha"><button class="passwordToggle" type="button" data-password-toggle="authPassword" aria-label="Mostrar senha" title="Mostrar senha">◉</button></span><div class="authMessage" id="authMessage"></div><button class="action" id="loginBtn">Entrar</button><button class="ghost" id="signupBtn">Criar minha conta</button><button class="textButton" id="authForgotPassword" type="button" style="justify-self:center;padding:6px 0;color:var(--cyan)">Esqueci minha senha</button><button class="ghost" id="closeAccount">Cancelar</button></div></div><div id="signedInPanel" hidden><h2>Conta sincronizada</h2><div class="accountInfo"><b id="accountDisplayName"></b><div class="small muted" id="accountEmail"></div><div class="small muted" id="syncText">Sincronizando...</div></div><button class="ghost" id="editProfileName" style="width:100%">Alterar meu nome</button><div class="authForm" id="profileNameEditor" hidden style="margin-top:8px"><input id="profileName" type="text" autocomplete="name" maxlength="60" placeholder="Novo nome exibido"><div class="modalActions"><button class="ghost" id="cancelProfileName" type="button">Cancelar</button><button class="action" id="saveProfileName">Salvar nome</button></div></div><button class="action" id="syncNowBtn" style="margin-top:10px">Sincronizar agora</button><button class="ghost" id="changePasswordBtn" style="margin-top:8px;width:100%">Alterar minha senha</button><button class="ghost" id="logoutBtn" style="margin-top:8px;width:100%">Sair desta conta</button><button class="ghost danger" id="deleteAccountBtn" style="margin-top:8px;width:100%">Excluir minha conta</button><button class="ghost" id="closeAccountIn" style="margin-top:8px;width:100%">Fechar</button></div></dialog>
+<dialog id="accountDialog"><div id="signedOutPanel"><div class="loginBannerFrame" style="border-radius:14px;overflow:hidden;margin-bottom:12px;border:1px solid #2b4f6e"><img src="login-banner.jpg" alt="Jornada do Caçador" class="loginBannerImg"></div><h2 style="margin-top:0">Sincronizar seus estudos</h2><p class="muted">Use a mesma conta no computador, iPad e Android para manter progresso, flashcards e anotações juntos.</p><div class="authForm"><label class="field" id="authNameField" hidden>Seu nome<input id="authName" type="text" autocomplete="name" maxlength="60" placeholder="Como deseja ser chamado"></label><input id="authEmail" type="email" autocomplete="email" placeholder="Seu e-mail"><span class="passwordWrap"><input id="authPassword" type="password" autocomplete="current-password" minlength="6" placeholder="Sua senha"><button class="passwordToggle" type="button" data-password-toggle="authPassword" aria-label="Mostrar senha" title="Mostrar senha">◉</button></span><div class="authMessage" id="authMessage"></div><button class="action" id="loginBtn">Entrar</button><button class="ghost" id="signupBtn">Criar minha conta</button><button class="textButton" id="authForgotPassword" type="button" style="justify-self:center;padding:6px 0;color:var(--cyan)">Esqueci minha senha</button><button class="ghost" id="closeAccount">Cancelar</button></div></div><div id="signedInPanel" hidden><h2>Conta sincronizada</h2><div class="accountInfo"><b id="accountDisplayName"></b><div class="small muted" id="accountEmail"></div><div class="small muted" id="syncText">Sincronizando...</div></div><button class="ghost" id="editProfileName" style="width:100%">Alterar meu nome</button><div class="authForm" id="profileNameEditor" hidden style="margin-top:8px"><input id="profileName" type="text" autocomplete="name" maxlength="60" placeholder="Novo nome exibido"><div class="modalActions"><button class="ghost" id="cancelProfileName" type="button">Cancelar</button><button class="action" id="saveProfileName">Salvar nome</button></div></div><button class="action" id="syncNowBtn" style="margin-top:10px">Sincronizar agora</button><button class="ghost" id="changePasswordBtn" style="margin-top:8px;width:100%">Alterar minha senha</button><button class="ghost" id="logoutBtn" style="margin-top:8px;width:100%">Sair desta conta</button><button class="ghost danger" id="deleteAccountBtn" style="margin-top:8px;width:100%">Excluir minha conta</button><button class="ghost" id="closeAccountIn" style="margin-top:8px;width:100%">Fechar</button></div></dialog>
 <dialog id="changePasswordDialog"><div class="eyebrow">SEGURANÇA DA CONTA</div><h2 style="margin-top:5px">Alterar minha senha</h2><p class="muted">Confirme a senha atual e escolha uma nova senha com pelo menos 8 caracteres.</p><form class="authForm" id="changePasswordForm"><label class="field">Senha atual<span class="passwordWrap"><input id="currentAccountPassword" type="password" autocomplete="current-password" minlength="6" required><button class="passwordToggle" type="button" data-password-toggle="currentAccountPassword" aria-label="Mostrar senha" title="Mostrar senha">◉</button></span></label><label class="field">Nova senha<span class="passwordWrap"><input id="newAccountPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Mínimo de 8 caracteres"><button class="passwordToggle" type="button" data-password-toggle="newAccountPassword" aria-label="Mostrar senha" title="Mostrar senha">◉</button></span></label><label class="field">Confirme a nova senha<span class="passwordWrap"><input id="confirmAccountPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Digite novamente"><button class="passwordToggle" type="button" data-password-toggle="confirmAccountPassword" aria-label="Mostrar senha" title="Mostrar senha">◉</button></span></label><div class="authMessage" id="changePasswordMessage"></div><div class="modalActions"><button class="ghost" id="cancelChangePassword" type="button">Cancelar</button><button class="action" type="submit">Salvar nova senha</button></div></form></dialog>
 <dialog id="passwordConfirmDialog"><div class="eyebrow">CONFIRMAÇÃO DE SEGURANÇA</div><h2 id="passwordConfirmTitle" style="margin-top:5px">Confirmar ação</h2><p class="muted" id="passwordConfirmText"></p><label class="field">Digite sua senha<span class="passwordWrap"><input id="confirmPassword" type="password" autocomplete="current-password" minlength="6" placeholder="Sua senha atual"><button class="passwordToggle" type="button" data-password-toggle="confirmPassword" aria-label="Mostrar senha" title="Mostrar senha">◉</button></span></label><div class="authMessage" id="passwordConfirmMessage"></div><div class="modalActions"><button class="ghost" id="cancelPasswordConfirm">Cancelar</button><button class="action danger" id="confirmPasswordAction">Confirmar</button></div></dialog>
 <dialog id="resetPasswordDialog"><div class="eyebrow">RECUPERAÇÃO DE CONTA</div><h2 style="margin-top:5px">Crie uma nova senha</h2><p class="muted">Escolha uma senha com pelo menos 8 caracteres. Ela será usada em todos os seus aparelhos.</p><form class="authForm" id="resetPasswordForm"><label class="field">Nova senha<span class="passwordWrap"><input id="newPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Mínimo de 8 caracteres"><button class="passwordToggle" type="button" data-password-toggle="newPassword" aria-label="Mostrar senha" title="Mostrar senha">◉</button></span></label><label class="field">Confirme a nova senha<span class="passwordWrap"><input id="confirmNewPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Digite novamente"><button class="passwordToggle" type="button" data-password-toggle="confirmNewPassword" aria-label="Mostrar senha" title="Mostrar senha">◉</button></span></label><div class="authMessage" id="resetPasswordMessage"></div><button class="action" type="submit">Salvar nova senha</button></form></dialog>
