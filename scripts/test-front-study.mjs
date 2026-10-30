@@ -253,3 +253,15 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   console.log("OK: Central de Estudo agrupada pelas Disciplinas da Biblioteca (e subpastas por Arquivo) validada.");
 }
 
+// Teste 17: Responsividade mobile da Classificação Geral (.rankRowRight) e Sala de Revisão (.reviewCardItem) + Arena de Duelos X1 (Estilo Perguntados)
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const sqlSrc = readFileSync(new URL("../supabase/migrations/20261030_v95_duel_arena_x1.sql", import.meta.url), "utf8");
+  assert.ok(htmlSrc.includes('id="duel"') && htmlSrc.includes('data-menu-view="duel"'), "View #duel e botão do Menu Duelo X1 devem existir");
+  assert.ok(htmlSrc.includes("formatQuestionStatementText") && htmlSrc.includes("reviewCardItem"), "Sala de revisão e enunciados de questões devem ter quebras de linha e layout empilhado mobile");
+  assert.ok(v77Src.includes("rankRowRight") && v77Src.includes("computeArenaStatsAndRivalries") && v77Src.includes("consecutiveWins"), "Ranking deve usar rankRowRight e Arena X1 deve calcular vitórias consecutivas (dominação)");
+  assert.ok(sqlSrc.includes("create table if not exists public.hunter_duels") && sqlSrc.includes("submit_hunter_duel_round"), "SQL v95 deve criar tabela hunter_duels e RPCs de duelo X1");
+  console.log("OK: Responsividade mobile (Ranking e Revisão), quebras de linha nas questões e Arena de Duelos X1 validados.");
+}
+

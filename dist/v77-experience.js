@@ -2742,9 +2742,10 @@
           <p class="small muted" style="margin:3px 0 0">Acompanhe a ofensiva diária, perfil de concurso (primário e secundário) e desempenho nos estudos.</p>
         </div>
         <div class="rankHeaderActions">
+          <button type="button" class="action small" id="openDuelArenaFromRankBtn" style="background:linear-gradient(90deg,#7c3aed,#2563eb)">⚔️ Arena Duelo X1</button>
           <button type="button" class="ghost small" id="shareAppRankingBtn">📲 Convidar Amigos</button>
           <button type="button" class="ghost small" id="dedupRankingBtn" title="Verifica e remove perfis duplicados sem progresso no banco">🧹 Limpar Duplicados</button>
-          <button type="button" class="action small" id="refreshRankingBtn">${leaderboardBusy?'⏳ Atualizando...':'↻ Atualizar Ranking'}</button>
+          <button type="button" class="ghost small" id="refreshRankingBtn">${leaderboardBusy?'⏳ Atualizando...':'↻ Atualizar'}</button>
         </div>
       </div>
 
@@ -2825,9 +2826,9 @@
             return `
               <div class="rankRow ${item.is_me?'isMe':''}">
                 <div class="rankPos">#${idx+1}</div>
-                <div style="display:flex;align-items:center;gap:10px;min-width:0">
+                <div class="rankRowMain" style="display:flex;align-items:center;gap:10px;min-width:0">
                   <span class="rankAvatar">${escText((item.name||'C').trim().slice(0,1).toUpperCase())}</span>
-                  <div style="min-width:0">
+                  <div style="min-width:0;flex:1">
                     <div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
                       ${escText(item.name)}${item.is_me?' <span class="tag" style="padding:2px 6px;font-size:.68rem">Você</span>':''}
                       ${studiedToday?' <span style="color:#4ade80;font-size:.75rem;font-weight:700">● Estudou hoje</span>':''}
@@ -2837,12 +2838,14 @@
                   </div>
                 </div>
                 <div class="rankRowMetrics small muted">
-                  <span>🎯 <b>${Number(item.accuracy||0)}%</b> acertos</span> ·
+                  <span>🎯 <b>${Number(item.accuracy||0)}%</b> acertos</span>
                   <span>✓ <b>${Number(item.missions_done||0)}</b> missões</span>
+                  <span>Rec: <b>${Number(item.best_streak||0)}d</b></span>
+                  ${!item.is_me?`<button type="button" class="ghost small" style="padding:4px 9px;min-height:28px;font-size:.73rem" data-challenge-from-rank="${escText(item.user_id)}|${escText(item.name)}">⚔️ Desafiar X1</button>`:''}
                 </div>
-                <div style="text-align:right">
-                  <div style="font-weight:900;color:var(--gold);font-size:1rem">🔥 ${Number(item.streak||0)}d</div>
-                  <div class="small muted">${Number(item.xp||0)} XP (Rec: ${Number(item.best_streak||0)}d)</div>
+                <div class="rankRowRight" style="text-align:right">
+                  <div style="font-weight:900;color:var(--gold);font-size:1.02rem">🔥 ${Number(item.streak||0)}d</div>
+                  <div class="small muted">${Number(item.xp||0)} XP</div>
                 </div>
               </div>
             `;
@@ -2852,6 +2855,15 @@
     `;
 
     q('#refreshRankingBtn').onclick=()=>loadHuntersLeaderboard(true);
+    if(q('#openDuelArenaFromRankBtn'))q('#openDuelArenaFromRankBtn').onclick=()=>openView('duel');
+    qa('[data-challenge-from-rank]').forEach(btn=>{
+      btn.onclick=()=>{
+        const [uid,uname]=btn.dataset.challengeFromRank.split('|');
+        selectedDuelOpponentId=uid;
+        selectedDuelOpponentName=uname;
+        openView('duel');
+      };
+    });
     if(q('#dedupRankingBtn'))q('#dedupRankingBtn').onclick=async()=>{
       try{
         const res=await cloudFetch('rpc/cleanup_duplicate_hunter_profiles',{method:'POST',body:JSON.stringify({})});
@@ -3450,25 +3462,22 @@
       exportVesperaRaioX(q('#vesperaSubjectSelect')?.value||'all');
     };
 
-    // Enriquecer cada item do #reviewList com botão de Resumo Rápido e Treinar 3 Questões
+    // Enriquecer cada item do #reviewList dentro de .reviewCardActions mantendo layout empilhado 100% responsivo no mobile
     qa('#reviewList .topic').forEach(itemEl=>{
       if(itemEl.querySelector('[data-rev-quick-quiz]'))return;
       const titleText=itemEl.querySelector('b')?.textContent?.trim()||'';
       const metaText=itemEl.querySelector('.small.muted')?.textContent||'';
       const subjGuess=subjects.find(s=>metaText.includes(s))||'';
-      const btnWrap=document.createElement('div');
-      btnWrap.style.cssText='display:flex;gap:6px;flex-wrap:wrap;align-items:center';
-      const existingBtn=itemEl.querySelector('button');
+      const actionsBar=itemEl.querySelector('.reviewCardActions')||itemEl;
+      const existingBtn=actionsBar.querySelector('button');
       if(!existingBtn)return;
-      existingBtn.parentNode.insertBefore(btnWrap,existingBtn);
-      btnWrap.appendChild(existingBtn);
       const quizBtn=document.createElement('button');
       quizBtn.type='button';
       quizBtn.className='ghost small';
       quizBtn.dataset.revQuickQuiz='1';
       quizBtn.textContent='🎯 Testar questões';
       quizBtn.onclick=()=>startActiveReviewSession(subjGuess);
-      btnWrap.insertBefore(quizBtn,existingBtn);
+      actionsBar.insertBefore(quizBtn,existingBtn);
 
       const relatedSum=(ALL_SUMMARIES||[]).find(s=>
         (subjGuess&&topicKey(s.category)===topicKey(subjGuess)&&normalizeText(s.title).includes(normalizeText(titleText).slice(0,16)))||
@@ -3486,10 +3495,9 @@
           preview.className='lessonBox bizu revInlineSummary';
           preview.style.cssText='width:100%;margin-top:8px';
           preview.innerHTML=`<b>${escText(relatedSum.title)}</b><p style="margin:4px 0">${escText(relatedSum.explanation||'')}</p>${relatedSum.bizu?`<div class="small"><b>⚡ Bizu:</b> ${escText(relatedSum.bizu)}</div>`:''}`;
-          itemEl.style.flexWrap='wrap';
           itemEl.appendChild(preview);
         };
-        btnWrap.insertBefore(sumBtn,quizBtn);
+        actionsBar.insertBefore(sumBtn,quizBtn);
       }
     });
   }
@@ -3583,8 +3591,638 @@
     };
   }
 
+
+  // 16. Arena de Duelos X1 (Estilo Perguntados — Cross-Platform PC ↔ Celular, Sem afetar o XP de estudo)
+  let duelHubData={players:[],my_duels:[],completed_duels:[]},duelHubBusy=false,duelSqlMissing=false;
+  let selectedDuelOpponentId='',selectedDuelOpponentName='',activeDuelSession=null,duelRoundTimer=null,duelPollTimer=null;
+
+  const FALLBACK_DUEL_QUESTIONS=[
+    {subject:'Direito Constitucional',topic:'Art. 5º — Direitos e Garantias Fundamentais',difficulty:'medio',statement:'Segundo o art. 5º, XI, da Constituição Federal, a casa é asilo inviolável do indivíduo, ninguém nela podendo penetrar sem consentimento do morador, SALVO:',options:['Apenas por determinação judicial, a qualquer hora do dia ou da noite.','Em caso de flagrante delito ou desastre, ou para prestar socorro, ou, durante o dia, por determinação judicial.','Durante a noite, mediante mandado policial expedido pelo Delegado de Polícia.','A qualquer hora, para cumprimento de intimação administrativa urgente.'],correct_index:1,explanation:'Pelo art. 5º, XI, da CF/88: flagrante delito, desastre ou prestar socorro podem ocorrer a qualquer hora (dia ou noite); já por determinação judicial, SOMENTE durante o dia.'},
+    {subject:'Direito Constitucional',topic:'Art. 144 — Segurança Pública',difficulty:'facil',statement:'De acordo com o art. 144, § 5º, da Constituição Federal, cabem à Polícia Militar:',options:['A apuração de infrações penais comuns e o exercício da polícia judiciária da União.','A polícia ostensiva e a preservação da ordem pública.','O patrulhamento ostensivo das rodovias e ferrovias federais.','A execução exclusiva das atividades de defesa civil em âmbito federal.'],correct_index:1,explanation:'Art. 144, § 5º, CF/88: Às polícias militares cabem a polícia ostensiva e a preservação da ordem pública.'},
+    {subject:'Legislação Extravagante',topic:'Lei nº 9.455/1997 — Crimes de Tortura',difficulty:'dificil',statement:'Acerca da Lei nº 9.455/1997 (Crimes de Tortura), assinale a alternativa CORRETA:',options:['O crime de tortura é afiançável e suscetível de graça ou anistia se praticado por particular.','Aquele que se omite em face dessas condutas, quando tinha o dever de evitá-las ou apurá-las, incorre na pena de detenção de 1 a 4 anos.','O crime de tortura só pode ser praticado por funcionário público no exercício da função (crime próprio em todas as modalidades).','A condenação acarreta a perda do cargo apenas se o agente for reincidente específico.'],correct_index:1,explanation:'Na tortura omissiva (art. 1º, § 2º, da Lei 9.455/97), a pena é de DETENÇÃO de 1 a 4 anos (diferente das formas comissivas, punidas com reclusão).'},
+    {subject:'Língua Portuguesa',topic:'Sintaxe e Conjunções Subordinativas',difficulty:'medio',statement:'No período "Embora o suspeito tenha fugido, a guarnição conseguiu recuperar o veículo minutos depois", a conjunção destacada estabelece relação semântica de:',options:['Causa.','Condição.','Concessão.','Proporção.'],correct_index:2,explanation:'"Embora" é a conjunção subordinativa adverbial concessiva clássica, introduzindo um fato contrário que não impede a realização da oração principal.'},
+    {subject:'Direito Penal',topic:'Excludentes de Ilicitude (Art. 23 do CP)',difficulty:'facil',statement:'NÃO constitui causa de exclusão da ilicitude (antijuridicidade) prevista no art. 23 do Código Penal:',options:['Estado de necessidade.','Legítima defesa.','Arrependimento posterior.','Estrito cumprimento de dever legal.'],correct_index:2,explanation:'As excludentes de ilicitude do art. 23 são: Estado de Necessidade, Legítima Defesa, Estrito Cumprimento de Dever Legal e Exercício Regular de Direito (Bizu: BRUCE LEE). O arrependimento posterior (art. 16) é causa de diminuição de pena.'},
+    {subject:'Legislação Extravagante',topic:'Lei Maria da Penha (Lei nº 11.340/2006)',difficulty:'dificil',statement:'Sobre as medidas protetivas de urgência na Lei nº 11.340/2006 e o entendimento dos Tribunais Superiores, é CORRETO afirmar:',options:['O crime de descumprimento de medida protetiva (art. 24-A) deixa de existir se a medida tiver sido deferida por juízo cível.','A concessão de medida protetiva de urgência independe do registro de boletim de ocorrência ou do ajuizamento de ação penal ou cível.','Nos crimes de lesão corporal praticados com violência doméstica contra a mulher, a ação penal é pública condicionada à representação.','É permitida a aplicação de penas de cesta básica nos casos de violência doméstica de menor potencial ofensivo.'],correct_index:1,explanation:'As medidas protetivas têm natureza autônoma de tutela de urgência; além disso, pela Súmula 542 do STJ, a lesão corporal em violência doméstica é de ação penal pública INCONDICIONADA, e o art. 17 veda cesta básica.'},
+    {subject:'Direito Processual Penal',topic:'Inquérito Policial',difficulty:'medio',statement:'Assinale a característica CORRETA do Inquérito Policial no direito brasileiro:',options:['É procedimento escrito, inquisitivo, sigiloso e dispensável para o oferecimento da denúncia quando já houver justa causa.','É procedimento contraditório obrigatório, sob pena de nulidade absoluta da ação penal subsequente.','A autoridade policial pode mandar arquivar os autos do inquérito policial sempre que verificar atipicidade.','O ofendido não pode requerer diligências durante o curso do inquérito policial.'],correct_index:0,explanation:'O IP é escrito, sigiloso, inquisitivo e dispensável (se o MP já dispuser de elementos de informação suficientes). Pelo art. 17 do CPP, a autoridade policial NUNCA pode mandar arquivar autos de inquérito.'}
+  ];
+
+  function buildDuelQuestionPack(subjectFilter='all',mode='misto',count=5){
+    let pool=(ALL_QUESTIONS||[]).filter(qItem=>Array.isArray(qItem.options)&&qItem.options.length===4&&Number.isInteger(qItem.correct_index));
+    if(subjectFilter&&subjectFilter!=='all'){
+      const bySubj=pool.filter(qItem=>topicKey(qItem.subject)===topicKey(subjectFilter));
+      if(bySubj.length>=3)pool=bySubj;
+    }
+    if(mode==='dificil'){
+      const hard=pool.filter(qItem=>normalizeText(qItem.difficulty||'').startsWith('dif'));
+      if(hard.length>=3)pool=hard;
+    }else if(mode==='fixacao'){
+      const easyMed=pool.filter(qItem=>!normalizeText(qItem.difficulty||'').startsWith('dif'));
+      if(easyMed.length>=3)pool=easyMed;
+    }
+    if(pool.length<count){
+      pool=[...pool,...FALLBACK_DUEL_QUESTIONS];
+    }
+    const shuffled=pool.slice().sort(()=>Math.random()-0.5);
+    const picked=[];
+    const usedStatements=new Set();
+    for(const item of shuffled){
+      const key=topicKey(item.statement).slice(0,70);
+      if(usedStatements.has(key))continue;
+      usedStatements.add(key);
+      picked.push({
+        subject:canonicalSubjectName(item.subject||'Geral'),
+        topic:item.topic||item.subject||'Desafio X1',
+        difficulty:item.difficulty||'medio',
+        statement:typeof window.formatQuestionStatementText==='function'?window.formatQuestionStatementText(item.statement):item.statement,
+        options:item.options.slice(0,4),
+        correct_index:Number(item.correct_index)||0,
+        explanation:item.explanation||'Confira o fundamento teórico na Central de Estudo.'
+      });
+      if(picked.length>=count)break;
+    }
+    return picked;
+  }
+
+  function computeArenaStatsAndRivalries(){
+    const myId=cloudSession?.user?.id||'local';
+    const players=Array.isArray(duelHubData.players)?duelHubData.players:[];
+    const completed=(Array.isArray(duelHubData.completed_duels)?duelHubData.completed_duels:[]).slice().sort((a,b)=>new Date(a.completed_at||a.created_at).getTime()-new Date(b.completed_at||b.created_at).getTime());
+
+    const statsByUser=new Map();
+    for(const p of players){
+      statsByUser.set(p.user_id,{
+        user_id:p.user_id,
+        name:p.name,
+        role:p.role,
+        is_me:p.is_me||p.user_id===myId,
+        is_online:p.is_online,
+        wins:0,
+        losses:0,
+        draws:0,
+        streak:0,
+        best_streak:0,
+        total_correct:0
+      });
+    }
+
+    // Confronto direto (Head-to-Head) e sequência consecutiva contra cada rival ("Freguesia / Dominação")
+    const pairHistory=new Map();
+
+    for(const d of completed){
+      const cId=d.challenger_id,oId=d.opponent_id;
+      if(!statsByUser.has(cId))statsByUser.set(cId,{user_id:cId,name:d.challenger_name||'Caçador',role:'PMPE',is_me:cId===myId,wins:0,losses:0,draws:0,streak:0,best_streak:0,total_correct:0});
+      if(!statsByUser.has(oId))statsByUser.set(oId,{user_id:oId,name:d.opponent_name||'Caçador',role:'PMPE',is_me:oId===myId,wins:0,losses:0,draws:0,streak:0,best_streak:0,total_correct:0});
+      const cStat=statsByUser.get(cId),oStat=statsByUser.get(oId);
+      cStat.total_correct+=Number(d.challenger_score||0);
+      oStat.total_correct+=Number(d.opponent_score||0);
+
+      if(d.is_draw||!d.winner_id){
+        cStat.draws++;oStat.draws++;
+        cStat.streak=0;oStat.streak=0;
+      }else if(d.winner_id===cId){
+        cStat.wins++;oStat.losses++;
+        cStat.streak++;cStat.best_streak=Math.max(cStat.best_streak,cStat.streak);
+        oStat.streak=0;
+      }else if(d.winner_id===oId){
+        oStat.wins++;cStat.losses++;
+        oStat.streak++;oStat.best_streak=Math.max(oStat.best_streak,oStat.streak);
+        cStat.streak=0;
+      }
+
+      const pairKey=[cId,oId].sort().join('|');
+      const rec=pairHistory.get(pairKey)||{u1:cId,u1Name:cStat.name,u2:oId,u2Name:oStat.name,wins:{[cId]:0,[oId]:0},draws:0,lastWinner:null,consecutiveWins:0};
+      rec.u1Name=statsByUser.get(rec.u1)?.name||rec.u1Name;
+      rec.u2Name=statsByUser.get(rec.u2)?.name||rec.u2Name;
+      if(d.is_draw||!d.winner_id){
+        rec.draws++;
+        rec.lastWinner=null;
+        rec.consecutiveWins=0;
+      }else{
+        rec.wins[d.winner_id]=(rec.wins[d.winner_id]||0)+1;
+        if(rec.lastWinner===d.winner_id){
+          rec.consecutiveWins++;
+        }else{
+          rec.lastWinner=d.winner_id;
+          rec.consecutiveWins=1;
+        }
+      }
+      pairHistory.set(pairKey,rec);
+    }
+
+    const ranking=[...statsByUser.values()].sort((a,b)=>(b.wins-a.wins)||(b.streak-a.streak)||(a.losses-b.losses)||(b.total_correct-a.total_correct));
+    const dominations=[...pairHistory.values()].filter(r=>r.lastWinner&&r.consecutiveWins>=1).sort((a,b)=>b.consecutiveWins-a.consecutiveWins);
+    return {ranking,dominations,pairHistory};
+  }
+
+  async function loadDuelArenaHub(silent=false){
+    if(duelHubBusy)return;
+    duelHubBusy=true;
+    if(!silent)renderDuelArena();
+    try{
+      if(!cloudSession){
+        duelHubData={players:[localHunterRow()],my_duels:[],completed_duels:[]};
+        return;
+      }
+      const res=await cloudFetch('rpc/get_duel_arena_hub',{method:'POST',body:JSON.stringify({})});
+      const data=await res.json().catch(()=>null);
+      if(res.ok&&data){
+        duelSqlMissing=false;
+        duelHubData={
+          players:Array.isArray(data.players)?data.players:[],
+          my_duels:Array.isArray(data.my_duels)?data.my_duels:[],
+          completed_duels:Array.isArray(data.completed_duels)?data.completed_duels:[]
+        };
+      }
+    }catch(err){
+      const msg=String(err?.message||err||'');
+      if(/get_duel_arena_hub|Could not find the function|PGRST202/i.test(msg)){
+        duelSqlMissing=true;
+      }
+    }finally{
+      duelHubBusy=false;
+      if(!activeDuelSession)renderDuelArena();
+    }
+  }
+
+  async function launchDuelChallenge(useAiGeneration=false){
+    const oppSelect=q('#duelOpponentSelect'),subjSelect=q('#duelSubjectSelect'),modeSelect=q('#duelModeSelect'),countSelect=q('#duelCountSelect');
+    const oppId=oppSelect?.value||selectedDuelOpponentId;
+    if(!oppId)return toast('Escolha um caçador oponente para desafiar no X1!');
+    const subj=subjSelect?.value||'all';
+    const mode=modeSelect?.value||'misto';
+    const count=Math.min(10,Math.max(3,Number(countSelect?.value)||5));
+    const oppPlayer=(duelHubData.players||[]).find(p=>String(p.user_id)===String(oppId));
+    const oppName=oppPlayer?.name||selectedDuelOpponentName||'Oponente';
+
+    let questions=[];
+    if(useAiGeneration&&cloudSession){
+      const aiBtn=q('#createDuelAiBtn');
+      if(aiBtn){aiBtn.disabled=true;aiBtn.textContent='⏳ IA criando questões do duelo...'}
+      try{
+        const session=await validSession();
+        const campaignName=(typeof activeCampaign==='function'?activeCampaign()?.name:'Concurso Policial')||'Concurso Policial';
+        const subjText=subj==='all'?'Direito Constitucional, Direito Penal, Legislação Extravagante, Língua Portuguesa e Direito Militar':subj;
+        const diffLabel=mode==='dificil'?'difíceis com pegadinhas de banca':mode==='fixacao'?'diretas de fixação de conceitos e lei seca':'equilibradas entre fixação e questões difíceis';
+        const prompt=`Crie ${count} questões inéditas de múltipla escolha (4 alternativas A, B, C, D) ${diffLabel} sobre "${subjText}" para o concurso "${campaignName}".\nResponda EXCLUSIVAMENTE com um array JSON válido no formato:\n[{"subject":"Disciplina","topic":"Assunto","difficulty":"${mode==='dificil'?'dificil':'medio'}","statement":"Enunciado claro","options":["Alternativa A","Alternativa B","Alternativa C","Alternativa D"],"correct_index":0,"explanation":"Gabarito comentado curto"}]`;
+        const r=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{
+          method:'POST',
+          headers:authHeaders(session.access_token),
+          body:JSON.stringify({question:prompt,context:`Duelo X1 ${campaignName} - ${subjText}`,mode:'gerador de duelo x1',campaign_id:activeCampaign()?.dbId,campaign:campaignName})
+        });
+        const d=await r.json().catch(()=>({}));
+        const raw=String(d?.answer||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/i,'');
+        const s=raw.indexOf('['),e=raw.lastIndexOf(']');
+        if(s>=0&&e>s){
+          const parsed=JSON.parse(raw.slice(s,e+1));
+          if(Array.isArray(parsed)&&parsed.length>=3){
+            questions=parsed.filter(x=>Array.isArray(x.options)&&x.options.length>=4).slice(0,count).map(x=>({
+              subject:canonicalSubjectName(x.subject||subjText),
+              topic:String(x.topic||'Desafio IA X1'),
+              difficulty:String(x.difficulty||mode),
+              statement:typeof window.formatQuestionStatementText==='function'?window.formatQuestionStatementText(x.statement):String(x.statement),
+              options:x.options.slice(0,4).map(String),
+              correct_index:Math.min(3,Math.max(0,Number(x.correct_index)||0)),
+              explanation:String(x.explanation||'Questão gerada pela IA para o Duelo X1.')
+            }));
+          }
+        }
+      }catch{}finally{
+        if(aiBtn){aiBtn.disabled=false;aiBtn.textContent='✨ Desafiar com Questões Criadas pela IA'}
+      }
+    }
+
+    if(!questions.length){
+      questions=buildDuelQuestionPack(subj,mode,count);
+    }
+
+    try{
+      const res=await cloudFetch('rpc/create_hunter_duel',{
+        method:'POST',
+        body:JSON.stringify({
+          p_opponent_id:oppId,
+          p_subject:subj==='all'?'Roleta Mista (Perguntados)':subj,
+          p_mode:mode,
+          p_questions:questions
+        })
+      });
+      const created=await res.json().catch(()=>({}));
+      if(!res.ok||!created?.duel_id)throw new Error(created?.message||'Execute a migração v95 no Supabase para criar duelos online.');
+      toast(`⚔️ Desafio X1 criado contra ${oppName}! Responda sua rodada agora!`);
+      await loadDuelArenaHub(true);
+      const myDuel=(duelHubData.my_duels||[]).find(d=>d.id===created.duel_id)||{
+        id:created.duel_id,
+        challenger_id:cloudSession?.user?.id,
+        opponent_id:oppId,
+        challenger_name:localHunterRow().name,
+        opponent_name:oppName,
+        subject:subj==='all'?'Roleta Mista (Perguntados)':subj,
+        difficulty_mode:mode,
+        questions
+      };
+      startPlayingDuel(myDuel);
+    }catch(err){
+      toast(err.message||'Não foi possível iniciar o duelo.');
+    }
+  }
+
+  function startPlayingDuel(duel){
+    if(!duel||!Array.isArray(duel.questions)||!duel.questions.length)return toast('Este duelo não possui questões válidas.');
+    if(duelRoundTimer){clearInterval(duelRoundTimer);duelRoundTimer=null}
+    activeDuelSession={
+      duel,
+      index:0,
+      score:0,
+      totalTimeS:0,
+      questionStartMs:Date.now(),
+      secondsLeft:25,
+      answered:false,
+      answers:[]
+    };
+    renderDuelArena();
+    startDuelQuestionCountdown();
+  }
+
+  function startDuelQuestionCountdown(){
+    if(duelRoundTimer)clearInterval(duelRoundTimer);
+    if(!activeDuelSession)return;
+    activeDuelSession.secondsLeft=25;
+    activeDuelSession.questionStartMs=Date.now();
+    duelRoundTimer=setInterval(()=>{
+      if(!activeDuelSession||activeDuelSession.answered)return;
+      const elapsed=Math.floor((Date.now()-activeDuelSession.questionStartMs)/1000);
+      const rem=Math.max(0,25-elapsed);
+      activeDuelSession.secondsLeft=rem;
+      const clockEl=q('#duelLiveTimerText'),fillEl=q('#duelLiveTimerFill');
+      if(clockEl)clockEl.textContent=`⏱️ ${rem}s`;
+      if(fillEl)fillEl.style.width=`${Math.round((rem/25)*100)}%`;
+      if(rem<=0){
+        answerDuelQuestion(-1);
+      }
+    },250);
+  }
+
+  function answerDuelQuestion(chosenIdx){
+    if(!activeDuelSession||activeDuelSession.answered)return;
+    activeDuelSession.answered=true;
+    if(duelRoundTimer){clearInterval(duelRoundTimer);duelRoundTimer=null}
+    const spent=Math.min(25,Math.max(1,Math.round((Date.now()-activeDuelSession.questionStartMs)/1000)));
+    activeDuelSession.totalTimeS+=spent;
+    const curQ=activeDuelSession.duel.questions[activeDuelSession.index];
+    const isCorrect=chosenIdx===Number(curQ.correct_index);
+    if(isCorrect)activeDuelSession.score++;
+    activeDuelSession.answers.push({index:activeDuelSession.index,chosen:chosenIdx,correct:isCorrect,time_s:spent});
+
+    qa('[data-duel-opt]').forEach(btn=>{
+      const idx=Number(btn.dataset.duelOpt);
+      btn.disabled=true;
+      if(idx===Number(curQ.correct_index))btn.classList.add('correct');
+      else if(idx===chosenIdx)btn.classList.add('wrong');
+    });
+
+    const fb=q('#duelRoundFeedback');
+    if(fb){
+      fb.hidden=false;
+      fb.innerHTML=`
+        <div class="lessonBox ${isCorrect?'bizu':'trap'}" style="margin-top:10px">
+          <b>${chosenIdx<0?'⏰ Tempo esgotado!':isCorrect?`✓ Acertou em ${spent}s!`:'✗ Resposta incorreta'}</b>
+          <p style="margin:4px 0 0">${escText(curQ.explanation||'Revise este ponto no seu material.')}</p>
+        </div>
+        <button type="button" class="action" id="nextDuelQuestionBtn" style="margin-top:10px;width:100%">
+          ${activeDuelSession.index+1<activeDuelSession.duel.questions.length?'Próxima questão do duelo →':'Finalizar minha rodada e enviar placar 🏆'}
+        </button>
+      `;
+      q('#nextDuelQuestionBtn').onclick=async()=>{
+        if(activeDuelSession.index+1<activeDuelSession.duel.questions.length){
+          activeDuelSession.index++;
+          activeDuelSession.answered=false;
+          renderDuelArena();
+          startDuelQuestionCountdown();
+        }else{
+          await finishAndSubmitDuelRound();
+        }
+      };
+    }
+  }
+
+  async function finishAndSubmitDuelRound(){
+    if(!activeDuelSession)return;
+    const {duel,score,totalTimeS,answers}=activeDuelSession;
+    const btn=q('#nextDuelQuestionBtn');
+    if(btn){btn.disabled=true;btn.textContent='⏳ Salvando seu placar na Arena...'}
+    try{
+      const res=await cloudFetch('rpc/submit_hunter_duel_round',{
+        method:'POST',
+        body:JSON.stringify({
+          p_duel_id:duel.id,
+          p_score:score,
+          p_time_s:totalTimeS,
+          p_answers:answers
+        })
+      });
+      const updated=await res.json().catch(()=>({}));
+      if(!res.ok)throw new Error(updated?.message||'Erro ao enviar resultado do duelo.');
+      playCompletionChime();
+      activeDuelSession=null;
+      await loadDuelArenaHub(true);
+      renderDuelArena();
+      if(updated.status==='completed'){
+        const myId=cloudSession?.user?.id;
+        const won=updated.winner_id===myId;
+        toast(updated.is_draw?`🤝 Duelo empatado (${score}/${duel.questions.length})!`:won?`🏆 VITÓRIA NO X1! Você venceu por ${score}/${duel.questions.length} (${totalTimeS}s)!`:`Duelo finalizado (${score}/${duel.questions.length}). Confira o placar na Arena!`);
+      }else{
+        toast(`✓ Sua rodada (${score}/${duel.questions.length} em ${totalTimeS}s) foi registrada! Aguardando o oponente responder.`);
+      }
+    }catch(err){
+      toast(err.message||'Não foi possível registrar o duelo.');
+      activeDuelSession=null;
+      renderDuelArena();
+    }
+  }
+
+  function renderDuelArena(){
+    const root=q('#duelRoot');
+    if(!root)return;
+    const myId=cloudSession?.user?.id||'local';
+    const me=localHunterRow();
+
+    if(activeDuelSession){
+      const {duel,index,score,totalTimeS,secondsLeft}=activeDuelSession;
+      const curQ=duel.questions[index];
+      const oppName=duel.challenger_id===myId?duel.opponent_name:duel.challenger_name;
+      const letters=['A','B','C','D'];
+      root.innerHTML=`
+        <div class="duelPlayStage">
+          <div class="sectionHead" style="margin-bottom:6px">
+            <div>
+              <div class="eyebrow">⚔️ DUELO X1 CONTRA ${escText((oppName||'OPONENTE').toUpperCase())} · RODADA ${index+1}/${duel.questions.length}</div>
+              <h2 style="margin:2px 0 0">${escText(curQ.subject||'Disciplina')} · <span style="font-size:.9rem;color:var(--cyan)">${escText(curQ.topic||'Questão')}</span></h2>
+            </div>
+            <div style="text-align:right">
+              <span class="tag" id="duelLiveTimerText" style="font-size:.95rem;font-weight:900">⏱️ ${secondsLeft}s</span>
+              <div class="small muted" style="margin-top:3px">Placar parcial: <b>${score}/${index}</b> (${totalTimeS}s)</div>
+            </div>
+          </div>
+          <div class="duelTimerBar"><div class="duelTimerFill" id="duelLiveTimerFill" style="width:${Math.round((secondsLeft/25)*100)}%"></div></div>
+          <div id="duelQuestionStatement" style="white-space:pre-line;line-height:1.68;padding:14px;border-radius:12px;background:#071422;border:1px solid #1f3c56;margin-bottom:14px;font-size:.96rem">${escText(curQ.statement)}</div>
+          <div>
+            ${(curQ.options||[]).map((opt,i)=>`
+              <button type="button" class="duelOptBtn" data-duel-opt="${i}">
+                <b>${letters[i]||i+1}</b>
+                <span>${escText(opt)}</span>
+              </button>
+            `).join('')}
+          </div>
+          <div id="duelRoundFeedback" hidden></div>
+        </div>
+      `;
+      qa('[data-duel-opt]').forEach(btn=>{
+        btn.onclick=()=>answerDuelQuestion(Number(btn.dataset.duelOpt));
+      });
+      return;
+    }
+
+    const {ranking,dominations,pairHistory}=computeArenaStatsAndRivalries();
+    const opponents=(duelHubData.players||[]).filter(p=>!p.is_me&&String(p.user_id)!==String(myId));
+    const pendingForMe=(duelHubData.my_duels||[]).filter(d=>d.status==='pending'&&((d.challenger_id===myId&&!d.challenger_done)||(d.opponent_id===myId&&!d.opponent_done)));
+    const waitingOpponent=(duelHubData.my_duels||[]).filter(d=>d.status==='pending'&&((d.challenger_id===myId&&d.challenger_done&&!d.opponent_done)||(d.opponent_id===myId&&d.opponent_done&&!d.challenger_done)));
+    const finishedMy=(duelHubData.my_duels||[]).filter(d=>d.status==='completed').slice(0,12);
+    const subjects=[...new Set([...LEARNING_SUBJECTS,'Direito Constitucional','Direito Militar','Legislação Extravagante','Direito Penal','Direito Processual Penal','Língua Portuguesa','Raciocínio Lógico-Matemático','Informática'])];
+
+    root.innerHTML=`
+      <div class="card duelHero" style="margin-bottom:12px">
+        <div class="sectionHead" style="margin-bottom:6px">
+          <div>
+            <div class="eyebrow">⚔️ MODO COMPETITIVO ESTILO PERGUNTADOS · PC ↔ CELULAR</div>
+            <h2 style="margin:2px 0 0">Arena X1 — Duelo de Caçadores</h2>
+            <p class="small muted" style="margin:4px 0 0">Desafie amigos online ou em qualquer navegador (computador ou celular) em baterias de fixação e questões difíceis. <b>Não altera seu XP de estudo!</b></p>
+          </div>
+          <div class="rankHeaderActions">
+            <span class="tag">🎮 Sem perder/ganhar XP de estudo</span>
+            <button type="button" class="action small" id="refreshDuelHubBtn">${duelHubBusy?'⏳ Atualizando...':'↻ Atualizar Arena'}</button>
+          </div>
+        </div>
+        <div class="duelWheelCats">
+          <span class="duelCatChip">⚖️ Constitucional</span>
+          <span class="duelCatChip">🚨 Legislação Extravagante</span>
+          <span class="duelCatChip">🎖️ Direito Militar</span>
+          <span class="duelCatChip">📘 Língua Portuguesa</span>
+          <span class="duelCatChip">🚔 Penal & Processo Penal</span>
+          <span class="duelCatChip">🧠 RLM & Informática</span>
+        </div>
+      </div>
+
+      ${duelSqlMissing?`
+        <div class="card" style="margin-bottom:12px;border-color:var(--gold)">
+          <b>Ative a Arena de Duelos X1 no Supabase (1 vez):</b>
+          <p class="small muted" style="margin:4px 0 0">Execute o arquivo <code>supabase/migrations/20261030_v95_duel_arena_x1.sql</code> no SQL Editor do Supabase para liberar os desafios X1 entre computador e celular.</p>
+        </div>
+      `:''}
+
+      ${pendingForMe.length?`
+        <div class="card" style="margin-bottom:12px;border-color:#22c55e;background:linear-gradient(145deg,#0c291e,#071420)">
+          <div class="sectionHead">
+            <div>
+              <div class="eyebrow" style="color:#4ade80">🔔 DESAFIOS X1 AGUARDANDO SUA RESPOSTA AGORA</div>
+              <h3 style="margin:2px 0 0">Sua vez de jogar!</h3>
+            </div>
+            <span class="tag">${pendingForMe.length} duelo(s)</span>
+          </div>
+          <div class="list">
+            ${pendingForMe.map(d=>{
+              const rival=d.challenger_id===myId?d.opponent_name:d.challenger_name;
+              return `
+                <div class="card" style="padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+                  <div>
+                    <b>⚔️ Contra ${escText(rival)}</b> · <span class="tag">${escText(d.subject||'Roleta Mista')}</span>
+                    <div class="small muted">${(d.questions||[]).length} questões · Modo: ${escText(d.difficulty_mode||'misto')} · Desempate por tempo (25s/questão)</div>
+                  </div>
+                  <button type="button" class="action small" data-play-duel="${escText(d.id)}" style="width:auto">▶️ Jogar Minha Rodada Agora</button>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `:''}
+
+      <div class="card" style="margin-bottom:12px">
+        <div class="sectionHead">
+          <div>
+            <div class="eyebrow">LANÇAR NOVO DESAFIO X1</div>
+            <h3 style="margin:2px 0 0">Escolha o Oponente e a Modalidade</h3>
+          </div>
+          <span class="tag">25s por questão</span>
+        </div>
+        <div class="essayGrid">
+          <label class="field">Desafiar Caçador
+            <select id="duelOpponentSelect">
+              ${opponents.length?opponents.map(p=>`<option value="${escText(p.user_id)}" ${String(p.user_id)===String(selectedDuelOpponentId)?'selected':''}>${p.is_online?'🟢 [Online agora] ':'⚪ '}${escText(p.name)} (${escText(p.role||'PMPE')})</option>`).join(''):'<option value="">Aguardando outros caçadores no banco</option>'}
+            </select>
+          </label>
+          <label class="field">Disciplina (Banco / Biblioteca / Edital)
+            <select id="duelSubjectSelect">
+              <option value="all">🎲 Roleta Mista Estilo Perguntados (Todas as matérias)</option>
+              ${subjects.map(s=>`<option value="${escText(s)}">${escText(s)}</option>`).join('')}
+            </select>
+          </label>
+          <label class="field">Nível do Duelo
+            <select id="duelModeSelect">
+              <option value="misto">⚖️ Equilibrado (Fixação + Questões Difíceis)</option>
+              <option value="fixacao">⚡ Fixação Rápida (Conceitos e Lei Seca)</option>
+              <option value="dificil">🔥 Somente Difíceis e Pegadinhas de Banca</option>
+            </select>
+          </label>
+          <label class="field">Quantidade de Questões
+            <select id="duelCountSelect">
+              <option value="5" selected>5 questões (Rápido ~2 min)</option>
+              <option value="7">7 questões (Disputa completa)</option>
+            </select>
+          </label>
+        </div>
+        <div class="essayHelperBar" style="margin-top:12px;margin-bottom:0;padding-bottom:0;border-bottom:0">
+          <button type="button" class="action" id="createDuelBankBtn">⚔️ Iniciar Duelo X1 (Banco da Biblioteca)</button>
+          <button type="button" class="ghost" id="createDuelAiBtn">✨ Desafiar com Questões Criadas pela IA</button>
+        </div>
+      </div>
+
+      ${dominations.length?`
+        <div class="card" style="margin-bottom:12px;border-color:#f59e0b88">
+          <div class="sectionHead">
+            <div>
+              <div class="eyebrow" style="color:var(--gold)">🔥 QUADRO DE DOMINAÇÃO E VITÓRIAS CONSECUTIVAS (FREGUESIA X1)</div>
+              <h3 style="margin:2px 0 0">Quem está dominando os confrontos diretos</h3>
+            </div>
+            <span class="tag">Vitórias seguidas</span>
+          </div>
+          <div style="display:grid;gap:8px">
+            ${dominations.map(dom=>{
+              const winnerName=dom.lastWinner===dom.u1?dom.u1Name:dom.u2Name;
+              const loserName=dom.lastWinner===dom.u1?dom.u2Name:dom.u1Name;
+              const wScore=dom.wins[dom.lastWinner]||0;
+              const lScore=dom.wins[dom.lastWinner===dom.u1?dom.u2:dom.u1]||0;
+              return `
+                <div class="card" style="padding:11px 14px;background:#0a1826;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+                  <div>
+                    <span class="dominationBadge">👑 ${dom.consecutiveWins>=2?`DOMINANDO: ${dom.consecutiveWins} VITÓRIAS SEGUIDAS!`:'1ª VITÓRIA DA SÉRIE'}</span>
+                    <div style="margin-top:5px;font-size:.95rem"><b>${escText(winnerName)}</b> ganhou <b>${dom.consecutiveWins}x consecutiva(s)</b> de <b>${escText(loserName)}</b></div>
+                  </div>
+                  <div class="tag">Placar Histórico: ${wScore} × ${lScore}${dom.draws?` (${dom.draws} emp.)`:''}</div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `:''}
+
+      <div class="card" style="margin-bottom:12px">
+        <div class="sectionHead">
+          <div>
+            <div class="eyebrow">TOPO DA ARENA · SEPARADO DO XP DE ESTUDO</div>
+            <h3 style="margin:2px 0 0">🏆 Ranking de Vencedores do Duelo X1</h3>
+          </div>
+          <span class="tag">${ranking.length} competidor(es)</span>
+        </div>
+        <div>
+          ${ranking.map((r,idx)=>{
+            const total=r.wins+r.losses+r.draws;
+            const winRate=total?Math.round((r.wins/total)*100):0;
+            return `
+              <div class="rankRow ${r.is_me?'isMe':''}">
+                <div class="rankPos">${idx===0&&r.wins>0?'👑':`#${idx+1}`}</div>
+                <div class="rankRowMain" style="display:flex;align-items:center;gap:10px;min-width:0">
+                  <span class="rankAvatar">${escText((r.name||'C').trim().slice(0,1).toUpperCase())}</span>
+                  <div style="min-width:0">
+                    <div style="font-weight:800;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                      <span class="onlineDot ${r.is_online?'on':''}" title="${r.is_online?'Online agora':'Offline'}"></span>
+                      <span>${escText(r.name)}</span>
+                      ${r.is_me?'<span class="tag" style="padding:2px 6px;font-size:.68rem">Você</span>':''}
+                      ${r.streak>=2?`<span class="dominationBadge">🔥 ${r.streak} vitórias seguidas</span>`:''}
+                    </div>
+                    <div class="small muted">${r.is_online?'🟢 Online agora no navegador':'Pode receber desafio (joga quando entrar)'}</div>
+                  </div>
+                </div>
+                <div class="rankRowMetrics small muted">
+                  <span>⚔️ <b>${r.wins}V</b> · ${r.losses}D · ${r.draws}E</span>
+                  <span>🎯 Aproveitamento: <b>${winRate}%</b></span>
+                  <span>Recorde invicto: <b>${r.best_streak}x</b></span>
+                  ${!r.is_me?`<button type="button" class="action small" style="width:auto;padding:5px 10px;min-height:30px;font-size:.75rem" data-quick-duel-opp="${escText(r.user_id)}|${escText(r.name)}">⚔️ Chamar para X1</button>`:''}
+                </div>
+                <div class="rankRowRight" style="text-align:right">
+                  <div style="font-weight:900;color:var(--cyan);font-size:1.02rem">🏆 ${r.wins} vit.</div>
+                  <div class="small muted">${r.total_correct} acertos</div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      ${(waitingOpponent.length||finishedMy.length)?`
+        <div class="card">
+          <div class="sectionHead">
+            <h3>Histórico Recente e Duelos Aguardando Oponente</h3>
+            <span class="tag">${waitingOpponent.length+finishedMy.length} partida(s)</span>
+          </div>
+          <div class="list">
+            ${waitingOpponent.map(d=>{
+              const rival=d.challenger_id===myId?d.opponent_name:d.challenger_name;
+              const myScore=d.challenger_id===myId?d.challenger_score:d.opponent_score;
+              const myTime=d.challenger_id===myId?d.challenger_time_s:d.opponent_time_s;
+              return `
+                <div class="card" style="padding:11px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+                  <div>
+                    <b>⏳ Aguardando ${escText(rival)} responder</b> · <span class="tag">${escText(d.subject)}</span>
+                    <div class="small muted">Sua rodada: <b>${myScore}/${(d.questions||[]).length} acertos em ${myTime}s</b> · Assim que ${escText(rival)} jogar no celular ou PC, o vencedor será declarado!</div>
+                  </div>
+                  <span class="tag">Em aberto</span>
+                </div>
+              `;
+            }).join('')}
+            ${finishedMy.map(d=>{
+              const isChal=d.challenger_id===myId;
+              const rival=isChal?d.opponent_name:d.challenger_name;
+              const myScore=isChal?d.challenger_score:d.opponent_score;
+              const myTime=isChal?d.challenger_time_s:d.opponent_time_s;
+              const oppScore=isChal?d.opponent_score:d.challenger_score;
+              const oppTime=isChal?d.opponent_time_s:d.challenger_time_s;
+              const won=d.winner_id===myId;
+              return `
+                <div class="card" style="padding:11px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;border-left:4px solid ${d.is_draw?'var(--gold)':won?'#22c55e':'#ef4444'}">
+                  <div>
+                    <b>${d.is_draw?'🤝 Empate':won?'🏆 Vitória':'⚔️ Derrota'} contra ${escText(rival)}</b> · <span class="tag">${escText(d.subject)}</span>
+                    <div class="small muted">Você: <b>${myScore} acertos (${myTime}s)</b> × ${escText(rival)}: <b>${oppScore} acertos (${oppTime}s)</b></div>
+                  </div>
+                  <span class="tafStatusPill ${d.is_draw?'near':won?'ready':'prep'}">${d.is_draw?'Empate':won?'Venceu':'Perdeu'}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `:''}
+    `;
+
+    if(q('#refreshDuelHubBtn'))q('#refreshDuelHubBtn').onclick=()=>loadDuelArenaHub(false);
+    if(q('#createDuelBankBtn'))q('#createDuelBankBtn').onclick=()=>launchDuelChallenge(false);
+    if(q('#createDuelAiBtn'))q('#createDuelAiBtn').onclick=()=>launchDuelChallenge(true);
+    qa('[data-play-duel]').forEach(btn=>{
+      btn.onclick=()=>{
+        const found=(duelHubData.my_duels||[]).find(d=>String(d.id)===String(btn.dataset.playDuel));
+        if(found)startPlayingDuel(found);
+      };
+    });
+    qa('[data-quick-duel-opp]').forEach(btn=>{
+      btn.onclick=()=>{
+        const [uid,uname]=btn.dataset.quickDuelOpp.split('|');
+        selectedDuelOpponentId=uid;
+        selectedDuelOpponentName=uname;
+        const sel=q('#duelOpponentSelect');
+        if(sel){sel.value=uid;sel.scrollIntoView({behavior:'smooth',block:'center'})}
+        toast(`Oponente ${uname} selecionado! Escolha a matéria e clique em Iniciar Duelo X1.`);
+      };
+    });
+  }
+
   const baseOpenView=openView;
-  openView=function(id){baseOpenView(id);try{sessionStorage.setItem(viewKey,id)}catch{}if(id==='report'){populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()}if(id==='today'){updateTodayCommand();ensureTafAndRankingShortcuts()}if(id==='map'){renderReverseSchedule();decorateEditalIncidenceBadges()}if(id==='review')enhanceReviewCenter();if(id==='essay')enhanceTypedEssayOption();if(id==='taf')renderTafPanel();if(id==='library'){renderCommunityCoopBanner();syncCommunityLibraryForActivePortal()}if(id==='ranking'){renderHuntersLeaderboard();loadHuntersLeaderboard()}};
+  openView=function(id){baseOpenView(id);try{sessionStorage.setItem(viewKey,id)}catch{}if(id==='report'){populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()}if(id==='today'){updateTodayCommand();ensureTafAndRankingShortcuts()}if(id==='map'){renderReverseSchedule();decorateEditalIncidenceBadges()}if(id==='review')enhanceReviewCenter();if(id==='essay')enhanceTypedEssayOption();if(id==='taf')renderTafPanel();if(id==='library'){renderCommunityCoopBanner();syncCommunityLibraryForActivePortal()}if(id==='ranking'){renderHuntersLeaderboard();loadHuntersLeaderboard()}if(id==='duel'){renderDuelArena();loadDuelArenaHub()}};
   const baseTickClock=typeof tickClock==='function'?tickClock:null;
   if(baseTickClock){
     window.tickClock=function(){
@@ -3647,6 +4285,7 @@
     };
   }
   setTimeout(()=>syncCommunityLibraryForActivePortal(),1200);
+  setInterval(()=>{if(q('#duel')?.classList.contains('active')&&!activeDuelSession&&cloudSession&&navigator.onLine)loadDuelArenaHub(true)},7000);
   const remembered=(()=>{try{return sessionStorage.getItem(viewKey)}catch{return null}})();
   if(remembered&&q(`#${CSS.escape(remembered)}`)?.classList.contains('view'))openView(remembered);
   q('#aboutDialog .tag')&&(q('#aboutDialog .tag').textContent='Versão 78 · experiência orientada ao estudo');
