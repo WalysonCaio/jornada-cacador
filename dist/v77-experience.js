@@ -4325,7 +4325,7 @@
       save();
       if(typeof renderDaily==='function')renderDaily();
       updateTodayCommand();
-      decorateDailyStepProgressLabels();
+      decorateDailyStepProgressLabels();renderInteractiveNotifications();
       const allDone=steps.every((_,i)=>Boolean(state.dailySteps[i]));
       if(allDone&&!state.done?.[state.daily]){
         complete(state.daily);
@@ -4463,6 +4463,447 @@
     });
   }
 
+
+  // 18. Central de Notificações Interativa (Feito / Limpar / Lembrar mais tarde 2h ou Amanhã) + Fechar Modal ao Clicar Fora
+  let activeNotifTab='active';
+
+  function ensureNotifState(){
+    if(!state.notifState||typeof state.notifState!=='object'){
+      state.notifState={dismissed:{},snoozed:{}};
+    }
+    if(!state.notifState.dismissed||typeof state.notifState.dismissed!=='object')state.notifState.dismissed={};
+    if(!state.notifState.snoozed||typeof state.notifState.snoozed!=='object')state.notifState.snoozed={};
+    return state.notifState;
+  }
+
+  function buildInteractiveNotificationItems(){
+    if(typeof refreshStreak==='function')refreshStreak();
+    const items=[];
+    const today=typeof localDayKey==='function'?localDayKey():new Date().toISOString().slice(0,10);
+    const myId=cloudSession?.user?.id||'local';
+
+    // 1. Duelos X1 aguardando sua resposta
+    const pendingDuels=(duelHubData?.my_duels||[]).filter(d=>d.status==='pending'&&((d.challenger_id===myId&&!d.challenger_done)||(d.opponent_id===myId&&!d.opponent_done)));
+    pendingDuels.forEach(d=>{
+      const rival=d.challenger_id===myId?d.opponent_name:d.challenger_name;
+      items.push({
+        id:`duel-${d.id}`,
+        kind:'warn',
+        icon:'⚔️',
+        title:`Duelo X1 contra ${rival}`,
+        text:`${(d.questions||[]).length} questões (${d.subject||'Roleta Mista'}) aguardando sua rodada.`,
+        view:'duel',
+        actionLabel:'⚔️ Jogar X1'
+      });
+    });
+
+    // 2. Documentos em processamento, falha, pendentes ou com aviso de cobertura
+    const processing=(cloudDocuments||[]).filter(x=>!x.is_community&&x.processing_status==='processing');
+    const failed=(cloudDocuments||[]).filter(x=>!x.is_community&&x.processing_status==='error');
+    const pending=(cloudDocuments||[]).filter(x=>!x.is_community&&x.processing_status==='pending');
+    const coverageWarnings=(cloudDocuments||[]).filter(x=>!x.is_community&&x.processing_status==='ready'&&x.document_type!=='edital'&&x.metadata?.coverage?.needs_review);
+
+    processing.forEach(doc=>items.push({
+      id:`proc-${doc.id}`,
+      kind:'warn',
+      icon:'◌',
+      title:`Analisando ${doc.title}`,
+      text:'Você pode navegar pelo aplicativo. O resultado aparecerá quando a análise terminar.',
+      view:'library',
+      actionLabel:'Ver na Biblioteca'
+    }));
+
+    failed.forEach(doc=>items.push({
+      id:`fail-${doc.id}`,
+      docId:doc.id,
+      kind:'error',
+      icon:'!',
+      title:`Falha em ${doc.title}`,
+      text:'Toque em Tentar novamente ou abra a Biblioteca.',
+      view:'library',
+      actionLabel:'⚡ Tentar análise',
+      retryDocId:doc.id
+    }));
+
+    pending.forEach(doc=>items.push({
+      id:`pend-${doc.id}`,
+      docId:doc.id,
+      kind:'warn',
+      icon:'↥',
+      title:`${doc.title} aguarda análise`,
+      text:doc.document_type==='edital'?'Inicie a análise para criar o mapa e as missões.':'Inicie a geração do conteúdo de estudo.',
+      view:'library',
+      actionLabel:'⚡ Analisar agora',
+      retryDocId:doc.id
+    }));
+
+    coverageWarnings.forEach(doc=>items.push({
+      id:`cov-${doc.id}`,
+      docId:doc.id,
+      isCoverageWarning:true,
+      kind:'warn',
+      icon:'!',
+      title:`Revise a cobertura de ${doc.title}`,
+      text:(doc.metadata?.coverage?.warnings||[])[0]||'A leitura do PDF precisa de conferência. Marque como "Feito" se já conferiu.',
+      view:'library',
+      actionLabel:'Abrir Biblioteca'
+    }));
+
+    // 3. Revisões espaçadas e erros do dia
+    const reviews=typeof dueReviews==='function'?dueReviews():[];
+    if(reviews.length){
+      items.push({
+        id:`rev-${today}-${reviews.length}`,
+        stableGroup:`rev-${today}`,
+        kind:'warn',
+        icon:'↻',
+        title:`${reviews.length} revisão${reviews.length===1?' pendente':'ões pendentes'} hoje`,
+        text:'Revisar agora ajuda a fixar o conteúdo na memória de longo prazo.',
+        view:'review',
+        actionLabel:'Ir para Revisões'
+      });
+    }
+
+    // 4. Contagem regressiva da prova
+    const days=typeof examDaysRemaining==='function'?examDaysRemaining():null;
+    const examDate=typeof activeCampaign==='function'?activeCampaign()?.examDate:null;
+    if(days!==null&&days>=0){
+      items.push({
+        id:`exam-${today}`,
+        kind:days<=7?'warn':'',
+        icon:'⌛',
+        title:days===0?'A prova é hoje!':days===1?'Falta 1 dia para a prova':`Faltam ${days} dias para a prova`,
+        text:`Data: ${new Date(`${examDate}T12:00:00`).toLocaleDateString('pt-BR')}. Mantenha a constância no ciclo reverso.`,
+        view:'map',
+        actionLabel:'Ver Cronograma'
+      });
+    }
+
+    // 5. Ofensiva e meta diária de estudo
+    const studied=Math.floor(Number(state?.studyByDay?.[today]||0)/60);
+    const activeToday=typeof qualifiesStreakDay==='function'?qualifiesStreakDay(today):false;
+    const missionToday=typeof dayHasCompletedMission==='function'?dayHasCompletedMission(today):false;
+    const reqMin=typeof streakMinSeconds==='function'?Math.round(streakMinSeconds()/60):50;
+
+    if((state?.streak||0)>0&&!activeToday){
+      items.push({
+        id:`streak-${today}`,
+        kind:'warn',
+        icon:'♨',
+        title:`Proteja sua ofensiva de ${state.streak} ${state.streak===1?'dia':'dias'}`,
+        text:`${studied<reqMin?`Estude mais ${reqMin-studied} minuto(s). `:''}${!missionToday?'Conclua uma missão hoje.':''}`.trim(),
+        view:'today',
+        actionLabel:'Ir para Missão'
+      });
+    }
+
+    const dailyGoalMin=Number(state?.settings?.dailyMinutes||180);
+    if(studied<dailyGoalMin){
+      items.push({
+        id:`goal-${today}`,
+        kind:'',
+        icon:'⌁',
+        title:'Meta diária de estudo em andamento',
+        text:`${studied} de ${dailyGoalMin} minutos estudados hoje (faltam ${Math.max(0,dailyGoalMin-studied)} min).`,
+        view:'today',
+        actionLabel:'Iniciar Foco'
+      });
+    }
+
+    // 6. Status de conexão
+    if(!navigator.onLine){
+      items.push({
+        id:'net-offline',
+        kind:'error',
+        icon:'×',
+        title:'Você está offline',
+        text:'O progresso fica salvo neste aparelho e será sincronizado quando a internet voltar.'
+      });
+    }else if(cloudSession&&syncReady){
+      items.push({
+        id:`sync-ok-${today}`,
+        kind:'success',
+        icon:'✓',
+        title:'Progresso sincronizado na nuvem',
+        text:'Missões, questões, anotações, TAF e tempo estudado estão seguros na sua conta.'
+      });
+    }
+
+    return items;
+  }
+
+  function classifyNotifications(){
+    const ns=ensureNotifState();
+    const now=Date.now();
+    // Limpar snoozes vencidos para que voltem automaticamente para "Pendentes"!
+    for(const [k,untilTs] of Object.entries(ns.snoozed)){
+      if(Number(untilTs)<=now)delete ns.snoozed[k];
+    }
+
+    const raw=buildInteractiveNotificationItems();
+    const active=[],snoozed=[],done=[];
+
+    for(const item of raw){
+      const key=item.stableGroup||item.id;
+      if(ns.dismissed[key]||ns.dismissed[item.id]){
+        done.push({...item,stateKey:key,doneAt:ns.dismissed[key]||ns.dismissed[item.id]});
+      }else if(ns.snoozed[key]&&Number(ns.snoozed[key])>now){
+        snoozed.push({...item,stateKey:key,snoozedUntil:Number(ns.snoozed[key])});
+      }else{
+        active.push({...item,stateKey:key});
+      }
+    }
+    return {active,snoozed,done};
+  }
+
+  function markNotificationDone(item){
+    const ns=ensureNotifState();
+    const key=item.stateKey||item.id;
+    ns.dismissed[key]=new Date().toISOString();
+    ns.dismissed[item.id]=new Date().toISOString();
+    delete ns.snoozed[key];
+    // Se for aviso de cobertura de um PDF ("Revise a cobertura de ..."), também limpa a flag needs_review no documento para não voltar mais
+    if(item.isCoverageWarning&&item.docId){
+      const doc=(cloudDocuments||[]).find(d=>String(d.id)===String(item.docId));
+      if(doc&&doc.metadata?.coverage){
+        doc.metadata.coverage.needs_review=false;
+        if(cloudSession&&navigator.onLine){
+          cloudFetch(`study_documents?id=eq.${encodeURIComponent(doc.id)}`,{
+            method:'PATCH',
+            body:JSON.stringify({metadata:doc.metadata})
+          }).catch(()=>undefined);
+        }
+      }
+    }
+    save();
+    renderInteractiveNotifications();
+    toast('✓ Aviso marcado como feito e removido dos pendentes!');
+  }
+
+  function snoozeNotification(item,hours=2){
+    const ns=ensureNotifState();
+    const key=item.stateKey||item.id;
+    let until;
+    if(hours==='tomorrow'){
+      const d=new Date();
+      d.setDate(d.getDate()+1);
+      d.setHours(8,0,0,0);
+      until=d.getTime();
+    }else{
+      until=Date.now()+Number(hours||2)*3600000;
+    }
+    ns.snoozed[key]=until;
+    delete ns.dismissed[key];
+    save();
+    renderInteractiveNotifications();
+    const timeLabel=hours==='tomorrow'?'amanhã às 08:00':`daqui a ${hours}h`;
+    toast(`⏰ Aviso adiado! Lembraremos você ${timeLabel}.`);
+  }
+
+  function restoreNotification(key){
+    const ns=ensureNotifState();
+    delete ns.dismissed[key];
+    delete ns.snoozed[key];
+    save();
+    renderInteractiveNotifications();
+    toast('↺ Aviso restaurado para Pendentes.');
+  }
+
+  function renderInteractiveNotifications(){
+    const root=q('#notificationList');
+    if(!root)return;
+    const {active,snoozed,done}=classifyNotifications();
+    const important=active.filter(x=>x.kind!=='success').length;
+    const badge=q('#notificationBadge');
+    if(badge){
+      badge.hidden=important===0;
+      badge.textContent=important>9?'9+':String(important);
+    }
+
+    const steps=typeof dailyStepsFor==='function'?dailyStepsFor(state.settings?.dailyMinutes||180):[];
+    const doneSteps=Object.values(state.dailySteps||{}).filter(Boolean).length;
+    const today=typeof localDayKey==='function'?localDayKey():new Date().toISOString().slice(0,10);
+    if(q('#notificationSync'))q('#notificationSync').textContent=!navigator.onLine?'Offline':cloudSession&&syncReady?'Sincronizado':cloudSession?'Sincronizando':'Somente local';
+    if(q('#notificationCampaign'))q('#notificationCampaign').textContent=activeCampaign()?.name||'Nenhuma';
+    if(q('#notificationStudy'))q('#notificationStudy').textContent=`${Math.floor(Number(state.studyByDay?.[today]||0)/60)} min`;
+    if(q('#notificationMission'))q('#notificationMission').textContent=`${Math.round(doneSteps/Math.max(1,steps.length)*100)}%`;
+
+    const currentList=activeNotifTab==='snoozed'?snoozed:activeNotifTab==='done'?done:active;
+
+    root.innerHTML=`
+      <div class="notifTabsBar">
+        <button type="button" class="notifTabBtn ${activeNotifTab==='active'?'active':''}" data-notif-tab="active">🔔 Pendentes (${active.length})</button>
+        <button type="button" class="notifTabBtn ${activeNotifTab==='snoozed'?'active':''}" data-notif-tab="snoozed">⏰ Lembrar depois (${snoozed.length})</button>
+        <button type="button" class="notifTabBtn ${activeNotifTab==='done'?'active':''}" data-notif-tab="done">✓ Feitos (${done.length})</button>
+      </div>
+
+      <div class="notifBulkBar">
+        <span class="small muted">
+          ${activeNotifTab==='active'
+            ?`${important} aviso(s) pedindo atenção · Clique fora da janela a qualquer momento para fechar`
+            :activeNotifTab==='snoozed'
+              ?'Avisos adiados voltam sozinhos quando o horário chegar'
+              :'Avisos marcados como concluídos ou limpos'}
+        </span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${activeNotifTab==='active'&&active.length?`
+            <button type="button" class="ghost small" id="notifSnoozeAllBtn">⏰ Adiar todos (2h)</button>
+            <button type="button" class="action small" id="notifMarkAllDoneBtn" style="width:auto">✓ Marcar todos como feitos</button>
+          `:''}
+          ${(activeNotifTab==='snoozed'&&snoozed.length)||(activeNotifTab==='done'&&done.length)?`
+            <button type="button" class="ghost small" id="notifRestoreAllBtn">↺ Restaurar todos</button>
+          `:''}
+        </div>
+      </div>
+
+      ${currentList.length?currentList.map((item,idx)=>{
+        const snoozeText=item.snoozedUntil?`Adiado até ${new Date(item.snoozedUntil).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`:'';
+        return `
+          <article class="notificationItem ${escText(item.kind||'')}">
+            <div class="notifMainRow">
+              <div class="notificationIcon">${escText(item.icon||'•')}</div>
+              <div>
+                <b>${escText(item.title)}</b>
+                ${snoozeText?`<span class="notifSnoozeTag">⏰ ${escText(snoozeText)}</span>`:''}
+                <p style="margin:3px 0 0">${escText(item.text)}</p>
+              </div>
+            </div>
+            <div class="notifActionsRow">
+              ${item.retryDocId?`<button type="button" class="action small" style="width:auto" data-notif-retry-doc="${escText(item.retryDocId)}">${escText(item.actionLabel||'Analisar')}</button>`:item.view?`<button type="button" class="action small" style="width:auto" data-notification-view="${escText(item.view)}">${escText(item.actionLabel||'Abrir')}</button>`:''}
+              ${activeNotifTab==='active'?`
+                <button type="button" class="ghost small" data-notif-done="${idx}">✓ Feito</button>
+                <button type="button" class="ghost small" data-notif-snooze2h="${idx}">⏰ +2h</button>
+                <button type="button" class="ghost small" data-notif-tomorrow="${idx}">🌙 Amanhã</button>
+              `:`
+                <button type="button" class="ghost small" data-notif-restore="${escText(item.stateKey)}">↺ Voltar para Pendentes</button>
+              `}
+            </div>
+          </article>
+        `;
+      }).join(''):`
+        <div class="empty">
+          ${activeNotifTab==='active'
+            ?'🎉 Tudo limpo! Nenhuma notificação pendente no momento.'
+            :activeNotifTab==='snoozed'
+              ?'Nenhum aviso adiado para mais tarde.'
+              :'Nenhum aviso marcado como feito ainda.'}
+        </div>
+      `}
+
+      <div style="margin-top:10px;display:flex;justify-content:flex-end">
+        <button type="button" class="ghost" id="closeNotificationsBottomBtn" style="width:100%">Fechar painel de notificações</button>
+      </div>
+    `;
+
+    qa('[data-notif-tab]').forEach(btn=>{
+      btn.onclick=()=>{
+        activeNotifTab=btn.dataset.notifTab;
+        renderInteractiveNotifications();
+      };
+    });
+
+    qa('[data-notification-view]').forEach(btn=>{
+      btn.onclick=()=>openAppView(btn.dataset.notificationView);
+    });
+
+    qa('[data-notif-retry-doc]').forEach(btn=>{
+      btn.onclick=()=>{
+        const docId=btn.dataset.notifRetryDoc;
+        q('#notificationDialog')?.close();
+        openView('library');
+        if(typeof processEditalDocument==='function')processEditalDocument(docId);
+      };
+    });
+
+    qa('[data-notif-done]').forEach(btn=>{
+      btn.onclick=()=>{
+        const item=currentList[Number(btn.dataset.notifDone)];
+        if(item)markNotificationDone(item);
+      };
+    });
+
+    qa('[data-notif-snooze2h]').forEach(btn=>{
+      btn.onclick=()=>{
+        const item=currentList[Number(btn.dataset.notifSnooze2h)];
+        if(item)snoozeNotification(item,2);
+      };
+    });
+
+    qa('[data-notif-tomorrow]').forEach(btn=>{
+      btn.onclick=()=>{
+        const item=currentList[Number(btn.dataset.notifTomorrow)];
+        if(item)snoozeNotification(item,'tomorrow');
+      };
+    });
+
+    qa('[data-notif-restore]').forEach(btn=>{
+      btn.onclick=()=>restoreNotification(btn.dataset.notifRestore);
+    });
+
+    if(q('#notifMarkAllDoneBtn'))q('#notifMarkAllDoneBtn').onclick=()=>{
+      const ns=ensureNotifState();
+      const nowIso=new Date().toISOString();
+      active.forEach(item=>{
+        ns.dismissed[item.stateKey||item.id]=nowIso;
+        ns.dismissed[item.id]=nowIso;
+        if(item.isCoverageWarning&&item.docId){
+          const doc=(cloudDocuments||[]).find(d=>String(d.id)===String(item.docId));
+          if(doc&&doc.metadata?.coverage)doc.metadata.coverage.needs_review=false;
+        }
+      });
+      save();
+      renderInteractiveNotifications();
+      toast('✓ Todas as notificações foram marcadas como feitas!');
+    };
+
+    if(q('#notifSnoozeAllBtn'))q('#notifSnoozeAllBtn').onclick=()=>{
+      const ns=ensureNotifState();
+      const until=Date.now()+2*3600000;
+      active.forEach(item=>{
+        ns.snoozed[item.stateKey||item.id]=until;
+      });
+      save();
+      renderInteractiveNotifications();
+      toast('⏰ Todos os avisos foram adiados por 2 horas!');
+    };
+
+    if(q('#notifRestoreAllBtn'))q('#notifRestoreAllBtn').onclick=()=>{
+      const ns=ensureNotifState();
+      if(activeNotifTab==='snoozed')ns.snoozed={};
+      else ns.dismissed={};
+      save();
+      activeNotifTab='active';
+      renderInteractiveNotifications();
+      toast('↺ Avisos restaurados para Pendentes.');
+    };
+
+    if(q('#closeNotificationsBottomBtn'))q('#closeNotificationsBottomBtn').onclick=()=>{
+      q('#notificationDialog')?.close();
+    };
+  }
+
+  function enableBackdropClickToCloseDialogs(){
+    document.addEventListener('mousedown',e=>{
+      const dlg=e.target;
+      if(!dlg||dlg.tagName!=='DIALOG'||!dlg.open)return;
+      // Verifica se o clique ocorreu fora da caixa interna do modal (no backdrop escuro)
+      const rect=dlg.getBoundingClientRect();
+      const clickedInside=(
+        e.clientX>=rect.left&&
+        e.clientX<=rect.right&&
+        e.clientY>=rect.top&&
+        e.clientY<=rect.bottom
+      );
+      if(!clickedInside){
+        if(dlg.id==='passwordConfirmDialog'&&typeof cancelPasswordConfirmation==='function'){
+          cancelPasswordConfirmation();
+        }else{
+          dlg.close();
+        }
+      }
+    });
+  }
+
   const baseOpenView=openView;
   openView=function(id){baseOpenView(id);try{sessionStorage.setItem(viewKey,id)}catch{}if(id==='report'){populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()}if(id==='today'){updateTodayCommand();ensureTafAndRankingShortcuts()}if(id==='map'){renderReverseSchedule();decorateEditalIncidenceBadges()}if(id==='review')enhanceReviewCenter();if(id==='essay')enhanceTypedEssayOption();if(id==='taf')renderTafPanel();if(id==='library'){renderCommunityCoopBanner();syncCommunityLibraryForActivePortal()}if(id==='ranking'){renderHuntersLeaderboard();loadHuntersLeaderboard()}if(id==='duel'){renderDuelArena();loadDuelArenaHub()}};
   const baseTickClock=typeof tickClock==='function'?tickClock:null;
@@ -4478,7 +4919,7 @@
   const baseRenderReport=renderReport;
   renderReport=function(){baseRenderReport();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()};
 
-  hookAutomaticDailyStepTracking();addTodayCommand();ensureReverseSchedulePanel();bindQuestionCenter();updateTodayCommand();decorateDailyStepProgressLabels();renderReverseSchedule();
+  window.renderNotifications=renderNotifications=renderInteractiveNotifications;if(q('#notificationBtn'))q('#notificationBtn').onclick=()=>{renderInteractiveNotifications();q('#notificationDialog').showModal()};enableBackdropClickToCloseDialogs();hookAutomaticDailyStepTracking();addTodayCommand();ensureReverseSchedulePanel();bindQuestionCenter();updateTodayCommand();decorateDailyStepProgressLabels();renderReverseSchedule();
   qa('[data-menu-view]').forEach(button=>button.onclick=()=>{q('#moreDialog')?.close();openView(button.dataset.menuView)});
   function realignStudyDisciplinesWithLibrary(){
     if(!Array.isArray(cloudDocuments)||!cloudDocuments.length||typeof window.resolveDocumentDiscipline!=='function')return;

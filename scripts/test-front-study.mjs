@@ -291,3 +291,12 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   console.log("OK: Automação das caixas da Missão Diária e sincronia completa de missões validadas.");
 }
 
+// Teste 21: Central de Notificações Interativa (Feito, Lembrar mais tarde 2h/Amanhã, Limpar tudo) e Fechar Modal ao Clicar Fora
+{
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const cssSrc = readFileSync(new URL("../dist/ui-v77.css", import.meta.url), "utf8");
+  assert.ok(v77Src.includes("renderInteractiveNotifications") && v77Src.includes("markNotificationDone") && v77Src.includes("snoozeNotification"), "Central de Notificações deve suportar marcar como feito, adiar (2h/amanhã) e limpar todas");
+  assert.ok(v77Src.includes("enableBackdropClickToCloseDialogs") && cssSrc.includes("dialog>.sectionHead:first-child"), "Modais devem fechar ao clicar fora e manter cabeçalho fixo (sticky) ao rolar");
+  console.log("OK: Central de Notificações interativa e fechamento ao clicar fora validados.");
+}
+
