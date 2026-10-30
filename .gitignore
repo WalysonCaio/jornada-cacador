@@ -11,3 +11,8 @@ app/android/build/
 .env
 .env.*
 !.env.example
+$null
+.claude/
+app/index.html
+app/sw.js
+wrangler.jsonc
