@@ -2,6 +2,49 @@
   'use strict';
   const q=s=>document.querySelector(s), qa=s=>[...document.querySelectorAll(s)];
   const escText=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const shortLabel=(text,maxLen=52)=>{
+    const clean=String(text||'').replace(/\s+/g,' ').trim();
+    return clean.length>maxLen?clean.slice(0,maxLen-1).trim()+'…':clean;
+  };
+  const BOARD_BOSS_PROFILES={
+    'Cebraspe':{
+      rank:'RANK S · DIFICULDADE ALTA',
+      difficulty:'dificil',
+      scoring:'liquid',
+      summary:'Casos hipotéticos, jurisprudência dominante do STF/STJ, súmulas e pegadinhas de generalização ("sempre", "exclusivamente") ou inversão entre regra e exceção.',
+      promptRules:`PADRÃO OBRIGATÓRIO DA BANCA CEBRASPE (NÍVEL DIFÍCIL / RANK S):
+- Crie enunciados contextualizados com situações hipotéticas de serviço público/policial ("Determinado agente público...", "Considerando a jurisprudência dominante do STF e do STJ...").
+- Cobre entendimento sumulado, jurisprudência de tribunais superiores, exceções constitucionais/legais e distinções doutrinárias finas.
+- Nos distratores, use as pegadinhas clássicas do Cebraspe: generalizações indevidas ("em qualquer hipótese", "sempre", "exclusivamente"), inversão entre competência privativa e exclusiva, ou troca entre regra geral e exceção.`
+    },
+    'FGV Conhecimento':{
+      rank:'RANK S · DIFICULDADE ALTA',
+      difficulty:'dificil',
+      scoring:'standard',
+      summary:'Enunciados longos baseados em casos práticos com personagens ("João, servidor estadual..."), exigindo interpretação profunda e aplicação da norma ao caso concreto.',
+      promptRules:`PADRÃO OBRIGATÓRIO DA BANCA FGV (NÍVEL DIFÍCIL / RANK S):
+- TODA questão deve apresentar um caso prático narrativo com personagens nomeados (ex.: "João, policial penal em serviço...", "Maria, servidora pública estadual...") enfrentando um dilema jurídico, administrativo ou lógico concreto.
+- As 4 alternativas devem ser extensas, técnicas e muito próximas entre si, exigindo que o candidato aplique a lei/jurisprudência/gramática ao caso narrado (nunca faça perguntas curtas do tipo "O que diz o art. X").`
+    },
+    'Instituto AOCP':{
+      rank:'RANK A · DIFICULDADE MÉDIA-ALTA',
+      difficulty:'dificil',
+      scoring:'standard',
+      summary:'Cobrança cirúrgica da letra seca da lei, prazos, quóruns, penas e exceções expressas ("salvo", "exceto", "vedado"), trocando palavras-chave nos distratores.',
+      promptRules:`PADRÃO OBRIGATÓRIO DA BANCA INSTITUTO AOCP (NÍVEL DIFÍCIL / RANK A):
+- Cobre com rigor cirúrgico a literalidade da lei seca, prazos processuais/administrativos, penas, requisitos, competências e exceções legais expressas ("salvo", "exceto", "vedado", "prescindível" vs "imprescindível").
+- Construa alternativas onde os distratores reproduzem o texto legal quase idêntico, mas trocam um verbo modal ("poderá" por "deverá"), um prazo, uma autoridade competente ou misturam incisos do mesmo artigo.`
+    },
+    'IDECAN':{
+      rank:'RANK A · DIFICULDADE MÉDIA-ALTA',
+      difficulty:'dificil',
+      scoring:'standard',
+      summary:'Questões técnicas e detalhistas que cruzam múltiplos artigos da legislação especial com classificações doutrinárias e nomenclatura técnica.',
+      promptRules:`PADRÃO OBRIGATÓRIO DA BANCA IDECAN (NÍVEL DIFÍCIL / RANK A):
+- Elabore questões técnicas e detalhistas que cruzem dispositivos da legislação com classificações doutrinárias (ex.: atributos e espécies de atos, teoria do crime, tipos de flagrante, análise morfossintática avançada).
+- Exija domínio preciso da nomenclatura técnica e das exceções previstas na legislação específica do cargo.`
+    }
+  };
   const viewKey='jornada-last-view-v77';
   if(typeof processEditalDocument==='function'&&typeof window.processStudyDocument!=='function'){
     window.processStudyDocument=id=>processEditalDocument(id);
@@ -345,7 +388,7 @@
       if(label&&key&&!topicsMap.has(key))topicsMap.set(key,label);
     }
     const sorted=[...topicsMap.entries()].sort((a,b)=>a[1].localeCompare(b[1],'pt-BR'));
-    topicSelect.innerHTML='<option value="all">Todos os assuntos</option>'+sorted.map(([key,label])=>`<option value="${escText(key)}">${escText(label)}</option>`).join('');
+    topicSelect.innerHTML='<option value="all">Todos os assuntos</option>'+sorted.map(([key,label])=>`<option value="${escText(key)}" title="${escText(label)}">${escText(shortLabel(label,52))}</option>`).join('');
     topicSelect.value=topicsMap.has(currentTopic)?currentTopic:'all';
     populateExamHubSelects();
   }
@@ -982,7 +1025,7 @@
           <h3 style="margin:4px 0 6px">Gerador de Caderno Comentado no Estilo da Banca</h3>
           <p class="small muted" style="margin:0 0 12px">Escolha a banca, a disciplina e o assunto do seu edital. A IA criará questões inéditas com resolução passo a passo (Conceito-chave + análise de cada alternativa + pegadinha) e salvará no seu banco.</p>
           <div class="simuladoConfigGrid" style="margin-bottom:10px">
-            <label class="field" style="margin:0">Banca organizadora<select id="genBankBoard"><option value="Instituto AOCP">Instituto AOCP</option><option value="Cebraspe">Cebraspe</option><option value="FGV Conhecimento">FGV Conhecimento</option><option value="IBFC">IBFC</option><option value="FCC">FCC</option><option value="Vunesp">Vunesp</option><option value="Projeto Caveira (Policial)">Estilo Caveira (Carreiras Policiais)</option></select></label>
+            <label class="field" style="margin:0">Banca organizadora<select id="genBankBoard"><option value="Instituto AOCP">Instituto AOCP</option><option value="Cebraspe">Cebraspe</option><option value="FGV Conhecimento">FGV Conhecimento</option><option value="IDECAN">IDECAN</option><option value="IBFC">IBFC</option><option value="FCC">FCC</option><option value="Vunesp">Vunesp</option><option value="Projeto Caveira (Policial)">Estilo Caveira (Carreiras Policiais)</option></select></label>
             <label class="field" style="margin:0">Disciplina do portal<select id="genBankSubject"></select></label>
             <label class="field" style="margin:0">Assunto / Tópico foco<select id="genBankTopic"><option value="Geral do edital">Todos os tópicos da disciplina</option></select></label>
           </div>
@@ -1051,13 +1094,14 @@
     const missions=(typeof missionPool==='function'?missionPool():[]).filter(m=>topicKey(canonicalSubjectName(m.subject))===topicKey(genSubj));
     const qTopics=(ALL_QUESTIONS||[]).filter(item=>topicKey(canonicalSubjectName(item.subject))===topicKey(genSubj)).map(item=>item.topic).filter(Boolean);
     const topics=[...new Set([...missions.map(m=>m.name),...qTopics])].slice(0,60);
-    genTopic.innerHTML=`<option value="Tópicos essenciais de ${escText(genSubj)}">Todos os tópicos de ${escText(genSubj)}</option>`+topics.map(t=>`<option value="${escText(t)}">${escText(t)}</option>`).join('');
+    genTopic.innerHTML=`<option value="Tópicos essenciais de ${escText(genSubj)}">Todos os tópicos de ${escText(shortLabel(genSubj,32))}</option>`+topics.map(t=>{
+      const cleanVal=String(t||'').replace(/\s+/g,' ').trim().slice(0,180);
+      return `<option value="${escText(cleanVal)}" title="${escText(cleanVal)}">${escText(shortLabel(cleanVal,52))}</option>`;
+    }).join('');
   }
 
   function renderExamBankHub(){
     ensureExamBankHub();
-    enhanceFlashcardsSpacedRepetition();
-    enhanceEssayCenter();
     const catalogEl=q('#examDocumentsCatalog'),countTag=q('#examHubCountTag');
     if(!catalogEl)return;
     const officialQuestions=(ALL_QUESTIONS||[]).filter(item=>normalizedOrigin(item)==='oficial');
@@ -1273,7 +1317,11 @@
     try{
       const session=await validSession();
       if(!session)throw new Error('Sessão expirada. Entre novamente.');
-      const context=typeof assistantLibraryContext==='function'?assistantLibraryContext():'';
+      const baseContext=typeof assistantLibraryContext==='function'?assistantLibraryContext():'';
+      const boardProfile=BOARD_BOSS_PROFILES[board]||null;
+      const context=boardProfile
+        ?`${boardProfile.promptRules}\n\n${baseContext}`.trim()
+        :baseContext;
       const res=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{
         method:'POST',
         headers:{...authHeaders(session.access_token)},
@@ -2951,11 +2999,12 @@
       .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,'[EMAIL PROTEGIDO]');
   }
 
-  async function syncCommunityLibraryForActivePortal(){
+  async function syncCommunityLibraryForActivePortal(force=false){
     if(!cloudSession)return;
     const campaign=typeof activeCampaign==='function'?activeCampaign():null;
     if(!campaign)return;
     const slug=normalizeExamSlug(campaign.name||'',campaign.organization||'');
+    if(!force&&communityCache.slug===slug&&communityCache.loadedAt&&(Date.now()-communityCache.loadedAt<300000))return;
     try{
       const res=await cloudFetch('rpc/get_community_exam_library',{
         method:'POST',
@@ -4903,7 +4952,36 @@
     };
   }
   const baseRender=render;
-  render=function(){syncHunterStatsSnapshot();baseRender();enhanceSoloLevelingVisuals();enhanceFlashcardsSpacedRepetition();enhanceEssayCenter();enhanceTypedEssayOption();enhanceReviewCenter();decorateEditalIncidenceBadges();renderCommunityCoopBanner();decorateDailyStepProgressLabels();updateFlashcardSpacedStats();updateTodayCommand();ensureTafAndRankingShortcuts();renderReverseSchedule();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub();if(q('#taf')?.classList.contains('active'))renderTafPanel();if(q('#ranking')?.classList.contains('active'))renderHuntersLeaderboard()};
+  render=function(){
+    syncHunterStatsSnapshot();
+    baseRender();
+    enhanceSoloLevelingVisuals();
+    const activeId=document.querySelector('.view.active')?.id||'today';
+    if(!window._v77InitialBootDone){
+      window._v77InitialBootDone=true;
+      enhanceFlashcardsSpacedRepetition();
+      enhanceEssayCenter();
+      enhanceTypedEssayOption();
+      enhanceReviewCenter();
+      decorateEditalIncidenceBadges();
+      renderCommunityCoopBanner();
+      decorateDailyStepProgressLabels();
+      updateFlashcardSpacedStats();
+      updateTodayCommand();
+      ensureTafAndRankingShortcuts();
+      renderReverseSchedule();
+    }else{
+      if(activeId==='today'){decorateDailyStepProgressLabels();updateTodayCommand();ensureTafAndRankingShortcuts()}
+      else if(activeId==='map'){decorateEditalIncidenceBadges();renderReverseSchedule()}
+      else if(activeId==='study'){enhanceFlashcardsSpacedRepetition();updateFlashcardSpacedStats()}
+      else if(activeId==='library'){renderCommunityCoopBanner()}
+      else if(activeId==='essay'){enhanceEssayCenter();enhanceTypedEssayOption()}
+      else if(activeId==='review'){enhanceReviewCenter()}
+      else if(activeId==='taf'){renderTafPanel()}
+      else if(activeId==='ranking'){renderHuntersLeaderboard()}
+      else if(activeId==='duel'){renderDuelArena()}
+    }
+  };
   const baseRenderReport=renderReport;
   renderReport=function(){baseRenderReport();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()};
 
@@ -4982,46 +5060,116 @@
             <div class="slBannerContent">
               <div class="slSystemBadge">👑 MASMORRA DAS BANCAS · BOSS RAID</div>
               <h3>Enfrente os Monstros das Bancas Examinadoras</h3>
-              <p class="small muted">Escolha uma banca abaixo para configurar automaticamente o gerador de questões comentadas ou iniciar uma bateria tática no estilo da prova:</p>
+              <p class="small muted">Toque em um Chefe abaixo para ativar o <b>Modo Boss (Nível Difícil)</b> com o padrão real de cobrança e pegadinhas daquela banca:</p>
               <div class="slBossGrid">
                 <button type="button" class="slBossBtn" data-sl-boss-board="Cebraspe">
-                  <span class="slBossRank">RANK S</span>
+                  <span class="slBossRank">RANK S · DIFÍCIL</span>
                   <b>CEBRASPE</b>
-                  <small>Jurisprudência & Casos</small>
+                  <small>Jurisprudência STF/STJ & Casos</small>
                 </button>
-                <button type="button" class="slBossBtn" data-sl-boss-board="FGV">
-                  <span class="slBossRank">RANK S</span>
+                <button type="button" class="slBossBtn" data-sl-boss-board="FGV Conhecimento">
+                  <span class="slBossRank">RANK S · DIFÍCIL</span>
                   <b>FGV</b>
-                  <small>Interpretação & Casos Práticos</small>
+                  <small>Casos Práticos Narrativos Longos</small>
                 </button>
                 <button type="button" class="slBossBtn" data-sl-boss-board="Instituto AOCP">
-                  <span class="slBossRank">RANK A</span>
+                  <span class="slBossRank">RANK A · DIFÍCIL</span>
                   <b>AOCP</b>
-                  <small>Letra da Lei & Pegadinhas</small>
+                  <small>Letra da Lei, Prazos & Exceções</small>
                 </button>
                 <button type="button" class="slBossBtn" data-sl-boss-board="IDECAN">
-                  <span class="slBossRank">RANK A</span>
+                  <span class="slBossRank">RANK A · DIFÍCIL</span>
                   <b>IDECAN</b>
-                  <small>Cobrança Literal & Técnica</small>
+                  <small>Cobrança Técnica & Doutrinária</small>
                 </button>
               </div>
+              <div class="slActiveBossPanel" id="slActiveBossPanel" hidden></div>
             </div>
           </div>
         `;
         if(anchor.id==='examBankHub')anchor.insertAdjacentHTML('beforebegin',bannerHtml);
         else anchor.insertAdjacentHTML('afterend',bannerHtml);
-        qa('[data-sl-boss-board]').forEach(btn=>{
-          btn.onclick=()=>{
-            const board=btn.dataset.slBossBoard;
-            if(typeof switchExamHubTab==='function')switchExamHubTab('generator');
-            const boardSel=q('#genExamBoard');
-            if(boardSel){
-              boardSel.value=board;
-              boardSel.dispatchEvent(new Event('change'));
+
+        const activateBossBoard=(board)=>{
+          const profile=BOARD_BOSS_PROFILES[board]||BOARD_BOSS_PROFILES['Instituto AOCP'];
+          qa('[data-sl-boss-board]').forEach(b=>b.classList.toggle('active',b.dataset.slBossBoard===board));
+          ensureExamBankHub();
+          populateExamHubSelects();
+          const boardSel=q('#genBankBoard');
+          if(boardSel){
+            if(![...boardSel.options].some(o=>o.value===board)){
+              boardSel.insertAdjacentHTML('beforeend',`<option value="${escText(board)}">${escText(board)}</option>`);
             }
-            q('#examBankHub')?.scrollIntoView({behavior:'smooth',block:'start'});
-            toast(`⚔️ Chefe ${board} selecionado! Escolha a disciplina e gere o caderno tático.`);
-          };
+            boardSel.value=board;
+          }
+          const diffSel=q('#genBankDifficulty');
+          if(diffSel)diffSel.value=profile.difficulty||'dificil';
+          const scoreSel=q('#simuladoScoringMode');
+          if(scoreSel)scoreSel.value=profile.scoring||'standard';
+
+          const currentSubj=q('#questionSubject')?.value||'all';
+          const shortB=board.replace('Conhecimento','').replace('Instituto ','').trim();
+          const boardRegex=new RegExp(shortB,'i');
+          const matchingBoardQs=(ALL_QUESTIONS||[]).filter(item=>(currentSubj==='all'||learningCategory(item.subject)===currentSubj)&&boardRegex.test(`${item.board||''} ${item.explanation||''}`));
+          const hardPool=(ALL_QUESTIONS||[]).filter(item=>(currentSubj==='all'||learningCategory(item.subject)===currentSubj)&&['dificil','medio'].includes(normalizedDifficulty(item)));
+          const raidPool=matchingBoardQs.length>=3?matchingBoardQs:(hardPool.length?hardPool:(ALL_QUESTIONS||[]));
+
+          const panel=q('#slActiveBossPanel');
+          if(panel){
+            panel.hidden=false;
+            panel.innerHTML=`
+              <div class="slBossStatusHead">
+                <div>
+                  <span class="slBossRank">${escText(profile.rank)} · MODO BOSS ATIVO</span>
+                  <h4>Chefe ${escText(board)} selecionado</h4>
+                </div>
+                <span class="tag">${matchingBoardQs.length} questão(ões) ${escText(shortB)} no banco</span>
+              </div>
+              <p class="small" style="margin:6px 0 10px;color:#e2e8f0;line-height:1.45"><b>O que muda nesta banca:</b> ${escText(profile.summary)}</p>
+              <div class="slBossActionRow">
+                <button type="button" class="action small" id="slStartImmediateRaidBtn">⚔️ Enfrentar Agora (${Math.min(8,Math.max(5,raidPool.length))} Questões Difíceis · +300 XP)</button>
+                <button type="button" class="ghost small" id="slGenerateBossPackNowBtn">✨ Gerar Caderno Inédito Padrão ${escText(shortB)} (IA)</button>
+              </div>
+            `;
+            q('#slStartImmediateRaidBtn').onclick=()=>{
+              if(!raidPool.length){
+                switchExamHubTab('generator');
+                q('#generateBoardPackBtn')?.click();
+                return;
+              }
+              const sortedHard=[...raidPool].sort((a,b)=>{
+                const da=normalizedDifficulty(a)==='dificil'?0:normalizedDifficulty(a)==='medio'?1:2;
+                const db=normalizedDifficulty(b)==='dificil'?0:normalizedDifficulty(b)==='medio'?1:2;
+                return da-db||(Math.random()-0.5);
+              });
+              const chosen=sortedHard.slice(0,Math.min(8,sortedHard.length)).map(prepareQuestion);
+              activeQuestions={
+                mode:'boss',
+                subject:currentSubj==='all'?`Raid ${shortB}`:currentSubj,
+                questions:chosen,
+                current:0,
+                correct:0,
+                streak:0,
+                level:3,
+                answered:false
+              };
+              if(q('#questionDialogTitle'))q('#questionDialogTitle').textContent=`👑 Boss Raid · ${board} (Nível Difícil)`;
+              q('#questionDialog')?.showModal();
+              showQuestion();
+              toast(`⚔️ Boss Raid contra ${board} iniciado! Alcance 70%+ para vencer e ganhar +300 XP!`);
+            };
+            q('#slGenerateBossPackNowBtn').onclick=()=>{
+              switchExamHubTab('generator');
+              if(q('#genBankBoard'))q('#genBankBoard').value=board;
+              if(q('#genBankDifficulty'))q('#genBankDifficulty').value='dificil';
+              q('#examBankHub')?.scrollIntoView({behavior:'smooth',block:'center'});
+              handleGenerateBoardPack();
+            };
+          }
+        };
+
+        qa('[data-sl-boss-board]').forEach(btn=>{
+          btn.onclick=()=>activateBossBoard(btn.dataset.slBossBoard);
         });
       }
     }
@@ -5093,8 +5241,7 @@
   if(baseLoadGenForComm){
     loadGeneratedContent=async function(){
       const res=await baseLoadGenForComm();
-      realignStudyDisciplinesWithLibrary();
-      await syncCommunityLibraryForActivePortal();
+      await syncCommunityLibraryForActivePortal(false);
       realignStudyDisciplinesWithLibrary();
       return res;
     };

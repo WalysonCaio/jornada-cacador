@@ -650,3 +650,70 @@ section.hero.slSystemHero {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ── v103: Contenção Responsiva de Selects Longos, Fluidez de Scroll e Painel Boss Raid ── */
+.simuladoConfigGrid > .field,
+.formrow > .field,
+.examGeneratorBox .field,
+.questionTrainer .field {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden;
+}
+
+select,
+.field select {
+  width: 100%;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.summaryCard,
+.docCard {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 220px;
+}
+
+.slBossBtn.active {
+  border-color: #59e6ff !important;
+  background: linear-gradient(160deg, rgba(14, 48, 80, 0.96), rgba(52, 23, 98, 0.92)) !important;
+  box-shadow: 0 0 20px rgba(89, 230, 255, 0.35), inset 0 0 12px rgba(89, 230, 255, 0.18) !important;
+  transform: translateY(-2px);
+}
+
+.slActiveBossPanel {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(7, 17, 32, 0.92);
+  border: 1px solid rgba(89, 230, 255, 0.4);
+  box-shadow: inset 0 0 18px rgba(89, 230, 255, 0.08);
+}
+
+.slBossStatusHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.slBossStatusHead h4 {
+  margin: 2px 0 0;
+  font-size: 0.98rem;
+  color: #67e8f9;
+}
+
+.slBossActionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.slBossActionRow > button {
+  flex: 1 1 220px;
+}

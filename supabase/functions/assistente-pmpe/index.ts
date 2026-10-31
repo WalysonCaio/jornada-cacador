@@ -460,10 +460,15 @@ Regras obrigatórias:
 - Marque origin como "autoral".
 - No campo explanation, escreva uma RESOLUÇÃO PASSO A PASSO que ensine o aluno (estilo boaResposta):
   "Conceito-chave: [regra ou fundamento cobrado]\n✅ Alternativa correta: [justificativa passo a passo]\n❌ Por que as outras estão erradas: [análise concisa de cada distrator]\n⚠️ Pegadinha da banca (${board}): [como não cair no erro]".`
-      : `Elabore um caderno de ${count} questões inéditas de múltipla escolha no estilo exato de cobrança da banca ${board}.
+      : `Elabore um caderno de ${count} questões inéditas de múltipla escolha reproduzindo FIELMENTE a engenharia de prova e pegadinhas da banca ${board}.
 Disciplina: ${subject}.
 Assunto / Tópico foco: ${topic}.
-Dificuldade solicitada: ${difficulty === "progressivo" ? "progressiva (comece com fácil, passe para média e finalize com difícil)" : difficulty}.
+Dificuldade solicitada: ${difficulty === "progressivo" ? "progressiva (comece com fácil, passe para média e finalize com difícil)" : difficulty === "dificil" ? "DIFÍCIL (Nível Boss Raid: cobre casos práticos complexos, exceções legais, prazos, jurisprudência dominante e pegadinhas clássicas da banca)" : difficulty}.
+Perfil obrigatório da banca ${board}:
+- Se Cebraspe: situações hipotéticas, jurisprudência dominante STF/STJ, súmulas e pegadinhas de generalização ("sempre", "exclusivamente") ou inversão entre regra e exceção.
+- Se FGV: enunciados narrativos longos com personagens em casos concretos ("João, servidor público..."), exigindo aplicação prática da norma e alternativas técnicas próximas.
+- Se Instituto AOCP: literalidade cirúrgica da lei seca, prazos, penas, competências e exceções ("salvo", "exceto", "vedado"), trocando palavras-chave nos distratores.
+- Se IDECAN: cobrança técnica e detalhista cruzando dispositivos legais com classificações doutrinárias e nomenclatura técnica.
 
 ${context ? `MATERIAL DE REFERÊNCIA DO PORTAL:\n${context}\n` : ""}
 

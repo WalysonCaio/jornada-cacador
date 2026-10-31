@@ -380,3 +380,16 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   assert(v77Src.includes("enhanceSoloLevelingVisuals") && v77Src.includes("bancas-boss-banner.jpg") && cssSrc.includes(".slBossesBanner"), "Banners e elementos visuais responsivos do Solo Leveling devem estar presentes");
   console.log("OK: Trilha de Aprendizagem sem Edital ('Edital e Prova' removido) e personalização responsiva Solo Leveling validadas.");
 }
+
+// ── Validação v103: Responsividade dos Selects, Boss Raid Real por Banca e Fluidez de Renderização ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const cssSrc = readFileSync(new URL("../dist/ui-v77.css", import.meta.url), "utf8");
+
+  assert.ok(htmlSrc.includes("shortOptionLabel") && v77Src.includes("shortLabel(cleanVal,52)"), "Selects de tópicos longos devem truncar o texto visível para não estourar a tela");
+  assert.ok(htmlSrc.includes("renderViewById") && v77Src.includes("_v77InitialBootDone"), "Renderização deve ser orientada à aba ativa (lazy view render) para máxima fluidez");
+  assert.ok(v77Src.includes("BOARD_BOSS_PROFILES") && v77Src.includes("slActiveBossPanel") && v77Src.includes("slStartImmediateRaidBtn"), "Masmorra das Bancas (Boss Raid) deve aplicar perfil real da banca, dificuldade difícil e permitir duelo imediato ou geração IA");
+  assert.ok(cssSrc.includes(".slActiveBossPanel") && cssSrc.includes("content-visibility: auto"), "CSS deve conter contenção responsiva de selects e otimização de scroll");
+  console.log("OK: Responsividade dos selects, Boss Raid real das bancas e fluidez de renderização (v103) validados.");
+}
