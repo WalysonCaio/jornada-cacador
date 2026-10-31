@@ -125,7 +125,8 @@ revoke all on function public.cleanup_duplicate_hunter_profiles() from public;
 grant execute on function public.cleanup_duplicate_hunter_profiles() to authenticated, service_role;
 
 -- Executa a limpeza imediatamente ao rodar esta migração no SQL Editor!
-select public.cleanup_duplicate_hunter_profiles();
+-- DESATIVADO (v96_a): esta chamada excluía contas de auth.users automaticamente.
+-- select public.cleanup_duplicate_hunter_profiles();
 
 -- Atualiza get_hunters_leaderboard() com deduplicação automática por nome normalizado (DISTINCT ON)
 create or replace function public.get_hunters_leaderboard()

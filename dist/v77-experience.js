@@ -2765,7 +2765,6 @@
         <div class="rankHeaderActions">
           <button type="button" class="action small" id="openDuelArenaFromRankBtn" style="background:linear-gradient(90deg,#7c3aed,#2563eb)">⚔️ Arena Duelo X1</button>
           <button type="button" class="ghost small" id="shareAppRankingBtn">📲 Convidar Amigos</button>
-          <button type="button" class="ghost small" id="dedupRankingBtn" title="Verifica e remove perfis duplicados sem progresso no banco">🧹 Limpar Duplicados</button>
           <button type="button" class="ghost small" id="refreshRankingBtn">${leaderboardBusy?'⏳ Atualizando...':'↻ Atualizar'}</button>
         </div>
       </div>
@@ -2879,24 +2878,12 @@
     if(q('#openDuelArenaFromRankBtn'))q('#openDuelArenaFromRankBtn').onclick=()=>openView('duel');
     qa('[data-challenge-from-rank]').forEach(btn=>{
       btn.onclick=()=>{
-        const [uid,uname]=btn.dataset.challengeFromRank.split('|');
+        const raw=btn.dataset.challengeFromRank||'',cut=raw.indexOf('|'),uid=cut<0?raw:raw.slice(0,cut),uname=cut<0?'Oponente':raw.slice(cut+1);
         selectedDuelOpponentId=uid;
         selectedDuelOpponentName=uname;
         openView('duel');
       };
     });
-    if(q('#dedupRankingBtn'))q('#dedupRankingBtn').onclick=async()=>{
-      try{
-        const res=await cloudFetch('rpc/cleanup_duplicate_hunter_profiles',{method:'POST',body:JSON.stringify({})});
-        const data=await res.json().catch(()=>({}));
-        const removed=Number(data?.removed_count||0);
-        await loadHuntersLeaderboard(false);
-        toast(removed>0?`✓ ${removed} perfil(is) duplicado(s) excluído(s) do banco!`:'✓ Nenhum perfil duplicado pendente no banco (apenas 1 conta por participante).');
-      }catch{
-        await loadHuntersLeaderboard(false);
-        toast('Lista deduplicada! Execute a migração v92 no SQL Editor do Supabase para excluir duplicados do banco.');
-      }
-    };
     q('#shareAppRankingBtn').onclick=async()=>{
       const rolesText=me.secondary_role?`${me.role} e ${me.secondary_role}`:me.role;
       const shareText=`🔥 Estou estudando no Jornada do Caçador para ${rolesText} (${me.streak} dias de ofensiva e ${me.xp} XP)! Entre no app, compartilhe materiais da prova e dispute no Ranking: https://jornada.wcaio.workers.dev`;
