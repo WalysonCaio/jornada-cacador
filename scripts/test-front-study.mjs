@@ -300,3 +300,36 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   console.log("OK: Central de Notificações interativa e fechamento ao clicar fora validados.");
 }
 
+
+// ── Validação v100: Extração determinística e desdobramento de Edital Verticalizado (PPPE) ──
+{
+  const pdfClientCode = readFileSync(new URL("../dist/pdf-text-client.js", import.meta.url), "utf8");
+  assert(pdfClientCode.includes("Promise.withResolvers"), "pdf-text-client.js deve incluir polyfill para Promise.withResolvers");
+  assert(pdfClientCode.includes("extractStructuredEditalTopics"), "pdf-text-client.js deve expor extractStructuredEditalTopics");
+  assert(pdfClientCode.includes("campaign_topics?on_conflict=campaign_id,subject,topic"), "pdf-text-client.js deve salvar campaign_topics com on_conflict para evitar erro 409");
+
+  const uc = [
+    slice("function normalizeText(", "function missionForQuestion("),
+    slice("window.unpackEditalTopicsList=function(", "window._activeProcessingDocs="),
+  ].join("\n");
+  const ctx = { window: {} };
+  vm.createContext(ctx);
+  vm.runInContext(uc, ctx);
+
+  // Simula quando a IA devolve todos os tópicos sob 1 único subject ("Polícia Penal - PE")
+  const collapsedRows = [
+    { id: 1, subject: "Polícia Penal - PE", unit_name: "", topic: "1. Compreensão e interpretação de textos de gêneros variados" },
+    { id: 2, subject: "Polícia Penal - PE", unit_name: "", topic: "2. Domínio da ortografia oficial e sintaxe da oração" },
+    { id: 3, subject: "Polícia Penal - PE", unit_name: "", topic: "1. Ética e moral. Ética no setor público e Decreto nº 46.852/2018" },
+    { id: 4, subject: "Polícia Penal - PE", unit_name: "", topic: "1. Lei nº 15.755/2016 (Código Penitenciário do Estado de Pernambuco)" },
+    { id: 5, subject: "Polícia Penal - PE", unit_name: "", topic: "1. Noções de sistema operacional (ambientes Linux e Windows) e redes de computadores" },
+    { id: 6, subject: "Polícia Penal - PE", unit_name: "", topic: "1. Estruturas lógicas e tabelas verdade" },
+    { id: 7, subject: "Polícia Penal - PE", unit_name: "", topic: "1. Aplicação da lei penal. O fato típico e seus elementos. Crime consumado e tentado" },
+    { id: 8, subject: "Polícia Penal - PE", unit_name: "", topic: "1. Disposições preliminares do Código de Processo Penal e Inquérito policial" },
+  ];
+
+  const unpackedPppe = ctx.window.unpackEditalTopicsList(collapsedRows, "Polícia Penal - PE", "EDITAL VERTICALIZADO PPPE");
+  const distinctSubjects = [...new Set(unpackedPppe.map((r) => r.subject))];
+  assert(distinctSubjects.length >= 7, `unpackEditalTopicsList deve separar as disciplinas reais quando agrupadas sob Polícia Penal - PE (obteve ${distinctSubjects.length}: ${distinctSubjects.join(", ")})`);
+  console.log("OK: extrator determinístico de Edital Verticalizado (PPPE) e separação automática de disciplinas validados.");
+}

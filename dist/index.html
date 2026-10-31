@@ -764,7 +764,10 @@ function canonicalSubjectName(value,contextHint=''){
     [/^direito administrativo|\b(atos administrativos|poderes administrativos|agentes publicos|licitacoes e contratos|improbidade administrativa|organizacao administrativa|controle da administracao)\b/,'Direito Administrativo'],
     [/^direito processual penal|^processo penal|\b(inquerito policial|acao penal|prisao em flagrante|prisao preventiva|prisao temporaria|provas no processo penal|liberdade provisoria)\b/,'Direito Processual Penal'],
     [/^direito penal|\b(teoria do crime|tipicidade|ilicitude|culpabilidade|concurso de pessoas|crimes contra a pessoa|crimes contra o patrimonio|crimes contra a administracao publica|aplicacao da lei penal)\b/,'Direito Penal'],
-    [/^(direitos humanos|direito humano)|\b(declaracao universal dos direitos|pacto de san jose|convencao americana|regras de nelson mandela|uso progressivo da forca)\b/,'Direitos Humanos']
+    [/^(direitos humanos|direito humano)|\b(declaracao universal dos direitos|pacto de san jose|convencao americana|regras de nelson mandela|uso progressivo da forca|regras minimas da onu|conselhos penitenciarios|conselhos da comunidade)\b/,'Direitos Humanos'],
+    [/^etica\b|\b(etica e moral|etica no servico publico|etica no setor publico|codigo de etica|46[\s.]*852)\b/,'Ética no Serviço Público'],
+    [/^legislacao estadual\b|\b(codigo penitenciario do estado de pernambuco|15[\s.]*755|normas disciplinares dos policiais penais|6[\s.]*123)\b/,'Legislação Estadual'],
+    [/^atualidades\b|\b(topicos relevantes e atuais|seguranca prisional nacional)\b/,'Atualidades']
   ];
   for(const [pattern,label] of rules){if(pattern.test(key))return label}
   for(const [pattern,label] of rules){if(pattern.test(combined))return label}
@@ -894,7 +897,7 @@ function finishLesson(){const l=activeLesson,total=l.questions.length,score=Math
 function restoreLessonStage(){$('#lessonStage').innerHTML='<div class="eyebrow" id="lessonSubject">DISCIPLINA</div><h2 class="lessonQuestion" id="lessonQuestion"></h2><div class="lessonOptions" id="lessonOptions"></div><div class="lessonFeedback" id="lessonFeedback"></div><button class="action" id="lessonNext" hidden>Continuar</button>';$('#lessonNext').onclick=nextLesson}
 function renderCampaigns(){const current=activeCampaign();$('#campaignBtn').textContent=`${current?.name||'Meus portais'} ▾`;$('#campaignList').innerHTML=state.campaigns.map(c=>`<div class="campaignChoice ${c.id===state.activeCampaignId?'active':''}"><div><b>${esc(c.name)}</b><span class="small muted">${esc(c.organization||'Concurso personalizado')} · prioridade ${c.priority}</span></div><div class="campaignButtons"><button class="ghost" data-switch-campaign="${c.id}">${c.id===state.activeCampaignId?'Ativa':'Entrar'}</button><button class="ghost" data-edit-campaign="${c.id}">Editar</button><button class="ghost danger" data-delete-campaign="${c.id}">Excluir</button></div></div>`).join('');$$('[data-switch-campaign]').forEach(b=>b.onclick=()=>switchCampaign(b.dataset.switchCampaign));$$('[data-edit-campaign]').forEach(b=>b.onclick=()=>openCampaignEdit(b.dataset.editCampaign));$$('[data-delete-campaign]').forEach(b=>b.onclick=()=>deleteCampaign(b.dataset.deleteCampaign))}
 function switchCampaign(id){const current=activeCampaign();if(current)current.customCampaign=state.customCampaign;const next=state.campaigns.find(c=>c.id===id);if(!next)return;state.activeCampaignId=id;state.customCampaign=next.customCampaign||{name:next.name,missions:[]};selectedCustomSubject=localStorage.getItem(portalSelectionKey())||'';state.daily=null;state.dailySteps={};cloudDocuments=[];cloudEssays=[];ALL_SUMMARIES=[];ALL_FLASHCARDS=[];ALL_QUESTIONS=[];LEARNING_SUBJECTS=[];save();$('#campaignDialog').close();render();if(cloudSession)Promise.all([loadCloudDocuments(),loadGeneratedContent(),loadCampaignTopics(),loadEssays()]).then(renderAssistant);toast(`Portal ${next.name} ativado`)}
-function addCampaign(){const name=$('#newCampaignName').value.trim(),organization=$('#newCampaignOrg').value.trim(),priority=+$('#newCampaignPriority').value;if(!name)return toast('Informe o nome do concurso');const id=`campaign-${Date.now()}`,campaign={id,name,organization,priority,template:'custom',customCampaign:{name,missions:[]}};const current=activeCampaign();if(current)current.customCampaign=state.customCampaign;state.campaigns.push(campaign);state.activeCampaignId=id;state.customCampaign=campaign.customCampaign;state.daily=null;state.dailySteps={};$('#newCampaignName').value='';$('#newCampaignOrg').value='';save();$('#campaignDialog').close();render();toast('Novo portal criado. Agora insira o edital.')}
+function addCampaign(){const name=$('#newCampaignName').value.trim(),organization=$('#newCampaignOrg').value.trim(),priority=+$('#newCampaignPriority').value;if(!name)return toast('Informe o nome do concurso');const id=`campaign-${Date.now()}`,campaign={id,name,organization,priority,template:'custom',customCampaign:{name,missions:[]}};const current=activeCampaign();if(current)current.customCampaign=state.customCampaign;state.campaigns.push(campaign);state.activeCampaignId=id;state.customCampaign=campaign.customCampaign;selectedCustomSubject='';state.daily=null;state.dailySteps={};cloudDocuments=[];cloudEssays=[];ALL_SUMMARIES=[];ALL_FLASHCARDS=[];ALL_QUESTIONS=[];LEARNING_SUBJECTS=[];$('#newCampaignName').value='';$('#newCampaignOrg').value='';save();$('#campaignDialog').close();render();if(cloudSession)ensureActiveCampaignRecord().then(()=>Promise.all([loadCloudDocuments(),loadGeneratedContent(),loadCampaignTopics(),loadEssays()])).then(renderAssistant).catch(()=>{});toast('Novo portal criado. Agora insira o edital.')}
 function openCampaignEdit(id){const c=state.campaigns.find(x=>x.id===id);if(!c)return;editingCampaignId=id;$('#editCampaignName').value=c.name;$('#editCampaignOrg').value=c.organization||'';$('#editCampaignExamDate').value=c.examDate||c.exam_date||'';$('#editCampaignPriority').value=String(c.priority||1);$('#editCampaignDialog').showModal()}
 async function saveCampaignEdit(){const c=state.campaigns.find(x=>x.id===editingCampaignId),name=$('#editCampaignName').value.trim();if(!c||!name)return toast('Informe o nome do concurso');c.name=name;c.organization=$('#editCampaignOrg').value.trim();c.examDate=$('#editCampaignExamDate').value||null;c.priority=+$('#editCampaignPriority').value;if(c.customCampaign&&!c.customCampaign.name)c.customCampaign.name=name;save();$('#editCampaignDialog').close();render();try{await syncCampaignRecord(c,true);toast('Campanha e data da prova sincronizadas')}catch(error){toast(`Alteração salva neste aparelho. Sincronização pendente: ${error.message}`)}}
 async function deleteCampaign(id){if(state.campaigns.length===1)return toast('Mantenha pelo menos uma campanha');const c=state.campaigns.find(x=>x.id===id);if(!c)return;if(!cloudSession)return toast('Entre na sua conta para excluir um portal com segurança');const password=await requestPasswordConfirmation({title:'Excluir portal?',text:`O portal “${c.name}”, seus arquivos e todas as missões vinculadas serão excluídos. Esta ação não pode ser desfeita.`,button:'Excluir portal'});if(!password)return;try{if(c.dbId)await secureAccountAction('delete_campaign',password,{campaign_id:c.dbId})}catch(error){return toast(error.message)}const deletedMissions=new Set((c.customCampaign?.missions||[]).map(m=>m.id));for(const mId of deletedMissions){delete state.done[mId];delete state.errors[mId];for(const rKey of Object.keys(state.reviews||{}))if(rKey.startsWith(`mission-${mId}-`))delete state.reviews[rKey]}for(const [eKey,err] of Object.entries(state.errors||{}))if(err?.campaignId===id)delete state.errors[eKey];for(const bKey of Object.keys(state.bosses||{}))if(bKey.startsWith(`boss-${id}-`))delete state.bosses[bKey];state.scores=(state.scores||[]).filter(s=>s.campaignId!==id&&!deletedMissions.has(s.id));state.dailyHistory=(state.dailyHistory||[]).filter(x=>x.campaignId!==id);state.userNotes=(state.userNotes||[]).filter(x=>x.campaignId!==id);state.aiHistory=(state.aiHistory||[]).filter(x=>x.campaignId!==id);state.learning.completed=Object.fromEntries(Object.entries(state.learning?.completed||{}).filter(([key])=>!key.startsWith(`${id}-`)));const switched=state.activeCampaignId===id;state.campaigns=state.campaigns.filter(x=>x.id!==id);if(switched){state.activeCampaignId=state.campaigns[0].id;state.customCampaign=state.campaigns[0].customCampaign||{name:state.campaigns[0].name,missions:[]};state.daily=null;state.dailyDate=null;state.currentDailyHistoryId=null;state.dailySteps={};cloudDocuments=[];cloudEssays=[];ALL_SUMMARIES=[];ALL_FLASHCARDS=[];ALL_QUESTIONS=[];LEARNING_SUBJECTS=[]}state._resetEpoch=Date.now();save();renderCampaigns();render();if(cloudSession){if(switched)await Promise.all([loadCloudDocuments(),loadGeneratedContent(),loadCampaignTopics(),loadEssays()]).then(renderAssistant);if(navigator.onLine)await pushCloudState()}toast('Portal, arquivos e dados vinculados foram excluídos')}
@@ -965,7 +968,126 @@ function missionIdentity(m){const clean=value=>normalizeText(value).replace(/^\s
 function reconcileMissionProgress(previous,next){const stats={kept:0,fuzzy:0,lost:0},nextIds=new Set(next.map(m=>m.id)),oldByKey=new Map(),matched=new Set(),pairs=[],unmatchedNext=[],fuzzyUsed=new Set();for(const m of previous||[])oldByKey.set(missionIdentity(m),m);for(const mission of next){const old=oldByKey.get(missionIdentity(mission));if(old){if(old.id!==mission.id)pairs.push([old,mission]);matched.add(old.id);stats.kept++}else unmatchedNext.push(mission)}const hasProgress=m=>Boolean(state.done[m.id]||state.errors[m.id]||state.daily===m.id),part=(m,i)=>missionIdentity(m).split('|')[i],tokens=m=>new Set(part(m,1).split(' ').filter(w=>w.length>2));for(const old of(previous||[]).filter(m=>!matched.has(m.id)&&!nextIds.has(m.id)&&hasProgress(m))){const a=tokens(old);let best=null,score=0;for(const cand of unmatchedNext){if(fuzzyUsed.has(cand.id)||part(cand,0)!==part(old,0))continue;const b=tokens(cand);let inter=0;a.forEach(w=>{if(b.has(w))inter++});const union=a.size+b.size-inter,j=union?inter/union:0;if(j>score){score=j;best=cand}}if(best&&score>=.6){fuzzyUsed.add(best.id);pairs.push([old,best]);matched.add(old.id);stats.fuzzy++}}for(const[old,mission]of pairs){if(state.done[old.id]&&!state.done[mission.id])state.done[mission.id]=state.done[old.id];if(state.errors[old.id]&&!state.errors[mission.id])state.errors[mission.id]={...state.errors[old.id],missionId:mission.id};for(const err of Object.values(state.errors||{}))if(err&&err.missionId===old.id)err.missionId=mission.id;if(state.daily===old.id)state.daily=mission.id;for(const entry of state.dailyHistory||[]){if(entry.missionId===old.id){entry.missionId=mission.id;entry.name=mission.name;entry.subject=mission.subject}}delete state.done[old.id];delete state.errors[old.id]}for(const old of previous||[]){if(nextIds.has(old.id)||matched.has(old.id))continue;if(state.done[old.id]){stats.lost++;state.archivedProgress=(state.archivedProgress||[]).concat({campaignId:state.activeCampaignId,subject:old.subject,name:old.name,doneAt:state.done[old.id],archivedAt:new Date().toISOString()}).slice(-500)}delete state.done[old.id];delete state.errors[old.id]}dedupeDailyHistory();return stats}
 function progressNote(stats){if(!stats)return'';if(stats.lost)return` ${stats.lost} missão(ões) concluída(s) não existem mais no novo mapa e foram arquivadas.`;if(stats.fuzzy)return` ${stats.fuzzy} missão(ões) com nome ajustado mantiveram seu progresso.`;return''}
 async function loadCampaignTopics(){const campaign=activeCampaign();if(!cloudSession||!campaign?.dbId)return;try{let response=await cloudFetch(`campaign_topics?campaign_id=eq.${campaign.dbId}&select=id,subject,unit_name,topic,edital_order,status,subject_order,learning_order,difficulty,prerequisite_topic,pedagogical_reason&order=subject_order.asc,learning_order.asc,edital_order.asc`).catch(()=>null);if(!response||!response.ok)response=await cloudFetch(`campaign_topics?campaign_id=eq.${campaign.dbId}&select=id,subject,topic,edital_order,status,subject_order,learning_order,difficulty,prerequisite_topic,pedagogical_reason&order=subject_order.asc,learning_order.asc,edital_order.asc`);const rows=await response.json();if(!response.ok)throw new Error(rows?.message||'Execute a migração pedagógica v48 no Supabase.');const previous=[...(state.customCampaign.missions||[])],unpacked=window.unpackEditalTopicsList(rows,campaign.name),missions=unpacked.map((row,i)=>({id:row.id?`edital-${row.id}`:`edital-u-${i}`,dbId:row.id||null,si:null,ti:i,name:row.topic,subject:canonicalSubjectName(row.subject||'Edital'),editalOrder:row.edital_order??i,subjectOrder:row.subject_order??0,learningOrder:row.learning_order??i,difficulty:row.difficulty||'basic',prerequisite:row.prerequisite_topic||'',pedagogicalReason:row.pedagogical_reason||''}));const progressStats=reconcileMissionProgress(previous,missions);for(const row of unpacked){const mId=row.id?`edital-${row.id}`:null;if(mId&&row.status==='mastered'&&!state.done[mId])state.done[mId]=new Date().toISOString()}if(progressStats.lost||progressStats.fuzzy)toast(progressNote(progressStats).trim());state.customCampaign={name:campaign.name,missions};campaign.customCampaign=state.customCampaign;if(!missions.some(m=>m.id===state.daily)){state.daily=null;state.dailySteps={}}save();render()}catch(error){console.warn('Não foi possível sincronizar o mapa do edital',error);toast(error.message)}}
-window.unpackEditalTopicsList=function(rawList,campaignName=''){if(!Array.isArray(rawList)||!rawList.length)return[];const genericRe=/^(edital|edital do concurso|conteudos? programaticos?|conhecimentos?( gerais| basicos| especificos| complementares| tecnicos| profissionais)?|objetos? de avaliacao|disciplinas?|materias?|programas?|anexo\s*[ivxlcdm\d]*|bloco\s*[ivxlcdm\d]*|modulo\s*[ivxlcdm\d]*|parte\s*[ivxlcdm\d]*|geral|comum a todos.*|cargo\s*\d*.*)$/i,campNorm=normalizeText(campaignName).trim(),isGen=v=>{const s=normalizeText(v).replace(/[^a-z0-9 ]+/g,' ').trim();return !s||genericRe.test(s)||(campNorm&&s===campNorm)},subjHints=[/lingua portuguesa|portugues|interpretacao de texto/i,/raciocinio logico/i,/matematica/i,/informatica|tecnologia da informacao/i,/direito constitucional/i,/direito administrativo/i,/direito penal/i,/direito processual/i,/penal militar|estatuto dos policiais|legislacao institucional/i,/direitos? humanos/i,/legislacao|leis? extravagantes|maria da penha|crimes hediondos/i,/nocoes de/i,/atualidades|realidade/i,/historia/i,/geografia/i,/ingles|espanhol/i,/biologia|fisica|quimica|ciencias/i,/contabilidade|administracao|economia|arquivologia|afo/i,/etica|redacao oficial|criminologia|medicina legal|transito/i];const distinctSubj=new Set(rawList.map(r=>normalizeText(r?.subject)).filter(Boolean)),distinctUnits=new Set(rawList.map(r=>normalizeText(r?.unit||r?.unit_name)).filter(u=>u.length>=3&&!isGen(u))),promoteUnit=distinctSubj.size<=1&&distinctUnits.size>=2;let lastSubj='';const out=[];for(const item of rawList){let subj=String(item?.subject||'').replace(/\s+/g,' ').trim(),unit=String(item?.unit||item?.unit_name||'').replace(/\s+/g,' ').trim(),rawTopic=String(item?.topic||item?.name||'').replace(/\s+/g,' ').trim();if(rawTopic.length<3)continue;if((promoteUnit||isGen(subj))&&unit&&!isGen(unit)){subj=unit;unit=''}else if(isGen(subj)||distinctSubj.size<=1){const pm=rawTopic.match(/^([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-záéíóúâêôãõçÁÉÍÓÚÂÊÔÃÕÇ\s\-\/]{2,55}?)\s*(?::|\s[–—-]\s)\s*(.+)$/);if(pm&&!/^\d/.test(pm[1])&&!isGen(pm[1])&&subjHints.some(re=>re.test(normalizeText(pm[1])))){subj=pm[1].trim();rawTopic=pm[2].trim()}else if(isGen(subj)&&lastSubj)subj=lastSubj}if(!subj)subj=lastSubj||'Edital';if(!isGen(subj))lastSubj=subj;const cleanSubject=canonicalSubjectName(subj);const splitPieces=(rawTopic.length>160&&/(?:^|[\s.;:])1\s*[.\-)]\s+\S[\s\S]*[\s.;:]2\s*[.\-)]\s+\S[\s\S]*[\s.;:]3\s*[.\-)]\s+\S/.test(rawTopic))?rawTopic.split(/(?=(?:^|[\s.;:])\d{1,2}\s*[.\-)]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ])/g).map(p=>p.replace(/^[\s.;:]+|[\s.;]+$/g,'').trim()).filter(p=>p.length>=3):[rawTopic];splitPieces.forEach((piece,pIdx)=>{out.push({...item,id:splitPieces.length===1?item.id:(item.id?`${item.id}-p${pIdx}`:null),subject:cleanSubject,unit_name:unit,unit,topic:piece,name:piece})})}return out};
+window.unpackEditalTopicsList=function(rawList,campaignName='',docTitle=''){
+  if(!Array.isArray(rawList)||!rawList.length)return[];
+  const genericRe=/^(edital(\s+verticalizado|\s+do\s+concurso|\s+de\s+abertura|\s+esquematizado|\s+sintetizado|\s+n[ºo°]?\s*[\d\/.-]+)?.*|ciclo\s*\d+.*|conteudos?\s*programaticos?|conhecimentos?(\s+gerais|\s+basicos|\s+especificos|\s+complementares|\s+tecnicos|\s+profissionais)?|objetos?\s*de\s*avaliacao|disciplinas?|materias?|programas?|anexo\s*[ivxlcdm\d]*.*|bloco\s*[ivxlcdm\d]*.*|modulo\s*[ivxlcdm\d]*.*|parte\s*[ivxlcdm\d]*.*|geral|comum\s+a\s+todos.*|cargo\s*\d*.*|policia\s*(penal|militar|civil|federal|rodoviaria|cientifica|legislativa|judicial).*|corpo\s+de\s+bombeiros.*|guarda\s+(municipal|civil).*|agente\s+(penitenciario|de\s+policia|socioeducativo).*|soldado.*|oficial.*|pm\s*pe.*|pp\s*pe.*|pc\s*pe.*|cbm\s*pe.*|prf.*|pf.*)$/i;
+  const knownHeaderRe=/^(?:disciplina\s*:\s*|materia\s*:\s*)?(?:[ivxlcdm\d]{1,4}\s*[.\-–—)]\s*)?(lingua\s+portuguesa|portugues|interpretacao\s+de\s+textos?|redacao(\s+oficial|\s+discursiva)?|etica(\s+no\s+servico\s+publico|\s+na\s+administracao\s+publica|\s+publica|\s+e\s+cidadania)?|raciocinio\s+logico(\s*[-e/]\s*matematico|\s+quantitativo)?|matematica(\s+financeira|\s+basica|\s+e\s+raciocinio\s+logico)?|estatistica|(nocoes\s+de\s+)?informatica|tecnologia\s+da\s+informacao.*|atualidades.*|conhecimentos\s+regionais.*|historia.*|geografia.*|(nocoes\s+de\s+)?direito\s+(constitucional|administrativo|penal(\s+militar)?|processual\s+penal(\s+militar)?|militar|civil|processual\s+civil|tributario|previdenciario|eleitoral|do\s+trabalho|ambiental|financeiro|empresarial|consumidor|internacional|humanos).*|direitos?\s+humanos.*|legislacao\s+(estadual|especial|extravagante|institucional|penal(\s+especial)?|especifica|municipal|de\s+transito|aplicada|pertinente|penitenciaria|do\s+sistema\s+prisional).*|leis?\s+(especiais|extravagantes|penais\s+especiais).*|estatuto.*|criminologia.*|medicina\s+legal.*|(nocoes\s+de\s+)?administracao.*|afo|arquivologia.*|contabilidade.*|economia|lingua\s+(inglesa|espanhola|estrangeira).*|ingles|espanhol|fisica|quimica|biologia|anatomia\s+humana|primeiros\s+socorros|defesa\s+civil)$/i;
+  const campNorm=normalizeText(campaignName).replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+  const titleNorm=normalizeText(docTitle).replace(/\.pdf$/i,'').replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+  const cleanWatermarks=v=>String(v||'').replace(/\b[^\s@]+@[^\s@]+\.[^\s@]+\b/gi,'').replace(/\b(?:cpf\s*:?\s*)?\d{3}\.?\d{3}\.?\d{3}[-./]\d{2}\b/gi,'').replace(/\s+/g,' ').trim();
+  const isGen=v=>{
+    const s=normalizeText(v).replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+    if(!s)return true;
+    if(knownHeaderRe.test(normalizeText(v).trim()))return false;
+    if(genericRe.test(s))return true;
+    if(campNorm&&(s===campNorm||(campNorm.length>=4&&s.includes(campNorm))||(s.length>=4&&campNorm.includes(s))))return true;
+    if(titleNorm&&(s===titleNorm||(titleNorm.length>=5&&s.includes(titleNorm))))return true;
+    return false;
+  };
+  const subjHints=[/lingua portuguesa|portugues|interpretacao de texto/i,/raciocinio logico/i,/matematica/i,/informatica|tecnologia da informacao/i,/direito constitucional/i,/direito administrativo/i,/direito penal/i,/direito processual/i,/penal militar|estatuto dos policiais|legislacao institucional/i,/direitos? humanos/i,/legislacao|leis? extravagantes|maria da penha|crimes hediondos/i,/nocoes de/i,/atualidades|realidade/i,/historia/i,/geografia/i,/ingles|espanhol/i,/biologia|fisica|quimica|ciencias/i,/contabilidade|administracao|economia|arquivologia|afo/i,/etica|redacao oficial|criminologia|medicina legal|transito/i];
+  const blockRules=[
+    {subject:'Língua Portuguesa',re:/\b(compreensao e interpretacao|tipologia textual|generos textuais|ortografia|coesao|coerencia|morfossintatica|classes de palavras|coordenacao entre oracoes|subordinacao entre oracoes|sinais de pontuacao|concordancia verbal|regencia verbal|indicativo de crase|pronomes atonos|colocacao pronominal|semantica|figuras de linguagem|redacao oficial)\b/i},
+    {subject:'Ética no Serviço Público',re:/\b(etica e moral|etica, principios e valores|etica e democracia|etica e funcao publica|etica no setor publico|codigo de etica|46[\s.]*852|sindicancias? investigativa)\b/i},
+    {subject:'Legislação Estadual',re:/\b(codigo penitenciario do estado de pernambuco|15[\s.]*755\/2016|106\/2007|422\/2019|150\/2009|6[\s.]*123\/1968|regime juridico dos funcionarios publicos civis do estado de pernambuco|policial penal de pernambuco|normas disciplinares dos policiais penais)\b/i},
+    {subject:'Informática',re:/\b(sistema operacional|ambientes linux e windows|redes de computadores|intranet|microsoft edge|mozilla firefox|google chrome|correio eletronico|computacao na nuvem|cloud computing|arquivos, pastas e programas|seguranca da informacao|virus, worms|antivirus|firewall|procedimentos de backup|cloud storage)\b/i},
+    {subject:'Raciocínio Lógico-Matemático',re:/\b(estruturas logicas|logica de argumentacao|logica sentencial|proposicoes simples e compostas|tabelas verdade|equivalencias|leis de de morgan|diagramas logicos|logica de primeira ordem|principios de contagem|operacoes com conjuntos|problemas aritmeticos, geometricos e matriciais)\b/i},
+    {subject:'Atualidades',re:/\b(topicos relevantes e atuais|seguranca prisional nacional|somente para prova discursiva)\b/i},
+    {subject:'Direito Administrativo',re:/\b(estado, governo e administracao publica|direito administrativo\. objeto|ato administrativo|extincao do ato administrativo|cassacao, anulacao, revogacao e convalidacao|decadencia administrativa|agentes publicos.*cargo, emprego e funcao|poderes da administracao publica|hierarquico, disciplinar, regulamentar e de policia|regime juridico-administrativo|responsabilidade civil do estado|servicos publicos.*concessao, permissao|organizacao administrativa.*autarquias, fundacoes|controle da administracao publica|improbidade administrativa|8[\s.]*429\/1992|9[\s.]*784\/1999)\b/i},
+    {subject:'Direito Constitucional',re:/\b(constituicao da republica federativa do brasil de 1988|aplicabilidade das normas constitucionais|eficacia plena, contida e limitada|direitos e garantias fundamentais|direitos e deveres individuais e coletivos|organizacao politico-administrativa do estado|poder executivo.*presidente da republica|poder legislativo.*processo legislativo|poder judiciario.*conselho nacional de justica|funcoes essenciais a justica)\b/i},
+    {subject:'Direito Processual Penal',re:/\b(disposicoes preliminares do codigo de processo penal|inquerito policial|acao penal|9[\s.]*296\/1996|interceptacao telefonica|juiz, ministerio publico, acusado, defensor|prisao, liberdade provisoria e fianca|crimes de responsabilidade dos funcionarios publicos|habeas corpus e seu processo|aplicaveis ao direito processual penal)\b/i},
+    {subject:'Direito Penal',re:/\b(aplicacao da lei penal|lei penal no tempo e no espaco|territorialidade e extraterritorialidade|fato tipico e seus elementos|crime consumado e tentado|ilicitude e causas de exclusao|culpabilidade|imputabilidade penal|concurso de pessoas|crimes contra a pessoa|crimes contra o patrimonio|crimes contra a fe publica|crimes contra a administracao publica|8[\s.]*072\/1990|delitos hediondos|aplicaveis ao direito penal)\b/i},
+    {subject:'Direitos Humanos',re:/\b(declaracao universal dos direitos humanos|regras minimas da onu|tratamento de pessoas presas|programa nacional de direitos humanos|7[\s.]*037\/2009|conselhos da comunidade|conselhos penitenciarios|arts\. 62 a 64 da lei de execucao penal)\b/i},
+    {subject:'Legislação Extravagante',re:/\b(12[\s.]*850\/2013|organizacoes criminosas|9[\s.]*613\/1998|lavagem de dinheiro|9[\s.]*455\/1997|antitortura|12[\s.]*846\/2013|anticorrupcao|13[\s.]*869\/2019|abuso de autoridade|10[\s.]*826\/2003|estatuto do desarmamento|11[\s.]*343\/2006|lei de drogas|13[\s.]*964\/2019|lei de execucao penal|sistema penitenciario federal|11[\s.]*671\/2008|atencao integral a saude das pessoas privadas de liberdade|plano estrategico de educacao no ambito do sistema prisional|atencao as mulheres em situacao de privacao de liberdade)\b/i}
+  ];
+  const inferBlockSubj=txt=>{
+    const norm=normalizeText(txt);
+    let best='',bestHits=0;
+    for(const r of blockRules){
+      const m=norm.match(new RegExp(r.re.source,'gi'));
+      const c=m?m.length:0;
+      if(c>bestHits){bestHits=c;best=r.subject;}
+    }
+    return best;
+  };
+  const splitTopicPieces=rawTopic=>{
+    if(rawTopic.length<=140)return[rawTopic];
+    if(/(?:^|[\s.;:])0?1\s*[.\-)]\s+\S[\s\S]*[\s.;:]0?2\s*[.\-)]\s+\S[\s\S]*[\s.;:]0?3\s*[.\-)]\s+\S/.test(rawTopic)){
+      const p=rawTopic.split(/(?=(?:^|[\s.;:])\d{1,2}\s*[.\-)]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ])/g).map(x=>x.replace(/^[\s.;:]+|[\s.;]+$/g,'').trim()).filter(x=>x.length>=3);
+      if(p.length>=3)return p;
+    }
+    if(/(?:^|[\s.;:])1\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]{2,}[\s\S]*[\s.;:]2\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]{2,}[\s\S]*[\s.;:]3\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]{2,}/.test(rawTopic)){
+      const p=rawTopic.split(/(?=(?:^|[\s.;:])\d{1,2}\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]{2,})/g).map(x=>x.replace(/^[\s.;:]+|[\s.;]+$/g,'').trim()).filter(x=>x.length>=3);
+      if(p.length>=3)return p;
+    }
+    return[rawTopic];
+  };
+
+  const expanded=[];
+  for(const item of rawList){
+    const rawTopic=cleanWatermarks(item?.topic||item?.name||'');
+    if(rawTopic.length<3)continue;
+    const pieces=splitTopicPieces(rawTopic);
+    pieces.forEach((piece,pIdx)=>{
+      expanded.push({item,piece,pIdx,totalPieces:pieces.length});
+    });
+  }
+
+  const nonGenericSubj=new Set(expanded.map(x=>cleanWatermarks(x.item?.subject)).filter(s=>s&&!isGen(s)).map(s=>normalizeText(s)));
+  const distinctUnits=new Set(expanded.map(x=>cleanWatermarks(x.item?.unit||x.item?.unit_name)).filter(u=>u.length>=3&&!isGen(u)).map(u=>normalizeText(u)));
+  const promoteUnit=nonGenericSubj.size<=1&&distinctUnits.size>=2;
+
+  const blockSubjMap=new Map();
+  if(nonGenericSubj.size<=1&&!promoteUnit&&expanded.length>=4){
+    const blocks=[];
+    let cur=[],prevNum=0,headerSubj='';
+    for(let i=0;i<expanded.length;i++){
+      const p=expanded[i].piece.trim();
+      if(knownHeaderRe.test(normalizeText(p))&&p.length<=80&&!/^\d/.test(p)){
+        headerSubj=p;
+        blockSubjMap.set(i,'__SKIP_HEADER__');
+        continue;
+      }
+      if(headerSubj){blockSubjMap.set(i,headerSubj);continue;}
+      const nm=p.match(/^0?(\d{1,2})(?:\s*[.\-)]\s*|\s+)/);
+      const num=nm?Number(nm[1]):0;
+      if(cur.length>0&&num===1&&prevNum>=1){blocks.push(cur);cur=[];}
+      cur.push(i);
+      if(num>0)prevNum=num;
+    }
+    if(cur.length)blocks.push(cur);
+    for(const b of blocks){
+      const bSubj=inferBlockSubj(b.map(idx=>expanded[idx].piece).join(' \n '));
+      if(bSubj){for(const idx of b)blockSubjMap.set(idx,bSubj);}
+      else{for(const idx of b){const s=inferBlockSubj(expanded[idx].piece);if(s)blockSubjMap.set(idx,s);}}
+    }
+  }
+
+  let lastSubj='';
+  const out=[];
+  for(let i=0;i<expanded.length;i++){
+    const {item,piece,pIdx,totalPieces}=expanded[i];
+    const bHint=blockSubjMap.get(i)||'';
+    if(bHint==='__SKIP_HEADER__')continue;
+    let subj=cleanWatermarks(item?.subject||''),unit=cleanWatermarks(item?.unit||item?.unit_name||''),rawTopic=piece;
+    if((promoteUnit||isGen(subj))&&unit&&!isGen(unit)){subj=unit;unit='';}
+    else if(bHint){subj=bHint;}
+    else if(isGen(subj)||nonGenericSubj.size<=1){
+      const pm=rawTopic.match(/^([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-záéíóúâêôãõçÁÉÍÓÚÂÊÔÃÕÇ\s\-\/()]{2,60}?)\s*(?::|\s[–—-]\s)\s*(.+)$/);
+      if(pm&&!/^\d/.test(pm[1])&&!isGen(pm[1])&&(knownHeaderRe.test(normalizeText(pm[1]))||subjHints.some(re=>re.test(normalizeText(pm[1]))))){
+        subj=pm[1].trim();rawTopic=pm[2].trim();
+      }else{
+        const inf=inferBlockSubj(rawTopic);
+        if(inf)subj=inf;
+        else if(isGen(subj)&&lastSubj)subj=lastSubj;
+      }
+    }
+    if(!subj||isGen(subj))subj=lastSubj||cleanWatermarks(item?.subject||'')||'Edital';
+    else lastSubj=subj;
+    const cleanSubject=canonicalSubjectName(subj);
+    out.push({...item,id:totalPieces===1?item.id:(item.id?`${item.id}-p${pIdx}`:null),subject:cleanSubject,unit_name:unit,unit,topic:rawTopic,name:rawTopic});
+  }
+  return out;
+};
 window._activeProcessingDocs=window._activeProcessingDocs||new Set();
 function standardizeDocumentTitle(raw){let s=String(raw||'').trim().replace(/\.pdf$/i,'').replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}[-_\s]*/i,'').replace(/[_]+/g,' ').replace(/\s*-\s*/g,'-').replace(/\s+/g,' ').trim();s=s.replace(/\bartigo\s*(\d+)/gi,'ART.$1').replace(/\bart\.?\s*(\d+)/gi,'ART.$1');return s.toLocaleUpperCase('pt-BR')}
 window.standardizeDocumentTitle=standardizeDocumentTitle;
