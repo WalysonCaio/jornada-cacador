@@ -590,7 +590,7 @@
       if(!existingFp.has(questionFingerprint(item)))ALL_QUESTIONS.push(item);
     }
     state.customQuestionsByCampaign[campId]=currentLocal.slice(-400);
-    LEARNING_SUBJECTS=[...new Set([...LEARNING_SUBJECTS,...toAdd.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    LEARNING_SUBJECTS=typeof window.computeValidLearningSubjects==='function'?window.computeValidLearningSubjects():[...new Set([...LEARNING_SUBJECTS,...toAdd.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
     save();
 
     const campaign=typeof activeCampaign==='function'?activeCampaign():null;
@@ -3008,6 +3008,7 @@
           ?window.resolveDocumentDiscipline(parentDoc,row.content?.subject||'',`${row.content?.source||''} ${row.title||''}`)
           :canonicalSubjectName(row.content?.subject||'Conteúdo geral',`${row.content?.source||''} ${row.title||''}`);
         const cleanTitle=sanitizePersonalWatermarks(row.title||'Assunto da Comunidade');
+        if(typeof window.isInvalidTrailSubject==='function'&&window.isInvalidTrailSubject(cat,cleanTitle,row.content?.source||'',parentDoc))continue;
         const sumKey=`${topicKey(cat)}|${topicKey(cleanTitle)}`;
         if(!existingSumKeys.has(sumKey)){
           ALL_SUMMARIES.push({
@@ -3059,7 +3060,7 @@
         }
       }
 
-      LEARNING_SUBJECTS=[...new Set([...ALL_SUMMARIES.map(x=>x.category),...ALL_FLASHCARDS.map(x=>x[0]),...ALL_QUESTIONS.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+      LEARNING_SUBJECTS=typeof window.computeValidLearningSubjects==='function'?window.computeValidLearningSubjects():[...new Set([...ALL_SUMMARIES.map(x=>x.category),...ALL_FLASHCARDS.map(x=>x[0]),...ALL_QUESTIONS.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
 
       if(addedDocs>0||commSums.length>0||commTopics.length>0){
         if(typeof renderUserDocuments==='function')renderUserDocuments();
@@ -4902,39 +4903,183 @@
     };
   }
   const baseRender=render;
-  render=function(){syncHunterStatsSnapshot();baseRender();enhanceFlashcardsSpacedRepetition();enhanceEssayCenter();enhanceTypedEssayOption();enhanceReviewCenter();decorateEditalIncidenceBadges();renderCommunityCoopBanner();decorateDailyStepProgressLabels();updateFlashcardSpacedStats();updateTodayCommand();ensureTafAndRankingShortcuts();renderReverseSchedule();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub();if(q('#taf')?.classList.contains('active'))renderTafPanel();if(q('#ranking')?.classList.contains('active'))renderHuntersLeaderboard()};
+  render=function(){syncHunterStatsSnapshot();baseRender();enhanceSoloLevelingVisuals();enhanceFlashcardsSpacedRepetition();enhanceEssayCenter();enhanceTypedEssayOption();enhanceReviewCenter();decorateEditalIncidenceBadges();renderCommunityCoopBanner();decorateDailyStepProgressLabels();updateFlashcardSpacedStats();updateTodayCommand();ensureTafAndRankingShortcuts();renderReverseSchedule();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub();if(q('#taf')?.classList.contains('active'))renderTafPanel();if(q('#ranking')?.classList.contains('active'))renderHuntersLeaderboard()};
   const baseRenderReport=renderReport;
   renderReport=function(){baseRenderReport();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()};
 
-  window.renderNotifications=renderNotifications=renderInteractiveNotifications;if(q('#notificationBtn'))q('#notificationBtn').onclick=()=>{renderInteractiveNotifications();q('#notificationDialog').showModal()};enableBackdropClickToCloseDialogs();hookAutomaticDailyStepTracking();addTodayCommand();ensureReverseSchedulePanel();bindQuestionCenter();updateTodayCommand();decorateDailyStepProgressLabels();renderReverseSchedule();
+  window.renderNotifications=renderNotifications=renderInteractiveNotifications;if(q('#notificationBtn'))q('#notificationBtn').onclick=()=>{renderInteractiveNotifications();q('#notificationDialog').showModal()};enableBackdropClickToCloseDialogs();enhanceSoloLevelingVisuals();hookAutomaticDailyStepTracking();addTodayCommand();ensureReverseSchedulePanel();bindQuestionCenter();updateTodayCommand();decorateDailyStepProgressLabels();renderReverseSchedule();
   qa('[data-menu-view]').forEach(button=>button.onclick=()=>{q('#moreDialog')?.close();openView(button.dataset.menuView)});
-  function realignStudyDisciplinesWithLibrary(){
-    if(!Array.isArray(cloudDocuments)||!cloudDocuments.length||typeof window.resolveDocumentDiscipline!=='function')return;
-    let changed=false;
-    for(const s of (ALL_SUMMARIES||[])){
-      const doc=cloudDocuments.find(d=>String(d.id)===String(s.documentId));
-      if(doc){
-        const nextCat=window.resolveDocumentDiscipline(doc,s.category,`${doc.title} ${s.title}`);
-        if(nextCat&&nextCat!==s.category){s.category=nextCat;changed=true}
-        const stdDocTitle=typeof window.standardizeDocumentTitle==='function'?window.standardizeDocumentTitle(doc.title):doc.title;
-        if(!s.is_community&&stdDocTitle&&s.source!==stdDocTitle){s.source=stdDocTitle;changed=true}
+  function enhanceSoloLevelingVisuals(){
+    // 1) Hero Card na aba Hoje com visual Holográfico Solo Leveling
+    const hero=q('section.hero');
+    if(hero){
+      hero.classList.add('slSystemHero');
+      if(!q('#slHeroHudBar')){
+        const campaignName=(typeof activeCampaign==='function'&&activeCampaign()?.name)||'PMPE — Soldado';
+        hero.insertAdjacentHTML('afterbegin',`
+          <div class="slHeroHudBar" id="slHeroHudBar">
+            <span class="slSystemBadge"><i class="slPulseDot"></i> SYSTEM STATUS · CAÇADOR ATIVO</span>
+            <span class="slPortalBadge" id="slHeroPortalTag">◈ ${escText(campaignName)}</span>
+          </div>
+        `);
+      }else{
+        const portalTag=q('#slHeroPortalTag');
+        if(portalTag&&typeof activeCampaign==='function'){
+          portalTag.textContent=`◈ ${activeCampaign()?.name||'PMPE — Soldado'}`;
+        }
       }
     }
-    for(const qItem of (ALL_QUESTIONS||[])){
-      const doc=qItem.documentId?cloudDocuments.find(d=>String(d.id)===String(qItem.documentId)):null;
-      const nextCat=window.resolveDocumentDiscipline(doc,qItem.subject,`${doc?.title||''} ${qItem.topic||''}`);
-      if(nextCat&&nextCat!==qItem.subject){qItem.subject=nextCat;changed=true}
+
+    // 2) Banner Masmorra Solo Leveling na Trilha de Aprendizagem (#learning)
+    const learningView=q('#learning');
+    if(learningView){
+      let trailBanner=q('#slTrailHeroBanner');
+      if(!trailBanner){
+        const head=learningView.querySelector('.sectionHead');
+        if(head){
+          head.insertAdjacentHTML('afterend',`
+            <div class="slBannerCard slTrailBanner" id="slTrailHeroBanner">
+              <div class="slBannerArtWrap">
+                <img src="login-banner.jpg" alt="Sistema Solo Leveling" class="slBannerArtImg" loading="lazy">
+              </div>
+              <div class="slBannerContent">
+                <div class="slSystemBadge">⚡ DUNGEON TRILHA · DISCIPLINAS DO PORTAL</div>
+                <h3>Evolua por Disciplina com seus Materiais, IA e Simulados</h3>
+                <p class="small muted">O edital define as disciplinas do seu portal, e cada fase abaixo é gerada exclusivamente a partir dos seus materiais de estudo, questões criadas pela IA e simulados/provas.</p>
+                <div class="slSourcePills" id="slTrailSourceStats"></div>
+              </div>
+            </div>
+          `);
+          trailBanner=q('#slTrailHeroBanner');
+        }
+      }
+      const statsEl=q('#slTrailSourceStats');
+      if(statsEl){
+        const subj=typeof selectedLearningSubject!=='undefined'?selectedLearningSubject:'';
+        const sKey=typeof subjectKey==='function'?subjectKey(subj):'';
+        const matCount=(ALL_SUMMARIES||[]).filter(s=>!sKey||subjectKey(s.category)===sKey).length;
+        const subjQs=(ALL_QUESTIONS||[]).filter(item=>!sKey||subjectKey(learningCategory(item.subject))===sKey);
+        const aiQCount=subjQs.filter(item=>normalizedOrigin(item)==='autoral').length;
+        const simQCount=subjQs.filter(item=>normalizedOrigin(item)!=='autoral').length;
+        statsEl.innerHTML=`
+          <span class="slStatChip">📚 <b>${matCount}</b> resumo(s) de material</span>
+          <span class="slStatChip">✨ <b>${aiQCount}</b> questão(ões) IA</span>
+          <span class="slStatChip">🎯 <b>${simQCount}</b> de provas/simulados</span>
+        `;
+      }
+    }
+
+    // 3) Banner "Chefes das Bancas (AOCP · CEBRASPE · FGV · IDECAN)" na Central de Questões (#report)
+    const reportView=q('#report');
+    if(reportView&&!q('#slBossesRaidBanner')){
+      const anchor=q('#examBankHub')||reportView.querySelector('.sectionHead');
+      if(anchor){
+        const bannerHtml=`
+          <div class="slBannerCard slBossesBanner" id="slBossesRaidBanner">
+            <div class="slBossesPosterWrap">
+              <img src="bancas-boss-banner.jpg" alt="Chefes das Bancas: AOCP, Cebraspe, FGV e IDECAN" class="slBossesPosterImg" loading="lazy">
+            </div>
+            <div class="slBannerContent">
+              <div class="slSystemBadge">👑 MASMORRA DAS BANCAS · BOSS RAID</div>
+              <h3>Enfrente os Monstros das Bancas Examinadoras</h3>
+              <p class="small muted">Escolha uma banca abaixo para configurar automaticamente o gerador de questões comentadas ou iniciar uma bateria tática no estilo da prova:</p>
+              <div class="slBossGrid">
+                <button type="button" class="slBossBtn" data-sl-boss-board="Cebraspe">
+                  <span class="slBossRank">RANK S</span>
+                  <b>CEBRASPE</b>
+                  <small>Jurisprudência & Casos</small>
+                </button>
+                <button type="button" class="slBossBtn" data-sl-boss-board="FGV">
+                  <span class="slBossRank">RANK S</span>
+                  <b>FGV</b>
+                  <small>Interpretação & Casos Práticos</small>
+                </button>
+                <button type="button" class="slBossBtn" data-sl-boss-board="Instituto AOCP">
+                  <span class="slBossRank">RANK A</span>
+                  <b>AOCP</b>
+                  <small>Letra da Lei & Pegadinhas</small>
+                </button>
+                <button type="button" class="slBossBtn" data-sl-boss-board="IDECAN">
+                  <span class="slBossRank">RANK A</span>
+                  <b>IDECAN</b>
+                  <small>Cobrança Literal & Técnica</small>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+        if(anchor.id==='examBankHub')anchor.insertAdjacentHTML('beforebegin',bannerHtml);
+        else anchor.insertAdjacentHTML('afterend',bannerHtml);
+        qa('[data-sl-boss-board]').forEach(btn=>{
+          btn.onclick=()=>{
+            const board=btn.dataset.slBossBoard;
+            if(typeof switchExamHubTab==='function')switchExamHubTab('generator');
+            const boardSel=q('#genExamBoard');
+            if(boardSel){
+              boardSel.value=board;
+              boardSel.dispatchEvent(new Event('change'));
+            }
+            q('#examBankHub')?.scrollIntoView({behavior:'smooth',block:'start'});
+            toast(`⚔️ Chefe ${board} selecionado! Escolha a disciplina e gere o caderno tático.`);
+          };
+        });
+      }
+    }
+  }
+
+  function realignStudyDisciplinesWithLibrary(){
+    let changed=false;
+    if(typeof window.isInvalidTrailSubject==='function'){
+      const beforeSum=(ALL_SUMMARIES||[]).length;
+      ALL_SUMMARIES=(ALL_SUMMARIES||[]).filter(s=>{
+        const doc=Array.isArray(cloudDocuments)?cloudDocuments.find(d=>String(d.id)===String(s.documentId)):null;
+        return !window.isInvalidTrailSubject(s.category,s.title,s.source,doc);
+      });
+      if(ALL_SUMMARIES.length!==beforeSum)changed=true;
+
+      const beforeCards=(ALL_FLASHCARDS||[]).length;
+      ALL_FLASHCARDS=(ALL_FLASHCARDS||[]).filter(c=>!window.isInvalidTrailSubject(c?.[0],c?.[1]));
+      if(ALL_FLASHCARDS.length!==beforeCards)changed=true;
+
+      const beforeQs=(ALL_QUESTIONS||[]).length;
+      ALL_QUESTIONS=(ALL_QUESTIONS||[]).filter(qItem=>{
+        const doc=qItem.documentId&&Array.isArray(cloudDocuments)?cloudDocuments.find(d=>String(d.id)===String(qItem.documentId)):null;
+        return !window.isInvalidTrailSubject(qItem.subject,qItem.topic,'',doc);
+      });
+      if(ALL_QUESTIONS.length!==beforeQs)changed=true;
+    }
+
+    if(Array.isArray(cloudDocuments)&&cloudDocuments.length&&typeof window.resolveDocumentDiscipline==='function'){
+      for(const s of (ALL_SUMMARIES||[])){
+        const doc=cloudDocuments.find(d=>String(d.id)===String(s.documentId));
+        if(doc){
+          const nextCat=window.resolveDocumentDiscipline(doc,s.category,`${doc.title} ${s.title}`);
+          if(nextCat&&!window.isInvalidTrailSubject?.(nextCat,s.title,doc.title,doc)&&nextCat!==s.category){s.category=nextCat;changed=true}
+          const stdDocTitle=typeof window.standardizeDocumentTitle==='function'?window.standardizeDocumentTitle(doc.title):doc.title;
+          if(!s.is_community&&stdDocTitle&&s.source!==stdDocTitle){s.source=stdDocTitle;changed=true}
+        }
+      }
+      for(const qItem of (ALL_QUESTIONS||[])){
+        const doc=qItem.documentId?cloudDocuments.find(d=>String(d.id)===String(qItem.documentId)):null;
+        const nextCat=window.resolveDocumentDiscipline(doc,qItem.subject,`${doc?.title||''} ${qItem.topic||''}`);
+        if(nextCat&&!window.isInvalidTrailSubject?.(nextCat,qItem.topic,'',doc)&&nextCat!==qItem.subject){qItem.subject=nextCat;changed=true}
+      }
     }
     for(const card of (ALL_FLASHCARDS||[])){
       const nextCat=canonicalSubjectName(card[0],card[1]||'');
       if(nextCat&&nextCat!==card[0]){card[0]=nextCat;changed=true}
     }
-    if(changed){
-      LEARNING_SUBJECTS=[...new Set([...ALL_SUMMARIES.map(x=>x.category),...ALL_FLASHCARDS.map(x=>x[0]),...ALL_QUESTIONS.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+
+    const nextSubjects=typeof window.computeValidLearningSubjects==='function'
+      ?window.computeValidLearningSubjects()
+      :[...new Set([...ALL_SUMMARIES.map(x=>x.category),...ALL_FLASHCARDS.map(x=>x[0]),...ALL_QUESTIONS.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    if(changed||JSON.stringify(nextSubjects)!==JSON.stringify(LEARNING_SUBJECTS)){
+      LEARNING_SUBJECTS=nextSubjects;
       if(typeof renderStudy==='function')renderStudy();
       if(typeof renderLearning==='function')renderLearning();
       if(typeof renderQuestionFilters==='function')renderQuestionFilters();
     }
+    enhanceSoloLevelingVisuals();
   }
   const baseLoadCloudDocsForSync=typeof loadCloudDocuments==='function'?loadCloudDocuments:null;
   if(baseLoadCloudDocsForSync){

@@ -333,3 +333,50 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   assert(distinctSubjects.length >= 7, `unpackEditalTopicsList deve separar as disciplinas reais quando agrupadas sob Polícia Penal - PE (obteve ${distinctSubjects.length}: ${distinctSubjects.join(", ")})`);
   console.log("OK: extrator determinístico de Edital Verticalizado (PPPE) e separação automática de disciplinas validados.");
 }
+
+// ── Validação v102: Trilha de Aprendizagem sem Edital ("Edital e Prova" excluído) + Personalização Solo Leveling ──
+{
+  const uc = [
+    slice("function normalizeText(", "function missionForQuestion("),
+  ].join("\n");
+  const ctx = {
+    window: {},
+    state: {
+      customCampaign: {
+        missions: [
+          { id: "m1", subject: "Direito Militar", name: "Hierarquia e disciplina" },
+          { id: "m2", subject: "Língua Portuguesa", name: "Compreensão de textos" },
+        ],
+      },
+    },
+    ALL_SUMMARIES: [
+      { category: "Edital e Prova", title: "Regras do Concurso" },
+      { category: "Edital", title: "Cronograma" },
+      { category: "Hierarquia e Disciplina", title: "Bases Institucionais" },
+      { category: "Língua Portuguesa", title: "Interpretação de Textos" },
+    ],
+    ALL_FLASHCARDS: [
+      ["Edital e Prova", "Qual a data?", "Domingo"],
+      ["Direito Constitucional", "Art. 5º", "Direitos individuais"],
+    ],
+    ALL_QUESTIONS: [
+      { subject: "Edital e Prova", topic: "Cronograma" },
+      { subject: "Direito Penal", topic: "Crimes contra a Administração" },
+    ],
+  };
+  vm.createContext(ctx);
+  vm.runInContext(uc, ctx);
+
+  assert.equal(ctx.window.isInvalidTrailSubject("Edital e Prova"), true, "'Edital e Prova' deve ser bloqueado na Trilha de Aprendizagem");
+  assert.equal(ctx.window.isInvalidTrailSubject("Edital"), true, "'Edital' deve ser bloqueado na Trilha de Aprendizagem");
+  assert.equal(ctx.canonicalSubjectName("Hierarquia e Disciplina"), "Direito Militar", "'Hierarquia e Disciplina' deve ser unificado em Direito Militar");
+
+  const validTrail = ctx.window.computeValidLearningSubjects();
+  assert(!validTrail.includes("Edital e Prova") && !validTrail.includes("Edital") && !validTrail.includes("Hierarquia e Disciplina"), `Trilha não pode conter 'Edital e Prova' nem subtópicos soltos: ${validTrail.join(", ")}`);
+  assert(validTrail.includes("Direito Militar") && validTrail.includes("Língua Portuguesa") && validTrail.includes("Direito Constitucional") && validTrail.includes("Direito Penal"), "Trilha deve manter todas as disciplinas reais do portal");
+
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const cssSrc = readFileSync(new URL("../dist/ui-v77.css", import.meta.url), "utf8");
+  assert(v77Src.includes("enhanceSoloLevelingVisuals") && v77Src.includes("bancas-boss-banner.jpg") && cssSrc.includes(".slBossesBanner"), "Banners e elementos visuais responsivos do Solo Leveling devem estar presentes");
+  console.log("OK: Trilha de Aprendizagem sem Edital ('Edital e Prova' removido) e personalização responsiva Solo Leveling validadas.");
+}

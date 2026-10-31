@@ -398,3 +398,255 @@ dialog>.sectionHead:first-child{
   dialog>.sectionHead:first-child{top:-14px;margin:-14px -14px 10px;padding:13px 14px 10px}
   .notifActionsRow button{flex:1 1 auto;text-align:center}
 }
+
+/* ── v102: Personalização Solo Leveling (System HUD, Banners Responsivos e Portais da Trilha) ── */
+section.hero.slSystemHero {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(105deg, rgba(6, 14, 28, 0.95) 0%, rgba(9, 22, 42, 0.89) 55%, rgba(25, 14, 52, 0.72) 100%),
+    url('login-banner.jpg') right 20% / cover no-repeat !important;
+  border: 1px solid rgba(89, 230, 255, 0.42) !important;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5), inset 0 0 28px rgba(89, 230, 255, 0.08) !important;
+}
+
+.slHeroHudBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(89, 230, 255, 0.2);
+}
+
+.slSystemBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(89, 230, 255, 0.12);
+  border: 1px solid rgba(89, 230, 255, 0.38);
+  color: #67e8f9;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 0 14px rgba(89, 230, 255, 0.16);
+}
+
+.slPulseDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+  display: inline-block;
+}
+
+.slPortalBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.18);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  color: #ddd6fe;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.slBannerCard {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  margin: 12px 0 16px;
+  padding: 14px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(8, 19, 36, 0.96), rgba(19, 14, 43, 0.92));
+  border: 1px solid rgba(89, 230, 255, 0.32);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.42), inset 0 0 22px rgba(139, 92, 246, 0.1);
+}
+
+.slBannerCard.slBossesBanner {
+  grid-template-columns: 185px minmax(0, 1fr);
+}
+
+.slBannerArtWrap,
+.slBossesPosterWrap {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(89, 230, 255, 0.35);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  background: #050b14;
+}
+
+.slBannerArtImg {
+  display: block;
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  object-position: center 20%;
+}
+
+.slBossesPosterImg {
+  display: block;
+  width: 100%;
+  height: 225px;
+  object-fit: cover;
+  object-position: center top;
+}
+
+.slBannerContent {
+  min-width: 0;
+}
+
+.slBannerContent h3 {
+  margin: 6px 0 4px;
+  font-size: 1.06rem;
+  color: #f8fafc;
+}
+
+.slSourcePills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.slStatChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 10px;
+  background: rgba(15, 33, 58, 0.85);
+  border: 1px solid rgba(89, 230, 255, 0.25);
+  font-size: 0.76rem;
+  color: #cbd5e1;
+}
+
+.slStatChip b {
+  color: #67e8f9;
+}
+
+.slBossGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.slBossBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, rgba(17, 29, 54, 0.92), rgba(34, 18, 66, 0.85));
+  border: 1px solid rgba(167, 139, 250, 0.38);
+  color: #f8fafc;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.slBossBtn:hover {
+  transform: translateY(-2px);
+  border-color: #59e6ff;
+  box-shadow: 0 6px 18px rgba(89, 230, 255, 0.22);
+}
+
+.slBossRank {
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #c084fc;
+  text-transform: uppercase;
+}
+
+.slBossBtn b {
+  font-size: 0.86rem;
+  color: #67e8f9;
+}
+
+.slBossBtn small {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  line-height: 1.25;
+}
+
+.slPhaseMeta {
+  margin-bottom: 4px;
+}
+
+.slGateTag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.slGateTag.open {
+  background: rgba(89, 230, 255, 0.15);
+  border: 1px solid rgba(89, 230, 255, 0.45);
+  color: #67e8f9;
+}
+
+.slGateTag.cleared {
+  background: rgba(34, 197, 94, 0.16);
+  border: 1px solid rgba(74, 222, 128, 0.45);
+  color: #86efac;
+}
+
+.slGateTag.locked {
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  color: #94a3b8;
+}
+
+@media (min-width: 881px) {
+  .loginBannerFrame picture,
+  .loginBannerFrame .loginBannerImg {
+    max-height: 340px;
+    object-fit: cover;
+    object-position: center 15%;
+  }
+}
+
+@media (max-width: 760px) {
+  section.hero.slSystemHero {
+    background:
+      linear-gradient(180deg, rgba(6, 14, 28, 0.86) 0%, rgba(8, 18, 35, 0.95) 100%),
+      url('login-banner.jpg') center top / cover no-repeat !important;
+  }
+
+  .slBannerCard,
+  .slBannerCard.slBossesBanner {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .slBannerArtImg {
+    height: 125px;
+    object-position: center 20%;
+  }
+
+  .slBossesPosterImg {
+    height: 165px;
+    object-position: center 18%;
+  }
+
+  .slBossGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
