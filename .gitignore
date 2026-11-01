@@ -11,8 +11,20 @@ app/android/build/
 .env
 .env.*
 !.env.example
-$null
 .claude/
 app/index.html
 app/sw.js
 wrangler.jsonc
+# Android (projeto atual em android/)
+android/.gradle/
+android/.idea/
+android/build/
+android/app/build/
+android/local.properties
+*.jks
+*.keystore
+# Supabase local
+supabase/.temp/
+# Sistema
+.DS_Store
+Thumbs.db

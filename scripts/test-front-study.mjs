@@ -393,3 +393,93 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   assert.ok(cssSrc.includes(".slActiveBossPanel") && cssSrc.includes("content-visibility: auto"), "CSS deve conter contenção responsiva de selects e otimização de scroll");
   console.log("OK: Responsividade dos selects, Boss Raid real das bancas e fluidez de renderização (v103) validados.");
 }
+
+// ── Validação v105: Todos os formatos de Edital Verticalizado (numeração contínua 1..N, sem número/checkbox, cabeçalho com colunas e bloco único sem número) + Auto-Portal ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const pdfClientSrc = readFileSync(new URL("../dist/pdf-text-client.js", import.meta.url), "utf8");
+  const scriptSrc = htmlSrc.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const fnSlice = [
+    scriptSrc.slice(scriptSrc.indexOf("function normalizeText("), scriptSrc.indexOf("function missionForQuestion(")),
+    scriptSrc.slice(scriptSrc.indexOf("window.unpackEditalTopicsList=function("), scriptSrc.indexOf("window._activeProcessingDocs=")),
+  ].join("\n");
+
+  const ctx = {
+    window: {},
+    cloudDocuments: [],
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_KEY: "anon",
+    processEditalDocument: async () => {},
+    deleteCloudDocument: async () => {},
+    fetch: async () => ({ ok: true, json: async () => ({}) }),
+    toast: () => {},
+  };
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(fnSlice, ctx);
+  vm.runInContext(pdfClientSrc, ctx);
+
+  // Caso A: Tópicos SEM numeração sob 1 único subject genérico ("Edital Verticalizado") -> NÃO pode colapsar em 1 matéria só!
+  const unnumberedCollapsed = [
+    { subject: "Edital Verticalizado", topic: "Compreensão e interpretação de textos de gêneros variados" },
+    { subject: "Edital Verticalizado", topic: "Tipologia textual e ortografia oficial" },
+    { subject: "Edital Verticalizado", topic: "Redes de computadores, internet, intranet e navegadores" },
+    { subject: "Edital Verticalizado", topic: "Segurança da informação: vírus, worms e firewall" },
+    { subject: "Edital Verticalizado", topic: "Direitos e garantias fundamentais na Constituição de 1988" },
+    { subject: "Edital Verticalizado", topic: "Inquérito policial e ação penal no processo penal" },
+    { subject: "Edital Verticalizado", topic: "Aplicação da lei penal, fato típico e ilicitude" },
+    { subject: "Edital Verticalizado", topic: "Lei nº 12.850/2013 (organizações criminosas) e Lei de Execução Penal" },
+  ];
+  const unpackedUnnumbered = ctx.window.unpackEditalTopicsList(unnumberedCollapsed, "Polícia Penal");
+  const unnumSubjects = [...new Set(unpackedUnnumbered.map((x) => x.subject))];
+  assert(unnumSubjects.length >= 6, `Tópicos sem numeração devem separar ao menos 6 disciplinas reais, obteve ${unnumSubjects.length}: ${unnumSubjects.join(", ")}`);
+
+  // Caso B: Edital Verticalizado com NUMERAÇÃO CONTÍNUA (1..3 em Português, 4..6 em Informática, 7..9 em Direito Constitucional) + colunas na mesma linha do cabeçalho
+  const continuousPages = [
+    {
+      page: 1,
+      text: [
+        "LÍNGUA PORTUGUESA   Teoria   Resumo   Questões   Revisão",
+        "1 Compreensão e interpretação de textos de gêneros variados.",
+        "2 Reconhecimento de tipos e gêneros textuais.",
+        "3 Domínio da ortografia oficial e mecanismos de coesão.",
+        "NOÇÕES DE INFORMÁTICA (10 questões)   Leitura   Questões   Acertos (%)",
+        "4 Noções de sistema operacional (ambientes Linux e Windows).",
+        "5 Redes de computadores e navegadores.",
+        "6 Segurança da informação: vírus, worms e pragas virtuais.",
+        "DIREITO CONSTITUCIONAL   Teoria   Questões",
+        "7 Direitos e garantias fundamentais (Art. 5º da CF/88).",
+        "8 Da Segurança Pública (Art. 144 da CF/88).",
+        "9 Organização político-administrativa do Estado.",
+      ].join("\n"),
+    },
+  ];
+  const extractedCont = ctx.window.extractStructuredEditalTopics(continuousPages, { title: "EDITAL VERTICALIZADO", campaignName: "PMPE" });
+  assert.equal(extractedCont.subjectCount, 3, `Numeração contínua 1..9 deve extrair as 3 disciplinas, obteve ${extractedCont.subjectCount}`);
+  assert.equal(extractedCont.topics.length, 9, `Numeração contínua 1..9 deve extrair todos os 9 tópicos, obteve ${extractedCont.topics.length}`);
+
+  // Caso C: Edital Verticalizado com checkboxes / linhas sem número abaixo de cada disciplina
+  const checkboxPages = [
+    {
+      page: 1,
+      text: [
+        "DIREITO PENAL",
+        "☐ Aplicação da lei penal no tempo e no espaço.",
+        "☐ Fato típico, ilicitude e culpabilidade.",
+        "☐ Crimes contra a pessoa e contra o patrimônio.",
+        "DIREITO PROCESSUAL PENAL",
+        "☐ Inquérito policial: natureza, características e prazos.",
+        "☐ Prisão em flagrante, prisão preventiva e temporária.",
+        "LEGISLAÇÃO EXTRAVAGANTE",
+        "☐ Lei nº 11.340/2006 (Lei Maria da Penha).",
+        "☐ Lei nº 9.455/1997 (Crimes de Tortura).",
+      ].join("\n"),
+    },
+  ];
+  const extractedChk = ctx.window.extractStructuredEditalTopics(checkboxPages, { title: "EDITAL VERTICALIZADO", campaignName: "PCPE" });
+  assert.equal(extractedChk.subjectCount, 3, `Edital verticalizado com checkboxes deve extrair 3 disciplinas, obteve ${extractedChk.subjectCount}`);
+  assert.equal(extractedChk.topics.length, 7, `Edital verticalizado com checkboxes deve extrair 7 tópicos, obteve ${extractedChk.topics.length}`);
+
+  assert(htmlSrc.includes("inferExamPortalInfo") && htmlSrc.includes("toggleDocumentCommunitySharing"), "index.html deve criar/alternar portal automaticamente pelo edital e permitir opt-in de compartilhamento na comunidade");
+  console.log("OK: extrator universal de Editais Verticalizados (numeração contínua, sem número, checkboxes e auto-portal) validado.");
+}

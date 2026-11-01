@@ -360,26 +360,45 @@ export function extractStructuredEditalTopics(
     }
     if (!currentSubject) continue;
 
-    const standaloneNum = line.match(/^0?(\d{1,2})\s*[.\-)]?$/);
+    const standaloneNum = line.match(/^0?(\d{1,3})\s*[.\-)]?$/);
     if (standaloneNum) {
       const n = Number(standaloneNum[1]);
-      if (n === currentTableNum + 1 || (currentTableNum === 0 && n === 1)) {
+      const isFirstInSubject = currentTableNum === 0 && n >= 1 && n <= 400;
+      const isSequential = currentTableNum > 0 && (n === currentTableNum + 1 || n === currentTableNum + 2);
+      const isResetToOne = currentTableNum >= 2 && n === 1;
+      if (isFirstInSubject || isSequential || isResetToOne) {
         flushTopic();
+        if (isResetToOne) {
+          const lookahead = allLines.slice(i + 1, i + 8).join(" ");
+          const inf = inferDisciplineFromTopicsBlock(lookahead);
+          if (inf && normalizeSearch(inf) !== normalizeSearch(currentSubject)) currentSubject = inf;
+        }
         currentTableNum = n;
         continue;
       }
     }
 
-    const inlineNum = line.match(/^0?(\d{1,2})(?:\s*[.\-)]\s*|\s+)([A-ZÀ-Ýa-zà-ÿ].*)$/);
+    const inlineNum = line.match(/^0?(\d{1,3})(?:\.(\d{1,2}))?(?:\s*[.\-)]\s*|\s+)([A-ZÀ-Ýa-zà-ÿ].*)$/);
     if (inlineNum) {
       const n = Number(inlineNum[1]);
-      const rest = inlineNum[2].trim();
+      const subN = inlineNum[2] ? Number(inlineNum[2]) : null;
+      const rest = inlineNum[3].trim();
       const isLawContinuation = /^(?:a\s+\d+|de\s+\d+|\d|º|°|da\s+lei|do\s+decreto|do\s+c[oó]digo|da\s+constitui[cç][aã]o|e\s+\d+)/i.test(rest);
-      if (!isLawContinuation && (n === currentTableNum + 1 || (currentTableNum === 0 && n === 1))) {
-        flushTopic();
-        currentTableNum = n;
-        currentTopicParts.push(rest);
-        continue;
+      if (!isLawContinuation) {
+        const isFirstInSubject = currentTableNum === 0 && n >= 1 && n <= 400;
+        const isSequential = currentTableNum > 0 && (n === currentTableNum + 1 || n === currentTableNum + 2 || (subN !== null && n === currentTableNum));
+        const isResetToOne = currentTableNum >= 2 && n === 1 && subN === null;
+        if (isFirstInSubject || isSequential || isResetToOne) {
+          flushTopic();
+          if (isResetToOne) {
+            const lookahead = [rest, ...allLines.slice(i + 1, i + 7)].join(" ");
+            const inf = inferDisciplineFromTopicsBlock(lookahead);
+            if (inf && normalizeSearch(inf) !== normalizeSearch(currentSubject)) currentSubject = inf;
+          }
+          currentTableNum = n;
+          currentTopicParts.push(rest);
+          continue;
+        }
       }
     }
 
@@ -529,14 +548,17 @@ export function mergeChunkResults(results, maxTopics = 4000, context = {}) {
     }
     if (currentBlock.length) blocks.push(currentBlock);
     for (const b of blocks) {
-      const combinedText = b.map((idx) => flatExpanded[idx].piece).join(" \n ");
-      const bSubj = inferDisciplineFromTopicsBlock(combinedText);
-      if (bSubj) {
-        for (const idx of b) inferredBlockSubjects.set(idx, bSubj);
+      const perItem = b.map((idx) => ({ idx, s: inferDisciplineFromTopicsBlock(flatExpanded[idx].piece) }));
+      const distinctInBlock = new Set(perItem.map((x) => x.s).filter(Boolean));
+      if (blocks.length >= 2 && distinctInBlock.size <= 1) {
+        const combinedText = b.map((idx) => flatExpanded[idx].piece).join(" \n ");
+        const bSubj = inferDisciplineFromTopicsBlock(combinedText);
+        if (bSubj) {
+          for (const idx of b) inferredBlockSubjects.set(idx, bSubj);
+        }
       } else {
-        for (const idx of b) {
-          const singleSubj = inferDisciplineFromTopicsBlock(flatExpanded[idx].piece);
-          if (singleSubj) inferredBlockSubjects.set(idx, singleSubj);
+        for (const { idx, s } of perItem) {
+          if (s) inferredBlockSubjects.set(idx, s);
         }
       }
     }

@@ -29,12 +29,45 @@
 
   const EMAIL_LINE_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
   const CPF_LINE_RE = /^(?:cpf\s*:?\s*)?\d{3}\.?\d{3}\.?\d{3}[-./]\d{2}$/i;
-  const TABLE_CHROME_LINE_RE = /^(leitura|-?\s*letra|da\s+lei|leitura\s*-\s*letra\s+da\s+lei|quest[oõ]|es|quest[oõ]es|acerto|s\s*\(\%\).*|acertos\s*\(\%\).*|tempo|revis[aã]|o|revis[aã]o|teoria|resumo|videoaula|pdf|status|conclu[ií]do|\(\%\))$/i;
+  const TABLE_CHROME_LINE_RE = /^(leitura|-?\s*letra|da\s+lei|leitura\s*-\s*letra\s+da\s+lei|quest[oõ]|es|quest[oõ]es|exerc[ií]cios?|acerto|s\s*\(\%\).*|acertos\s*\(\%\).*|tempo|revis[aã]|o|revis[aã]o|1[ªa]\s*rev.*|2[ªa]\s*rev.*|3[ªa]\s*rev.*|teoria|resumo|videoaula|pdf|status|conclu[ií]do|estudado|check|\(\%\)|item|t[oó]pico|assunto|conte[uú]do)$/i;
   const ADMIN_ONLY_RE = /^(inscri(c|ç)(a|ã)o|cronograma|remunera(c|ç)(a|ã)o|vagas?|isen(c|ç)(a|ã)o|taxa de inscri(c|ç)(a|ã)o|resultado|recursos?|exame m[eé]dico|teste de aptid(a|ã)o f[ií]sica|investiga(c|ç)(a|ã)o social|documentos?|matr[ií]cula|curso de forma(c|ç)(a|ã)o)$/i;
 
   const GENERIC_SUBJECT_RE = /^(edital(\s+verticalizado|\s+do\s+concurso|\s+de\s+abertura|\s+esquematizado|\s+sintetizado|\s+n[ºo°]?\s*[\d\/.-]+)?.*|ciclo\s*\d+.*|conte[uú]do(s)?\s*program[aá]tico(s)?|conhecimentos?\s*(gerais|b[aá]sicos|espec[ií]ficos|complementares|t[eé]cnicos|profissionais)?|objetos?\s*de\s*avalia[cç][aã]o|disciplinas?|mat[eé]rias?|programa(s)?|anexo\s*[ivxlcdm\d]*.*|bloco\s*[ivxlcdm\d]*.*|m[oó]dulo\s*[ivxlcdm\d]*.*|parte\s*[ivxlcdm\d]*.*|geral|comum\s+a\s+todos.*|cargo\s*\d*.*|pol[ií]cia\s*(penal|militar|civil|federal|rodovi[aá]ria|cient[ií]fica|legislativa|judicial).*|corpo\s+de\s+bombeiros.*|guarda\s+(municipal|civil).*|agente\s+(penitenci[aá]rio|de\s+pol[ií]cia|socioeducativo).*|soldado.*|oficial.*|pm\s*pe.*|pp\s*pe.*|pc\s*pe.*|cbm\s*pe.*|prf.*|pf.*)$/i;
 
-  const KNOWN_SUBJECT_HEADER_RE = /^(?:disciplina\s*:\s*|mat[eé]ria\s*:\s*)?(?:[ivxlcdm\d]{1,4}\s*[.\-–—)]\s*)?(l[ií]ngua\s+portuguesa|portugu[eê]s|interpreta[cç][aã]o\s+de\s+textos?|reda[cç][aã]o(\s+oficial|\s+discursiva)?|[eé]tica(\s+no\s+servi[cç]o\s+p[uú]blico|\s+na\s+administra[cç][aã]o\s+p[uú]blica|\s+p[uú]blica|\s+e\s+cidadania)?|racioc[ií]nio\s+l[oó]gico(\s*[-e/]\s*matem[aá]tico|\s+quantitativo)?|matem[aá]tica(\s+financeira|\s+b[aá]sica|\s+e\s+racioc[ií]nio\s+l[oó]gico)?|estat[ií]stica|(no[cç][oõ]es\s+de\s+)?inform[aá]tica|tecnologia\s+da\s+informa[cç][aã]o(\s+e\s+comunica[cç][aã]o)?|atualidades(\s*\(.*\)|\s+e\s+conhecimentos\s+gerais)?|conhecimentos\s+regionais.*|hist[oó]ria(\s+de\s+pernambuco|\s+do\s+brasil|\s+geral)?|geografia(\s+de\s+pernambuco|\s+do\s+brasil|\s+geral)?|(no[cç][oõ]es\s+de\s+)?direito\s+(constitucional|administrativo|penal(\s+militar)?|processual\s+penal(\s+militar)?|militar|civil|processual\s+civil|tribut[aá]rio|previdenci[aá]rio|eleitoral|do\s+trabalho|ambiental|financeiro|empresarial|consumidor|internacional|humanos).*|direitos?\s+humanos(\s+e\s+participa[cç][aã]o\s+social|\s+e\s+cidadania|\s+e\s+legisla[cç][aã]o.*)?|legisla[cç][aã]o\s+(estadual|especial|extravagante|institucional|penal(\s+especial)?|espec[ií]fica|municipal|de\s+tr[aâ]nsito|aplicada|pertinente|penitenci[aá]ria|do\s+sistema\s+prisional).*|leis?\s+(especiais|extravagantes|penais\s+especiais).*|estatuto.*|criminologia|(no[cç][oõ]es\s+de\s+)?criminologia|(no[cç][oõ]es\s+de\s+)?medicina\s+legal|(no[cç][oõ]es\s+de\s+)?administra[cç][aã]o(\s+p[uú]blica|\s+geral|\s+financeira\s+e\s+or[cç]ament[aá]ria)?|afo|arquivologia|(no[cç][oõ]es\s+de\s+)?arquivologia|contabilidade(\s+geral|\s+p[uú]blica)?|economia|l[ií]ngua\s+(inglesa|espanhola|estrangeira).*|ingl[eê]s|espanhol|f[ií]sica|qu[ií]mica|biologia|anatomia\s+humana|primeiros\s+socorros|defesa\s+civil)$/i;
+  const KNOWN_SUBJECT_HEADER_RE = /^(?:(?:disciplina|mat[eé]ria|bloco\s*[ivxlcdm\d]+|m[oó]dulo\s*[ivxlcdm\d]+|conhecimentos?\s*(?:b[aá]sicos|gerais|espec[ií]ficos))\s*[:\-–—]\s*)?(?:[ivxlcdm\d]{1,4}\s*[.\-–—)]\s*)?(l[ií]ngua\s+portuguesa(\s+e\s+interpreta[cç][aã]o\s+de\s+textos?|\s+e\s+reda[cç][aã]o.*)?|portugu[eê]s|gram[aá]tica.*|interpreta[cç][aã]o\s+de\s+textos?|reda[cç][aã]o(\s+oficial|\s+discursiva)?|[eé]tica(\s+no\s+servi[cç]o\s+p[uú]blico|\s+na\s+administra[cç][aã]o\s+p[uú]blica|\s+p[uú]blica|\s+e\s+cidadania|\s+e\s+conduta.*)?|racioc[ií]nio\s+l[oó]gico(\s*[-e/]\s*matem[aá]tico|\s+quantitativo|\s+e\s+estat[ií]stica)?|rlm|matem[aá]tica(\s+financeira|\s+b[aá]sica|\s+e\s+racioc[ií]nio\s+l[oó]gico)?|estat[ií]stica|(?:no[cç][oõ]es\s+de\s+|conhecimentos?\s+de\s+)?inform[aá]tica|tecnologia\s+da\s+informa[cç][aã]o(\s+e\s+comunica[cç][aã]o)?|atualidades(\s*\(.*\)|\s+e\s+conhecimentos\s+gerais|\s+e\s+hist[oó]ria.*|\s+e\s+geografia.*)?|conhecimentos\s+regionais.*|realidade\s+[eé]tnica.*|hist[oó]ria(\s+e\s+geografia.*|\s+de\s+pernambuco|\s+do\s+brasil|\s+geral|\s+da\s+para[ií]ba|\s+da\s+bahia|\s+do\s+cear[aá]|\s+de\s+alagoas)?|geografia(\s+e\s+hist[oó]ria.*|\s+de\s+pernambuco|\s+do\s+brasil|\s+geral|\s+da\s+para[ií]ba|\s+da\s+bahia|\s+do\s+cear[aá]|\s+de\s+alagoas)?|(?:no[cç][oõ]es\s+de\s+|conhecimentos?\s+de\s+)?direito\s+(constitucional|administrativo|penal(\s+militar|\s+e\s+processual\s+penal)?|processual\s+penal(\s+militar|\s+e\s+penal)?|militar|civil|processual\s+civil|tribut[aá]rio|previdenci[aá]rio|eleitoral|do\s+trabalho|ambiental|financeiro|empresarial|consumidor|internacional|humanos|penitenci[aá]rio).*|(?:no[cç][oõ]es\s+de\s+)?direitos?\s+humanos(\s+e\s+participa[cç][aã]o\s+social|\s+e\s+cidadania|\s+e\s+legisla[cç][aã]o.*)?|(?:no[cç][oõ]es\s+de\s+)?legisla[cç][aã]o(\s+estadual|\s+especial|\s+extravagante|\s+institucional|\s+penal(\s+especial|\s+extravagante)?|\s+espec[ií]fica|\s+municipal|\s+de\s+tr[aâ]nsito|\s+aplicada|\s+pertinente|\s+penitenci[aá]ria|\s+do\s+sistema\s+prisional|\s+militar|\s+da\s+pm.*|\s+da\s+pp.*|\s+da\s+pc.*|\s+jur[ií]dica.*)?|leis?\s+(especiais|extravagantes|penais\s+especiais).*|estatuto.*|c[oó]digo\s+de\s+tr[aâ]nsito.*|ctb|(?:no[cç][oõ]es\s+de\s+)?criminologia|(?:no[cç][oõ]es\s+de\s+)?medicina\s+legal|(?:no[cç][oõ]es\s+de\s+)?criminal[ií]stica|seguran[cç]a\s+(p[uú]blica|prisional|corporativa|org[aâ]nica).*|(?:no[cç][oõ]es\s+de\s+)?administra[cç][aã]o(\s+p[uú]blica|\s+geral|\s+financeira\s+e\s+or[cç]ament[aá]ria|\s+de\s+recursos\s+materiais|\s+e\s+[eé]tica)?|afo|or[cç]amento\s+p[uú]blico|gest[aã]o\s+de\s+pessoas|atendimento\s+ao\s+p[uú]blico|(?:no[cç][oõ]es\s+de\s+)?arquivologia|(?:no[cç][oõ]es\s+de\s+)?contabilidade(\s+geral|\s+p[uú]blica)?|economia|l[ií]ngua\s+(inglesa|espanhola|estrangeira).*|ingl[eê]s|espanhol|f[ií]sica|qu[ií]mica|biologia|anatomia\s+humana|primeiros\s+socorros|defesa\s+civil|dire[cç][aã]o\s+defensiva)$/i;
+
+  const TOPIC_DISCIPLINE_RULES = [
+    { subject: "Língua Portuguesa", re: /\b(compreensao e interpretacao|tipologia textual|generos textuais|ortografia|acentuacao grafica|coesao|coerencia|morfossintatica|morfologia|classes de palavras|coordenacao entre oracoes|subordinacao entre oracoes|sinais de pontuacao|concordancia verbal|concordancia nominal|regencia verbal|regencia nominal|indicativo de crase|pronomes atonos|colocacao pronominal|semantica|figuras de linguagem|redacao oficial|manual de redacao da presidencia|reescrita de frases)\b/i },
+    { subject: "Ética no Serviço Público", re: /\b(etica e moral|etica, principios e valores|etica e democracia|etica e funcao publica|etica no setor publico|codigo de etica|46[\s.]*852|1[\s.]*171\/1994|sindicancias? investigativa)\b/i },
+    { subject: "Legislação Estadual", re: /\b(codigo penitenciario do estado de pernambuco|15[\s.]*755\/2016|106\/2007|422\/2019|150\/2009|6[\s.]*123\/1968|regime juridico dos funcionarios publicos civis do estado de pernambuco|policial penal de pernambuco|normas disciplinares dos policiais penais)\b/i },
+    { subject: "Informática", re: /\b(sistema operacional|ambientes linux e windows|windows 10|windows 11|redes de computadores|intranet|navegadores|microsoft edge|mozilla firefox|google chrome|correio eletronico|computacao na nuvem|cloud computing|arquivos, pastas e programas|seguranca da informacao|virus, worms|malware|phishing|ransomware|antivirus|firewall|procedimentos de backup|cloud storage|pacote office|libreoffice|word|excel|powerpoint)\b/i },
+    { subject: "Raciocínio Lógico-Matemático", re: /\b(estruturas logicas|logica de argumentacao|logica sentencial|proposicoes simples e compostas|tabelas verdade|equivalencias|leis de de morgan|diagramas logicos|logica de primeira ordem|principios de contagem|analise combinatoria|probabilidade|operacoes com conjuntos|problemas aritmeticos, geometricos e matriciais|porcentagem|regra de tres|juros simples)\b/i },
+    { subject: "Atualidades", re: /\b(topicos relevantes e atuais|seguranca prisional nacional|somente para prova discursiva|energia, transporte, meio ambiente, economia, sociedade)\b/i },
+    { subject: "Direito Administrativo", re: /\b(estado, governo e administracao publica|direito administrativo\. objeto|ato administrativo|extincao do ato administrativo|cassacao, anulacao, revogacao e convalidacao|decadencia administrativa|agentes publicos.*cargo, emprego e funcao|poderes da administracao publica|hierarquico, disciplinar, regulamentar e de policia|regime juridico-administrativo|responsabilidade civil do estado|servicos publicos.*concessao, permissao|organizacao administrativa.*autarquias, fundacoes|controle da administracao publica|improbidade administrativa|8[\s.]*429\/1992|9[\s.]*784\/1999|14[\s.]*133\/2021|licitacoes e contratos)\b/i },
+    { subject: "Direito Constitucional", re: /\b(constituicao da republica federativa do brasil de 1988|aplicabilidade das normas constitucionais|eficacia plena, contida e limitada|direitos e garantias fundamentais|direitos e deveres individuais e coletivos|direitos sociais|nacionalidade|direitos politicos|organizacao politico-administrativa do estado|poder executivo.*presidente da republica|poder legislativo.*processo legislativo|poder judiciario.*conselho nacional de justica|funcoes essenciais a justica|defesa do estado e das instituicoes|art\.?\s*144)\b/i },
+    { subject: "Direito Processual Penal", re: /\b(disposicoes preliminares do codigo de processo penal|inquerito policial|acao penal|9[\s.]*296\/1996|interceptacao telefonica|juiz, ministerio publico, acusado, defensor|prisao, liberdade provisoria e fianca|prisao em flagrante|prisao preventiva|prisao temporaria|provas.*cadeia de custodia|crimes de responsabilidade dos funcionarios publicos|habeas corpus e seu processo|aplicaveis ao direito processual penal)\b/i },
+    { subject: "Direito Penal", re: /\b(aplicacao da lei penal|lei penal no tempo e no espaco|territorialidade e extraterritorialidade|fato tipico e seus elementos|crime consumado e tentado|ilicitude e causas de exclusao|legitima defesa|estado de necessidade|culpabilidade|imputabilidade penal|concurso de pessoas|concurso de crimes|crimes contra a pessoa|crimes contra o patrimonio|crimes contra a fe publica|crimes contra a administracao publica|8[\s.]*072\/1990|delitos hediondos|aplicaveis ao direito penal)\b/i },
+    { subject: "Direitos Humanos", re: /\b(declaracao universal dos direitos humanos|regras minimas da onu|regras de nelson mandela|regras de bangkok|pacto de san jose da costa rica|convencao americana sobre direitos humanos|tratamento de pessoas presas|programa nacional de direitos humanos|7[\s.]*037\/2009|conselhos da comunidade|conselhos penitenciarios|arts\. 62 a 64 da lei de execucao penal)\b/i },
+    { subject: "Legislação Extravagante", re: /\b(12[\s.]*850\/2013|organizacoes criminosas|9[\s.]*613\/1998|lavagem de dinheiro|9[\s.]*455\/1997|antitortura|crimes de tortura|12[\s.]*846\/2013|anticorrupcao|13[\s.]*869\/2019|abuso de autoridade|10[\s.]*826\/2003|estatuto do desarmamento|11[\s.]*343\/2006|lei de drogas|13[\s.]*964\/2019|pacote anticrime|lei de execucao penal|7[\s.]*210\/1984|11[\s.]*340\/2006|maria da penha|sistema penitenciario federal|11[\s.]*671\/2008|atencao integral a saude das pessoas privadas de liberdade|plano estrategico de educacao no ambito do sistema prisional|atencao as mulheres em situacao de privacao de liberdade)\b/i },
+    { subject: "Direito Militar", re: /\b(estatuto dos policiais militares|codigo disciplinar dos militares|direito penal militar|processual penal militar|sunor|6[\s.]*783\/1974|11[\s.]*817\/2000|crimes militares em tempo de paz)\b/i },
+    { subject: "História de Pernambuco", re: /\b(insurreicao pernambucana|revolucao pernambucana|confederacao do equador|revolucao praieira|capitania de pernambuco|guerra dos mascates|ocupacao holandesa)\b/i },
+    { subject: "Geografia de Pernambuco", re: /\b(mesorregioes de pernambuco|bacias hidrograficas de pernambuco|relevo de pernambuco|agreste e sertao pernambucano|zona da mata pernambucana)\b/i },
+  ];
+
+  function inferDisciplineFromTopicsBlock(topicsText) {
+    const norm = normalizeSearch(topicsText);
+    let bestSubject = "";
+    let bestHits = 0;
+    for (const rule of TOPIC_DISCIPLINE_RULES) {
+      const matches = norm.match(new RegExp(rule.re.source, "gi"));
+      const count = matches ? matches.length : 0;
+      if (count > bestHits) {
+        bestHits = count;
+        bestSubject = rule.subject;
+      }
+    }
+    return bestSubject;
+  }
 
   function sanitizeWatermarkText(value) {
     return String(value ?? "")
@@ -44,10 +77,22 @@
       .trim();
   }
 
+  function stripTableChromeSuffix(value) {
+    let s = String(value ?? "").trim();
+    for (let pass = 0; pass < 2; pass++) {
+      s = s.replace(/^(?:disciplina|mat[eé]ria|bloco\s*[ivxlcdm\d]+|m[oó]dulo\s*[ivxlcdm\d]+|conhecimentos?\s*(?:b[aá]sicos|gerais|espec[ií]ficos))\s*[:\-–—]\s*/i, "").trim();
+      s = s.replace(/\s+(?:leitura(?:\s*-\s*letra\s+da\s+lei)?|teoria|resumo|pdf|videoaula|quest[oõ]es|exerc[ií]cios?|acertos?(?:\s*\(\%\))?|tempo|revis[aã]o|\d[ªa]\s*rev(?:is[aã]o)?|status|conclu[ií]do|estudado|check)(?:\s+(?:leitura(?:\s*-\s*letra\s+da\s+lei)?|da\s+lei|teoria|resumo|pdf|videoaula|quest[oõ]es|exerc[ií]cios?|acertos?(?:\s*\(\%\))?|\(\%\)|tempo|revis[aã]o|\d[ªa]\s*rev(?:is[aã]o)?|status|conclu[ií]do|estudado|check))*\s*$/i, "").trim();
+      s = s.replace(/\s*\(\s*(?:\d+\s*quest[oõ]es?|peso\s*[\d.,]+|conhecimentos?\s*(?:b[aá]sicos|gerais|espec[ií]ficos))(?:[^)]*)\)\s*$/i, "").trim();
+    }
+    return s;
+  }
+
   function isGenericSubjectName(value, campaignName = "", docTitle = "") {
-    const s = normalizeSearch(value).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+    const cleaned = stripTableChromeSuffix(value);
+    const s = normalizeSearch(cleaned).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
     if (!s) return true;
-    if (KNOWN_SUBJECT_HEADER_RE.test(String(value ?? "").trim())) return false;
+    const withoutPrefixNum = cleaned.replace(/^(?:[ivxlcdm\d]{1,4}\s*[.\-–—)]\s*)/i, "").trim();
+    if (KNOWN_SUBJECT_HEADER_RE.test(withoutPrefixNum)) return false;
     if (GENERIC_SUBJECT_RE.test(s)) return true;
     const camp = normalizeSearch(campaignName).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
     if (camp && (s === camp || (camp.length >= 4 && s.includes(camp)) || (s.length >= 4 && camp.includes(s)))) return true;
@@ -63,7 +108,7 @@
       if (EMAIL_LINE_RE.test(rawLines[i]) || CPF_LINE_RE.test(rawLines[i])) {
         removeIdx.add(i);
         if (i > 0 && EMAIL_LINE_RE.test(rawLines[i]) && !/\d/.test(rawLines[i - 1]) && rawLines[i - 1].length <= 65) {
-          const prev = rawLines[i - 1];
+          const prev = stripTableChromeSuffix(rawLines[i - 1]);
           if (!KNOWN_SUBJECT_HEADER_RE.test(prev) && !GENERIC_SUBJECT_RE.test(normalizeSearch(prev))) {
             removeIdx.add(i - 1);
           }
@@ -78,7 +123,7 @@
       if (TABLE_CHROME_LINE_RE.test(line)) continue;
       const norm = normalizeSearch(line);
       if (TABLE_CHROME_LINE_RE.test(norm)) continue;
-      if (/^(edital\s+verticalizado.*|ciclo\s*\d+.*|policia\s+(penal|militar|civil|federal)\s*[-–—]?\s*[a-z]{0,3})$/i.test(norm)) continue;
+      if (/^(edital\s+verticalizado.*|ciclo\s*\d+.*|policia\s+(penal|militar|civil|federal)\s*[-–—]?\s*[a-z]{0,3}|pagina\s+\d+(\s+de\s+\d+)?)$/i.test(norm)) continue;
       out.push(line);
     }
     return out;
@@ -86,46 +131,45 @@
 
   function splitNumberedTopicBlock(topic) {
     const cleanTopic = sanitizeWatermarkText(topic).replace(/\s+/g, " ").trim();
-    if (cleanTopic.length <= 140) return [cleanTopic];
-    const hasPunct1 = /(?:^|[\s.;:])0?1\s*[.\-)]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/i.test(cleanTopic);
-    const hasPunct2 = /[\s.;:]0?2\s*[.\-)]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/i.test(cleanTopic);
-    const hasPunct3 = /[\s.;:]0?3\s*[.\-)]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/i.test(cleanTopic);
-    if (hasPunct1 && hasPunct2 && hasPunct3) {
+    if (cleanTopic.length <= 120) return [cleanTopic];
+    const hasPunct1 = /(?:^|[\s.;:])0?1(?:\.\d+)?\s*[.\-)]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/i.test(cleanTopic);
+    const hasPunct2 = /[\s.;:]0?2(?:\.\d+)?\s*[.\-)]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/i.test(cleanTopic);
+    if (hasPunct1 && hasPunct2) {
       const parts = cleanTopic
-        .split(/(?=(?:^|[\s.;:])\d{1,2}\s*[.\-)]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ])/g)
+        .split(/(?=(?:^|[\s.;:])\d{1,3}(?:\.\d+)?\s*[.\-)]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ])/g)
         .map((p) => p.replace(/^[\s.;:]+|[\s.;]+$/g, "").trim())
         .filter((p) => p.length >= 3);
-      if (parts.length >= 3) return parts;
+      if (parts.length >= 2) return parts;
     }
     const hasSpace1 = /(?:^|[\s.;:])1\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]{2,}/.test(cleanTopic);
     const hasSpace2 = /[\s.;:]2\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]{2,}/.test(cleanTopic);
-    const hasSpace3 = /[\s.;:]3\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]{2,}/.test(cleanTopic);
-    if (hasSpace1 && hasSpace2 && hasSpace3) {
+    if (hasSpace1 && hasSpace2) {
       const parts = cleanTopic
-        .split(/(?=(?:^|[\s.;:])\d{1,2}\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]{2,})/g)
+        .split(/(?=(?:^|[\s.;:])\d{1,3}\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]{2,})/g)
         .map((p) => p.replace(/^[\s.;:]+|[\s.;]+$/g, "").trim())
         .filter((p) => p.length >= 3);
-      if (parts.length >= 3) return parts;
+      if (parts.length >= 2) return parts;
     }
     return [cleanTopic];
   }
 
   function isSubjectHeaderLine(line, nextLine, campaignName = "", docTitle = "") {
-    const s = String(line || "").replace(/^\s*(?:disciplina|mat[eé]ria)\s*:\s*/i, "").trim();
-    if (s.length < 4 || s.length > 88) return false;
+    const s = stripTableChromeSuffix(line);
+    if (s.length < 3 || s.length > 96) return false;
     if (/^\d+\s+[a-záéíóúâêôãõç]/.test(s)) return false;
     if (/[.;]$/.test(s)) return false;
     if (isGenericSubjectName(s, campaignName, docTitle)) return false;
-    const cleanedHeader = s.replace(/^(?:[ivxlcdm\d]{1,4}\s*[.\-–—)]\s*)/i, "").trim();
+    const cleanedHeader = s.replace(/^(?:[ivxlcdm\d]{1,4}\s*[.\-–—)]\s*)/i, "").replace(/\s*:\s*$/, "").trim();
     if (KNOWN_SUBJECT_HEADER_RE.test(cleanedHeader)) {
       const letters = cleanedHeader.replace(/[^A-Za-zÀ-ÿ]/g, "");
       const upper = cleanedHeader.replace(/[^A-ZÀ-Ý]/g, "");
-      if (letters.length >= 4 && upper.length / letters.length >= 0.65) return true;
-      if (nextLine && /^(?:0?1|I)(?:\s*$|[.\-)]\s*|\s+[A-ZÀ-Ý])/i.test(nextLine)) return true;
+      if (letters.length >= 3 && upper.length / letters.length >= 0.55) return true;
+      if (nextLine && /^(?:0?\d{1,3}|[IVX]{1,4}|[☐▢☑✓✔•▪▸\-–—]|\[\s*\])(?:\s*$|[.\-)]\s*|\s+[A-ZÀ-Ý])/i.test(nextLine)) return true;
+      if (/^(?:disciplina|mat[eé]ria)\s*:/i.test(line)) return true;
     }
-    const letters = s.replace(/[^A-Za-zÀ-ÿ]/g, "");
-    const upper = s.replace(/[^A-ZÀ-Ý]/g, "");
-    if (!/^\d/.test(s) && letters.length >= 5 && upper.length === letters.length && nextLine && /^0?1(?:\s*$|[.\-)]\s+|\s+[A-ZÀ-Ý])/i.test(nextLine)) {
+    const letters = cleanedHeader.replace(/[^A-Za-zÀ-ÿ]/g, "");
+    const upper = cleanedHeader.replace(/[^A-ZÀ-Ý]/g, "");
+    if (!/^\d/.test(s) && letters.length >= 5 && upper.length === letters.length && nextLine && /^(?:0?\d{1,3}|[☐▢☑✓✔•▪▸])(?:\s*$|[.\-)]\s+|\s+[A-ZÀ-Ý])/i.test(nextLine)) {
       return true;
     }
     return false;
@@ -138,7 +182,7 @@
     const campaignName = options.campaignName || "";
     const docTitle = options.title || "";
     const fullRawText = pages.map((p) => String(p?.text || "")).join("\n");
-    const isVerticalizedHint = /verticalizado|ciclo\s*\d+|leitura\s*-\s*letra\s+da\s+lei|acertos\s*\(\%\)/i.test(`${docTitle}\n${fullRawText.slice(0, 4000)}`);
+    const isVerticalizedHint = /verticalizado|esquematizado|sintetizado|ciclo\s*\d+|leitura\s*-\s*letra\s+da\s+lei|acertos\s*\(\%\)|quadro\s+de\s+estudos/i.test(`${docTitle}\n${fullRawText.slice(0, 5000)}`);
 
     const allLines = [];
     for (const p of pages) {
@@ -150,34 +194,109 @@
     let currentSubject = "";
     let currentTableNum = 0;
     let currentTopicParts = [];
+    let unnumberedSubjectLines = [];
+    let autoBlockCounter = 1;
 
-    const flushTopic = () => {
-      if (!currentSubject || !currentTopicParts.length) return;
-      const rawBody = sanitizeWatermarkText(currentTopicParts.join(" ").replace(/\s+/g, " ").replace(/-\s+/g, "-").trim());
-      currentTopicParts = [];
-      if (rawBody.length < 3) return;
-      const subKey = normalizeSearch(currentSubject);
+    const pushTopicForSubject = (subj, topicBody) => {
+      const cleanSubj = stripTableChromeSuffix(subj)
+        .replace(/^(?:[ivxlcdm\d]{1,4}\s*[.\-–—)]\s*)/i, "")
+        .replace(/\s*:\s*$/, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const rawBody = sanitizeWatermarkText(topicBody.replace(/\s+/g, " ").replace(/-\s+/g, "-").trim());
+      if (!cleanSubj || rawBody.length < 3) return;
+      const subKey = normalizeSearch(cleanSubj);
       if (ADMIN_ONLY_RE.test(normalizeSearch(rawBody)) || normalizeSearch(rawBody) === subKey) return;
       const pieces = splitNumberedTopicBlock(rawBody);
       for (const piece of pieces) {
-        const stripped = piece.replace(/^\d{1,2}\s*(?:[.\-)]\s*|\s+)/, "").trim();
+        const stripped = piece
+          .replace(/^(?:[☐▢☑✓✔•▪▸]|\[\s*[xX ]?\s*\])\s*/, "")
+          .replace(/^\d{1,3}(?:\.\d{1,2})?\s*(?:[.\-)]\s*|\s+)/, "")
+          .trim();
         if (stripped.length < 2) continue;
         const nextCount = (perSubjectDisplayCount.get(subKey) || 0) + 1;
         perSubjectDisplayCount.set(subKey, nextCount);
         rawExtracted.push({
-          subject: currentSubject,
+          subject: cleanSubj,
           topic: `${nextCount}. ${stripped}`,
         });
       }
     };
 
+    const flushUnnumberedLines = () => {
+      if (!currentSubject || !unnumberedSubjectLines.length) {
+        unnumberedSubjectLines = [];
+        return;
+      }
+      const merged = [];
+      for (const ln of unnumberedSubjectLines) {
+        const cleanLn = ln.replace(/^(?:[☐▢☑✓✔•▪▸\-–—]|\[\s*[xX ]?\s*\])\s*/, "").trim();
+        if (!cleanLn) continue;
+        if (
+          merged.length > 0 &&
+          !/[.;:!?]$/.test(merged[merged.length - 1]) &&
+          (/^[a-záéíóúâêôãõç]/.test(cleanLn) || /^(?:de|da|do|dos|das|e|ou|para|com|em|no|na|nos|nas|ao|aos|à|às|por|pelo|pela)\b/i.test(cleanLn))
+        ) {
+          merged[merged.length - 1] += " " + cleanLn;
+        } else {
+          merged.push(cleanLn);
+        }
+      }
+      unnumberedSubjectLines = [];
+      for (const itemText of merged) {
+        pushTopicForSubject(currentSubject, itemText);
+      }
+    };
+
+    const flushTopic = () => {
+      if (!currentSubject || !currentTopicParts.length) {
+        currentTopicParts = [];
+        return;
+      }
+      const rawBody = currentTopicParts.join(" ");
+      currentTopicParts = [];
+      pushTopicForSubject(currentSubject, rawBody);
+    };
+
     for (let i = 0; i < allLines.length; i++) {
       const line = allLines[i];
       const nextLine = allLines[i + 1] || "";
+
+      // Caso 1: Linha com "DISCIPLINA: 1. Tópico..." na mesma linha
+      const inlineHeaderAndTopics = line.match(/^([A-ZÀ-Ý][A-Za-zÀ-ÿ\s\-–—/()]{3,65}?)\s*(?::|\s[-–—]\s)\s*((?:0?1(?:\.\d+)?\s*[.\-)\s]|[☐▢☑•])\s*.+)$/);
+      if (inlineHeaderAndTopics) {
+        const candHeader = stripTableChromeSuffix(inlineHeaderAndTopics[1]);
+        const cleanedCand = candHeader.replace(/^(?:[ivxlcdm\d]{1,4}\s*[.\-–—)]\s*)/i, "").trim();
+        if (!isGenericSubjectName(candHeader, campaignName, docTitle) && KNOWN_SUBJECT_HEADER_RE.test(cleanedCand)) {
+          flushTopic();
+          flushUnnumberedLines();
+          currentSubject = cleanedCand;
+          currentTableNum = 1;
+          currentTopicParts.push(inlineHeaderAndTopics[2].trim());
+          flushTopic();
+          continue;
+        }
+      }
+
+      // Caso 2: Linha de tabela estilo Excel "Disciplina | 1 | Tópico" ou "Disciplina \t Tópico"
+      const excelRowMatch = line.match(/^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s\-/]{3,50}?)\s*(?:\||\t)\s*(?:0?(\d{1,3})\s*(?:\||\t|[.\-)])\s*)?(.{4,})$/);
+      if (excelRowMatch) {
+        const candSubj = stripTableChromeSuffix(excelRowMatch[1]);
+        if (!isGenericSubjectName(candSubj, campaignName, docTitle) && KNOWN_SUBJECT_HEADER_RE.test(candSubj)) {
+          flushTopic();
+          flushUnnumberedLines();
+          currentSubject = candSubj;
+          currentTableNum = Number(excelRowMatch[2] || 1);
+          pushTopicForSubject(currentSubject, excelRowMatch[3]);
+          continue;
+        }
+      }
+
+      // Caso 3: Linha cabeçalho de disciplina
       if (isSubjectHeaderLine(line, nextLine, campaignName, docTitle)) {
         flushTopic();
-        currentSubject = line
-          .replace(/^\s*(?:disciplina|mat[eé]ria)\s*:\s*/i, "")
+        flushUnnumberedLines();
+        currentSubject = stripTableChromeSuffix(line)
           .replace(/^(?:[ivxlcdm\d]{1,4}\s*[.\-–—)]\s*)/i, "")
           .replace(/\s*:\s*$/, "")
           .replace(/\s+/g, " ")
@@ -185,29 +304,82 @@
         currentTableNum = 0;
         continue;
       }
-      if (!currentSubject) continue;
 
-      const standaloneNum = line.match(/^0?(\d{1,2})\s*[.\-)]?$/);
+      if (!currentSubject) {
+        // Se o edital começou direto em "1 Compreensão e interpretação..." sem cabeçalho explícito
+        const firstNoHeader = line.match(/^0?1(?:\s*[.\-)]\s*|\s+)([A-ZÀ-Ý].{10,})$/);
+        if (firstNoHeader) {
+          const inferred = inferDisciplineFromTopicsBlock(`${line} ${nextLine}`);
+          if (inferred) {
+            currentSubject = inferred;
+            currentTableNum = 1;
+            currentTopicParts.push(firstNoHeader[1].trim());
+            continue;
+          }
+        }
+        continue;
+      }
+
+      // Caso 4: Número isolado na linha (ex.: célula da coluna Nº da tabela)
+      const standaloneNum = line.match(/^0?(\d{1,3})\s*[.\-)]?$/);
       if (standaloneNum) {
         const n = Number(standaloneNum[1]);
-        if (n === currentTableNum + 1 || (currentTableNum === 0 && n === 1)) {
+        const isFirstInSubject = currentTableNum === 0 && n >= 1 && n <= 400;
+        const isSequential = currentTableNum > 0 && (n === currentTableNum + 1 || n === currentTableNum + 2);
+        const isResetToOne = currentTableNum >= 2 && n === 1;
+        if (isFirstInSubject || isSequential || isResetToOne) {
           flushTopic();
+          flushUnnumberedLines();
+          if (isResetToOne) {
+            const lookahead = allLines.slice(i + 1, i + 8).join(" ");
+            const inf = inferDisciplineFromTopicsBlock(lookahead);
+            if (inf && normalizeSearch(inf) !== normalizeSearch(currentSubject)) {
+              currentSubject = inf;
+            } else {
+              currentSubject = `${currentSubject}__bloco_${++autoBlockCounter}`;
+            }
+          }
           currentTableNum = n;
           continue;
         }
       }
 
-      const inlineNum = line.match(/^0?(\d{1,2})(?:\s*[.\-)]\s*|\s+)([A-ZÀ-Ýa-zà-ÿ].*)$/);
+      // Caso 5: Número + Texto na mesma linha (ex.: "1 Compreensão...", "11 Noções de sistema...", "1.1 Tipologia...")
+      const inlineNum = line.match(/^0?(\d{1,3})(?:\.(\d{1,2}))?(?:\s*[.\-)]\s*|\s+)([A-ZÀ-Ýa-zà-ÿ].*)$/);
       if (inlineNum) {
         const n = Number(inlineNum[1]);
-        const rest = inlineNum[2].trim();
-        const isLawContinuation = /^(?:a\s+\d+|de\s+\d+|\d|º|°|da\s+lei|do\s+decreto|do\s+c[oó]digo|da\s+constitui[cç][aã]o|e\s+\d+)/i.test(rest);
-        if (!isLawContinuation && (n === currentTableNum + 1 || (currentTableNum === 0 && n === 1))) {
-          flushTopic();
-          currentTableNum = n;
-          currentTopicParts.push(rest);
-          continue;
+        const subN = inlineNum[2] ? Number(inlineNum[2]) : null;
+        const rest = inlineNum[3].trim();
+        const isLawContinuation = /^(?:a\s+\d+|de\s+\d+|\d|º|°|da\s+lei|do\s+decreto|do\s+c[oó]digo|da\s+constitui[cç][aã]o|e\s+\d+|mil\s|reais|anos|meses|dias|horas)/i.test(rest);
+        if (!isLawContinuation) {
+          const isFirstInSubject = currentTableNum === 0 && n >= 1 && n <= 400;
+          const isSequential = currentTableNum > 0 && (n === currentTableNum + 1 || n === currentTableNum + 2 || (subN !== null && n === currentTableNum));
+          const isResetToOne = currentTableNum >= 2 && n === 1 && subN === null;
+          if (isFirstInSubject || isSequential || isResetToOne) {
+            flushTopic();
+            flushUnnumberedLines();
+            if (isResetToOne) {
+              const lookahead = [rest, ...allLines.slice(i + 1, i + 7)].join(" ");
+              const inf = inferDisciplineFromTopicsBlock(lookahead);
+              if (inf && normalizeSearch(inf) !== normalizeSearch(currentSubject)) {
+                currentSubject = inf;
+              }
+            }
+            currentTableNum = n;
+            currentTopicParts.push(rest);
+            continue;
+          }
         }
+      }
+
+      // Caso 6: Checkbox ou Bullet explícito (ex.: "☐ Compreensão e interpretação...", "• Direitos fundamentais")
+      const bulletMatch = line.match(/^(?:[☐▢☑✓✔•▪▸]|\[\s*[xX ]?\s*\])\s+(.{3,})$/);
+      if (bulletMatch) {
+        flushTopic();
+        flushUnnumberedLines();
+        currentTableNum = Math.max(1, currentTableNum + 1);
+        currentTopicParts.push(bulletMatch[1].trim());
+        continue;
       }
 
       if (currentTableNum > 0) {
@@ -216,9 +388,45 @@
         currentTableNum = 1;
         currentTopicParts.push(line);
         flushTopic();
+      } else if (line.length >= 4 && !TABLE_CHROME_LINE_RE.test(line)) {
+        unnumberedSubjectLines.push(line);
       }
     }
     flushTopic();
+    flushUnnumberedLines();
+
+    // Resolver quaisquer blocos anônimos (__bloco_) inferindo a disciplina real
+    const blockGroups = new Map();
+    for (const item of rawExtracted) {
+      if (item.subject.includes("__bloco_")) {
+        const list = blockGroups.get(item.subject) || [];
+        list.push(item.topic);
+        blockGroups.set(item.subject, list);
+      }
+    }
+    const resolvedBlockNames = new Map();
+    for (const [blkName, tList] of blockGroups.entries()) {
+      const inf = inferDisciplineFromTopicsBlock(tList.join(" \n "));
+      resolvedBlockNames.set(blkName, inf || blkName.split("__bloco_")[0]);
+    }
+    for (const item of rawExtracted) {
+      if (resolvedBlockNames.has(item.subject)) {
+        item.subject = resolvedBlockNames.get(item.subject);
+      }
+    }
+
+    // Se todas as linhas caíram em apenas 1 disciplina e há >= 8 tópicos, verifica se há múltiplas disciplinas misturadas
+    const initialSubjects = new Set(rawExtracted.map((r) => normalizeSearch(r.subject)));
+    if (initialSubjects.size <= 1 && rawExtracted.length >= 6 && typeof window.unpackEditalTopicsList === "function") {
+      const unpacked = window.unpackEditalTopicsList(rawExtracted, campaignName, docTitle);
+      const unpackedSubj = new Set(unpacked.map((u) => normalizeSearch(u.subject)));
+      if (unpackedSubj.size >= 2) {
+        rawExtracted.length = 0;
+        for (const u of unpacked) {
+          rawExtracted.push({ subject: u.subject, topic: u.topic });
+        }
+      }
+    }
 
     const subjectDisplay = new Map();
     const subjectOrder = new Map();
@@ -246,22 +454,24 @@
       list.forEach((entry, lIdx) => {
         const ratio = list.length > 1 ? lIdx / (list.length - 1) : 0;
         const difficulty = ratio < 0.4 ? "basic" : ratio < 0.8 ? "intermediate" : "advanced";
+        const cleanBody = entry.topic.replace(/^\d+\.\s*/, "").trim();
+        const numberedTopic = `${lIdx + 1}. ${cleanBody}`;
         topics.push({
           subject: entry.subject,
           unit: "",
-          topic: entry.topic.slice(0, 700),
+          topic: numberedTopic.slice(0, 700),
           edital_order: globalIdx++,
           subject_order: sOrder,
           learning_order: lIdx,
           difficulty,
-          prerequisite_topic: lIdx > 0 ? list[lIdx - 1].topic.slice(0, 700) : "",
+          prerequisite_topic: lIdx > 0 ? `${lIdx}. ${list[lIdx - 1].topic.replace(/^\d+\.\s*/, "").trim()}`.slice(0, 700) : "",
           pedagogical_reason: lIdx === 0 ? "Tópico base inicial da disciplina no edital." : "Sequência progressiva direta do edital verticalizado.",
         });
       });
     }
 
     return {
-      isVerticalized: isVerticalizedHint || (bySubject.size >= 3 && topics.length >= 12),
+      isVerticalized: isVerticalizedHint || (bySubject.size >= 2 && topics.length >= 8),
       subjectCount: bySubject.size,
       topics,
       meta: {
@@ -316,6 +526,17 @@
     return null;
   }
 
+  async function openPdfDocumentWithFallback(pdfjs, bytes) {
+    try {
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL("./pdf.worker.mjs", document.baseURI).href;
+      const task = pdfjs.getDocument({ data: bytes.slice(0), useSystemFonts: true, isEvalSupported: false });
+      return await withTimeout(task.promise, 18000, "PDF_OPEN_TIMEOUT");
+    } catch (firstErr) {
+      const fallbackTask = pdfjs.getDocument({ data: bytes.slice(0), useSystemFonts: true, isEvalSupported: false, disableWorker: true });
+      return await withTimeout(fallbackTask.promise, 25000, "PDF_OPEN_TIMEOUT");
+    }
+  }
+
   async function extractAndUploadText(doc, session) {
     if (!doc?.storage_path) return false;
     if (window._extractedPagesByDocId.has(doc.id)) return true;
@@ -343,15 +564,7 @@
     }
 
     const pdfjs = await import("./pdf.mjs");
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL("./pdf.worker.mjs", document.baseURI).href;
-    const loadingTask = pdfjs.getDocument({ data: bytes, useSystemFonts: true, isEvalSupported: false });
-    let pdf;
-    try {
-      pdf = await withTimeout(loadingTask.promise, 25000, "PDF_OPEN_TIMEOUT");
-    } catch (openErr) {
-      try { await loadingTask.destroy(); } catch {}
-      throw openErr;
-    }
+    const pdf = await openPdfDocumentWithFallback(pdfjs, bytes);
 
     const pdfTotalPages = Number(pdf.numPages) || 0;
     const maxPages = Math.min(pdfTotalPages, MAX_EXTRACT_PAGES);
@@ -364,12 +577,20 @@
         const page = await withTimeout(pdf.getPage(pageNumber), 4500, "PAGE_TIMEOUT");
         const content = await page.getTextContent();
         let text = "";
+        let prevY = null;
         for (const item of content.items || []) {
           if (!item || typeof item.str !== "string") continue;
+          const curY = Array.isArray(item.transform) && Number.isFinite(item.transform[5]) ? item.transform[5] : null;
+          if (prevY !== null && curY !== null && Math.abs(curY - prevY) > 2.8 && !text.endsWith("\n")) {
+            text += "\n";
+          }
           text += item.str;
           text += item.hasEOL ? "\n" : " ";
+          if (item.str.trim() && curY !== null) {
+            prevY = item.hasEOL ? null : curY;
+          }
         }
-        text = text.replace(/[\t ]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+        text = text.replace(/[\t ]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
         meaningfulCharacters += text.replace(/\s/g, "").length;
         if (text.length > 0) pages.push({ page: pageNumber, text });
         page.cleanup();
@@ -384,7 +605,7 @@
       toast(`Aviso: o PDF possui ${pdfTotalPages} páginas; foram extraídas as primeiras ${maxPages} páginas.`);
     }
 
-    if (!pages.length || meaningfulCharacters < 120) {
+    if (!pages.length || meaningfulCharacters < 80) {
       console.info("PDF sem camada de texto selecionável suficiente; será usada a leitura visual.", { pages: pages.length, meaningfulCharacters });
       return false;
     }
@@ -402,15 +623,16 @@
       pages,
     });
     try {
+      // Tenta application/pdf primeiro (sempre aceito no bucket study-documents), depois text/plain
       let sidecarRes = await storageFetch(`${doc.storage_path}.text.json`, session, {
         method: "POST",
-        headers: { "Content-Type": "text/plain; charset=utf-8", "x-upsert": "true" },
+        headers: { "Content-Type": "application/pdf", "x-upsert": "true" },
         body: payload,
       });
       if (!sidecarRes.ok) {
         sidecarRes = await storageFetch(`${doc.storage_path}.text.json`, session, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-upsert": "true" },
+          headers: { "Content-Type": "text/plain", "x-upsert": "true" },
           body: payload,
         });
       }
@@ -537,35 +759,74 @@
 
     if (!rows.length) return false;
 
+    // Atualiza o estado local imediatamente para que os portais e disciplinas nunca fiquem vazios
+    const previous = [...(state.customCampaign?.missions || [])];
+    const prefix = state.activeCampaignId.replace(/[^a-z0-9]/gi, "").slice(-10);
+    const missions = rows.map((item, i) => ({
+      id: `${prefix}-ai-${i}`,
+      si: null,
+      ti: i,
+      name: item.topic,
+      subject: item.subject || "Edital",
+      editalOrder: item.edital_order,
+      subjectOrder: item.subject_order,
+      learningOrder: item.learning_order,
+      difficulty: item.difficulty,
+    }));
+    if (typeof reconcileMissionProgress === "function") reconcileMissionProgress(previous, missions);
+    state.customCampaign = { name: activeCampaign()?.name || "Campanha", missions };
+    if (activeCampaign()) activeCampaign().customCampaign = state.customCampaign;
+    save();
+
     const delRes = await cloudFetch(`campaign_topics?${topicsFilter}`, { method: "DELETE" }).catch(() => null);
-    if (!delRes || !delRes.ok) return false;
+    if (delRes && delRes.ok) {
+      let insRes = await cloudFetch("campaign_topics?on_conflict=campaign_id,subject,topic", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Prefer: "return=representation,resolution=ignore-duplicates",
+        },
+        body: JSON.stringify(rows),
+      }).catch(() => null);
 
-    const insRes = await cloudFetch("campaign_topics?on_conflict=campaign_id,subject,topic", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Prefer: "return=representation,resolution=ignore-duplicates",
-      },
-      body: JSON.stringify(rows),
-    }).catch(() => null);
-
-    if (!insRes || !insRes.ok) {
-      if (Array.isArray(backupTopics) && backupTopics.length) {
-        await cloudFetch("campaign_topics?on_conflict=campaign_id,subject,topic", {
+      // Fallback caso alguma coluna estendida (v48) ainda não exista no banco do usuário
+      if (!insRes || !insRes.ok) {
+        const minimalRows = rows.map((r) => ({
+          campaign_id: r.campaign_id,
+          user_id: r.user_id,
+          subject: r.subject,
+          unit_name: r.unit_name,
+          topic: r.topic,
+          edital_order: r.edital_order,
+        }));
+        insRes = await cloudFetch("campaign_topics?on_conflict=campaign_id,subject,topic", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Prefer: "resolution=ignore-duplicates",
+            Prefer: "return=representation,resolution=ignore-duplicates",
           },
-          body: JSON.stringify(backupTopics),
-        }).catch(() => undefined);
+          body: JSON.stringify(minimalRows),
+        }).catch(() => null);
       }
-      return false;
+
+      if (!insRes || !insRes.ok) {
+        if (Array.isArray(backupTopics) && backupTopics.length) {
+          await cloudFetch("campaign_topics?on_conflict=campaign_id,subject,topic", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Prefer: "resolution=ignore-duplicates",
+            },
+            body: JSON.stringify(backupTopics),
+          }).catch(() => undefined);
+        }
+      }
     }
 
     await cloudFetch(`study_documents?id=eq.${doc.id}`, {
       method: "PATCH",
       body: JSON.stringify({
+        document_type: "edital",
         processing_status: "ready",
         metadata: {
           ...(doc.metadata || {}),
@@ -580,24 +841,15 @@
       }),
     }).catch(() => undefined);
 
-    const previous = [...(state.customCampaign?.missions || [])];
-    const prefix = state.activeCampaignId.replace(/[^a-z0-9]/gi, "").slice(-10);
-    const missions = rows.map((item, i) => ({
-      id: `${prefix}-ai-${i}`,
-      si: null,
-      ti: i,
-      name: item.topic,
-      subject: item.subject || "Edital",
-    }));
-    if (typeof reconcileMissionProgress === "function") reconcileMissionProgress(previous, missions);
-    state.customCampaign = { name: activeCampaign()?.name || "Campanha", missions };
-    if (activeCampaign()) activeCampaign().customCampaign = state.customCampaign;
-    save();
-    await loadCampaignTopics();
+    doc.document_type = "edital";
     doc.processing_status = "ready";
-    await loadCloudDocuments();
+    await loadCampaignTopics().catch(() => undefined);
+    await loadCloudDocuments().catch(() => undefined);
+    if (cloudSession && navigator.onLine && typeof pushCloudState === "function") {
+      pushCloudState().catch(() => undefined);
+    }
     render();
-    toast(`Edital analisado: ${subjOrderMap.size} disciplina(s) e ${rows.length} missões sincronizadas com sucesso!`);
+    toast(`Edital analisado: ${subjOrderMap.size} disciplina(s) e ${rows.length} missões criadas no portal!`);
     return true;
   }
 
@@ -632,7 +884,7 @@
         curChars += block.length;
       }
       if (cur) chunks.push(cur);
-      if (chunks.length > 6) {
+      if (chunks.length > 8) {
         toast("O edital é extenso demais para o modo de recuperação. O mapa atual foi mantido; tente reprocessar em instantes.");
         return false;
       }
@@ -804,17 +1056,34 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
       }
     }
     try {
+      const pages = window._extractedPagesByDocId.get(id);
+      if (Array.isArray(pages) && pages.length && session) {
+        const campaignName = typeof activeCampaign === "function" ? activeCampaign()?.name || "" : "";
+        const structured = extractStructuredEditalTopics(pages, { title: doc.title, campaignName });
+        const titleLooksEdital = /\b(edital\s+verticalizado|edital\s+esquematizado|edital\s+sintetizado|edital\s+do\s+concurso|conte[uú]do\s+program[aá]tico\s+verticalizado)\b/i.test(String(doc.title || ""));
+
+        // Se o usuário enviou um Edital Verticalizado mas esqueceu a categoria em "Material de estudo" (ou se já é "Edital"):
+        // extrai todas as disciplinas instantaneamente no navegador e sincroniza o Portal sem depender de 1 única disciplina!
+        if ((isEditalType(doc) || titleLooksEdital || (structured.isVerticalized && structured.subjectCount >= 3 && structured.topics.length >= 10)) &&
+            structured.subjectCount >= 2 && structured.topics.length >= 6) {
+          doc.document_type = "edital";
+          const savedOk = await saveTopicsToCampaignAndSync(doc, structured.topics, session, pages.length);
+          if (savedOk) return;
+        }
+      }
+
       await originalProcessDocument(id);
       const updatedDoc = cloudDocuments.find((item) => item.id === id);
-      const pages = window._extractedPagesByDocId.get(id);
-      if (updatedDoc && Array.isArray(pages) && pages.length && session) {
+      const afterPages = window._extractedPagesByDocId.get(id);
+      if (updatedDoc && Array.isArray(afterPages) && afterPages.length && session) {
         if (isEditalType(updatedDoc)) {
           const campaignName = typeof activeCampaign === "function" ? activeCampaign()?.name || "" : "";
-          const structured = extractStructuredEditalTopics(pages, { title: updatedDoc.title, campaignName });
+          const structured = extractStructuredEditalTopics(afterPages, { title: updatedDoc.title, campaignName });
           const currentMissions = state.customCampaign?.missions || [];
           const currentSubjCount = new Set(currentMissions.map((m) => normalizeSearch(m.subject)).filter(Boolean)).size;
           const needsStructuredRepair =
             updatedDoc.processing_status !== "ready" ||
+            currentSubjCount <= 1 ||
             (structured.subjectCount >= 2 &&
               structured.topics.length >= 6 &&
               (currentSubjCount < structured.subjectCount || currentMissions.length < structured.topics.length * 0.8));
@@ -822,9 +1091,9 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
           if (needsStructuredRepair) {
             try {
               if (structured.subjectCount >= 2 && structured.topics.length >= 5) {
-                await saveTopicsToCampaignAndSync(updatedDoc, structured.topics, session, pages.length);
-              } else if (updatedDoc.processing_status !== "ready") {
-                await recoverPdfViaAssistant(updatedDoc, pages, session);
+                await saveTopicsToCampaignAndSync(updatedDoc, structured.topics, session, afterPages.length);
+              } else if (updatedDoc.processing_status !== "ready" || currentSubjCount <= 1) {
+                await recoverPdfViaAssistant(updatedDoc, afterPages, session);
               }
             } catch (recErr) {
               console.warn("Reparo estruturado/complementar do edital falhou", recErr);
@@ -832,7 +1101,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
           }
         } else if (updatedDoc.processing_status !== "ready") {
           try {
-            await recoverPdfViaAssistant(updatedDoc, pages, session);
+            await recoverPdfViaAssistant(updatedDoc, afterPages, session);
           } catch (recErr) {
             console.warn("Modo de recuperação complementar falhou", recErr);
           }

@@ -1708,9 +1708,9 @@
   function applyLegalHighlightsToTextNodes(rootEl){
     if(!rootEl||!legalHighlightEnabled)return;
     const targets=rootEl.querySelectorAll('.lessonIntro, .lessonBox li, .lessonBox');
-    const lawRegex=/((?:Art\.?\s*\d+[º°ª]?|§\s*\d+[º°ª]?|parágrafo único|Lei\s+(?:Complementar\s+|Federal\s+|Estadual\s+)?n?[º°]?\s*[\d.\/-]+|CF\/88|Súmula\s+(?:Vinculante\s+)?\d+|STF|STJ))/gi;
-    const exceptionRegex=/((?:salvo|exceto|vedad[oa]s?|proibid[oa]s?|inafiançáve(?:l|is)|imprescritíve(?:l|is)|insuscetíveis|insuscetível|nunca|jamais|somente|exclusivamente|independe(?:m|ntemente)?))/gi;
-    const penaltyRegex=/((?:reclusão|detenção|multa|\d+\s*(?:dias?|meses|anos?|horas?)|maioria\s+absoluta|unânime))/gi;
+    const lawRegex=/(\b(?:Art\.?\s*\d+[º°ª]?|§\s*\d+[º°ª]?|parágrafo único|Lei\s+(?:Complementar\s+|Federal\s+|Estadual\s+)?n?[º°]?\s*[\d.\/-]+|CF\/88|Súmula\s+(?:Vinculante\s+)?\d+|STF|STJ)\b)/gi;
+    const exceptionRegex=/(\b(?:salvo|exceto|vedad[oa]s?|proibid[oa]s?|inafiançáve(?:l|is)|imprescritíve(?:l|is)|insuscetíveis|insuscetível|nunca|jamais|somente|exclusivamente|independe(?:m|ntemente)?)\b)/gi;
+    const penaltyRegex=/(\b(?:reclusão|detenção|multa|\d+\s*(?:dias?|meses|anos?|horas?)|maioria\s+absoluta|unânime)\b)/gi;
 
     targets.forEach(el=>{
       if(el.dataset.hlApplied==='1')return;
@@ -1758,14 +1758,17 @@
       head.insertAdjacentHTML('afterend',`<div class="flashSpacedBar" id="flashcardSpacedBar"><span class="small muted" id="flashSpacedStats">Repetição espaçada ativa (1=Difícil · 2=Rever · 3=Fácil · Espaço=Virar)</span><label class="small" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="flashDueOnlyToggle"> Apenas pendentes/difíceis</label></div>`);
       q('#flashDueOnlyToggle').onchange=()=>{if(typeof renderCard==='function')renderCard();updateFlashcardSpacedStats()};
     }
-    document.addEventListener('flashcards:graded',updateFlashcardSpacedStats);
-    document.addEventListener('keydown',e=>{
-      if(!q('#study')?.classList.contains('active')||!q('#cards')?.classList.contains('active'))return;
-      if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName||''))return;
-      if(e.key==='1'){e.preventDefault();window.gradeCard?.('hard')}
-      else if(e.key==='2'){e.preventDefault();window.gradeCard?.('medium')}
-      else if(e.key==='3'){e.preventDefault();window.gradeCard?.('easy')}
-    });
+    if(!window._v77FlashListenersBound){
+      window._v77FlashListenersBound=true;
+      document.addEventListener('flashcards:graded',updateFlashcardSpacedStats);
+      document.addEventListener('keydown',e=>{
+        if(!q('#study')?.classList.contains('active')||!q('#cards')?.classList.contains('active'))return;
+        if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName||''))return;
+        if(e.key==='1'){e.preventDefault();window.gradeCard?.('hard')}
+        else if(e.key==='2'){e.preventDefault();window.gradeCard?.('medium')}
+        else if(e.key==='3'){e.preventDefault();window.gradeCard?.('easy')}
+      });
+    }
     updateFlashcardSpacedStats();
   }
 
@@ -3867,7 +3870,7 @@
         })
       });
       const created=await res.json().catch(()=>({}));
-      if(!res.ok||!created?.duel_id)throw new Error(created?.message||'Execute a migração v95 no Supabase para criar duelos online.');
+      if(!res.ok||!created?.duel_id)throw new Error(duelErrorMessage(created?.message,'Não foi possível criar o duelo. Verifique se as migrações v95 e v96 foram executadas no Supabase.'));
       toast(`⚔️ Desafio X1 criado contra ${oppName}! Responda sua rodada agora!`);
       await loadDuelArenaHub(true);
       const myDuel=(duelHubData.my_duels||[]).find(d=>d.id===created.duel_id)||{
@@ -3922,21 +3925,40 @@
     },250);
   }
 
-  function answerDuelQuestion(chosenIdx){
+  async function answerDuelQuestion(chosenIdx){
     if(!activeDuelSession||activeDuelSession.answered)return;
     activeDuelSession.answered=true;
     if(duelRoundTimer){clearInterval(duelRoundTimer);duelRoundTimer=null}
     const spent=Math.min(25,Math.max(1,Math.round((Date.now()-activeDuelSession.questionStartMs)/1000)));
     activeDuelSession.totalTimeS+=spent;
     const curQ=activeDuelSession.duel.questions[activeDuelSession.index];
-    const isCorrect=chosenIdx===Number(curQ.correct_index);
+    qa('[data-duel-opt]').forEach(btn=>{btn.disabled=true});
+
+    let correctIdx=curQ.correct_index;
+    let explanationText=curQ.explanation||'';
+    if((correctIdx===null||correctIdx===undefined)&&cloudSession&&activeDuelSession.duel?.id){
+      try{
+        const gRes=await cloudFetch('rpc/grade_hunter_duel_question',{
+          method:'POST',
+          body:JSON.stringify({p_duel_id:activeDuelSession.duel.id,p_question_index:activeDuelSession.index,p_chosen:chosenIdx})
+        });
+        const gData=await gRes.json().catch(()=>null);
+        if(gRes.ok&&gData&&Number.isInteger(gData.correct_index)){
+          correctIdx=gData.correct_index;
+          explanationText=gData.explanation||explanationText;
+          curQ.correct_index=correctIdx;
+          curQ.explanation=explanationText;
+        }
+      }catch{}
+    }
+    const isCorrect=chosenIdx===Number(correctIdx??0);
     if(isCorrect)activeDuelSession.score++;
     activeDuelSession.answers.push({index:activeDuelSession.index,chosen:chosenIdx,correct:isCorrect,time_s:spent});
 
     qa('[data-duel-opt]').forEach(btn=>{
       const idx=Number(btn.dataset.duelOpt);
       btn.disabled=true;
-      if(idx===Number(curQ.correct_index))btn.classList.add('correct');
+      if(idx===Number(correctIdx??0))btn.classList.add('correct');
       else if(idx===chosenIdx)btn.classList.add('wrong');
     });
 
@@ -3965,6 +3987,22 @@
     }
   }
 
+  function duelErrorMessage(raw,fallback){
+    const m=String(raw||'');
+    const map={
+      already_submitted:'Você já enviou sua rodada deste duelo.',
+      duel_closed:'Este duelo já foi encerrado.',
+      duel_not_found:'Duelo não encontrado.',
+      not_participant:'Você não participa deste duelo.',
+      not_authenticated:'Entre na sua conta para jogar o X1.',
+      invalid_opponent:'Oponente inválido. Escolha outro caçador.',
+      invalid_questions:'Não foi possível montar as questões do duelo. Tente outra disciplina.',
+      too_many_pending_duels:'Você já tem muitos desafios pendentes hoje. Aguarde seus oponentes responderem.'
+    };
+    const key=Object.keys(map).find(k=>m.includes(k));
+    return key?map[key]:(m||fallback);
+  }
+
   async function finishAndSubmitDuelRound(){
     if(!activeDuelSession)return;
     const {duel,score,totalTimeS,answers}=activeDuelSession;
@@ -3981,7 +4019,7 @@
         })
       });
       const updated=await res.json().catch(()=>({}));
-      if(!res.ok)throw new Error(updated?.message||'Erro ao enviar resultado do duelo.');
+      if(!res.ok)throw new Error(duelErrorMessage(updated?.message,'Erro ao enviar resultado do duelo.'));
       playCompletionChime();
       activeDuelSession=null;
       await loadDuelArenaHub(true);
@@ -3989,9 +4027,16 @@
       if(updated.status==='completed'){
         const myId=cloudSession?.user?.id;
         const won=updated.winner_id===myId;
-        toast(updated.is_draw?`🤝 Duelo empatado (${score}/${duel.questions.length})!`:won?`🏆 VITÓRIA NO X1! Você venceu por ${score}/${duel.questions.length} (${totalTimeS}s)!`:`Duelo finalizado (${score}/${duel.questions.length}). Confira o placar na Arena!`);
+        const isChal=updated.challenger_id===myId;
+        const finalScore=Number(isChal?updated.challenger_score:updated.opponent_score);
+        const shownScore=Number.isFinite(finalScore)?finalScore:score;
+        const finalTime=Number(isChal?updated.challenger_time_s:updated.opponent_time_s);
+        const shownTime=Number.isFinite(finalTime)?finalTime:totalTimeS;
+        toast(updated.is_draw?`🤝 Duelo empatado (${shownScore}/${duel.questions.length})!`:won?`🏆 VITÓRIA NO X1! Você venceu por ${shownScore}/${duel.questions.length} (${shownTime}s)!`:`Duelo finalizado (${shownScore}/${duel.questions.length}). Confira o placar na Arena!`);
       }else{
-        toast(`✓ Sua rodada (${score}/${duel.questions.length} em ${totalTimeS}s) foi registrada! Aguardando o oponente responder.`);
+        const myIdPending=cloudSession?.user?.id,isChalPending=updated.challenger_id===myIdPending;
+        const pendScore=Number(isChalPending?updated.challenger_score:updated.opponent_score),pendTime=Number(isChalPending?updated.challenger_time_s:updated.opponent_time_s);
+        toast(`✓ Sua rodada (${Number.isFinite(pendScore)?pendScore:score}/${duel.questions.length} em ${Number.isFinite(pendTime)?pendTime:totalTimeS}s) foi registrada! Aguardando o oponente responder.`);
       }
     }catch(err){
       toast(err.message||'Não foi possível registrar o duelo.');

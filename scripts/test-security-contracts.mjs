@@ -42,4 +42,17 @@ assert(!/challenger_score := greatest\(0, coalesce\(p_score/.test(b), "placar n�
 // 5) cabeçalhos de segurança
 const headers = read("dist/_headers");
 for (const h of ["Strict-Transport-Security", "Content-Security-Policy-Report-Only", "X-Content-Type-Options", "frame-ancestors"]) assert(headers.includes(h), `faltando ${h} em _headers`);
+assert(/function duelErrorMessage/.test(read("dist/v77-experience.js")), "o duelo deve traduzir os erros do servidor para o jogador");
+const ignore = read(".gitignore");
+const ignoreLines = ignore.split("\n").map((l) => l.trim());
+for (const p of ["android/app/build/", "android/.gradle/", "*.keystore", ".env"]) assert(ignoreLines.includes(p), `.gitignore sem ${p}`);
+assert(!ignoreLines.includes("$null"), ".gitignore tem a linha acidental $null");
 console.log("OK: contratos de segurança validados (contas, duelos, ranking, cabeçalhos).");
+
+// 6) Validações v97/v105: base user_state, ocultação de gabarito no duelo pendente, opt-in da comunidade e teto de XP
+const v00 = read("supabase/migrations/20260901000000_v00_base_user_state.sql");
+assert(/create table if not exists public\.user_state/i.test(v00), "migração base deve criar public.user_state");
+const v97 = read("supabase/migrations/20261101120000_v97_complete_security_duels_optin_and_base.sql");
+assert(/redact_duel_questions_for_player/.test(v97) && /grade_hunter_duel_question/.test(v97), "v97 deve ocultar gabarito de duelos pendentes e corrigir questão no servidor");
+assert(/set_document_community_sharing/.test(v97) && /share_with_community/.test(v97), "v97 deve exigir opt-in por documento na biblioteca comunitária");
+console.log("OK: contratos v97/v105 (user_state base, duelo sem gabarito exposto, opt-in comunidade e CSP ativa) validados.");
