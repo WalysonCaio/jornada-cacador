@@ -20,11 +20,13 @@ const normalizeSearch = (value: unknown) => normalizeKey(value).normalize("NFD")
 
 const EMAIL_LINE_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 const CPF_LINE_RE = /^(?:cpf\s*:?\s*)?\d{3}\.?\d{3}\.?\d{3}[-./]\d{2}$/i;
-const TABLE_CHROME_LINE_RE = /^(leitura|-?\s*letra|da\s+lei|leitura\s*-\s*letra\s+da\s+lei|quest[oõ]|es|quest[oõ]es|acerto|s\s*\(\%\).*|acertos\s*\(\%\).*|tempo|revis[aã]|o|revis[aã]o|teoria|resumo|videoaula|pdf|status|conclu[ií]do|\(\%\))$/i;
+const INCIDENCE_ONLY_LINE_RE = /^(?:(?:n[ií]vel\s+de\s+)?incid[eê]ncia\s*:?\s*)?(?:alta|m[eé]dia|media|baixa)(?:[\s,/|-]+(?:incid[eê]ncia\s+)?(?:alta|m[eé]dia|media|baixa))*$/i;
+const LEGEND_OR_CHECKLIST_LINE_RE = /^(?:cai\s+muito.*|cai\s+com\s+frequ[eê]ncia.*|dificilmente\s+cai.*|incid[eê]ncia\s+(?:alta|m[eé]dia|media|baixa).*|as\s+ma\s*t[eé]rias\s+foram\s+organizadas.*|para\s+tornar\s+o\s+estudo\s+mais\s+pr[aá]tico.*|poss[ií]vel\s+identificar\s+rapidamente.*|definir\s+prioridades\s+de\s+revis[aã]o.*|aprendizado|\(somente\s+para\s+a?\s*prova\s+discursiva\)|checklist|s\s*i\s*m\s*u\s*l\s*a\s*d\s*o\s*s.*|acompanhe\s+sua\s+evolu[cç][aã]o.*|__\/__.*|anota[cç][oõ]es\s*:?|(?:0?\d\s+){3,}.*)$/i;
+const TABLE_CHROME_LINE_RE = /^(leitura|-?\s*letra|da\s+lei|letra\s+de\s+lei|leitura\s*-?\s*letra\s+d[ae]\s+lei|quest[oõ]|es|quest[oõ]es|acerto|s\s*\(\%\).*|acertos?\s*(?:\(\%\))?.*|tempo|revis[aã]|o|revis[aã]o|teoria|resumo|videoaula|pdf|status|conclu[ií]do|\(\%\)|incid[eê]ncia)$/i;
 
 const GENERIC_SUBJECT = /^(edital(\s+verticalizado|\s+do\s+concurso|\s+de\s+abertura|\s+esquematizado|\s+sintetizado|\s+n[ºo°]?\s*[\d\/.-]+)?.*|ciclo\s*\d+.*|conte[uú]do(s)?\s*program[aá]tico(s)?|conhecimentos?\s*(gerais|b[aá]sicos|espec[ií]ficos|complementares|t[eé]cnicos|profissionais)?|objetos?\s*de\s*avalia[cç][aã]o|disciplinas?|mat[eé]rias?|programa(s)?|anexo\s*[ivxlcdm\d]*.*|bloco\s*[ivxlcdm\d]*.*|m[oó]dulo\s*[ivxlcdm\d]*.*|parte\s*[ivxlcdm\d]*.*|geral|comum\s+a\s+todos.*|cargo\s*\d*.*|pol[ií]cia\s*(penal|militar|civil|federal|rodovi[aá]ria|cient[ií]fica|legislativa|judicial).*|corpo\s+de\s+bombeiros.*|guarda\s+(municipal|civil).*|agente\s+(penitenci[aá]rio|de\s+pol[ií]cia|socioeducativo).*|soldado.*|oficial.*|pm\s*pe.*|pp\s*pe.*|pc\s*pe.*|cbm\s*pe.*|prf.*|pf.*)$/i;
 
-export const KNOWN_SUBJECT_HEADER_RE = /^(?:disciplina\s*:\s*|mat[eé]ria\s*:\s*)?(?:[ivxlcdm\d]{1,4}\s*[.\-–—)]\s*)?(l[ií]ngua\s+portuguesa|portugu[eê]s|interpreta[cç][aã]o\s+de\s+textos?|reda[cç][aã]o(\s+oficial|\s+discursiva)?|[eé]tica(\s+no\s+servi[cç]o\s+p[uú]blico|\s+na\s+administra[cç][aã]o\s+p[uú]blica|\s+p[uú]blica|\s+e\s+cidadania)?|racioc[ií]nio\s+l[oó]gico(\s*[-e/]\s*matem[aá]tico|\s+quantitativo)?|matem[aá]tica(\s+financeira|\s+b[aá]sica|\s+e\s+racioc[ií]nio\s+l[oó]gico)?|estat[ií]stica|(no[cç][oõ]es\s+de\s+)?inform[aá]tica|tecnologia\s+da\s+informa[cç][aã]o(\s+e\s+comunica[cç][aã]o)?|atualidades(\s*\(.*\)|\s+e\s+conhecimentos\s+gerais)?|conhecimentos\s+regionais.*|hist[oó]ria(\s+de\s+pernambuco|\s+do\s+brasil|\s+geral)?|geografia(\s+de\s+pernambuco|\s+do\s+brasil|\s+geral)?|(no[cç][oõ]es\s+de\s+)?direito\s+(constitucional|administrativo|penal(\s+militar)?|processual\s+penal(\s+militar)?|militar|civil|processual\s+civil|tribut[aá]rio|previdenci[aá]rio|eleitoral|do\s+trabalho|ambiental|financeiro|empresarial|consumidor|internacional|humanos).*|direitos?\s+humanos(\s+e\s+participa[cç][aã]o\s+social|\s+e\s+cidadania|\s+e\s+legisla[cç][aã]o.*)?|legisla[cç][aã]o\s+(estadual|especial|extravagante|institucional|penal(\s+especial)?|espec[ií]fica|municipal|de\s+tr[aâ]nsito|aplicada|pertinente|penitenci[aá]ria|do\s+sistema\s+prisional).*|leis?\s+(especiais|extravagantes|penais\s+especiais).*|estatuto.*|criminologia|(no[cç][oõ]es\s+de\s+)?criminologia|(no[cç][oõ]es\s+de\s+)?medicina\s+legal|(no[cç][oõ]es\s+de\s+)?administra[cç][aã]o(\s+p[uú]blica|\s+geral|\s+financeira\s+e\s+or[cç]ament[aá]ria)?|afo|arquivologia|(no[cç][oõ]es\s+de\s+)?arquivologia|contabilidade(\s+geral|\s+p[uú]blica)?|economia|l[ií]ngua\s+(inglesa|espanhola|estrangeira).*|ingl[eê]s|espanhol|f[ií]sica|qu[ií]mica|biologia|anatomia\s+humana|primeiros\s+socorros|defesa\s+civil)$/i;
+export const KNOWN_SUBJECT_HEADER_RE = /^(?:disciplina\s*:\s*|mat[eé]ria\s*:\s*)?(?:[ivxlcdm\d]{1,4}\s*[.\-–—)]\s*)?(l[ií]ngua\s+portuguesa|portugu[eê]s|interpreta[cç][aã]o\s+de\s+textos?|reda[cç][aã]o(\s+oficial|\s+discursiva)?|[eé]tica(\s+no\s+servi[cç]o\s+p[uú]blico|\s+na\s+administra[cç][aã]o\s+p[uú]blica|\s+p[uú]blica|\s+e\s+cidadania)?|racioc[ií]nio\s+l[oó]gico(\s*[-e/]\s*matem[aá]tico|\s+quantitativo)?|matem[aá]tica(\s+financeira|\s+b[aá]sica|\s+e\s+racioc[ií]nio\s+l[oó]gico)?|estat[ií]stica|(no[cç][oõ]es\s+de\s+)?inform[aá]tica|tecnologia\s+da\s+informa[cç][aã]o(\s+e\s+comunica[cç][aã]o)?|atualidades(\s*\(.*\)|\s+e\s+conhecimentos\s+gerais)?|conhecimentos\s+regionais.*|hist[oó]ria(\s+de\s+pernambuco|\s+do\s+brasil|\s+geral)?|geografia(\s+de\s+pernambuco|\s+do\s+brasil|\s+geral)?|(no[cç][oõ]es\s+de\s+)?direito\s+(constitucional|administrativo|penal(\s+militar)?|processual\s+penal(\s+militar)?|militar|civil|processual\s+civil|tribut[aá]rio|previdenci[aá]rio|eleitoral|do\s+trabalho|ambiental|financeiro|empresarial|consumidor|internacional|humanos).*|direitos?\s+humanos(\s+e\s+participa[cç][aã]o\s+social|\s+e\s+cidadania|\s+e\s+legisla[cç][aã]o.*)?|legisla[cç][aã]o\s+(estadual|especial|extravagante|institucional|penal(\s+especial)?|espec[ií]fica|municipal|de\s+tr[aâ]nsito|aplicada|pertinente|penitenci[aá]ria|do\s+sistema\s+prisional).*|leis?\s+(especiais|extravagantes|penais\s+especiais).*|(?:no[cç][oõ]es\s+de\s+)?execu[cç][aã]o\s+penal.*|(?:no[cç][oõ]es\s+de\s+)?direito\s+penitenci[aá]rio.*|estatuto.*|criminologia|(no[cç][oõ]es\s+de\s+)?criminologia|(no[cç][oõ]es\s+de\s+)?medicina\s+legal|(no[cç][oõ]es\s+de\s+)?administra[cç][aã]o(\s+p[uú]blica|\s+geral|\s+financeira\s+e\s+or[cç]ament[aá]ria)?|afo|arquivologia|(no[cç][oõ]es\s+de\s+)?arquivologia|contabilidade(\s+geral|\s+p[uú]blica)?|economia|l[ií]ngua\s+(inglesa|espanhola|estrangeira).*|ingl[eê]s|espanhol|f[ií]sica|qu[ií]mica|biologia|anatomia\s+humana|primeiros\s+socorros|defesa\s+civil)$/i;
 
 export function isGenericSubjectName(value: unknown, campaignName = "", docTitle = ""): boolean {
   const s = normalizeSearch(value).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
@@ -48,7 +50,11 @@ export function sanitizeWatermarkText(value: unknown): string {
 
 /** Limpa linhas de marca d'água (nome + e-mail + CPF) e cabeçalhos de tabela verticalizada. */
 export function cleanEditalPageLines(pageText: string): string[] {
-  const rawLines = String(pageText ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const fullStr = String(pageText ?? "");
+  if (/__\/__\s+__\/__/i.test(fullStr) || (/checklist/i.test(fullStr) && /s\s*i\s*m\s*u\s*l\s*a\s*d\s*o\s*s/i.test(fullStr))) {
+    return [];
+  }
+  const rawLines = fullStr.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const removeIdx = new Set<number>();
   for (let i = 0; i < rawLines.length; i++) {
     if (EMAIL_LINE_RE.test(rawLines[i]) || CPF_LINE_RE.test(rawLines[i])) {
@@ -64,12 +70,19 @@ export function cleanEditalPageLines(pageText: string): string[] {
   const out: string[] = [];
   for (let i = 0; i < rawLines.length; i++) {
     if (removeIdx.has(i)) continue;
-    const line = sanitizeWatermarkText(rawLines[i]);
+    let line = sanitizeWatermarkText(rawLines[i]);
     if (!line) continue;
+    if (INCIDENCE_ONLY_LINE_RE.test(line) || LEGEND_OR_CHECKLIST_LINE_RE.test(line)) continue;
+    line = line
+      .replace(/^(?:(?:incid[eê]ncia\s+)?(?:alta|m[eé]dia|media|baixa)\s+)+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ•▪▸→☐▢☑])/i, "")
+      .replace(/(?:\s+(?:incid[eê]ncia\s+)?(?:alta|m[eé]dia|media|baixa))+$/i, "")
+      .trim();
+    if (!line) continue;
+    if (INCIDENCE_ONLY_LINE_RE.test(line) || LEGEND_OR_CHECKLIST_LINE_RE.test(line)) continue;
     if (TABLE_CHROME_LINE_RE.test(line)) continue;
     const norm = normalizeSearch(line);
-    if (TABLE_CHROME_LINE_RE.test(norm)) continue;
-    if (/^(edital\s+verticalizado.*|ciclo\s*\d+.*|policia\s+(penal|militar|civil|federal)\s*[-–—]?\s*[a-z]{0,3})$/i.test(norm)) continue;
+    if (TABLE_CHROME_LINE_RE.test(norm) || INCIDENCE_ONLY_LINE_RE.test(norm) || LEGEND_OR_CHECKLIST_LINE_RE.test(norm)) continue;
+    if (/^(edital\s+verticalizado.*|ciclo\s*\d+.*|policia\s+(penal|militar|civil|federal)(?:\s+de\s+pernambuco.*|\s*[-–—]?\s*[a-z]{0,3}))$/i.test(norm)) continue;
     out.push(line);
   }
   return out;
@@ -890,7 +903,9 @@ async function loadEditalPages(storagePath: string, inlinePayload?: any): Promis
   }).catch(() => null);
   if (result?.ok) {
     const payload = await result.json().catch(() => null);
-    stored = normalizePages(payload?.pages);
+    if (Number(payload?.version) >= 2 || !inline.length) {
+      stored = normalizePages(payload?.pages);
+    }
     pdfTotalPages = Number(payload?.pdf_total_pages) || pdfTotalPages;
     if (payload?.truncated_pages) truncatedPages = true;
   }
@@ -1007,7 +1022,7 @@ REGRAS OBRIGATÓRIAS:
 3. ATENÇÃO CRÍTICA SOBRE DISCIPLINAS (subject): subject DEVE ser o nome individual de cada matéria/disciplina (ex.: "Língua Portuguesa", "Raciocínio Lógico-Matemático", "Informática", "História de Pernambuco", "Direito Constitucional", "Direito Administrativo", "Direito Penal", "Direito Processual Penal", "Legislação Extravagante"). NUNCA agrupe várias disciplinas sob um único subject genérico como "Conhecimentos Gerais", "Conhecimentos Básicos", "Conhecimentos Específicos", "Conteúdo Programático", "Edital" ou o nome do cargo. Cada disciplina do edital precisa ter seu próprio subject separado.
 4. unit representa apenas bloco intermediário dentro daquela disciplina quando existir. Se o edital tiver "Conhecimentos Gerais > Língua Portuguesa", o subject é "Língua Portuguesa" (e NÃO "Conhecimentos Gerais").
 5. topic deve ser um item de estudo atômico e fiel. Separe enumerações apenas quando o próprio edital apresentar conteúdos distintos; preserve artigos, leis, decretos, intervalos e qualificadores.
-6. Não transforme título de disciplina em tópico e não crie subassuntos ausentes.
+6. Não transforme título de disciplina em tópico e NUNCA crie tópicos ou missões com palavras de nível de incidência ("ALTA", "MÉDIA", "BAIXA", "INCIDÊNCIA ALTA", "CAI MUITO", etc.). Quando uma disciplina possuir um título de CONTEÚDO (bloco pai terminado em ":") seguido de subitens/assuntos (com marcadores • ou →), não crie uma missão vazia só com o título do conteúdo; coloque o nome do conteúdo em unit e forme topic como "Nome do Conteúdo — Assunto".
 7. Ignore inscrições, vagas, cotas, salários, datas, etapas, TAF, exames médicos, recursos, documentação e demais regras administrativas, salvo quando fizerem parte expressa de uma disciplina cobrada.
 8. Preserve em edital_order a ordem original, mas organize learning_order como um professor planejando um currículo: fundamentos e pré-requisitos antes de aplicações e conteúdos avançados. Dentro de cada disciplina, cada etapa deve preparar a próxima.
 9. Não use conhecimento externo e não complete texto truncado por suposição.

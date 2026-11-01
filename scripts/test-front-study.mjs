@@ -483,3 +483,76 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   assert(htmlSrc.includes("inferExamPortalInfo") && htmlSrc.includes("toggleDocumentCommunitySharing"), "index.html deve criar/alternar portal automaticamente pelo edital e permitir opt-in de compartilhamento na comunidade");
   console.log("OK: extrator universal de Editais Verticalizados (numeração contínua, sem número, checkboxes e auto-portal) validado.");
 }
+
+
+// ── Validação v107: Filtro de Incidência (ALTA/MÉDIA/BAIXA), Hierarquia Conteúdo — Assunto e Biblioteca Comunitária Ativa por Padrão ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const pdfClientSrc = readFileSync(new URL("../dist/pdf-text-client.js", import.meta.url), "utf8");
+  const v97Sql = readFileSync(new URL("../supabase/migrations/20261101120000_v97_complete_security_duels_optin_and_base.sql", import.meta.url), "utf8");
+  const scriptSrc = htmlSrc.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const fnSlice = [
+    scriptSrc.slice(scriptSrc.indexOf("function normalizeText("), scriptSrc.indexOf("function missionForQuestion(")),
+    scriptSrc.slice(scriptSrc.indexOf("window.unpackEditalTopicsList=function("), scriptSrc.indexOf("window._activeProcessingDocs=")),
+  ].join("\n");
+
+  const ctx = {
+    window: {},
+    cloudDocuments: [],
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_KEY: "anon",
+    processEditalDocument: async () => {},
+    deleteCloudDocument: async () => {},
+    fetch: async () => ({ ok: true, json: async () => ({}) }),
+    toast: () => {},
+  };
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(fnSlice, ctx);
+  vm.runInContext(pdfClientSrc, ctx);
+
+  const pppePages = [
+    {
+      page: 2,
+      text: [
+        "EDITAL VERTICALIZADO",
+        "Polícia Penal de Pernambuco",
+        "CAI MUITO INCIDÊNCIA ALTA",
+        "CAI COM FREQUÊNCIA INCIDÊNCIA MÉDIA",
+        "DIFICILMENTE CAI INCIDÊNCIA BAIXA",
+        "As matérias foram organizadas por cores e níveis de incidência",
+        "língua portuguesa",
+        "ALTA",
+        "Compreensão e interpretação de textos de gêneros variados.",
+        "MÉDIA",
+        "Domínio da estrutura morfossintática do período:",
+        "• Emprego das classes de palavras.",
+        "• Concordância verbal e nominal.",
+        "ÉTICA NO SERVIÇO PÚBLICO",
+        "ALTA MÉDIA",
+        "ALTA",
+        "Média",
+        "Ética e moral.",
+        "Ética no setor público:",
+        "• Lei nº 8.112/1990 e suas alterações.",
+        "→ Espécies de procedimento disciplinar: sindicâncias investigativa, patrimonial e acusatória.",
+        "DIREITO ADMINISTRATIVO",
+        "Estado, governo e administração pública:",
+        "• Conceitos.",
+        "Direito administrativo:",
+        "• Objeto.",
+        "• Fontes.",
+        "EXECUÇÃO PENAL",
+        "Lei de Execução Penal.",
+      ].join("\n"),
+    },
+  ];
+
+  const res = ctx.window.extractStructuredEditalTopics(pppePages, { title: "EDITAL VERTICALIZADO PPPE", campaignName: "PPPE" });
+  assert.equal(res.subjectCount, 4, `Deve extrair as 4 disciplinas (incluindo Língua Portuguesa em minúsculo e Execução Penal), obteve ${res.subjectCount}`);
+  assert.ok(!res.topics.some((t) => /^(?:\d+\.\s*)?(?:alta|m[eé]dia|baixa|alta\s+m[eé]dia)$/i.test(t.topic)), "Nenhuma missão pode ser criada a partir de ALTA / MÉDIA / BAIXA");
+  assert.ok(res.topics.some((t) => t.topic.includes("Domínio da estrutura morfossintática do período — Emprego das classes de palavras.")), "Deve unir Conteúdo e Assunto em Língua Portuguesa");
+  assert.ok(res.topics.some((t) => t.topic.includes("Estado, governo e administração pública — Conceitos.")), "Deve unir Conteúdo e Assunto em Direito Administrativo");
+  assert.ok(v97Sql.includes("share_with_community boolean not null default true") && v97Sql.includes("coalesce(d.share_with_community, true) = true"), "Biblioteca da Comunidade deve manter compartilhamento ativo por padrão");
+  console.log("OK: filtro anti-ALTA/MÉDIA, hierarquia Conteúdo — Assunto e Biblioteca da Comunidade ativa por padrão (v107) validados.");
+}

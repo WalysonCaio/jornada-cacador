@@ -3007,18 +3007,22 @@
     const campaign=typeof activeCampaign==='function'?activeCampaign():null;
     if(!campaign)return;
     const slug=normalizeExamSlug(campaign.name||'',campaign.organization||'');
-    if(!force&&communityCache.slug===slug&&communityCache.loadedAt&&(Date.now()-communityCache.loadedAt<300000))return;
     try{
-      const res=await cloudFetch('rpc/get_community_exam_library',{
-        method:'POST',
-        body:JSON.stringify({p_exam_name:campaign.name||'',p_exam_org:campaign.organization||''})
-      });
-      const data=await res.json().catch(()=>null);
-      if(!res.ok||!data)return;
-      // Filtrar estritamente: NUNCA compartilhar 'edital' / 'edital_concurso' de outros usuários
-      const commDocs=(Array.isArray(data.documents)?data.documents:[]).filter(d=>!['edital','edital_concurso'].includes(d.document_type));
-      const commSums=Array.isArray(data.summaries)?data.summaries:[];
-      communityCache={slug:data.exam_slug||slug,documents:commDocs,summaries:commSums,editalTopics:[],loadedAt:Date.now()};
+      if(force||communityCache.slug!==slug||!communityCache.loadedAt||(Date.now()-communityCache.loadedAt>=60000)){
+        const res=await cloudFetch('rpc/get_community_exam_library',{
+          method:'POST',
+          body:JSON.stringify({p_exam_name:campaign.name||'',p_exam_org:campaign.organization||''})
+        });
+        const data=await res.json().catch(()=>null);
+        if(res.ok&&data){
+          // Filtrar estritamente: NUNCA compartilhar 'edital' / 'edital_concurso' de outros usuários
+          const fetchedDocs=(Array.isArray(data.documents)?data.documents:[]).filter(d=>!['edital','edital_concurso'].includes(d.document_type));
+          const fetchedSums=Array.isArray(data.summaries)?data.summaries:[];
+          communityCache={slug:data.exam_slug||slug,documents:fetchedDocs,summaries:fetchedSums,editalTopics:[],loadedAt:Date.now()};
+        }
+      }
+      const commDocs=Array.isArray(communityCache.documents)?communityCache.documents:[];
+      const commSums=Array.isArray(communityCache.summaries)?communityCache.summaries:[];
 
       // Remover qualquer edital da comunidade que estivesse em memória
       for(let i=cloudDocuments.length-1;i>=0;i--){
@@ -3114,13 +3118,13 @@
 
       LEARNING_SUBJECTS=typeof window.computeValidLearningSubjects==='function'?window.computeValidLearningSubjects():[...new Set([...ALL_SUMMARIES.map(x=>x.category),...ALL_FLASHCARDS.map(x=>x[0]),...ALL_QUESTIONS.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
 
-      if(addedDocs>0||commSums.length>0||commTopics.length>0){
+      if(addedDocs>0||commDocs.length>0||commSums.length>0){
         if(typeof renderUserDocuments==='function')renderUserDocuments();
         if(typeof renderStudy==='function')renderStudy();
         if(typeof renderLearning==='function')renderLearning();
         if(typeof renderQuestionFilters==='function')renderQuestionFilters();
-        renderCommunityCoopBanner();
       }
+      renderCommunityCoopBanner();
     }catch{}
   }
 
@@ -3298,8 +3302,8 @@
     if(!missions.length)return;
     qa('#topicList .topic').forEach(row=>{
       if(row.querySelector('.incidenceBadge'))return;
-      const chk=row.querySelector('input[data-id]');
-      const m=missions.find(item=>String(item.id)===String(chk?.dataset?.id||''));
+      const chk=row.querySelector('input[data-topic],input[data-id]');
+      const m=missions.find(item=>String(item.id)===String(chk?.dataset?.topic||chk?.dataset?.id||''));
       if(!m)return;
       const lvl=topicIncidenceLevel(m);
       const titleEl=row.querySelector('b')||row.querySelector('span');
@@ -5278,6 +5282,7 @@
   if(baseLoadCloudDocsForSync){
     loadCloudDocuments=async function(){
       const res=await baseLoadCloudDocsForSync();
+      await syncCommunityLibraryForActivePortal(false);
       realignStudyDisciplinesWithLibrary();
       return res;
     };

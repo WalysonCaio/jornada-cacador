@@ -29,12 +29,14 @@
 
   const EMAIL_LINE_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
   const CPF_LINE_RE = /^(?:cpf\s*:?\s*)?\d{3}\.?\d{3}\.?\d{3}[-./]\d{2}$/i;
-  const TABLE_CHROME_LINE_RE = /^(leitura|-?\s*letra|da\s+lei|leitura\s*-\s*letra\s+da\s+lei|quest[oõ]|es|quest[oõ]es|exerc[ií]cios?|acerto|s\s*\(\%\).*|acertos\s*\(\%\).*|tempo|revis[aã]|o|revis[aã]o|1[ªa]\s*rev.*|2[ªa]\s*rev.*|3[ªa]\s*rev.*|teoria|resumo|videoaula|pdf|status|conclu[ií]do|estudado|check|\(\%\)|item|t[oó]pico|assunto|conte[uú]do)$/i;
-  const ADMIN_ONLY_RE = /^(inscri(c|ç)(a|ã)o|cronograma|remunera(c|ç)(a|ã)o|vagas?|isen(c|ç)(a|ã)o|taxa de inscri(c|ç)(a|ã)o|resultado|recursos?|exame m[eé]dico|teste de aptid(a|ã)o f[ií]sica|investiga(c|ç)(a|ã)o social|documentos?|matr[ií]cula|curso de forma(c|ç)(a|ã)o)$/i;
+  const INCIDENCE_ONLY_LINE_RE = /^(?:(?:n[ií]vel\s+de\s+)?incid[eê]ncia\s*:?\s*)?(?:alta|m[eé]dia|media|baixa)(?:[\s,/|-]+(?:incid[eê]ncia\s+)?(?:alta|m[eé]dia|media|baixa))*$/i;
+  const LEGEND_OR_CHECKLIST_LINE_RE = /^(?:cai\s+muito.*|cai\s+com\s+frequ[eê]ncia.*|dificilmente\s+cai.*|incid[eê]ncia\s+(?:alta|m[eé]dia|media|baixa).*|as\s+ma\s*t[eé]rias\s+foram\s+organizadas.*|para\s+tornar\s+o\s+estudo\s+mais\s+pr[aá]tico.*|poss[ií]vel\s+identificar\s+rapidamente.*|definir\s+prioridades\s+de\s+revis[aã]o.*|aprendizado|\(somente\s+para\s+a?\s*prova\s+discursiva\)|checklist|s\s*i\s*m\s*u\s*l\s*a\s*d\s*o\s*s.*|acompanhe\s+sua\s+evolu[cç][aã]o.*|__\/__.*|anota[cç][oõ]es\s*:?|(?:0?\d\s+){3,}.*)$/i;
+  const TABLE_CHROME_LINE_RE = /^(leitura|-?\s*letra|da\s+lei|letra\s+de\s+lei|leitura\s*-?\s*letra\s+d[ae]\s+lei|quest[oõ]|es|quest[oõ]es|exerc[ií]cios?|acerto|s\s*\(\%\).*|acertos?\s*(?:\(\%\))?.*|tempo|revis[aã]|o|revis[aã]o|1[ªa]\s*rev.*|2[ªa]\s*rev.*|3[ªa]\s*rev.*|teoria|resumo|videoaula|pdf|status|conclu[ií]do|estudado|check|\(\%\)|item|t[oó]pico|assunto|conte[uú]do|incid[eê]ncia)$/i;
+  const ADMIN_ONLY_RE = /^(inscri(c|ç)(a|ã)o|cronograma|remunera(c|ç)(a|ã)o|vagas?|isen(c|ç)(a|ã)o|taxa de inscri(c|ç)(a|ã)o|resultado|recursos?|exame m[eé]dico|teste de aptid(a|ã)o f[ií]sica|investiga(c|ç)(a|ã)o social|documentos?|matr[ií]cula|curso de forma(c|ç)(a|ã)o|alta|m[eé]dia|media|baixa|alta\s+m[eé]dia|alta\s+media|m[eé]dia\s+alta|media\s+alta)$/i;
 
   const GENERIC_SUBJECT_RE = /^(edital(\s+verticalizado|\s+do\s+concurso|\s+de\s+abertura|\s+esquematizado|\s+sintetizado|\s+n[ºo°]?\s*[\d\/.-]+)?.*|ciclo\s*\d+.*|conte[uú]do(s)?\s*program[aá]tico(s)?|conhecimentos?\s*(gerais|b[aá]sicos|espec[ií]ficos|complementares|t[eé]cnicos|profissionais)?|objetos?\s*de\s*avalia[cç][aã]o|disciplinas?|mat[eé]rias?|programa(s)?|anexo\s*[ivxlcdm\d]*.*|bloco\s*[ivxlcdm\d]*.*|m[oó]dulo\s*[ivxlcdm\d]*.*|parte\s*[ivxlcdm\d]*.*|geral|comum\s+a\s+todos.*|cargo\s*\d*.*|pol[ií]cia\s*(penal|militar|civil|federal|rodovi[aá]ria|cient[ií]fica|legislativa|judicial).*|corpo\s+de\s+bombeiros.*|guarda\s+(municipal|civil).*|agente\s+(penitenci[aá]rio|de\s+pol[ií]cia|socioeducativo).*|soldado.*|oficial.*|pm\s*pe.*|pp\s*pe.*|pc\s*pe.*|cbm\s*pe.*|prf.*|pf.*)$/i;
 
-  const KNOWN_SUBJECT_HEADER_RE = /^(?:(?:disciplina|mat[eé]ria|bloco\s*[ivxlcdm\d]+|m[oó]dulo\s*[ivxlcdm\d]+|conhecimentos?\s*(?:b[aá]sicos|gerais|espec[ií]ficos))\s*[:\-–—]\s*)?(?:[ivxlcdm\d]{1,4}\s*[.\-–—)]\s*)?(l[ií]ngua\s+portuguesa(\s+e\s+interpreta[cç][aã]o\s+de\s+textos?|\s+e\s+reda[cç][aã]o.*)?|portugu[eê]s|gram[aá]tica.*|interpreta[cç][aã]o\s+de\s+textos?|reda[cç][aã]o(\s+oficial|\s+discursiva)?|[eé]tica(\s+no\s+servi[cç]o\s+p[uú]blico|\s+na\s+administra[cç][aã]o\s+p[uú]blica|\s+p[uú]blica|\s+e\s+cidadania|\s+e\s+conduta.*)?|racioc[ií]nio\s+l[oó]gico(\s*[-e/]\s*matem[aá]tico|\s+quantitativo|\s+e\s+estat[ií]stica)?|rlm|matem[aá]tica(\s+financeira|\s+b[aá]sica|\s+e\s+racioc[ií]nio\s+l[oó]gico)?|estat[ií]stica|(?:no[cç][oõ]es\s+de\s+|conhecimentos?\s+de\s+)?inform[aá]tica|tecnologia\s+da\s+informa[cç][aã]o(\s+e\s+comunica[cç][aã]o)?|atualidades(\s*\(.*\)|\s+e\s+conhecimentos\s+gerais|\s+e\s+hist[oó]ria.*|\s+e\s+geografia.*)?|conhecimentos\s+regionais.*|realidade\s+[eé]tnica.*|hist[oó]ria(\s+e\s+geografia.*|\s+de\s+pernambuco|\s+do\s+brasil|\s+geral|\s+da\s+para[ií]ba|\s+da\s+bahia|\s+do\s+cear[aá]|\s+de\s+alagoas)?|geografia(\s+e\s+hist[oó]ria.*|\s+de\s+pernambuco|\s+do\s+brasil|\s+geral|\s+da\s+para[ií]ba|\s+da\s+bahia|\s+do\s+cear[aá]|\s+de\s+alagoas)?|(?:no[cç][oõ]es\s+de\s+|conhecimentos?\s+de\s+)?direito\s+(constitucional|administrativo|penal(\s+militar|\s+e\s+processual\s+penal)?|processual\s+penal(\s+militar|\s+e\s+penal)?|militar|civil|processual\s+civil|tribut[aá]rio|previdenci[aá]rio|eleitoral|do\s+trabalho|ambiental|financeiro|empresarial|consumidor|internacional|humanos|penitenci[aá]rio).*|(?:no[cç][oõ]es\s+de\s+)?direitos?\s+humanos(\s+e\s+participa[cç][aã]o\s+social|\s+e\s+cidadania|\s+e\s+legisla[cç][aã]o.*)?|(?:no[cç][oõ]es\s+de\s+)?legisla[cç][aã]o(\s+estadual|\s+especial|\s+extravagante|\s+institucional|\s+penal(\s+especial|\s+extravagante)?|\s+espec[ií]fica|\s+municipal|\s+de\s+tr[aâ]nsito|\s+aplicada|\s+pertinente|\s+penitenci[aá]ria|\s+do\s+sistema\s+prisional|\s+militar|\s+da\s+pm.*|\s+da\s+pp.*|\s+da\s+pc.*|\s+jur[ií]dica.*)?|leis?\s+(especiais|extravagantes|penais\s+especiais).*|estatuto.*|c[oó]digo\s+de\s+tr[aâ]nsito.*|ctb|(?:no[cç][oõ]es\s+de\s+)?criminologia|(?:no[cç][oõ]es\s+de\s+)?medicina\s+legal|(?:no[cç][oõ]es\s+de\s+)?criminal[ií]stica|seguran[cç]a\s+(p[uú]blica|prisional|corporativa|org[aâ]nica).*|(?:no[cç][oõ]es\s+de\s+)?administra[cç][aã]o(\s+p[uú]blica|\s+geral|\s+financeira\s+e\s+or[cç]ament[aá]ria|\s+de\s+recursos\s+materiais|\s+e\s+[eé]tica)?|afo|or[cç]amento\s+p[uú]blico|gest[aã]o\s+de\s+pessoas|atendimento\s+ao\s+p[uú]blico|(?:no[cç][oõ]es\s+de\s+)?arquivologia|(?:no[cç][oõ]es\s+de\s+)?contabilidade(\s+geral|\s+p[uú]blica)?|economia|l[ií]ngua\s+(inglesa|espanhola|estrangeira).*|ingl[eê]s|espanhol|f[ií]sica|qu[ií]mica|biologia|anatomia\s+humana|primeiros\s+socorros|defesa\s+civil|dire[cç][aã]o\s+defensiva)$/i;
+  const KNOWN_SUBJECT_HEADER_RE = /^(?:(?:disciplina|mat[eé]ria|bloco\s*[ivxlcdm\d]+|m[oó]dulo\s*[ivxlcdm\d]+|conhecimentos?\s*(?:b[aá]sicos|gerais|espec[ií]ficos))\s*[:\-–—]\s*)?(?:[ivxlcdm\d]{1,4}\s*[.\-–—)]\s*)?(l[ií]ngua\s+portuguesa(\s+e\s+interpreta[cç][aã]o\s+de\s+textos?|\s+e\s+reda[cç][aã]o.*)?|portugu[eê]s|gram[aá]tica.*|interpreta[cç][aã]o\s+de\s+textos?|reda[cç][aã]o(\s+oficial|\s+discursiva)?|[eé]tica(\s+no\s+servi[cç]o\s+p[uú]blico|\s+na\s+administra[cç][aã]o\s+p[uú]blica|\s+p[uú]blica|\s+e\s+cidadania|\s+e\s+conduta.*)?|racioc[ií]nio\s+l[oó]gico(\s*[-e/]\s*matem[aá]tico|\s+quantitativo|\s+e\s+estat[ií]stica)?|rlm|matem[aá]tica(\s+financeira|\s+b[aá]sica|\s+e\s+racioc[ií]nio\s+l[oó]gico)?|estat[ií]stica|(?:no[cç][oõ]es\s+de\s+|conhecimentos?\s+de\s+)?inform[aá]tica|tecnologia\s+da\s+informa[cç][aã]o(\s+e\s+comunica[cç][aã]o)?|atualidades(\s*\(.*\)|\s+e\s+conhecimentos\s+gerais|\s+e\s+hist[oó]ria.*|\s+e\s+geografia.*)?|conhecimentos\s+regionais.*|realidade\s+[eé]tnica.*|hist[oó]ria(\s+e\s+geografia.*|\s+de\s+pernambuco|\s+do\s+brasil|\s+geral|\s+da\s+para[ií]ba|\s+da\s+bahia|\s+do\s+cear[aá]|\s+de\s+alagoas)?|geografia(\s+e\s+hist[oó]ria.*|\s+de\s+pernambuco|\s+do\s+brasil|\s+geral|\s+da\s+para[ií]ba|\s+da\s+bahia|\s+do\s+cear[aá]|\s+de\s+alagoas)?|(?:no[cç][oõ]es\s+de\s+|conhecimentos?\s+de\s+)?direito\s+(constitucional|administrativo|penal(\s+militar|\s+e\s+processual\s+penal)?|processual\s+penal(\s+militar|\s+e\s+penal)?|militar|civil|processual\s+civil|tribut[aá]rio|previdenci[aá]rio|eleitoral|do\s+trabalho|ambiental|financeiro|empresarial|consumidor|internacional|humanos|penitenci[aá]rio).*|(?:no[cç][oõ]es\s+de\s+)?direitos?\s+humanos(\s+e\s+participa[cç][aã]o\s+social|\s+e\s+cidadania|\s+e\s+legisla[cç][aã]o.*)?|(?:no[cç][oõ]es\s+de\s+)?legisla[cç][aã]o(\s+estadual|\s+especial|\s+extravagante|\s+institucional|\s+penal(\s+especial|\s+extravagante)?|\s+espec[ií]fica|\s+municipal|\s+de\s+tr[aâ]nsito|\s+aplicada|\s+pertinente|\s+penitenci[aá]ria|\s+do\s+sistema\s+prisional|\s+militar|\s+da\s+pm.*|\s+da\s+pp.*|\s+da\s+pc.*|\s+jur[ií]dica.*)?|leis?\s+(especiais|extravagantes|penais\s+especiais).*|(?:no[cç][oõ]es\s+de\s+)?execu[cç][aã]o\s+penal.*|(?:no[cç][oõ]es\s+de\s+)?direito\s+penitenci[aá]rio.*|estatuto.*|c[oó]digo\s+de\s+tr[aâ]nsito.*|ctb|(?:no[cç][oõ]es\s+de\s+)?criminologia|(?:no[cç][oõ]es\s+de\s+)?medicina\s+legal|(?:no[cç][oõ]es\s+de\s+)?criminal[ií]stica|seguran[cç]a\s+(p[uú]blica|prisional|corporativa|org[aâ]nica).*|(?:no[cç][oõ]es\s+de\s+)?administra[cç][aã]o(\s+p[uú]blica|\s+geral|\s+financeira\s+e\s+or[cç]ament[aá]ria|\s+de\s+recursos\s+materiais|\s+e\s+[eé]tica)?|afo|or[cç]amento\s+p[uú]blico|gest[aã]o\s+de\s+pessoas|atendimento\s+ao\s+p[uú]blico|(?:no[cç][oõ]es\s+de\s+)?arquivologia|(?:no[cç][oõ]es\s+de\s+)?contabilidade(\s+geral|\s+p[uú]blica)?|economia|l[ií]ngua\s+(inglesa|espanhola|estrangeira).*|ingl[eê]s|espanhol|f[ií]sica|qu[ií]mica|biologia|anatomia\s+humana|primeiros\s+socorros|defesa\s+civil|dire[cç][aã]o\s+defensiva)$/i;
 
   const TOPIC_DISCIPLINE_RULES = [
     { subject: "Língua Portuguesa", re: /\b(compreensao e interpretacao|tipologia textual|generos textuais|ortografia|acentuacao grafica|coesao|coerencia|morfossintatica|morfologia|classes de palavras|coordenacao entre oracoes|subordinacao entre oracoes|sinais de pontuacao|concordancia verbal|concordancia nominal|regencia verbal|regencia nominal|indicativo de crase|pronomes atonos|colocacao pronominal|semantica|figuras de linguagem|redacao oficial|manual de redacao da presidencia|reescrita de frases)\b/i },
@@ -102,7 +104,11 @@
   }
 
   function cleanEditalPageLines(pageText) {
-    const rawLines = String(pageText ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const fullStr = String(pageText ?? "");
+    if (/__\/__\s+__\/__/i.test(fullStr) || (/checklist/i.test(fullStr) && /s\s*i\s*m\s*u\s*l\s*a\s*d\s*o\s*s/i.test(fullStr))) {
+      return [];
+    }
+    const rawLines = fullStr.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     const removeIdx = new Set();
     for (let i = 0; i < rawLines.length; i++) {
       if (EMAIL_LINE_RE.test(rawLines[i]) || CPF_LINE_RE.test(rawLines[i])) {
@@ -118,12 +124,19 @@
     const out = [];
     for (let i = 0; i < rawLines.length; i++) {
       if (removeIdx.has(i)) continue;
-      const line = sanitizeWatermarkText(rawLines[i]);
+      let line = sanitizeWatermarkText(rawLines[i]);
       if (!line) continue;
+      if (INCIDENCE_ONLY_LINE_RE.test(line) || LEGEND_OR_CHECKLIST_LINE_RE.test(line)) continue;
+      line = line
+        .replace(/^(?:(?:incid[eê]ncia\s+)?(?:alta|m[eé]dia|media|baixa)\s+)+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ•▪▸→☐▢☑])/i, "")
+        .replace(/(?:\s+(?:incid[eê]ncia\s+)?(?:alta|m[eé]dia|media|baixa))+$/i, "")
+        .trim();
+      if (!line) continue;
+      if (INCIDENCE_ONLY_LINE_RE.test(line) || LEGEND_OR_CHECKLIST_LINE_RE.test(line)) continue;
       if (TABLE_CHROME_LINE_RE.test(line)) continue;
       const norm = normalizeSearch(line);
-      if (TABLE_CHROME_LINE_RE.test(norm)) continue;
-      if (/^(edital\s+verticalizado.*|ciclo\s*\d+.*|policia\s+(penal|militar|civil|federal)\s*[-–—]?\s*[a-z]{0,3}|pagina\s+\d+(\s+de\s+\d+)?)$/i.test(norm)) continue;
+      if (TABLE_CHROME_LINE_RE.test(norm) || INCIDENCE_ONLY_LINE_RE.test(norm) || LEGEND_OR_CHECKLIST_LINE_RE.test(norm)) continue;
+      if (/^(edital\s+verticalizado.*|ciclo\s*\d+.*|policia\s+(penal|militar|civil|federal)(?:\s+de\s+pernambuco.*|\s*[-–—]?\s*[a-z]{0,3})|pagina\s+\d+(\s+de\s+\d+)?)$/i.test(norm)) continue;
       out.push(line);
     }
     return out;
@@ -153,14 +166,24 @@
     return [cleanTopic];
   }
 
-  function isSubjectHeaderLine(line, nextLine, campaignName = "", docTitle = "") {
+  function isSubjectHeaderLine(line, nextLine, campaignName = "", docTitle = "", currentSubject = "") {
+    if (/^[•▪▸→☐▢☑✓✔]/.test(String(line || "").trim())) return false;
     const s = stripTableChromeSuffix(line);
     if (s.length < 3 || s.length > 96) return false;
     if (/^\d+\s+[a-záéíóúâêôãõç]/.test(s)) return false;
     if (/[.;]$/.test(s)) return false;
+    if (INCIDENCE_ONLY_LINE_RE.test(s) || LEGEND_OR_CHECKLIST_LINE_RE.test(s)) return false;
     if (isGenericSubjectName(s, campaignName, docTitle)) return false;
+    const rawTrim = String(line || "").trim();
     const cleanedHeader = s.replace(/^(?:[ivxlcdm\d]{1,4}\s*[.\-–—)]\s*)/i, "").replace(/\s*:\s*$/, "").trim();
+    // Se a linha termina com ":" e estamos dentro da própria disciplina (ou a próxima linha é um subtópico com bullet),
+    // trata-se de um nome de CONTEÚDO (bloco pai) da disciplina atual, não de uma nova disciplina!
+    if (rawTrim.endsWith(":") && !/^(?:disciplina|mat[eé]ria)\s*:/i.test(rawTrim)) {
+      if (currentSubject && normalizeSearch(cleanedHeader) === normalizeSearch(currentSubject)) return false;
+      if (nextLine && /^[•▪▸→]/.test(String(nextLine).trim())) return false;
+    }
     if (KNOWN_SUBJECT_HEADER_RE.test(cleanedHeader)) {
+      if (!rawTrim.endsWith(":")) return true;
       const letters = cleanedHeader.replace(/[^A-Za-zÀ-ÿ]/g, "");
       const upper = cleanedHeader.replace(/[^A-ZÀ-Ý]/g, "");
       if (letters.length >= 3 && upper.length / letters.length >= 0.55) return true;
@@ -197,7 +220,7 @@
     let unnumberedSubjectLines = [];
     let autoBlockCounter = 1;
 
-    const pushTopicForSubject = (subj, topicBody) => {
+    const pushTopicForSubject = (subj, topicBody, unitName = "") => {
       const cleanSubj = stripTableChromeSuffix(subj)
         .replace(/^(?:[ivxlcdm\d]{1,4}\s*[.\-–—)]\s*)/i, "")
         .replace(/\s*:\s*$/, "")
@@ -206,19 +229,27 @@
       const rawBody = sanitizeWatermarkText(topicBody.replace(/\s+/g, " ").replace(/-\s+/g, "-").trim());
       if (!cleanSubj || rawBody.length < 3) return;
       const subKey = normalizeSearch(cleanSubj);
-      if (ADMIN_ONLY_RE.test(normalizeSearch(rawBody)) || normalizeSearch(rawBody) === subKey) return;
+      const normBody = normalizeSearch(rawBody);
+      if (ADMIN_ONLY_RE.test(normBody) || INCIDENCE_ONLY_LINE_RE.test(normBody) || LEGEND_OR_CHECKLIST_LINE_RE.test(normBody) || normBody === subKey) return;
       const pieces = splitNumberedTopicBlock(rawBody);
       for (const piece of pieces) {
         const stripped = piece
-          .replace(/^(?:[☐▢☑✓✔•▪▸]|\[\s*[xX ]?\s*\])\s*/, "")
+          .replace(/^(?:[☐▢☑✓✔•▪▸→]|\[\s*[xX ]?\s*\])\s*/, "")
           .replace(/^\d{1,3}(?:\.\d{1,2})?\s*(?:[.\-)]\s*|\s+)/, "")
+          .replace(/^(?:(?:incid[eê]ncia\s+)?(?:alta|m[eé]dia|media|baixa)\s+)+/i, "")
           .trim();
         if (stripped.length < 2) continue;
+        if (INCIDENCE_ONLY_LINE_RE.test(stripped) || LEGEND_OR_CHECKLIST_LINE_RE.test(stripped)) continue;
+        const cleanUnit = sanitizeWatermarkText(unitName).replace(/\s*:\s*$/, "").trim();
+        const formattedTopic = cleanUnit && !stripped.toLowerCase().startsWith(cleanUnit.toLowerCase())
+          ? `${cleanUnit} — ${stripped}`
+          : stripped;
         const nextCount = (perSubjectDisplayCount.get(subKey) || 0) + 1;
         perSubjectDisplayCount.set(subKey, nextCount);
         rawExtracted.push({
           subject: cleanSubj,
-          topic: `${nextCount}. ${stripped}`,
+          unit: cleanUnit,
+          topic: `${nextCount}. ${formattedTopic}`,
         });
       }
     };
@@ -228,23 +259,79 @@
         unnumberedSubjectLines = [];
         return;
       }
-      const merged = [];
-      for (const ln of unnumberedSubjectLines) {
-        const cleanLn = ln.replace(/^(?:[☐▢☑✓✔•▪▸\-–—]|\[\s*[xX ]?\s*\])\s*/, "").trim();
-        if (!cleanLn) continue;
+      // 1) Agrupar linhas quebradas preservando o nível hierárquico (0 = linha/conteúdo, 1 = bullet •/☐, 2 = sub-bullet →)
+      const statements = [];
+      for (const rawLn of unnumberedSubjectLines) {
+        const ln = String(rawLn || "").trim();
+        if (!ln || INCIDENCE_ONLY_LINE_RE.test(ln) || LEGEND_OR_CHECKLIST_LINE_RE.test(ln)) continue;
+        const isLevel2 = /^→/.test(ln);
+        const isLevel1 = !isLevel2 && /^(?:[☐▢☑✓✔•▪▸]|\[\s*[xX ]?\s*\])/.test(ln);
+        const cleanLn = ln.replace(/^(?:[☐▢☑✓✔•▪▸→]|\[\s*[xX ]?\s*\])\s*/, "").trim();
+        if (!cleanLn || INCIDENCE_ONLY_LINE_RE.test(cleanLn)) continue;
+
+        const prev = statements.length > 0 ? statements[statements.length - 1] : null;
+        const prevEndsPunct = prev ? /[.;:!?]$/.test(prev.text) : true;
+        const prevEndsColon = prev ? /:\s*$/.test(prev.text) : false;
+        const startsLower = /^[a-záéíóúâêôãõç]/.test(cleanLn);
+
         if (
-          merged.length > 0 &&
-          !/[.;:!?]$/.test(merged[merged.length - 1]) &&
-          (/^[a-záéíóúâêôãõç]/.test(cleanLn) || /^(?:de|da|do|dos|das|e|ou|para|com|em|no|na|nos|nas|ao|aos|à|às|por|pelo|pela)\b/i.test(cleanLn))
+          prev &&
+          !isLevel1 &&
+          !isLevel2 &&
+          (!prevEndsPunct || (prevEndsColon && startsLower))
         ) {
-          merged[merged.length - 1] += " " + cleanLn;
+          prev.text = `${prev.text} ${cleanLn}`.replace(/-\s+/g, "-").replace(/\s+/g, " ").trim();
         } else {
-          merged.push(cleanLn);
+          statements.push({
+            level: isLevel2 ? 2 : isLevel1 ? 1 : 0,
+            text: cleanLn,
+          });
         }
       }
       unnumberedSubjectLines = [];
-      for (const itemText of merged) {
-        pushTopicForSubject(currentSubject, itemText);
+
+      // 2) Identificar o que é nome de CONTEÚDO (bloco pai terminado em ":") e o que é ASSUNTO que faz parte do conteúdo
+      let currentContent = "";
+      let currentSubContent = "";
+      for (let idx = 0; idx < statements.length; idx++) {
+        const st = statements[idx];
+        const nextSt = statements[idx + 1] || null;
+        if (st.level === 0) {
+          if (st.text.endsWith(":") && nextSt && (nextSt.level >= 1 || !nextSt.text.endsWith(":"))) {
+            currentContent = st.text.replace(/:\s*$/, "").trim();
+            currentSubContent = "";
+            continue;
+          }
+          // Se estamos dentro de um bloco de conteúdo (ex.: Resoluções) e um item veio sem marcador entre bullets
+          if (currentContent && st.text.endsWith(";") && nextSt && nextSt.level >= 1) {
+            pushTopicForSubject(currentSubject, st.text, currentContent);
+            continue;
+          }
+          currentContent = "";
+          currentSubContent = "";
+          pushTopicForSubject(currentSubject, st.text, "");
+        } else if (st.level === 1) {
+          if (nextSt && nextSt.level === 2) {
+            currentSubContent = st.text.replace(/[.:;]\s*$/, "").trim();
+            continue;
+          }
+          const unitLabel = currentSubContent
+            ? (currentContent ? `${currentContent} (${currentSubContent})` : currentSubContent)
+            : currentContent;
+          pushTopicForSubject(currentSubject, st.text, unitLabel);
+        } else if (st.level === 2) {
+          if (nextSt && nextSt.level === 1 && /processo administrativo disciplinar/i.test(st.text)) {
+            currentSubContent = st.text.replace(/[.:;]\s*$/, "").trim();
+            continue;
+          }
+          const unitLabel = currentSubContent
+            ? (currentContent ? `${currentContent} (${currentSubContent})` : currentSubContent)
+            : currentContent;
+          pushTopicForSubject(currentSubject, st.text, unitLabel);
+          if (!nextSt || nextSt.level !== 2) {
+            currentSubContent = "";
+          }
+        }
       }
     };
 
@@ -293,7 +380,7 @@
       }
 
       // Caso 3: Linha cabeçalho de disciplina
-      if (isSubjectHeaderLine(line, nextLine, campaignName, docTitle)) {
+      if (isSubjectHeaderLine(line, nextLine, campaignName, docTitle, currentSubject)) {
         flushTopic();
         flushUnnumberedLines();
         currentSubject = stripTableChromeSuffix(line)
@@ -372,14 +459,16 @@
         }
       }
 
-      // Caso 6: Checkbox ou Bullet explícito (ex.: "☐ Compreensão e interpretação...", "• Direitos fundamentais")
-      const bulletMatch = line.match(/^(?:[☐▢☑✓✔•▪▸]|\[\s*[xX ]?\s*\])\s+(.{3,})$/);
-      if (bulletMatch) {
-        flushTopic();
-        flushUnnumberedLines();
-        currentTableNum = Math.max(1, currentTableNum + 1);
-        currentTopicParts.push(bulletMatch[1].trim());
-        continue;
+      // Caso 6: Quando a disciplina já usa numeração explícita (1, 2, 3...), um checkbox isolado inicia novo tópico numerado;
+      // caso contrário (disciplina estruturada por Conteúdo: + bullets • / → / ☐), acumula em unnumberedSubjectLines para preservar a hierarquia Conteúdo -> Assunto!
+      if (currentTableNum > 0) {
+        const bulletMatch = line.match(/^(?:[☐▢☑✓✔]|\[\s*[xX ]?\s*\])\s+(.{3,})$/);
+        if (bulletMatch) {
+          flushTopic();
+          currentTableNum = currentTableNum + 1;
+          currentTopicParts.push(bulletMatch[1].trim());
+          continue;
+        }
       }
 
       if (currentTableNum > 0) {
@@ -443,7 +532,7 @@
       if (seen.has(dedupKey)) continue;
       seen.add(dedupKey);
       const list = bySubject.get(subjectKey) || [];
-      list.push({ subject: subjectDisplay.get(subjectKey), topic: item.topic, subjectKey });
+      list.push({ subject: subjectDisplay.get(subjectKey), unit: item.unit || "", topic: item.topic, subjectKey });
       bySubject.set(subjectKey, list);
     }
 
@@ -458,7 +547,7 @@
         const numberedTopic = `${lIdx + 1}. ${cleanBody}`;
         topics.push({
           subject: entry.subject,
-          unit: "",
+          unit: entry.unit || "",
           topic: numberedTopic.slice(0, 700),
           edital_order: globalIdx++,
           subject_order: sOrder,
@@ -514,7 +603,7 @@
       const response = await storageFetch(`${path}.text.json`, session);
       if (response.ok) {
         const payload = await response.json().catch(() => null);
-        if (Array.isArray(payload?.pages) && payload.pages.length) {
+        if (Number(payload?.version) >= 2 && Array.isArray(payload?.pages) && payload.pages.length) {
           return {
             pages: payload.pages,
             pdfTotalPages: Number(payload.pdf_total_pages || payload.total_pages || payload.pages.length),
@@ -576,21 +665,64 @@
       try {
         const page = await withTimeout(pdf.getPage(pageNumber), 4500, "PAGE_TIMEOUT");
         const content = await page.getTextContent();
-        let text = "";
-        let prevY = null;
-        for (const item of content.items || []) {
-          if (!item || typeof item.str !== "string") continue;
-          const curY = Array.isArray(item.transform) && Number.isFinite(item.transform[5]) ? item.transform[5] : null;
-          if (prevY !== null && curY !== null && Math.abs(curY - prevY) > 2.8 && !text.endsWith("\n")) {
-            text += "\n";
-          }
-          text += item.str;
-          text += item.hasEOL ? "\n" : " ";
-          if (item.str.trim() && curY !== null) {
-            prevY = item.hasEOL ? null : curY;
+        const rawItems = (content.items || []).filter((it) => it && typeof it.str === "string" && it.str.trim());
+        const watermarkZones = [];
+        for (const it of rawItems) {
+          const s = it.str.trim();
+          if (EMAIL_LINE_RE.test(s) || CPF_LINE_RE.test(s)) {
+            watermarkZones.push({
+              x: Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0,
+              y: Array.isArray(it.transform) && Number.isFinite(it.transform[5]) ? it.transform[5] : 0,
+            });
           }
         }
-        text = text.replace(/[\t ]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+        const filteredItems = rawItems.filter((it) => {
+          const s = it.str.trim();
+          const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
+          const y = Array.isArray(it.transform) && Number.isFinite(it.transform[5]) ? it.transform[5] : 0;
+          if (EMAIL_LINE_RE.test(s) || CPF_LINE_RE.test(s)) return false;
+          if (INCIDENCE_ONLY_LINE_RE.test(s) || TABLE_CHROME_LINE_RE.test(s)) return false;
+          if (watermarkZones.some((w) => Math.abs(x - w.x) < 65 && y >= w.y && y - w.y <= 36) && !/\d/.test(s) && s.length <= 55) {
+            return false;
+          }
+          return true;
+        });
+        filteredItems.sort((a, b) => {
+          const ay = Array.isArray(a.transform) && Number.isFinite(a.transform[5]) ? a.transform[5] : 0;
+          const by = Array.isArray(b.transform) && Number.isFinite(b.transform[5]) ? b.transform[5] : 0;
+          if (Math.abs(by - ay) > 3.5) return by - ay;
+          const ax = Array.isArray(a.transform) && Number.isFinite(a.transform[4]) ? a.transform[4] : 0;
+          const bx = Array.isArray(b.transform) && Number.isFinite(b.transform[4]) ? b.transform[4] : 0;
+          return ax - bx;
+        });
+        const rowGroups = [];
+        let curRow = [];
+        let curY = null;
+        for (const it of filteredItems) {
+          const y = Array.isArray(it.transform) && Number.isFinite(it.transform[5]) ? it.transform[5] : 0;
+          const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
+          const str = it.str.trim();
+          if (curY !== null && Math.abs(y - curY) > 3.5) {
+            rowGroups.push(curRow);
+            curRow = [];
+          }
+          curRow.push({ x, y, str });
+          curY = y;
+        }
+        if (curRow.length) rowGroups.push(curRow);
+        const pageLines = [];
+        for (const r of rowGroups) {
+          const minX = Math.min(...r.map((i) => i.x));
+          const rowTxt = r.map((i) => i.str).join(" ").replace(/\s+/g, " ").trim();
+          if (!rowTxt) continue;
+          const prevLine = pageLines.length ? pageLines[pageLines.length - 1] : "";
+          if (minX >= 47 && minX <= 59 && /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]/.test(rowTxt) && /[.:;]$/.test(prevLine)) {
+            pageLines.push(`• ${rowTxt}`);
+          } else {
+            pageLines.push(rowTxt);
+          }
+        }
+        const text = pageLines.join("\n").trim();
         meaningfulCharacters += text.replace(/\s/g, "").length;
         if (text.length > 0) pages.push({ page: pageNumber, text });
         page.cleanup();
@@ -614,7 +746,7 @@
     window._extractedPdfMetaByDocId.set(doc.id, { pdfTotalPages, truncatedPages });
 
     const payload = JSON.stringify({
-      version: 1,
+      version: 2,
       generated_at: new Date().toISOString(),
       total_pages: pages.length,
       pdf_total_pages: pdfTotalPages,
@@ -718,7 +850,8 @@
 
     const newSubjects = new Set(topics.map((t) => normalizeSearch(t.subject)).filter(Boolean));
     const oldSubjects = new Set((backupTopics || []).map((t) => normalizeSearch(t.subject)).filter(Boolean));
-    if (oldSubjects.size > newSubjects.size && backupTopics.length > topics.length && oldSubjects.size >= 2) {
+    const oldHadIncidenceNoise = (backupTopics || []).some((t) => INCIDENCE_ONLY_LINE_RE.test(String(t?.topic || "").replace(/^\d+\.\s*/, "").trim()));
+    if (!oldHadIncidenceNoise && oldSubjects.size > newSubjects.size && backupTopics.length > topics.length && oldSubjects.size >= 2) {
       toast("A análise parcial encontrou menos disciplinas que o mapa atual; o mapa anterior foi preservado.");
       return false;
     }
@@ -1135,6 +1268,27 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
     const session = await validSession().catch(() => null);
     if (session) await storageFetch(`${path}.text.json`, session, { method: "DELETE" }).catch(() => undefined);
   };
+
+  // Auto-reparo único (v107): se o portal ativo tem um PDF de edital já enviado mas as missões atuais possuem ruído "ALTA / MÉDIA"
+  // ou ainda não passaram pela extração espacial v107 (Conteúdo — Assunto), reprocessa automaticamente uma única vez!
+  if (typeof setTimeout === "function") setTimeout(async () => {
+    try {
+      if (typeof cloudSession === "undefined" || !cloudSession || !navigator.onLine) return;
+      const editalDoc = (typeof cloudDocuments !== "undefined" && Array.isArray(cloudDocuments))
+        ? cloudDocuments.find((d) => !d.is_community && isEditalType(d) && d.storage_path)
+        : null;
+      if (!editalDoc) return;
+      const healKey = `jornada-edital-v107-healed-${editalDoc.id}`;
+      const missions = (typeof state !== "undefined" && Array.isArray(state?.customCampaign?.missions)) ? state.customCampaign.missions : [];
+      const hasIncidenceBug = missions.some((m) => INCIDENCE_ONLY_LINE_RE.test(String(m?.name || "").replace(/^\d+\.\s*/, "").trim()));
+      const hasIsolatedColonHeader = missions.some((m) => String(m?.name || "").trim().endsWith(":"));
+      if (hasIncidenceBug || hasIsolatedColonHeader || !localStorage.getItem(healKey)) {
+        localStorage.setItem(healKey, "1");
+        window._extractedPagesByDocId.delete(editalDoc.id);
+        await processEditalDocument(editalDoc.id);
+      }
+    } catch {}
+  }, 2600);
 
   window.JornadaPdfText = { prepareDocumentText, recoverPdfViaAssistant, extractStructuredEditalTopics };
 })();

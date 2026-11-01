@@ -77,9 +77,68 @@ create table if not exists public.user_state (
 
 alter table public.user_state enable row level security;
 
--- 2) Opção de compartilhamento por documento na Biblioteca Comunitária (proteção de direitos autorais)
+-- 2) Biblioteca Comunitária ativa por padrão para todos os materiais (exceto editais, que são individuais)
 alter table if exists public.study_documents
-  add column if not exists share_with_community boolean not null default false;
+  add column if not exists share_with_community boolean not null default true;
+
+alter table if exists public.study_documents
+  alter column share_with_community set default true;
+
+-- Restaura visibilidade imediata na comunidade para todos os materiais já enviados pelos usuários
+update public.study_documents
+   set share_with_community = true
+ where document_type not in ('edital', 'edital_concurso')
+   and coalesce(metadata->>'private_only', 'false') <> 'true';
+
+-- Remove eventuais tópicos de edital que eram apenas rótulos de incidência ("ALTA", "MÉDIA", "BAIXA")
+delete from public.campaign_topics
+ where regexp_replace(
+         lower(
+           translate(
+             regexp_replace(trim(coalesce(topic, '')), '^\d+\.\s*', ''),
+             'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ',
+             'aaaaaeeeeiiiiooooouuuucaaaaaeeeeiiiiooooouuuuc'
+           )
+         ),
+         '\s+',
+         ' ',
+         'g'
+       ) in ('alta', 'media', 'baixa', 'alta media', 'media alta', 'incidencia alta', 'incidencia media', 'incidencia baixa', 'cai muito', 'cai com frequencia', 'dificilmente cai');
+
+create or replace function public.normalize_exam_slug(p_name text, p_org text default '')
+returns text
+language plpgsql
+immutable
+set search_path = public
+as $$
+declare
+  raw text := lower(
+    translate(
+      coalesce(p_name, '') || ' ' || coalesce(p_org, ''),
+      'áàâãäéèêëíìîïóòôõöúùûüçñÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑ',
+      'aaaaaeeeeiiiiooooouuuucnaaaaaeeeeiiiiooooouuuucn'
+    )
+  );
+begin
+  if raw ~ '(^|[^a-z])(pm\s*-?\s*pe|policia militar.*pe|policia militar.*pernambuco|soldado pmpe|oficial pmpe)([^a-z]|$)' then
+    return 'pmpe';
+  elsif raw ~ '(^|[^a-z])(pp\s*-?\s*pe|policia penal|policial penal|agente penitenciario)([^a-z]|$)' then
+    return 'pppe';
+  elsif raw ~ '(^|[^a-z])(pc\s*-?\s*pe|policia civil.*pe|policia civil.*pernambuco)([^a-z]|$)' then
+    return 'pcpe';
+  elsif raw ~ '(^|[^a-z])(cbm\s*-?\s*pe|bombeiro.*pe|bombeiro.*pernambuco)([^a-z]|$)' then
+    return 'cbmpe';
+  elsif raw ~ '(^|[^a-z])(prf|policia rodoviaria federal)([^a-z]|$)' then
+    return 'prf';
+  elsif raw ~ '(^|[^a-z])(pf|policia federal)([^a-z]|$)' then
+    return 'pf';
+  end if;
+
+  raw := regexp_replace(raw, '[^a-z0-9]+', '-', 'g');
+  raw := regexp_replace(raw, '(^-+|-+$)', '', 'g');
+  return coalesce(nullif(left(raw, 40), ''), 'geral');
+end;
+$$;
 
 create or replace function public.set_document_community_sharing(
   p_document_id uuid,
@@ -93,6 +152,7 @@ as $$
 declare
   uid uuid := auth.uid();
   v_doc public.study_documents%rowtype;
+  v_next boolean := coalesce(p_shared, true);
 begin
   if uid is null then
     raise exception 'not_authenticated';
@@ -112,8 +172,8 @@ begin
   end if;
 
   update public.study_documents
-     set share_with_community = coalesce(p_shared, false),
-         metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('share_with_community', coalesce(p_shared, false))
+     set share_with_community = v_next,
+         metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('share_with_community', v_next, 'private_only', (not v_next))
    where id = p_document_id and user_id = uid
    returning * into v_doc;
 
@@ -127,7 +187,7 @@ $$;
 revoke all on function public.set_document_community_sharing(uuid, boolean) from public, anon;
 grant execute on function public.set_document_community_sharing(uuid, boolean) to authenticated, service_role;
 
--- Atualizar get_community_exam_library para respeitar o consentimento por documento (share_with_community)
+-- Atualizar get_community_exam_library para exibir todos os materiais prontos da comunidade (exceto editais)
 create or replace function public.get_community_exam_library(
   p_exam_name text,
   p_exam_org text default ''
@@ -163,25 +223,30 @@ begin
         ),
         'created_at', d.created_at,
         'is_community', true,
-        'exam_slug', v_slug,
+        'exam_slug', public.normalize_exam_slug(sc.name, coalesce(sc.organization, '')),
         'portal_name', sc.name,
-        'author_name', 'Colega de ' || upper(v_slug)
+        'author_name', coalesce(
+          nullif(trim(us.state->'publicProfile'->>'name'), ''),
+          nullif(trim(us.state->'hunterStats'->>'name'), ''),
+          nullif(trim(u.raw_user_meta_data->>'full_name'), ''),
+          nullif(trim(u.raw_user_meta_data->>'name'), ''),
+          'Colega de ' || upper(v_slug)
+        )
       )
-      order by d.created_at desc
+      order by (public.normalize_exam_slug(sc.name, coalesce(sc.organization, '')) = v_slug) desc, d.created_at desc
     ),
     '[]'::jsonb
   )
   into v_docs
   from public.study_documents d
   join public.study_campaigns sc on sc.id = d.campaign_id
+  left join auth.users u on u.id = d.user_id
+  left join public.user_state us on us.user_id = d.user_id
   where d.user_id <> uid
     and d.processing_status = 'ready'
     and d.document_type not in ('edital', 'edital_concurso')
-    and (
-      d.share_with_community = true
-      or coalesce(d.metadata->>'share_with_community', '') in ('true', 't', '1')
-    )
-    and public.normalize_exam_slug(sc.name, coalesce(sc.organization, '')) = v_slug;
+    and coalesce(d.share_with_community, true) = true
+    and coalesce(d.metadata->>'private_only', 'false') <> 'true';
 
   select coalesce(
     jsonb_agg(
@@ -204,16 +269,15 @@ begin
     select g.*
     from public.generated_study_content g
     join public.study_campaigns sc on sc.id = g.campaign_id
-    join public.study_documents sd on sd.id = g.source_document_id
+    left join public.study_documents sd on sd.id = g.source_document_id
     where g.user_id <> uid
       and g.content_type = 'summary'
-      and sd.document_type not in ('edital', 'edital_concurso')
-      and (
-        sd.share_with_community = true
-        or coalesce(sd.metadata->>'share_with_community', '') in ('true', 't', '1')
-      )
-      and public.normalize_exam_slug(sc.name, coalesce(sc.organization, '')) = v_slug
-    order by g.created_at desc
+      and (sd.id is null or (
+        sd.document_type not in ('edital', 'edital_concurso')
+        and coalesce(sd.share_with_community, true) = true
+        and coalesce(sd.metadata->>'private_only', 'false') <> 'true'
+      ))
+    order by (public.normalize_exam_slug(sc.name, coalesce(sc.organization, '')) = v_slug) desc, g.created_at desc
     limit 250
   ) g;
 
