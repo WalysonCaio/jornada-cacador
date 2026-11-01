@@ -717,3 +717,130 @@ select,
 .slBossActionRow > button {
   flex: 1 1 220px;
 }
+
+/* ── v106: Correção Definitiva do Banner de Login e Poster das Bancas (Proporção Nativa 559x1001 Sem Cortes e Sem Buraco Vazio) ── */
+@media (min-width: 860px) {
+  .loginGate {
+    padding: 16px !important;
+  }
+  .loginShell {
+    width: min(94vw, 840px) !important;
+    grid-template-columns: 325px minmax(0, 1fr) !important;
+    align-items: stretch !important;
+    border-radius: 24px !important;
+  }
+  .loginHeroArt {
+    position: relative !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-end !important;
+    background: #050b14 !important;
+    border-right: 1px solid rgba(72, 168, 228, 0.32) !important;
+    overflow: hidden !important;
+    width: 325px !important;
+    min-height: 560px !important;
+  }
+  .loginHeroArt .loginBannerFrame {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    aspect-ratio: auto !important;
+    max-height: none !important;
+    border-bottom: 0 !important;
+    background: #050b14 !important;
+  }
+  .loginHeroArt .loginBannerFrame picture {
+    width: 100% !important;
+    height: 100% !important;
+    max-height: none !important;
+    display: block !important;
+  }
+  .loginHeroArt .loginBannerFrame .loginBannerImg {
+    width: 100% !important;
+    height: 100% !important;
+    max-height: none !important;
+    object-fit: cover !important;
+    object-position: center top !important;
+    display: block !important;
+    background: #050b14 !important;
+  }
+  .loginHeroFeatures {
+    position: relative !important;
+    z-index: 2 !important;
+    padding: 28px 10px 10px !important;
+    background: linear-gradient(180deg, rgba(4, 10, 20, 0) 0%, rgba(4, 10, 20, 0.8) 42%, rgba(4, 10, 20, 0.96) 100%) !important;
+  }
+  .loginHeroFeatures .eyebrow,
+  .loginHeroFeatures h2,
+  .loginHeroFeatures p {
+    display: none !important;
+  }
+  .loginHeroFeatures .loginFeaturePills {
+    justify-content: center !important;
+    gap: 4px !important;
+  }
+  .loginHeroFeatures .cmdPill {
+    font-size: 0.64rem !important;
+    padding: 3px 7px !important;
+    background: rgba(7, 19, 34, 0.9) !important;
+    border: 1px solid rgba(89, 230, 255, 0.4) !important;
+    backdrop-filter: blur(6px) !important;
+  }
+  .loginFormPane {
+    padding: 22px 28px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+  }
+}
+
+@media (max-width: 859px) {
+  .loginGate {
+    place-items: start center !important;
+    padding: 12px 10px !important;
+  }
+  .loginShell {
+    margin: auto !important;
+  }
+  .loginBannerFrame {
+    aspect-ratio: 1280 / 714 !important;
+    background: #050b14 !important;
+  }
+  .loginBannerFrame .loginBannerImg {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: center top !important;
+  }
+}
+
+.slBannerCard.slBossesBanner {
+  grid-template-columns: 175px minmax(0, 1fr) !important;
+  align-items: center !important;
+}
+
+.slBossesPosterWrap {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #050b14 !important;
+}
+
+.slBossesPosterImg {
+  width: 100% !important;
+  height: auto !important;
+  max-height: 310px !important;
+  object-fit: contain !important;
+  object-position: center center !important;
+}
+
+@media (max-width: 760px) {
+  .slBannerCard.slBossesBanner {
+    grid-template-columns: 1fr !important;
+  }
+  .slBossesPosterImg {
+    max-height: 260px !important;
+    object-fit: contain !important;
+  }
+}
