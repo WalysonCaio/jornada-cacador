@@ -1,7 +1,10 @@
 (()=>{
   'use strict';
   const q=s=>document.querySelector(s), qa=s=>[...document.querySelectorAll(s)];
-  const escText=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const escText=value=>{
+    const raw=typeof value==='string'&&value.length>1&&typeof window.normalizeLegalText==='function'?window.normalizeLegalText(value):String(value??'');
+    return raw.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  };
   const shortLabel=(text,maxLen=52)=>{
     const clean=String(text||'').replace(/\s+/g,' ').trim();
     return clean.length>maxLen?clean.slice(0,maxLen-1).trim()+'…':clean;
@@ -2996,10 +2999,11 @@
   let communityCache={slug:'',documents:[],summaries:[],editalTopics:[],loadedAt:0};
 
   function sanitizePersonalWatermarks(text=''){
-    return String(text??'')
+    const cleaned=String(text??'')
       .replace(/\b\d{3}\.?\d{3}\.?\d{3}\s*[-/]\s*\d{2}\b/g,'[CPF PROTEGIDO]')
       .replace(/(cpf|inscrito|licenciado para|aluno\(a\)|comprador)\s*[:\-]?\s*[0-9.\-]{8,18}/gi,'$1: [DADO PROTEGIDO]')
       .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,'[EMAIL PROTEGIDO]');
+    return typeof window.normalizeLegalText==='function'?window.normalizeLegalText(cleaned):cleaned;
   }
 
   async function syncCommunityLibraryForActivePortal(force=false){
@@ -3782,10 +3786,137 @@
     return {ranking,dominations,pairHistory};
   }
 
+  const seenDuelInviteIds=new Set((()=>{try{return JSON.parse(sessionStorage.getItem('jornada-seen-duel-invites-v108')||'[]')}catch{return[]}})());
+  const declinedDuelIds=new Set((()=>{try{return JSON.parse(localStorage.getItem('jornada-declined-duels-v108')||'[]')}catch{return[]}})());
+  function persistSeenDuelInvites(){try{sessionStorage.setItem('jornada-seen-duel-invites-v108',JSON.stringify([...seenDuelInviteIds].slice(-80)))}catch{}}
+  function persistDeclinedDuels(){try{localStorage.setItem('jornada-declined-duels-v108',JSON.stringify([...declinedDuelIds].slice(-120)))}catch{}}
+
+  function playDuelChallengeSound(){
+    try{
+      const Ctx=window.AudioContext||window.webkitAudioContext;
+      if(!Ctx)return;
+      const ctx=new Ctx();
+      const notes=[523.25,659.25,783.99,1046.5];
+      notes.forEach((freq,idx)=>{
+        const osc=ctx.createOscillator(),gain=ctx.createGain();
+        osc.type='triangle';
+        osc.frequency.setValueAtTime(freq,ctx.currentTime+idx*0.09);
+        gain.gain.setValueAtTime(0.12,ctx.currentTime+idx*0.09);
+        gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+idx*0.09+0.22);
+        osc.connect(gain);gain.connect(ctx.destination);
+        osc.start(ctx.currentTime+idx*0.09);
+        osc.stop(ctx.currentTime+idx*0.09+0.23);
+      });
+    }catch{}
+  }
+
+  async function declineDuelChallenge(duelId,isCancel=false){
+    if(!duelId)return;
+    declinedDuelIds.add(String(duelId));
+    seenDuelInviteIds.add(String(duelId));
+    persistDeclinedDuels();
+    persistSeenDuelInvites();
+    q('#duelInvitePopupDialog')?.close();
+    if(Array.isArray(duelHubData?.my_duels)){
+      duelHubData.my_duels=duelHubData.my_duels.filter(d=>String(d.id)!==String(duelId));
+    }
+    renderDuelArena();
+    if(typeof renderInteractiveNotifications==='function')renderInteractiveNotifications();
+    try{
+      await cloudFetch('rpc/decline_hunter_duel',{
+        method:'POST',
+        body:JSON.stringify({p_duel_id:duelId})
+      });
+    }catch{}
+    toast(isCancel?'🗑️ Convite de Duelo X1 cancelado.':'❌ Convite de Duelo X1 recusado.');
+    await loadDuelArenaHub(true);
+  }
+
+  function acceptDuelChallengeNow(duelId){
+    const found=(duelHubData?.my_duels||[]).find(d=>String(d.id)===String(duelId));
+    q('#duelInvitePopupDialog')?.close();
+    q('#notificationDialog')?.close();
+    if(!found){
+      openView('duel');
+      loadDuelArenaHub(false);
+      return;
+    }
+    seenDuelInviteIds.add(String(found.id));
+    persistSeenDuelInvites();
+    openView('duel');
+    startPlayingDuel(found);
+  }
+
+  function checkAndShowIncomingDuelInvitePopup(){
+    if(!cloudSession||activeDuelSession)return;
+    const myId=cloudSession?.user?.id;
+    if(!myId)return;
+    const incoming=(duelHubData?.my_duels||[]).filter(d=>
+      d&&d.status==='pending'&&
+      String(d.opponent_id)===String(myId)&&
+      !d.opponent_done&&
+      !declinedDuelIds.has(String(d.id))&&
+      !seenDuelInviteIds.has(String(d.id))
+    );
+    if(!incoming.length)return;
+    const d=incoming[0];
+    const dlg=q('#duelInvitePopupDialog'),body=q('#duelInvitePopupBody');
+    if(!dlg||!body||dlg.open)return;
+    seenDuelInviteIds.add(String(d.id));
+    persistSeenDuelInvites();
+    playDuelChallengeSound();
+    try{
+      if(window.Notification&&Notification.permission==='granted'){
+        new Notification(`⚔️ Desafio X1 de ${d.challenger_name||'Caçador'}!`,{
+          body:`Disciplina: ${d.subject||'Roleta Mista'} (${(d.questions||[]).length} questões). Clique para aceitar ou recusar!`,
+          icon:'icon-192.png'
+        });
+      }
+    }catch{}
+    const qCount=(d.questions||[]).length||5;
+    const modeLabel=d.difficulty_mode==='dificil'?'🔥 Difícil (Pegadinhas)':d.difficulty_mode==='fixacao'?'⚡ Fixação Rápida':'⚖️ Equilibrado';
+    body.innerHTML=`
+      <div class="slInviteAlertCard">
+        <div class="slInviteHeader">
+          <span class="slSystemBadge"><i class="slPulseDot"></i> [SISTEMA] CONVITE DE DUELO X1 EM TEMPO REAL</span>
+          <span class="tag">⏱️ 25s / questão</span>
+        </div>
+        <div class="slInviteHeroRow">
+          <div class="slInviteAvatar">⚔️</div>
+          <div>
+            <h2 style="margin:0;font-size:1.22rem;color:#f8fafc">${escText(d.challenger_name||'Um Caçador')} desafiou você para um X1!</h2>
+            <p class="small muted" style="margin:4px 0 0">
+              ${d.challenger_done
+                ?`⚡ <b>${escText(d.challenger_name)}</b> já concluiu a rodada dele! Jogue agora para revelar o placar e definir o vencedor.`
+                :`🟢 Desafio recém-lançado na Arena! Você pode aceitar para jogar agora ou recusar.`}
+            </p>
+          </div>
+        </div>
+        <div class="slInviteMetaGrid">
+          <div class="slInviteMetaItem"><small>DISCIPLINA</small><b>📚 ${escText(d.subject||'Roleta Mista')}</b></div>
+          <div class="slInviteMetaItem"><small>MODALIDADE</small><b>${escText(modeLabel)}</b></div>
+          <div class="slInviteMetaItem"><small>RODADAS</small><b>🎯 ${qCount} questões</b></div>
+        </div>
+        <div class="slInviteActions">
+          <button type="button" class="action" id="popupAcceptDuelBtn">⚔️ Aceitar e Jogar Agora</button>
+          <button type="button" class="ghost danger" id="popupDeclineDuelBtn">❌ Recusar Convite</button>
+          <button type="button" class="ghost small" id="popupLaterDuelBtn">⏰ Responder Depois (Fica nas Notificações 🔔)</button>
+        </div>
+      </div>
+    `;
+    q('#popupAcceptDuelBtn').onclick=()=>acceptDuelChallengeNow(d.id);
+    q('#popupDeclineDuelBtn').onclick=()=>declineDuelChallenge(d.id,false);
+    q('#popupLaterDuelBtn').onclick=()=>{
+      dlg.close();
+      toast('🔔 O convite de duelo ficou salvo no sino de Notificações e na Arena X1!');
+    };
+    try{dlg.showModal()}catch{}
+  }
+
   async function loadDuelArenaHub(silent=false){
     if(duelHubBusy)return;
     duelHubBusy=true;
-    if(!silent)renderDuelArena();
+    if(!silent&&q('#duel')?.classList.contains('active'))renderDuelArena();
     try{
       if(!cloudSession){
         duelHubData={players:[localHunterRow()],my_duels:[],completed_duels:[]};
@@ -3795,9 +3926,10 @@
       const data=await res.json().catch(()=>null);
       if(res.ok&&data){
         duelSqlMissing=false;
+        const rawMy=Array.isArray(data.my_duels)?data.my_duels:[];
         duelHubData={
           players:Array.isArray(data.players)?data.players:[],
-          my_duels:Array.isArray(data.my_duels)?data.my_duels:[],
+          my_duels:rawMy.filter(d=>d&&d.status!=='declined'&&!declinedDuelIds.has(String(d.id))),
           completed_duels:Array.isArray(data.completed_duels)?data.completed_duels:[]
         };
       }
@@ -3808,7 +3940,9 @@
       }
     }finally{
       duelHubBusy=false;
-      if(!activeDuelSession)renderDuelArena();
+      if(!activeDuelSession&&q('#duel')?.classList.contains('active'))renderDuelArena();
+      if(typeof renderInteractiveNotifications==='function')renderInteractiveNotifications();
+      checkAndShowIncomingDuelInvitePopup();
     }
   }
 
@@ -3876,6 +4010,9 @@
       const created=await res.json().catch(()=>({}));
       if(!res.ok||!created?.duel_id)throw new Error(duelErrorMessage(created?.message,'Não foi possível criar o duelo. Verifique se as migrações v95 e v96 foram executadas no Supabase.'));
       toast(`⚔️ Desafio X1 criado contra ${oppName}! Responda sua rodada agora!`);
+      if(typeof postSystemDuelNoticeToGuild==='function'){
+        postSystemDuelNoticeToGuild(`⚔️ Lancei um Desafio X1 contra ${oppName} em ${subj==='all'?'Roleta Mista':subj} (${count} questões)!`).catch(()=>undefined);
+      }
       await loadDuelArenaHub(true);
       const myDuel=(duelHubData.my_duels||[]).find(d=>d.id===created.duel_id)||{
         id:created.duel_id,
@@ -4146,7 +4283,10 @@
                     <b>⚔️ Contra ${escText(rival)}</b> · <span class="tag">${escText(d.subject||'Roleta Mista')}</span>
                     <div class="small muted">${(d.questions||[]).length} questões · Modo: ${escText(d.difficulty_mode||'misto')} · Desempate por tempo (25s/questão)</div>
                   </div>
-                  <button type="button" class="action small" data-play-duel="${escText(d.id)}" style="width:auto">▶️ Jogar Minha Rodada Agora</button>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                    <button type="button" class="action small" data-play-duel="${escText(d.id)}" style="width:auto">⚔️ Aceitar e Jogar Agora</button>
+                    <button type="button" class="ghost danger small" data-decline-duel="${escText(d.id)}" style="width:auto">❌ Recusar</button>
+                  </div>
                 </div>
               `;
             }).join('')}
@@ -4283,7 +4423,10 @@
                     <b>⏳ Aguardando ${escText(rival)} responder</b> · <span class="tag">${escText(d.subject)}</span>
                     <div class="small muted">Sua rodada: <b>${myScore}/${(d.questions||[]).length} acertos em ${myTime}s</b> · Assim que ${escText(rival)} jogar no celular ou PC, o vencedor será declarado!</div>
                   </div>
-                  <span class="tag">Em aberto</span>
+                  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="tag">Aguardando oponente</span>
+                    <button type="button" class="ghost danger small" data-cancel-duel="${escText(d.id)}" style="width:auto">🗑️ Cancelar convite</button>
+                  </div>
                 </div>
               `;
             }).join('')}
@@ -4313,11 +4456,23 @@
     if(q('#refreshDuelHubBtn'))q('#refreshDuelHubBtn').onclick=()=>loadDuelArenaHub(false);
     if(q('#createDuelBankBtn'))q('#createDuelBankBtn').onclick=()=>launchDuelChallenge(false);
     if(q('#createDuelAiBtn'))q('#createDuelAiBtn').onclick=()=>launchDuelChallenge(true);
+    const lobbyContainer=document.createElement('div');
+    lobbyContainer.id='duelLobbyChatSection';
+    lobbyContainer.style.marginTop='12px';
+    root.appendChild(lobbyContainer);
+    if(typeof renderGuildChatWidget==='function')renderGuildChatWidget('#duelLobbyChatSection','arena');
+
     qa('[data-play-duel]').forEach(btn=>{
       btn.onclick=()=>{
         const found=(duelHubData.my_duels||[]).find(d=>String(d.id)===String(btn.dataset.playDuel));
         if(found)startPlayingDuel(found);
       };
+    });
+    qa('[data-decline-duel]').forEach(btn=>{
+      btn.onclick=()=>declineDuelChallenge(btn.dataset.declineDuel,false);
+    });
+    qa('[data-cancel-duel]').forEach(btn=>{
+      btn.onclick=()=>declineDuelChallenge(btn.dataset.cancelDuel,true);
     });
     qa('[data-quick-duel-opp]').forEach(btn=>{
       btn.onclick=()=>{
@@ -4569,17 +4724,20 @@
     const myId=cloudSession?.user?.id||'local';
 
     // 1. Duelos X1 aguardando sua resposta
-    const pendingDuels=(duelHubData?.my_duels||[]).filter(d=>d.status==='pending'&&((d.challenger_id===myId&&!d.challenger_done)||(d.opponent_id===myId&&!d.opponent_done)));
+    const pendingDuels=(duelHubData?.my_duels||[]).filter(d=>d.status==='pending'&&!declinedDuelIds.has(String(d.id))&&((d.challenger_id===myId&&!d.challenger_done)||(d.opponent_id===myId&&!d.opponent_done)));
     pendingDuels.forEach(d=>{
-      const rival=d.challenger_id===myId?d.opponent_name:d.challenger_name;
+      const isInvite=String(d.opponent_id)===String(myId);
+      const rival=isInvite?d.challenger_name:d.opponent_name;
       items.push({
         id:`duel-${d.id}`,
+        duelId:d.id,
+        isDuelInvite:isInvite,
         kind:'warn',
         icon:'⚔️',
-        title:`Duelo X1 contra ${rival}`,
-        text:`${(d.questions||[]).length} questões (${d.subject||'Roleta Mista'}) aguardando sua rodada.`,
+        title:isInvite?`Convite de Duelo X1: ${rival} desafiou você!`:`Duelo X1 pendente contra ${rival}`,
+        text:`${(d.questions||[]).length} questões (${d.subject||'Roleta Mista'} · 25s/questão) aguardando sua rodada.`,
         view:'duel',
-        actionLabel:'⚔️ Jogar X1'
+        actionLabel:'⚔️ Aceitar e Jogar'
       });
     });
 
@@ -4855,7 +5013,10 @@
               </div>
             </div>
             <div class="notifActionsRow">
-              ${item.retryDocId?`<button type="button" class="action small" style="width:auto" data-notif-retry-doc="${escText(item.retryDocId)}">${escText(item.actionLabel||'Analisar')}</button>`:item.view?`<button type="button" class="action small" style="width:auto" data-notification-view="${escText(item.view)}">${escText(item.actionLabel||'Abrir')}</button>`:''}
+              ${item.duelId?`
+                <button type="button" class="action small" style="width:auto" data-notif-accept-duel="${escText(item.duelId)}">⚔️ Aceitar e Jogar</button>
+                <button type="button" class="ghost danger small" style="width:auto" data-notif-decline-duel="${escText(item.duelId)}">❌ Recusar</button>
+              `:item.retryDocId?`<button type="button" class="action small" style="width:auto" data-notif-retry-doc="${escText(item.retryDocId)}">${escText(item.actionLabel||'Analisar')}</button>`:item.view?`<button type="button" class="action small" style="width:auto" data-notification-view="${escText(item.view)}">${escText(item.actionLabel||'Abrir')}</button>`:''}
               ${activeNotifTab==='active'?`
                 <button type="button" class="ghost small" data-notif-done="${idx}">✓ Feito</button>
                 <button type="button" class="ghost small" data-notif-snooze2h="${idx}">⏰ +2h</button>
@@ -4890,6 +5051,12 @@
 
     qa('[data-notification-view]').forEach(btn=>{
       btn.onclick=()=>openAppView(btn.dataset.notificationView);
+    });
+    qa('[data-notif-accept-duel]').forEach(btn=>{
+      btn.onclick=()=>acceptDuelChallengeNow(btn.dataset.notifAcceptDuel);
+    });
+    qa('[data-notif-decline-duel]').forEach(btn=>{
+      btn.onclick=()=>declineDuelChallenge(btn.dataset.notifDeclineDuel,false);
     });
 
     qa('[data-notif-retry-doc]').forEach(btn=>{
@@ -5296,8 +5463,358 @@
       return res;
     };
   }
-  setTimeout(()=>syncCommunityLibraryForActivePortal(),1200);
-  setInterval(()=>{if(q('#duel')?.classList.contains('active')&&!activeDuelSession&&cloudSession&&navigator.onLine)loadDuelArenaHub(true)},7000);
+
+  // 19. Chat Interno da Guilda de Caçadores & Lobby Interativo (Geral / Duelos X1 / Fórum de Dúvidas)
+  const guildChatState={
+    channel:'all',
+    sendChannel:'geral',
+    messages:[],
+    replyTo:null,
+    loading:false,
+    sqlMissing:false,
+    lastSeenTime:Number(localStorage.getItem('jornada-guild-last-seen-v108')||0)
+  };
+
+  function updateGuildUnreadBadge(){
+    const badge=q('#floatingGuildUnreadBadge');
+    const btn=q('#floatingGuildChatBtn');
+    if(btn){
+      btn.hidden=!cloudSession&&localStorage.getItem('pmpe-guest-mode')!=='1';
+    }
+    if(!badge)return;
+    const myId=cloudSession?.user?.id||'';
+    const dlgOpen=Boolean(q('#guildChatDialog')?.open);
+    if(dlgOpen&&guildChatState.messages.length){
+      const latest=Math.max(...guildChatState.messages.map(m=>Date.parse(m.created_at||'')||0));
+      if(latest>guildChatState.lastSeenTime){
+        guildChatState.lastSeenTime=latest;
+        try{localStorage.setItem('jornada-guild-last-seen-v108',String(latest))}catch{}
+      }
+      badge.hidden=true;
+      badge.textContent='0';
+      return;
+    }
+    const unread=(guildChatState.messages||[]).filter(m=>{
+      const ts=Date.parse(m.created_at||'')||0;
+      return String(m.user_id)!==String(myId)&&ts>guildChatState.lastSeenTime;
+    }).length;
+    badge.hidden=unread<=0;
+    badge.textContent=unread>9?'9+':String(unread);
+  }
+
+  async function loadGuildChatMessages(silent=false){
+    if(guildChatState.loading||!cloudSession||!navigator.onLine)return;
+    guildChatState.loading=true;
+    try{
+      const res=await cloudFetch('rpc/get_guild_chat_messages',{
+        method:'POST',
+        body:JSON.stringify({p_channel:'all',p_limit:90})
+      });
+      const data=await res.json().catch(()=>null);
+      if(res.ok&&data&&Array.isArray(data.messages)){
+        guildChatState.sqlMissing=false;
+        const prevCount=guildChatState.messages.length;
+        const prevLastId=prevCount?guildChatState.messages[prevCount-1]?.id:'';
+        guildChatState.messages=data.messages;
+        const newLastId=data.messages.length?data.messages[data.messages.length-1]?.id:'';
+        if(!guildChatState.lastSeenTime&&data.messages.length){
+          const latest=Math.max(...data.messages.map(m=>Date.parse(m.created_at||'')||0));
+          guildChatState.lastSeenTime=latest;
+          try{localStorage.setItem('jornada-guild-last-seen-v108',String(latest))}catch{}
+        }
+        updateGuildUnreadBadge();
+        if(!silent||prevLastId!==newLastId||prevCount!==data.messages.length){
+          if(q('#guildChatDialog')?.open)renderGuildChatWidget('#guildChatDialogRoot','modal',true);
+          if(q('#duel')?.classList.contains('active')&&q('#duelLobbyChatSection'))renderGuildChatWidget('#duelLobbyChatSection','arena',true);
+        }
+      }
+    }catch(err){
+      const msg=String(err?.message||err||'');
+      if(/get_guild_chat_messages|Could not find the function|PGRST202/i.test(msg)){
+        guildChatState.sqlMissing=true;
+      }
+    }finally{
+      guildChatState.loading=false;
+    }
+  }
+
+  async function sendGuildChatMessageFromUI(prefix='modal'){
+    const input=q(`#guildChatInput_${prefix}`);
+    const chanSel=q(`#guildChatSendChannel_${prefix}`);
+    const btn=q(`#guildChatSendBtn_${prefix}`);
+    const text=(input?.value||'').trim();
+    if(!text)return toast('Digite sua mensagem para enviar ao Lobby da Guilda.');
+    if(!cloudSession)return toast('Entre na sua conta para conversar no Chat da Guilda.');
+    const channel=chanSel?.value||guildChatState.sendChannel||(guildChatState.channel==='all'?'geral':guildChatState.channel);
+    guildChatState.sendChannel=channel;
+    if(btn){btn.disabled=true;btn.textContent='⏳...'}
+    try{
+      const res=await cloudFetch('rpc/send_guild_chat_message',{
+        method:'POST',
+        body:JSON.stringify({
+          p_message:text,
+          p_channel:channel,
+          p_reply_to_id:guildChatState.replyTo?.id||null
+        })
+      });
+      const created=await res.json().catch(()=>null);
+      if(!res.ok)throw new Error(created?.message||'Não foi possível enviar a mensagem. Execute o SQL v97 atualizado no Supabase.');
+      if(input)input.value='';
+      guildChatState.replyTo=null;
+      await loadGuildChatMessages(false);
+    }catch(err){
+      toast(err.message||'Erro ao enviar mensagem.');
+    }finally{
+      if(btn){btn.disabled=false;btn.textContent='Enviar ➤'}
+    }
+  }
+
+  async function postSystemDuelNoticeToGuild(messageText){
+    if(!cloudSession||!messageText)return;
+    try{
+      await cloudFetch('rpc/send_guild_chat_message',{
+        method:'POST',
+        body:JSON.stringify({p_message:messageText,p_channel:'duelos',p_reply_to_id:null})
+      });
+      await loadGuildChatMessages(true);
+    }catch{}
+  }
+
+  async function deleteGuildChatMessageById(msgId){
+    if(!msgId||!cloudSession)return;
+    guildChatState.messages=(guildChatState.messages||[]).filter(m=>String(m.id)!==String(msgId));
+    if(q('#guildChatDialog')?.open)renderGuildChatWidget('#guildChatDialogRoot','modal',true);
+    if(q('#duelLobbyChatSection'))renderGuildChatWidget('#duelLobbyChatSection','arena',true);
+    try{
+      await cloudFetch('rpc/delete_guild_chat_message',{
+        method:'POST',
+        body:JSON.stringify({p_message_id:msgId})
+      });
+      toast('Mensagem removida do Lobby.');
+    }catch{}
+  }
+
+  function formatGuildTime(iso){
+    if(!iso)return'agora';
+    const d=new Date(iso);
+    if(isNaN(d.getTime()))return'';
+    const now=new Date();
+    const sameDay=d.toDateString()===now.toDateString();
+    return sameDay
+      ?d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+      :`${d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;
+  }
+
+  function renderGuildChatWidget(selector,prefix='modal',preserveInput=false){
+    const root=typeof selector==='string'?q(selector):selector;
+    if(!root)return;
+    const prevInputVal=preserveInput?(q(`#guildChatInput_${prefix}`)?.value||''):'';
+    const myId=cloudSession?.user?.id||'local';
+    const players=(duelHubData?.players||[]).filter(Boolean);
+    const onlineCount=players.filter(p=>p.is_online).length;
+    const filteredMsgs=(guildChatState.messages||[]).filter(m=>guildChatState.channel==='all'||m.channel===guildChatState.channel);
+    const chanBadges={
+      geral:{label:'🌐 Geral',cls:'geral'},
+      duelos:{label:'⚔️ Duelos X1',cls:'duelos'},
+      duvidas:{label:'📚 Dúvidas & Bizus',cls:'duvidas'}
+    };
+
+    root.innerHTML=`
+      <div class="card slGuildLobbyCard">
+        <div class="sectionHead" style="margin-bottom:8px">
+          <div>
+            <div class="eyebrow">💬 INTERAÇÃO ENTRE CAÇADORES · FÓRUM &amp; LOBBY X1</div>
+            <h3 style="margin:2px 0 0">Lobby da Guilda de Caçadores</h3>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <span class="tag">🟢 ${onlineCount} online · ${players.length||1} na guilda</span>
+            <button type="button" class="ghost small" data-guild-refresh="${prefix}">↻ Atualizar</button>
+          </div>
+        </div>
+
+        ${guildChatState.sqlMissing?`
+          <div class="lessonBox trap" style="margin-bottom:10px">
+            <b>Ative o Chat da Guilda no Supabase:</b>
+            <p class="small" style="margin:4px 0 0">Execute o arquivo SQL atualizado (<code>20261101120000_v97_complete_security_duels_optin_and_base.sql</code>) no SQL Editor do Supabase para liberar o bate-papo em tempo real entre todos os usuários.</p>
+          </div>
+        `:""}
+
+        ${players.length>1?`
+          <div class="slGuildOnlineStrip">
+            <span class="small muted" style="font-weight:700;white-space:nowrap">Caçadores no Lobby:</span>
+            <div class="slGuildPlayersRow">
+              ${players.map(p=>`
+                <div class="slGuildPlayerChip ${p.is_online?'online':''}">
+                  <span class="onlineDot ${p.is_online?'on':''}"></span>
+                  <b>${escText(p.name)}</b>
+                  ${!p.is_me?`<button type="button" class="slMiniDuelBtn" data-guild-challenge-opp="${escText(p.user_id)}|${escText(p.name)}" title="Desafiar ${escText(p.name)} para Duelo X1">⚔️ X1</button>`:`<span class="small muted">(você)</span>`}
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `:""}
+
+        <div class="notifTabsBar" style="margin-bottom:10px">
+          <button type="button" class="notifTabBtn ${guildChatState.channel==='all'?'active':''}" data-guild-chan="all" data-guild-prefix="${prefix}">🔥 Todos (${(guildChatState.messages||[]).length})</button>
+          <button type="button" class="notifTabBtn ${guildChatState.channel==='geral'?'active':''}" data-guild-chan="geral" data-guild-prefix="${prefix}">🌐 Lobby Geral</button>
+          <button type="button" class="notifTabBtn ${guildChatState.channel==='duelos'?'active':''}" data-guild-chan="duelos" data-guild-prefix="${prefix}">⚔️ Arena &amp; Duelos</button>
+          <button type="button" class="notifTabBtn ${guildChatState.channel==='duvidas'?'active':''}" data-guild-chan="duvidas" data-guild-prefix="${prefix}">📚 Dúvidas &amp; Bizus</button>
+        </div>
+
+        <div class="slGuildFeed" id="guildChatFeed_${prefix}">
+          ${filteredMsgs.length?filteredMsgs.map(m=>{
+            const isMe=Boolean(m.is_me||String(m.user_id)===String(myId));
+            const cb=chanBadges[m.channel]||chanBadges.geral;
+            const rankName=typeof rankLabelForXp==='function'?rankLabelForXp(Number(m.author_xp||0)):'Caçador';
+            return `
+              <div class="slGuildMsg ${isMe?'isMe':''}">
+                <div class="slGuildMsgAvatar">${escText((m.author_name||'C').trim().slice(0,1).toUpperCase())}</div>
+                <div class="slGuildMsgBody">
+                  <div class="slGuildMsgHead">
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                      <strong class="slGuildAuthor">${escText(m.author_name||'Caçador')}</strong>
+                      <span class="slGuildRankPill">${escText(rankName)}</span>
+                      <span class="slGuildChanTag ${cb.cls}">${cb.label}</span>
+                    </div>
+                    <span class="small muted">${escText(formatGuildTime(m.created_at))}</span>
+                  </div>
+                  ${m.reply_excerpt?`
+                    <div class="slGuildReplyQuote">
+                      <b>↩ ${escText(m.reply_author||'Colega')}:</b> ${escText(m.reply_excerpt)}
+                    </div>
+                  `:""}
+                  <div class="slGuildMsgText">${escText(m.message)}</div>
+                  <div class="slGuildMsgActions">
+                    <button type="button" class="slGuildActLink" data-guild-reply="${escText(m.id)}" data-guild-prefix="${prefix}">↩ Responder</button>
+                    ${!isMe?`<button type="button" class="slGuildActLink duel" data-guild-challenge-opp="${escText(m.user_id)}|${escText(m.author_name)}">⚔️ Chamar para X1</button>`:""}
+                    ${isMe?`<button type="button" class="slGuildActLink danger" data-guild-del="${escText(m.id)}">🗑️ Excluir</button>`:""}
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join(''):`
+            <div class="empty" style="padding:22px 12px">
+              💬 Nenhuma mensagem neste canal ainda. Mande um "Salve!", tire uma dúvida ou chame alguém para um Duelo X1!
+            </div>
+          `}
+        </div>
+
+        ${guildChatState.replyTo?`
+          <div class="slGuildReplyBanner">
+            <span>Respondendo a <b>${escText(guildChatState.replyTo.author_name)}</b>: “${escText((guildChatState.replyTo.message||'').slice(0,80))}”</span>
+            <button type="button" class="ghost small" data-guild-cancel-reply="${prefix}" style="width:auto;padding:2px 8px;min-height:24px">× Cancelar</button>
+          </div>
+        `:""}
+
+        <div class="slGuildComposeRow">
+          <select id="guildChatSendChannel_${prefix}" class="slGuildChannelSelect" aria-label="Canal da mensagem">
+            <option value="geral" ${(guildChatState.sendChannel==='geral'||guildChatState.channel==='geral')?'selected':''}>🌐 Geral</option>
+            <option value="duelos" ${(guildChatState.sendChannel==='duelos'||guildChatState.channel==='duelos')?'selected':''}>⚔️ Duelos X1</option>
+            <option value="duvidas" ${(guildChatState.sendChannel==='duvidas'||guildChatState.channel==='duvidas')?'selected':''}>📚 Dúvidas/Bizus</option>
+          </select>
+          <input type="text" id="guildChatInput_${prefix}" maxlength="600" placeholder="Escreva para a Guilda (dúvida, bizu ou chamar para X1)..." value="${escText(prevInputVal)}">
+          <button type="button" class="action small" id="guildChatSendBtn_${prefix}" style="width:auto;white-space:nowrap">Enviar ➤</button>
+        </div>
+      </div>
+    `;
+
+    const feedEl=q(`#guildChatFeed_${prefix}`);
+    if(feedEl)feedEl.scrollTop=feedEl.scrollHeight;
+
+    root.querySelectorAll(`[data-guild-refresh="${prefix}"]`).forEach(btn=>{
+      btn.onclick=async()=>{
+        await Promise.all([loadGuildChatMessages(false),loadDuelArenaHub(true)]);
+        renderGuildChatWidget(selector,prefix,true);
+      };
+    });
+
+    root.querySelectorAll('[data-guild-chan]').forEach(btn=>{
+      btn.onclick=()=>{
+        guildChatState.channel=btn.dataset.guildChan;
+        if(btn.dataset.guildChan!=='all')guildChatState.sendChannel=btn.dataset.guildChan;
+        if(q('#guildChatDialog')?.open)renderGuildChatWidget('#guildChatDialogRoot','modal',true);
+        if(q('#duelLobbyChatSection'))renderGuildChatWidget('#duelLobbyChatSection','arena',true);
+      };
+    });
+
+    root.querySelectorAll('[data-guild-reply]').forEach(btn=>{
+      btn.onclick=()=>{
+        const found=(guildChatState.messages||[]).find(m=>String(m.id)===String(btn.dataset.guildReply));
+        if(found){
+          guildChatState.replyTo=found;
+          guildChatState.sendChannel=found.channel||'geral';
+          renderGuildChatWidget(selector,prefix,true);
+          q(`#guildChatInput_${prefix}`)?.focus();
+        }
+      };
+    });
+
+    root.querySelectorAll('[data-guild-cancel-reply]').forEach(btn=>{
+      btn.onclick=()=>{
+        guildChatState.replyTo=null;
+        renderGuildChatWidget(selector,prefix,true);
+      };
+    });
+
+    root.querySelectorAll('[data-guild-del]').forEach(btn=>{
+      btn.onclick=()=>deleteGuildChatMessageById(btn.dataset.guildDel);
+    });
+
+    root.querySelectorAll('[data-guild-challenge-opp]').forEach(btn=>{
+      btn.onclick=()=>{
+        const [uid,uname]=(btn.dataset.guildChallengeOpp||'').split('|');
+        if(!uid)return;
+        selectedDuelOpponentId=uid;
+        selectedDuelOpponentName=uname;
+        q('#guildChatDialog')?.close();
+        openView('duel');
+        setTimeout(()=>{
+          const sel=q('#duelOpponentSelect');
+          if(sel){sel.value=uid;sel.scrollIntoView({behavior:'smooth',block:'center'})}
+          toast(`⚔️ ${uname} selecionado na Arena X1! Escolha a disciplina e lance o desafio!`);
+        },120);
+      };
+    });
+
+    const sendBtn=q(`#guildChatSendBtn_${prefix}`);
+    const inputEl=q(`#guildChatInput_${prefix}`);
+    if(sendBtn)sendBtn.onclick=()=>sendGuildChatMessageFromUI(prefix);
+    if(inputEl){
+      inputEl.onkeydown=e=>{
+        if(e.key==='Enter'&&!e.shiftKey){
+          e.preventDefault();
+          sendGuildChatMessageFromUI(prefix);
+        }
+      };
+    }
+  }
+
+  function openGuildChatDialog(){
+    const dlg=q('#guildChatDialog');
+    if(!dlg)return;
+    renderGuildChatWidget('#guildChatDialogRoot','modal',false);
+    try{dlg.showModal()}catch{}
+    updateGuildUnreadBadge();
+    loadGuildChatMessages(false);
+    loadDuelArenaHub(true);
+  }
+
+  if(q('#floatingGuildChatBtn'))q('#floatingGuildChatBtn').onclick=openGuildChatDialog;
+  if(q('#menuGuildChat'))q('#menuGuildChat').onclick=()=>{q('#moreDialog')?.close();openGuildChatDialog()};
+  if(q('#closeGuildChatDialogBtn'))q('#closeGuildChatDialogBtn').onclick=()=>q('#guildChatDialog')?.close();
+  setTimeout(()=>{
+    syncCommunityLibraryForActivePortal();
+    if(cloudSession&&navigator.onLine){
+      loadDuelArenaHub(true);
+      loadGuildChatMessages(true);
+    }
+  },1400);
+  setInterval(()=>{
+    if(cloudSession&&navigator.onLine){
+      if(!activeDuelSession)loadDuelArenaHub(true);
+      loadGuildChatMessages(true);
+    }
+  },8000);
   const remembered=(()=>{try{return sessionStorage.getItem(viewKey)}catch{return null}})();
   if(remembered&&q(`#${CSS.escape(remembered)}`)?.classList.contains('view'))openView(remembered);
   q('#aboutDialog .tag')&&(q('#aboutDialog .tag').textContent='Versão 78 · experiência orientada ao estudo');

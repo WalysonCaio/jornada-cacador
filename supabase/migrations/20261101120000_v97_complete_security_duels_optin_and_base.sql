@@ -817,14 +817,14 @@ begin
   -- Mantém só os campos conhecidos, com tamanho limitado e índice de resposta válido.
   select jsonb_agg(jsonb_build_object(
            'subject', left(coalesce(q->>'subject', ''), 120),
-           'topic', left(coalesce(q->>'topic', ''), 200),
-           'statement', left(coalesce(q->>'statement', ''), 1500),
+           'topic', public.normalize_legal_orthography(left(coalesce(q->>'topic', ''), 200)),
+           'statement', public.normalize_legal_orthography(left(coalesce(q->>'statement', ''), 1500)),
            'options', (
-             select coalesce(jsonb_agg(left(o #>> '{}', 500)), '[]'::jsonb)
+             select coalesce(jsonb_agg(public.normalize_legal_orthography(left(o #>> '{}', 500))), '[]'::jsonb)
                from jsonb_array_elements(q->'options') o
            ),
            'correct_index', public.safe_int(q->>'correct_index', 0, 9),
-           'explanation', left(coalesce(q->>'explanation', ''), 1500),
+           'explanation', public.normalize_legal_orthography(left(coalesce(q->>'explanation', ''), 1500)),
            'difficulty', left(coalesce(q->>'difficulty', ''), 20)
          ))
     into v_clean
@@ -995,3 +995,345 @@ $$;
 
 revoke all on function public.submit_hunter_duel_round(uuid, integer, integer, jsonb) from public, anon;
 grant execute on function public.submit_hunter_duel_round(uuid, integer, integer, jsonb) to authenticated, service_role;
+
+
+-- ============================================================================
+-- 7) NORMALIZAÇÃO ORTOGRÁFICA JURÍDICA (art. 5º, § 1º, 1ª, 5ª, Lei nº)
+--    Corrige automaticamente "art. 5o", "5a", "§ 1o" em todo o banco e em novos duelos/conteúdos
+-- ============================================================================
+
+create or replace function public.normalize_legal_orthography(p_text text)
+returns text
+language plpgsql
+immutable
+set search_path = public
+as $$
+declare
+  s text := coalesce(p_text, '');
+begin
+  if s = '' then
+    return s;
+  end if;
+  -- 1. Artigos 1º a 9º (ex.: "art. 5o", "art. 5a", "Art. 5°", "artigo 1o" -> "art. 5º" / "Art. 5º")
+  s := regexp_replace(s, '\m([Aa]rt(?:igos?)?\.?\s*)([1-9])\s*(?:[oOaA]|º|°|ª)\M', '\1\2º', 'g');
+  s := regexp_replace(s, '\m([Aa]rt(?:igos?)?\.?\s*)([1-9])(?=\s+(?:da|do|dos|das|de|e|ou|a|ao|c/c|caput|par[aá]grafo|inciso)|[,.;:()\-–—]|$)', '\1\2º', 'g');
+  -- Artigos >= 10 sem sufixo "o/a" indevido (ex.: "art. 10o", "art. 144o" -> "art. 10", "art. 144")
+  s := regexp_replace(s, '\m([Aa]rt(?:igos?)?\.?\s*)(\d{2,3})\s*(?:[oOaA]|º|°|ª)\M', '\1\2', 'g');
+  -- 2. Parágrafos 1º a 9º (ex.: "§ 1o", "§ 2a", "§ 1°", "parágrafo 1o" -> "§ 1º")
+  s := regexp_replace(s, '(§+\s*)([1-9])\s*(?:[oOaA]|º|°|ª)?(?=\M|\s|[,.;:()\-–—]|$)', '\1\2º', 'g');
+  s := regexp_replace(s, '\m([Pp]ar[aá]grafos?\s+)([1-9])\s*(?:[oOaA]|º|°|ª)\M', '\1\2º', 'g');
+  -- 3. Ordinais femininos e masculinos corrompidos (ex.: "1a", "2a", "5a" -> "1ª", "2ª", "5ª" e "1o", "5o" -> "1º", "5º")
+  s := regexp_replace(s, '\m([1-9]\d?)[aA]\M(?!\s*\))', '\1ª', 'g');
+  s := regexp_replace(s, '\m([1-9]\d?)[oO]\M', '\1º', 'g');
+  s := regexp_replace(s, '\m([1-9])\s*°(?!\s*[CFK]\M)', '\1º', 'g');
+  -- 4. Abreviatura de número de lei/decreto (ex.: "Lei no 8.112", "Lei n° 8.112" -> "Lei nº 8.112")
+  s := regexp_replace(s, '\m([Ll]ei|[Dd]ecreto|[Pp]ortaria|[Rr]esolu[cç][aã]o|[Ee]menda|[Ss][uú]mula)\s+n\.?\s*(?:[oO]|°)(?=\s*\d)', '\1 nº', 'g');
+  return s;
+end;
+$$;
+
+-- Atualiza os conteúdos, questões, duelos e tópicos já existentes no banco para corrigir "art. 5o" / "5a" -> "art. 5º" / "5ª"
+update public.generated_study_content
+   set title = public.normalize_legal_orthography(title),
+       content = (public.normalize_legal_orthography(content::text))::jsonb
+ where content is not null
+   and (content::text ~ '\m([Aa]rt\.?\s*\d+\s*[oOaA°]|[1-9][oOaA])\M' or title ~ '\m([Aa]rt\.?\s*\d+\s*[oOaA°]|[1-9][oOaA])\M');
+
+update public.hunter_duels
+   set questions = (public.normalize_legal_orthography(questions::text))::jsonb
+ where questions is not null
+   and questions::text ~ '\m([Aa]rt\.?\s*\d+\s*[oOaA°]|[1-9][oOaA])\M';
+
+update public.campaign_topics
+   set topic = public.normalize_legal_orthography(topic),
+       unit_name = public.normalize_legal_orthography(coalesce(unit_name, ''))
+ where topic ~ '\m([Aa]rt\.?\s*\d+\s*[oOaA°]|[1-9][oOaA])\M';
+
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'shared_question_bank') then
+    execute $q$
+      update public.shared_question_bank
+         set statement = public.normalize_legal_orthography(statement),
+             options = (public.normalize_legal_orthography(options::text))::jsonb,
+             explanation = public.normalize_legal_orthography(coalesce(explanation, '')),
+             topic = public.normalize_legal_orthography(coalesce(topic, ''))
+       where statement ~ '\m([Aa]rt\.?\s*\d+\s*[oOaA°]|[1-9][oOaA])\M'
+          or options::text ~ '\m([Aa]rt\.?\s*\d+\s*[oOaA°]|[1-9][oOaA])\M'
+    $q$;
+  end if;
+end;
+$$;
+
+
+-- ============================================================================
+-- 8) RECUSAR / CANCELAR CONVITE DE DUELO X1 (decline_hunter_duel)
+-- ============================================================================
+
+create or replace function public.decline_hunter_duel(
+  p_duel_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  d public.hunter_duels%rowtype;
+begin
+  if uid is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  select * into d
+    from public.hunter_duels
+   where id = p_duel_id
+   for update;
+
+  if not found then
+    raise exception 'duel_not_found';
+  end if;
+
+  if d.challenger_id <> uid and d.opponent_id <> uid then
+    raise exception 'not_participant';
+  end if;
+
+  if d.status <> 'pending' then
+    raise exception 'duel_closed';
+  end if;
+
+  update public.hunter_duels
+     set status = 'declined',
+         completed_at = now()
+   where id = p_duel_id
+   returning * into d;
+
+  return jsonb_build_object(
+    'id', d.id,
+    'status', d.status,
+    'declined_by', uid
+  );
+end;
+$$;
+
+revoke all on function public.decline_hunter_duel(uuid) from public, anon;
+grant execute on function public.decline_hunter_duel(uuid) to authenticated, service_role;
+
+
+-- ============================================================================
+-- 9) CHAT INTERNO DA GUILDA DE CAÇADORES & LOBBY INTERATIVO (hunter_guild_messages)
+-- ============================================================================
+
+create table if not exists public.hunter_guild_messages (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  author_name text not null default 'Caçador',
+  author_role text not null default 'PMPE — Soldado',
+  author_xp integer not null default 0,
+  channel text not null default 'geral' check (channel in ('geral', 'duelos', 'duvidas')),
+  message text not null check (char_length(trim(message)) between 1 and 800),
+  reply_to_id uuid references public.hunter_guild_messages(id) on delete set null,
+  reply_author text,
+  reply_excerpt text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_hunter_guild_messages_channel_created
+  on public.hunter_guild_messages(channel, created_at desc);
+
+create index if not exists idx_hunter_guild_messages_created
+  on public.hunter_guild_messages(created_at desc);
+
+alter table public.hunter_guild_messages enable row level security;
+
+drop policy if exists "Autenticados leem chat da guilda" on public.hunter_guild_messages;
+create policy "Autenticados leem chat da guilda"
+  on public.hunter_guild_messages
+  for select
+  to authenticated
+  using (true);
+
+drop policy if exists "Autenticados enviam mensagem propria na guilda" on public.hunter_guild_messages;
+create policy "Autenticados enviam mensagem propria na guilda"
+  on public.hunter_guild_messages
+  for insert
+  to authenticated
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Autenticados apagam propria mensagem na guilda" on public.hunter_guild_messages;
+create policy "Autenticados apagam propria mensagem na guilda"
+  on public.hunter_guild_messages
+  for delete
+  to authenticated
+  using (auth.uid() = user_id);
+
+create or replace function public.send_guild_chat_message(
+  p_message text,
+  p_channel text default 'geral',
+  p_reply_to_id uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  v_clean_msg text;
+  v_channel text := lower(trim(coalesce(p_channel, 'geral')));
+  v_author_name text := 'Caçador';
+  v_author_role text := 'PMPE — Soldado';
+  v_author_xp int := 0;
+  v_reply_author text := null;
+  v_reply_excerpt text := null;
+  v_row public.hunter_guild_messages%rowtype;
+begin
+  if uid is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  if v_channel not in ('geral', 'duelos', 'duvidas') then
+    v_channel := 'geral';
+  end if;
+
+  v_clean_msg := public.normalize_legal_orthography(
+    public.sanitize_personal_watermarks(left(trim(coalesce(p_message, '')), 800))
+  );
+
+  if length(v_clean_msg) < 1 then
+    raise exception 'empty_message';
+  end if;
+
+  select
+    left(coalesce(
+      nullif(trim(us.state->'publicProfile'->>'name'), ''),
+      nullif(trim(us.state->'hunterStats'->>'name'), ''),
+      nullif(trim(u.raw_user_meta_data->>'full_name'), ''),
+      nullif(trim(u.raw_user_meta_data->>'name'), ''),
+      'Caçador'
+    ), 60),
+    left(coalesce(
+      nullif(trim(us.state->'publicProfile'->>'role'), ''),
+      nullif(trim(us.state->'hunterStats'->>'role'), ''),
+      'PMPE — Soldado'
+    ), 80),
+    greatest(0, coalesce(public.safe_int(us.state->'hunterStats'->>'xp', 0, 1000000), 0))
+  into v_author_name, v_author_role, v_author_xp
+  from auth.users u
+  left join public.user_state us on us.user_id = u.id
+  where u.id = uid;
+
+  if p_reply_to_id is not null then
+    select author_name, left(message, 120)
+      into v_reply_author, v_reply_excerpt
+      from public.hunter_guild_messages
+     where id = p_reply_to_id;
+  end if;
+
+  insert into public.hunter_guild_messages (
+    user_id, author_name, author_role, author_xp,
+    channel, message, reply_to_id, reply_author, reply_excerpt
+  )
+  values (
+    uid, coalesce(v_author_name, 'Caçador'), coalesce(v_author_role, 'PMPE — Soldado'), coalesce(v_author_xp, 0),
+    v_channel, v_clean_msg, p_reply_to_id, v_reply_author, v_reply_excerpt
+  )
+  returning * into v_row;
+
+  update public.user_state
+     set server_updated_at = now()
+   where user_id = uid;
+
+  return to_jsonb(v_row) || jsonb_build_object('is_me', true);
+end;
+$$;
+
+revoke all on function public.send_guild_chat_message(text, text, uuid) from public, anon;
+grant execute on function public.send_guild_chat_message(text, text, uuid) to authenticated, service_role;
+
+create or replace function public.get_guild_chat_messages(
+  p_channel text default 'all',
+  p_limit integer default 80
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  v_chan text := lower(trim(coalesce(p_channel, 'all')));
+  v_lim int := greatest(10, least(150, coalesce(p_limit, 80)));
+  v_messages jsonb;
+begin
+  if uid is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  update public.user_state
+     set server_updated_at = now()
+   where user_id = uid;
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', m.id,
+        'user_id', m.user_id,
+        'is_me', (m.user_id = uid),
+        'author_name', m.author_name,
+        'author_role', m.author_role,
+        'author_xp', m.author_xp,
+        'channel', m.channel,
+        'message', m.message,
+        'reply_to_id', m.reply_to_id,
+        'reply_author', m.reply_author,
+        'reply_excerpt', m.reply_excerpt,
+        'created_at', m.created_at
+      )
+      order by m.created_at asc
+    ),
+    '[]'::jsonb
+  )
+  into v_messages
+  from (
+    select *
+      from public.hunter_guild_messages gm
+     where (v_chan = 'all' or gm.channel = v_chan)
+     order by gm.created_at desc
+     limit v_lim
+  ) m;
+
+  return jsonb_build_object(
+    'messages', v_messages
+  );
+end;
+$$;
+
+revoke all on function public.get_guild_chat_messages(text, integer) from public, anon;
+grant execute on function public.get_guild_chat_messages(text, integer) to authenticated, service_role;
+
+create or replace function public.delete_guild_chat_message(
+  p_message_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+begin
+  if uid is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  delete from public.hunter_guild_messages
+   where id = p_message_id and user_id = uid;
+
+  return jsonb_build_object('deleted', true, 'id', p_message_id);
+end;
+$$;
+
+revoke all on function public.delete_guild_chat_message(uuid) from public, anon;
+grant execute on function public.delete_guild_chat_message(uuid) to authenticated, service_role;

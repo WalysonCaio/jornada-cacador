@@ -556,3 +556,34 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   assert.ok(v97Sql.includes("share_with_community boolean not null default true") && v97Sql.includes("coalesce(d.share_with_community, true) = true"), "Biblioteca da Comunidade deve manter compartilhamento ativo por padrão");
   console.log("OK: filtro anti-ALTA/MÉDIA, hierarquia Conteúdo — Assunto e Biblioteca da Comunidade ativa por padrão (v107) validados.");
 }
+
+
+// ── Validação v108: Escrita Jurídica (art. 5º, 5ª, § 1º), Popup Global de Convite X1 (Aceitar/Recusar) e Chat Interno da Guilda ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const v97Sql = readFileSync(new URL("../supabase/migrations/20261101120000_v97_complete_security_duels_optin_and_base.sql", import.meta.url), "utf8");
+  const scriptSrc = htmlSrc.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const fnSlice = scriptSrc.slice(scriptSrc.indexOf("function normalizeText("), scriptSrc.indexOf("function missionForQuestion("));
+
+  const ctx = { window: {} };
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(fnSlice, ctx);
+
+  assert.equal(
+    ctx.normalizeLegalText("Assinale a alternativa correta acerca do direito de reunião e das liberdades previstas no art. 5o da Constituição Federal."),
+    "Assinale a alternativa correta acerca do direito de reunião e das liberdades previstas no art. 5º da Constituição Federal.",
+    "Deve corrigir art. 5o para art. 5º"
+  );
+  assert.equal(
+    ctx.normalizeLegalText("Nos termos do art. 5a, § 1o, e na 5a edição da Lei no 8.112/1990."),
+    "Nos termos do art. 5º, § 1º, e na 5ª edição da Lei nº 8.112/1990.",
+    "Deve corrigir art. 5a -> art. 5º, § 1o -> § 1º, 5a -> 5ª e Lei no -> Lei nº"
+  );
+
+  assert.ok(htmlSrc.includes('id="duelInvitePopupDialog"') && v77Src.includes("checkAndShowIncomingDuelInvitePopup") && v77Src.includes("declineDuelChallenge"), "Deve conter o Popup Global de Convite de Duelo X1 com botões Aceitar e Recusar");
+  assert.ok(htmlSrc.includes('id="guildChatDialog"') && htmlSrc.includes('id="floatingGuildChatBtn"') && v77Src.includes("renderGuildChatWidget") && v77Src.includes("sendGuildChatMessageFromUI"), "Deve conter o Chat Interno da Guilda e Lobby Interativo");
+  assert.ok(v97Sql.includes("decline_hunter_duel") && v97Sql.includes("hunter_guild_messages") && v97Sql.includes("send_guild_chat_message") && v97Sql.includes("normalize_legal_orthography"), "SQL v97 deve conter decline_hunter_duel, hunter_guild_messages e normalize_legal_orthography");
+  console.log("OK: escrita jurídica (art. 5º / 5ª), Popup Global de Convite X1 (Aceitar/Recusar) e Chat Interno da Guilda (v108) validados.");
+}
