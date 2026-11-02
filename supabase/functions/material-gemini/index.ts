@@ -17,7 +17,8 @@ const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const FALLBACK_STATUS = new Set([400, 404]);
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const TEXT_CHUNK_TARGET = 28000;
-const MAX_TEXT_CHUNKS = 8;
+const MAX_TEXT_CHUNKS = 14;
+const TEXT_CHUNK_MAX = 44000;
 
 const GEMINI_TEXT_FALLBACKS = [...GEMINI_MODEL_FALLBACKS];
 
@@ -506,12 +507,53 @@ function jsonFromModelText(value: unknown) {
   throw new Error("INVALID_PROVIDER_JSON");
 }
 
+function stripWatermarksAndMeta(text: string): string {
+  // Remove CPFs
+  let t = text.replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, "");
+  // Remove emails
+  t = t.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "");
+  // Remove license / buyer watermarks
+  t = t.replace(/(?:licenciado\s+para|c[oó]pia\s+exclusiva|material\s+adquirido\s+por|adquirido\s+por)[^\n]*/gi, "");
+  const lines = t.split("\n");
+  const filtered: string[] = [];
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    // Standalone teacher handle or social media link: @prof..., instagram, etc.
+    if (/^@[\w.-]+$/i.test(line) || /^https?:\/\/(?:www\.)?(?:instagram|youtube|facebook|tiktok|t\.me)\b/i.test(line)) continue;
+    // Standalone hashtag
+    if (/^#\w+$/.test(line)) continue;
+    // Standalone thank-you / closing slide text
+    if (/^(?:gratid[aã]o!*|muito obrigado!*|obrigado!*|valeu!*|fim|fim da aula!?|at[eé] a pr[oó]xima!?|encerramento!?)$/i.test(line)) continue;
+    // Repetitive student name alone on line (3+ capitalized words without subject keywords)
+    if (/^[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+(?:\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+){2,5}$/.test(line)) {
+      if (!/\b(?:direito|constitucional|administrativo|penal|processual|portugu[eê]s|reda[çc][aã]o|matem[aá]tica|l[oó]gica|inform[aá]tica|legisla[çc][aã]o|hist[oó]ria|geografia|compreens[aã]o|interpreta[çc][aã]o|fonologia|acentua[çc][aã]o|ortografia|morfologia|sintaxe|equival[eê]ncias?)\b/i.test(line)) {
+        continue;
+      }
+    }
+    filtered.push(line);
+  }
+  return filtered.join("\n");
+}
+
+function isNonDidacticSlide(text: string): boolean {
+  const clean = text.replace(/[\s\d.,:;()º°ª\-–—/]/g, "");
+  // Menos de 20 letras úteis
+  if (clean.length < 20) return true;
+  // Apenas nomes de disciplinas soltos ou expressões de agradecimento sem conteúdo didático
+  if (/^(?:lei\s+\d+|racioc[ií]nio\s+l[oó]gico(?:\s+matem[aá]tico)?|equival[eê]ncias?\s+l[oó]gicas?|l[ií]ngua\s+portuguesa|gratid[aã]o!?|obrigado!?|capa|sum[aá]rio)$/i.test(text.trim())) {
+    return true;
+  }
+  return false;
+}
+
 function normalizeExtractedPage(value: unknown) {
-  return String(value ?? "")
+  const raw = String(value ?? "")
     .replace(/\u0000/g, "")
     .replace(/[\t ]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+  return stripWatermarksAndMeta(raw).trim();
 }
 
 function validateExtractedPagesList(rawPages: unknown): TextPage[] | null {
@@ -519,8 +561,13 @@ function validateExtractedPagesList(rawPages: unknown): TextPage[] | null {
   const pages = rawPages
     .map((item: any, index: number) => ({ page: Number(item?.page) || index + 1, text: normalizeExtractedPage(item?.text) }))
     .filter((page: TextPage) => page.text.length > 0);
-  const meaningfulCharacters = pages.reduce((total: number, page: TextPage) => total + page.text.replace(/\s/g, "").length, 0);
-  if (!pages.length || meaningfulCharacters < 120) return null;
+  // Identifica páginas com real densidade teórica/didática
+  const substantivePages = pages.filter((page: TextPage) => !isNonDidacticSlide(page.text));
+  const meaningfulCharacters = substantivePages.reduce((total: number, page: TextPage) => total + page.text.replace(/\s/g, "").length, 0);
+  // Se o documento tiver menos de 150 caracteres de conteúdo didático substantivo,
+  // significa que é composto por slides manuscritos/escaneados ou apenas capas/agradecimentos.
+  // Devolve null para ativar o Gemini Vision nativo ou alertar sobre OCR.
+  if (!pages.length || meaningfulCharacters < 150) return null;
   return pages;
 }
 
@@ -550,6 +597,11 @@ function pageHeadings(text: string) {
 }
 
 function createTextChunks(pages: TextPage[]): TextChunk[] {
+  // Filtra páginas sem conteúdo didático (capas vazias, agradecimentos isolados) para não gerar resumos ou questões de ruído.
+  const didacticPages = pages.filter((page) => !isNonDidacticSlide(page.text));
+  const effectivePages = didacticPages.length ? didacticPages : pages;
+  const totalLength = effectivePages.reduce((sum, page) => sum + page.text.length + 24, 0);
+  const target = Math.min(TEXT_CHUNK_MAX, Math.max(TEXT_CHUNK_TARGET, Math.ceil(totalLength / MAX_TEXT_CHUNKS)));
   const chunks: TextChunk[] = [];
   let current: TextPage[] = [];
   let length = 0;
@@ -565,30 +617,30 @@ function createTextChunks(pages: TextPage[]): TextChunk[] {
     current = [];
     length = 0;
   };
-  for (const page of pages) {
+  for (const page of effectivePages) {
     const addition = page.text.length + 24;
-    if (current.length && length + addition > TEXT_CHUNK_TARGET) flush();
+    if (current.length && length + addition > target) flush();
     current.push(page);
     length += addition;
   }
   flush();
+  return chunks;
+}
 
-  // Não descarta silenciosamente o final de documentos extensos. Quando há
-  // mais de dez blocos, redistribui páginas contíguas em dez partes.
-  if (chunks.length <= MAX_TEXT_CHUNKS) return chunks;
-  const pagesPerChunk = Math.ceil(pages.length / MAX_TEXT_CHUNKS);
-  const balanced: TextChunk[] = [];
-  for (let offset = 0; offset < pages.length; offset += pagesPerChunk) {
-    const group = pages.slice(offset, offset + pagesPerChunk);
-    balanced.push({
-      index: balanced.length,
-      pageStart: group[0].page,
-      pageEnd: group[group.length - 1].page,
-      text: group.map((page) => `[PÁGINA ${page.page}]\n${page.text}`).join("\n\n").slice(0, 32000),
-      headings: [...new Set(group.flatMap((page) => pageHeadings(page.text)))].slice(0, 20),
-    });
-  }
-  return balanced;
+/** Cobertura real: só conta como coberto o que um trecho analisado com sucesso devolveu. */
+function buildTextCoverage(chunks: TextChunk[], analyzed: boolean[], totalPages: number) {
+  const label = (chunk: TextChunk) => chunk.headings.length ? chunk.headings : [`Páginas ${chunk.pageStart}–${chunk.pageEnd}`];
+  const sections = chunks.flatMap(label);
+  const covered = chunks.filter((_, index) => analyzed[index]).flatMap(label);
+  const missing = chunks.filter((_, index) => !analyzed[index]);
+  const ratio = chunks.length ? (chunks.length - missing.length) / chunks.length : 0;
+  return {
+    estimated_pages: totalPages,
+    sections_detected: sections,
+    sections_covered: covered,
+    omissions: missing.map((chunk) => `Páginas ${chunk.pageStart}–${chunk.pageEnd} não foram analisadas (tempo esgotado ou falha da IA). Reprocesse para completar.`),
+    coverage_confidence: missing.length ? Math.max(0.1, Math.round(0.9 * ratio * 100) / 100) : 0.9,
+  };
 }
 
 async function callOpenAiCompatibleProvider(
@@ -645,11 +697,15 @@ function chunkStudyPrompt(chunk: TextChunk, totalChunks: number, title: string, 
 
 Crie entre 1 e 4 resumos, respeitando a ordem pedagógica do texto. Para cada resumo devolva exatamente os campos: subject, title, page_start, page_end, explanation, points, example, bizu, mnemonic, trap, flashcards e questions.
 
-Regras:
+Regras pedagógicas e anti-alucinação:
+- NUNCA crie resumos, tópicos ou questões sobre capas, títulos soltos de disciplinas, nomes ou perfis de professores (@prof..., contatos), sumários, contracapas, agradecimentos ('GRATIDÃO', 'OBRIGADO'), encerramentos ('Fim da aula', 'Até a próxima') ou mensagens motivacionais. Ignore completamente essas páginas e ruídos de metadados;
+- O foco deve ser 100% no conteúdo teórico/programático de concurso (conceitos, regras gramaticais, artigos de lei, fórmulas lógicas, procedimentos e exceções);
+- Se o trecho não contiver conteúdo didático substantivo (por ser apenas capa, agradecimento ou propaganda), ignore-o e devolva {"summaries": []};
 - explanation deve ser uma aula detalhada, clara e autossuficiente para iniciante;
-- points deve possuir de 5 a 10 itens;
-- flashcards deve possuir de 5 a 8 objetos com question e answer;
-- questions deve possuir exatamente 5 objetos com statement, options (4 alternativas plausíveis do mesmo assunto), correct_index (0 a 3), explanation (resolução passo a passo com Conceito-chave, justificativa da correta, erro das demais e pegadinha), difficulty, topic e origin;
+- points deve possuir de 5 a 10 itens com regras e conceitos reais;
+- flashcards deve possuir de 5 a 8 objetos com question e answer focados no conteúdo didático;
+- questions deve possuir exatamente 5 questões de concurso com statement, options (4 alternativas plausíveis do mesmo assunto), correct_index (0 a 3), explanation (resolução passo a passo com Conceito-chave, justificativa da correta, erro das demais e pegadinha), difficulty, topic e origin;
+- NUNCA faça perguntas sobre quem é o professor, se o documento é capa ou sobre agradecimentos/marcas d'água;
 - use a progressão: 1 fácil, 2 médias e 2 difíceis;
 - não invente artigo, lei, exceção, banca ou dado ausente;
 - em referências jurídicas use “Art. 4°”, nunca “Art. 4o”;
@@ -790,17 +846,11 @@ async function generateStudyPackageFromText(
   await Promise.all(Array.from({ length: Math.min(3, chunks.length) }, (_, idx) => worker(idx)));
   const summaries = results.flatMap((generated) => generated?.parsed?.summaries || []);
   if (!summaries.length && lastChunkError) throw lastChunkError;
-  const sections = chunks.flatMap((chunk) => chunk.headings.length ? chunk.headings : [`Páginas ${chunk.pageStart}–${chunk.pageEnd}`]);
+  const analyzed = chunks.map((_, index) => Boolean(results[index]?.parsed?.summaries?.length));
   return {
     parsed: {
       summaries,
-      coverage: {
-        estimated_pages: pages.length,
-        sections_detected: sections,
-        sections_covered: sections,
-        omissions: [],
-        coverage_confidence: 0.9,
-      },
+      coverage: buildTextCoverage(chunks, analyzed, pages.length),
     },
     provider: [...new Set(providers)].join("+") || "unknown",
     model: [...new Set(models)].join("+") || "unknown",
@@ -973,8 +1023,10 @@ function sanitizeQuestions(value: unknown, fallbackTopic: string) {
     const rawIdx = raw?.correct_index;
     const letterIdx = typeof rawIdx === "string" ? ({ A: 0, B: 1, C: 2, D: 3, E: 4 } as Record<string, number>)[rawIdx.trim().toUpperCase()] : undefined;
     const numIdx = Number(rawIdx);
-    let correctIndex = letterIdx !== undefined ? letterIdx : (Number.isInteger(numIdx) ? numIdx : 0);
-    if (correctIndex >= options.length) correctIndex = Math.max(0, options.length - 1);
+    const hasIdx = rawIdx !== null && rawIdx !== undefined && String(rawIdx).trim() !== "";
+    let correctIndex = letterIdx !== undefined ? letterIdx : (hasIdx && Number.isInteger(numIdx) ? numIdx : -1);
+    // Gabarito ausente, inválido ou fora das alternativas: descarta a questão em vez de assumir a letra A.
+    if (correctIndex < 0 || correctIndex >= options.length) continue;
     if (options.length > 4) {
       const correctText = options[correctIndex] ?? options[0];
       const kept = options.filter((_, idx) => idx === correctIndex || idx < 4).slice(0, 4);
@@ -986,6 +1038,9 @@ function sanitizeQuestions(value: unknown, fallbackTopic: string) {
     const explanation = cleanGeneratedText(raw?.explanation || "Confira a justificativa no resumo deste tópico.", 3000);
     const difficulty = ["facil", "medio", "dificil"].includes(raw?.difficulty) ? raw.difficulty : "medio";
     const key = statement.toLocaleLowerCase("pt-BR");
+    // Descarta questões sobre capas, nomes de professores, agradecimentos ou marcas d'água
+    const noiseCheck = `${statement} ${options.join(" ")} ${explanation}`.toLocaleLowerCase("pt-BR");
+    if (/@prof|gratid[aã]o|pouca densidade conceitual|nome do professor|marca d['’]água|aparenta ser uma capa/i.test(noiseCheck)) continue;
     if (statement.length < 10 || options.length !== 4 || options.some((option: string) => option.length < 1)) continue;
     if (new Set(normalizedOptions).size !== 4 || !Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
     if (explanation.length < 8 || seen.has(key)) continue;
@@ -1005,8 +1060,24 @@ function sanitizeStrings(value: unknown, maxItems: number, maxLength: number) {
   return [...new Set(value.map((item) => cleanGeneratedText(item, maxLength)).filter(Boolean))].slice(0, maxItems);
 }
 
+function isNonDidacticSummary(title: string, explanation: string, points: string[]): boolean {
+  const t = title.toLocaleLowerCase("pt-BR");
+  if (/^(?:gratid[aã]o!?|obrigado!?|muito obrigado!?|agradecimento|capa|encerramento|final da aula|prof[.\s]|redes sociais|abertura|apresenta[çc][aã]o|sum[aá]rio)/i.test(t)) {
+    return true;
+  }
+  const full = `${title} ${explanation} ${points.join(" ")}`.toLocaleLowerCase("pt-BR");
+  if (/(?:pouca densidade conceitual|sem aprofundamento|mensagem de agradecimento|agradece(?:ndo)? aos alunos|encerramento da aula|indica(?:ndo)? a autoria)/i.test(full)) {
+    return true;
+  }
+  return false;
+}
+
 function sanitizeSummary(value: any, knownSubjects: string[]) {
   const title = normalizeLegalNotation(value?.title || "Resumo", 300);
+  const rawPoints = Array.isArray(value?.points) ? value.points.map((p: unknown) => String(p || "")) : [];
+  if (isNonDidacticSummary(title, String(value?.explanation || ""), rawPoints)) {
+    return { title: "", explanation: "" };
+  }
   const flashcards = Array.isArray(value?.flashcards) ? value.flashcards.map((card: any) => ({
     question: cleanGeneratedText(card?.question, 1000),
     answer: cleanGeneratedText(card?.answer, 2400),
@@ -1248,7 +1319,9 @@ Deno.serve(async (request) => {
           topic: String(q.topic || s.title || "Prova Oficial"),
           board: String(title || "Prova Oficial").slice(0, 80),
           difficulty: ["facil", "medio", "dificil"].includes(q.difficulty) ? q.difficulty : "medio",
-          origin: "oficial",
+          // "oficial" só pode ser usado quando houver gabarito oficial verificado; aqui as questões são
+          // adaptadas do PDF ou criadas pela IA, e o aluno precisa saber a diferença.
+          origin: q.origin === "adaptada_do_pdf" ? "adaptada_do_pdf" : "autoral",
           statement: String(q.statement || ""),
           options: Array.isArray(q.options) ? q.options.slice(0, 4) : [],
           correct_index: Number(q.correct_index) || 0,

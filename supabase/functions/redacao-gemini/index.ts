@@ -156,8 +156,36 @@ Deno.serve(async (request) => {
     const geminiFile = await uploadFile(bytes, essay.title, mimeType, activeGeminiKey);
     geminiFileName = geminiFile.name;
     const board = String(essay.board ?? "geral");
-    const boardGuidance = board === "AOCP" ? "Dê atenção especial à adequação ao tema, estrutura dissertativo-argumentativa, domínio da norma-padrão, coesão e coerência." : board === "Cebraspe" ? "Organize a devolutiva em aspectos macroestruturais (conteúdo, argumentação e organização) e microestruturais (gramática, ortografia, pontuação e coesão)." : board === "FGV" ? "Dê atenção especial à compreensão do tema, construção da tese, progressão argumentativa, estrutura, coesão e domínio linguístico." : "Use critérios gerais de redação para concursos públicos.";
-    const prompt = `Atue como corretor experiente de redações para concursos públicos brasileiros. Analise somente o texto manuscrito ou digitado presente no arquivo. Tema informado: ${essay.theme}. Tipo textual informado: ${essay.essay_type}. Banca ou padrão solicitado: ${board}. ${boardGuidance} Quantidade solicitada: ${essay.required_lines || "não informada"} linhas. Instruções adicionais: ${essay.instructions || "nenhuma"}. Não invente trechos ilegíveis. Aponte quando algo não puder ser lido. Avalie aderência ao tema e ao tipo textual, estrutura, tese, argumentação, coesão, coerência, gramática, ortografia, pontuação, repertório, conclusão e respeito à quantidade de linhas. Forneça nota geral de 0 a 100, diagnóstico direto, pontos fortes, problemas encontrados com explicação, plano de melhoria prioritário, sugestões de reescrita em trechos curtos e uma versão-modelo apenas como referência pedagógica. Os critérios são uma aproximação pedagógica: não afirme que a nota reproduz a correção oficial da banca quando o espelho oficial não foi fornecido.`;
+    const boardGuidance = board === "AOCP"
+      ? "Critérios Instituto AOCP: 1) Atendimento ao tema e tipologia (0-20), 2) Coesão e coerência (0-20), 3) Argumentação e progressão temática (0-30), 4) Modalidade escrita e norma culta (0-30)."
+      : board === "Cebraspe"
+      ? "Critérios Cebraspe: Macroestrutura (apresentação, tema e tópicos solicitados) e Microestrutura (descontos por erros de grafia, morfossintaxe e pontuação calculados pela extensão)."
+      : board === "FGV"
+      ? "Critérios FGV: 1) Compreensão do tema e tese (0-30), 2) Estrutura argumentativa e repertório (0-30), 3) Coesão e articulação (0-20), 4) Norma padrão e precisão vocabular (0-20)."
+      : board === "IDECAN"
+      ? "Critérios IDECAN: 1) Tema e Tipologia Textual (0-25), 2) Estrutura Argumentativa e Repertório (0-25), 3) Coesão e Coerência (0-25), 4) Domínio da Norma Padrão (0-25)."
+      : "Use os 4 eixos padrão de concursos públicos: 1) Tema e Tipologia (0-25), 2) Argumentação e Repertório (0-25), 3) Coesão e Coerência (0-25), 4) Domínio da Norma Padrão (0-25).";
+
+    const prompt = `Atue como corretor sênior de bancas de concursos públicos brasileiros. Analise o texto manuscrito ou digitado presente no arquivo.
+Tema informado: ${essay.theme}.
+Tipo textual informado: ${essay.essay_type}.
+Banca solicitada: ${board}.
+Diretrizes da banca: ${boardGuidance}
+Quantidade de linhas solicitada: ${essay.required_lines || "não informada"} linhas.
+Instruções adicionais: ${essay.instructions || "nenhuma"}.
+
+DEVOLUTIVA EXIGIDA:
+1. Avalie legibilidade (readable: boolean) e faça observação sobre linhas e apresentação (line_observation).
+2. Nota geral de 0 a 100 (score) e diagnóstico direto e honesto (diagnosis).
+3. Espelho oficial por critérios (criteria): forneça 4 critérios com name, max_score, score obtido e commentary detalhado justificando a pontuação. A soma das notas dos critérios deve equivaler ao score total.
+4. Apontamento de desvios linha a linha (deviations): liste desvios gramaticais, de crase, regência, concordância ou pontuação citando line ("Linha X"), snippet (trecho como o aluno escreveu), issue (natureza do erro) e suggestion (forma correta).
+5. Pontos fortes (strengths): liste de 2 a 5 pontos fortes reais da redação.
+6. O que melhorar (improvements): liste problemas encontrados com category, problem e recommendation prática.
+7. Plano prioritário de estudo (priority_plan): 3 a 5 ações práticas para a próxima redação.
+8. Sugestões de reescrita em trechos curtos (rewrite_suggestions).
+9. Texto-modelo dissertativo como referência nota 100 para o mesmo tema (model_text).
+
+Não invente se o texto for ilegível; aponte as linhas ilegíveis. Seja pedagogicamente rigoroso e construtivo.`;
     const models = await availableGeminiModels(activeGeminiKey);
     const baseBody = {
       contents: [{ parts: [{ file_data: { mime_type: geminiFile.mimeType ?? "application/pdf", file_uri: geminiFile.uri } }, { text: prompt }] }],
@@ -165,7 +193,7 @@ Deno.serve(async (request) => {
         temperature: 0.15,
         maxOutputTokens: 16384,
         responseMimeType: "application/json",
-        responseSchema: { type: "OBJECT", properties: { score: { type: "INTEGER", minimum: 0, maximum: 100 }, readable: { type: "BOOLEAN" }, diagnosis: { type: "STRING" }, strengths: { type: "ARRAY", items: { type: "STRING" } }, improvements: { type: "ARRAY", items: { type: "OBJECT", properties: { category: { type: "STRING" }, problem: { type: "STRING" }, recommendation: { type: "STRING" } }, required: ["category", "problem", "recommendation"] } }, priority_plan: { type: "ARRAY", items: { type: "STRING" } }, rewrite_suggestions: { type: "ARRAY", items: { type: "STRING" } }, model_text: { type: "STRING" }, line_observation: { type: "STRING" } }, required: ["score", "readable", "diagnosis", "strengths", "improvements", "priority_plan", "rewrite_suggestions", "model_text", "line_observation"] },
+        responseSchema: { type: "OBJECT", properties: { score: { type: "INTEGER", minimum: 0, maximum: 100 }, readable: { type: "BOOLEAN" }, diagnosis: { type: "STRING" }, strengths: { type: "ARRAY", items: { type: "STRING" } }, improvements: { type: "ARRAY", items: { type: "OBJECT", properties: { category: { type: "STRING" }, problem: { type: "STRING" }, recommendation: { type: "STRING" } }, required: ["category", "problem", "recommendation"] } }, priority_plan: { type: "ARRAY", items: { type: "STRING" } }, rewrite_suggestions: { type: "ARRAY", items: { type: "STRING" } }, model_text: { type: "STRING" }, line_observation: { type: "STRING" }, criteria: { type: "ARRAY", items: { type: "OBJECT", properties: { name: { type: "STRING" }, max_score: { type: "INTEGER" }, score: { type: "INTEGER" }, commentary: { type: "STRING" } }, required: ["name", "max_score", "score", "commentary"] } }, deviations: { type: "ARRAY", items: { type: "OBJECT", properties: { line: { type: "STRING" }, snippet: { type: "STRING" }, issue: { type: "STRING" }, suggestion: { type: "STRING" } }, required: ["line", "snippet", "issue", "suggestion"] } } }, required: ["score", "readable", "diagnosis", "strengths", "improvements", "priority_plan", "rewrite_suggestions", "model_text", "line_observation"] },
       },
     };
     const relaxedBody = {
