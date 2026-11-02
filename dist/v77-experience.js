@@ -3578,16 +3578,17 @@
     const fieldLabel=fileInput.closest('label');
     if(!fieldLabel)return;
     fieldLabel.insertAdjacentHTML('afterend',`
-      <div class="card" id="typedEssayBox" style="padding:12px 14px;margin:8px 0 12px;background:#071320;border:1px solid #1e3a54">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
-          <b style="font-size:.88rem">✍️ Opcional: Digitar redação direto na tela (sem precisar de foto/PDF)</b>
-          <span class="tag" id="typedEssayCounter">0 linhas · 0 palavras</span>
+      <div class="card" id="typedEssayBox" style="width:100%;box-sizing:border-box;padding:16px 18px;margin:12px 0 16px;background:linear-gradient(160deg,#091a2b,#061320);border:1px solid #28547a;border-radius:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+          <b style="font-size:.95rem;color:var(--cyan);display:flex;align-items:center;gap:6px">✍️ Digitar redação direto na tela (sem precisar de foto/PDF)</b>
+          <span class="tag" id="typedEssayCounter" style="font-weight:700">0 linhas · 0 palavras</span>
         </div>
-        <textarea id="typedEssayText" rows="7" maxlength="4500" placeholder="Se você estiver sem papel agora, digite sua redação aqui (de 20 a 30 linhas). Ao clicar em 'Converter texto digitado em folha para correção', ela será anexada automaticamente no campo de arquivo acima!"></textarea>
-        <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-          <span class="small muted">Dica: ~75 caracteres equivalem a 1 linha manuscrita na folha oficial.</span>
-          <button type="button" class="ghost small" id="attachTypedEssayBtn">📄 Converter texto digitado para correção</button>
+        <textarea id="typedEssayText" rows="12" maxlength="5000" style="width:100%!important;box-sizing:border-box!important;min-height:260px;line-height:1.7;font-size:.95rem;padding:14px 16px;border-radius:12px;background:#050f1a;border:1px solid #2d5577;color:#f1f5f9;resize:vertical;display:block;font-family:inherit" placeholder="Digite sua redação diretamente aqui (recomenda-se entre 20 e 30 linhas). Ao clicar no botão abaixo, o sistema formata o texto em folha pautada oficial com cabeçalho, numeração de linhas e anexa automaticamente para a correção da IA!"></textarea>
+        <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <span class="small muted">💡 Dica: ~75 a 85 caracteres equivalem a 1 linha manuscrita na folha oficial.</span>
+          <button type="button" class="action" id="attachTypedEssayBtn" style="padding:10px 18px;min-height:42px;font-size:.85rem;display:inline-flex;align-items:center;gap:6px">📄 Converter e Anexar Folha Oficial</button>
         </div>
+        <div id="typedEssayAttachedBadge" style="display:none;margin-top:10px;padding:9px 13px;border-radius:10px;background:#0d3324;border:1px solid #10b981;color:#6ee7b7;font-size:.84rem;font-weight:700">✓ Folha oficial gerada e anexada com sucesso! Clique em 'Enviar e corrigir redação' abaixo.</div>
       </div>
     `);
     const ta=q('#typedEssayText'),counter=q('#typedEssayCounter');
@@ -3655,7 +3656,12 @@
       const dt=new DataTransfer();
       dt.items.add(file);
       fileInput.files=dt.files;
-      if(q('#essayLines')&&!q('#essayLines').value)q('#essayLines').value='30';
+      if(q('#essayLines'))q('#essayLines').value=String(wrapped.length||30);
+      const badge=q('#typedEssayAttachedBadge');
+      if(badge){
+        badge.style.display='block';
+        badge.textContent=`✓ Folha oficial gerada com ${wrapped.length} linha(s) e anexada com sucesso! Clique em 'Enviar e corrigir redação' abaixo.`;
+      }
       toast(`Redação digitada convertida (${wrapped.length} linhas) e pronta! Agora clique em "Enviar e corrigir redação".`);
     };
   }

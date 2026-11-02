@@ -693,6 +693,31 @@ async function callOpenAiCompatibleProvider(
 }
 
 function chunkStudyPrompt(chunk: TextChunk, totalChunks: number, title: string, campaignContext: string, documentType: string) {
+  const isExam = ["prova", "simulado"].includes(documentType);
+  if (isExam) {
+    return `Analise o trecho abaixo das páginas ${chunk.pageStart} a ${chunk.pageEnd} do PDF de PROVA OFICIAL ou SIMULADO “${title}”. Bloco ${chunk.index + 1} de ${totalChunks}.
+Seu objetivo é EXCLUSIVAMENTE EXTRAIR TODAS AS QUESTÕES DE CONCURSO PRESENTES NESTE TRECHO.
+- PROVAS E SIMULADOS NÃO DEVEM VIRAR RESUMOS TEÓRICOS. Não escreva aulas nem invente resumos.
+- Para cada disciplina ou grupo de questões encontradas, retorne um objeto no array summaries:
+  - subject: nome oficial da disciplina correspondente (ex.: Língua Portuguesa, Direito Constitucional, Raciocínio Lógico, etc.);
+  - title: "Caderno de Questões — ${title.slice(0, 50)}";
+  - page_start: ${chunk.pageStart};
+  - page_end: ${chunk.pageEnd};
+  - explanation: "Questões extraídas diretamente da prova/simulado oficial.";
+  - points: ["Treino prático focado em questões oficiais/simuladas."];
+  - flashcards: [];
+  - questions: todas as questões encontradas neste trecho (fielmente adaptadas com enunciado completo, 4 opções plausíveis A-D, correct_index 0 a 3 conforme o gabarito ou fundamentação jurídica, explanation detalhada, difficulty "facil"|"medio"|"dificil", topic e origin "adaptada_do_pdf").
+- Se não houver questões neste trecho (ex.: folhas de instrução, capa ou texto institucional), devolva {"summaries": []}.
+- Responda apenas JSON no formato {"summaries":[...]}.
+
+TIPO: ${documentType}.
+CONTEXTO DO EDITAL (para classificação das disciplinas):
+${campaignContext || "Sem edital sincronizado."}
+
+TEXTO EXTRAÍDO:
+${chunk.text}`;
+  }
+
   return `Analise exclusivamente o trecho abaixo, extraído das páginas ${chunk.pageStart} a ${chunk.pageEnd} do PDF “${title}”. Este é o bloco ${chunk.index + 1} de ${totalChunks}. Não use conhecimento externo para completar lacunas.
 
 Crie entre 1 e 4 resumos, respeitando a ordem pedagógica do texto. Para cada resumo devolva exatamente os campos: subject, title, page_start, page_end, explanation, points, example, bizu, mnemonic, trap, flashcards e questions.
@@ -1292,7 +1317,16 @@ Deno.serve(async (request) => {
         coverage.warnings.unshift("Algumas seções do PDF podem precisar de revisão complementar.");
       }
     }
-    const rows = summaries.map((content: Record<string, unknown>) => ({ campaign_id: campaignId, user_id: user.id, source_document_id: documentId, content_type: "summary", title: String(content.title ?? "Resumo"), content: { ...content, source: title }, source_refs: [{ document_id: documentId, title }] }));
+    const isExam = ["prova", "simulado"].includes(documentType);
+    const rows = summaries.map((content: Record<string, unknown>) => ({
+      campaign_id: campaignId,
+      user_id: user.id,
+      source_document_id: documentId,
+      content_type: isExam ? "question_pack" : "summary",
+      title: String(content.title ?? (isExam ? `Caderno de Questões — ${title}` : "Resumo")),
+      content: { ...content, source: title, is_question_pack: isExam },
+      source_refs: [{ document_id: documentId, title }]
+    }));
     const saved = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(rows) });
     if (!saved.ok) { console.error("Database", saved.status, await saved.text());await setDocumentStatus(documentId, user.id, "pending");await finishUsage(usage.event_id,"error",undefined,undefined,"CONTENT_SAVE_FAILED");await updateJob(documentId,{status:"retry",last_error:"CONTENT_SAVE_FAILED"});return response({ error: "O conteúdo foi criado, mas não pôde ser salvo.", retryable: true }, 502); }
     const savedRows = await saved.json().catch(() => []);
