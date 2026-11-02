@@ -80,3 +80,10 @@ for (const required of ["rpc/sync_user_state", "rpc/claim_focus_session", "rpc/u
 if (html.includes("/functions/v1/hyper-endpoint") || !html.includes("/functions/v1/assistente-pmpe")) throw new Error("O frontend ainda aponta para a função antiga do assistente.");
 
 console.log(`OK: ${scripts.length} script(s), ${ids.length} IDs únicos, nenhuma referência ausente e nenhum segredo público detectado.`);
+
+// Guard against single-$ selector calling array methods (.forEach/.map/.filter)
+for (const rel of ["../dist/index.html", "../dist/v59-enhancements.js", "../dist/v77-experience.js", "../dist/v78-smart-notebook.js"]) {
+  const s = fs.readFileSync(new URL(rel, import.meta.url), "utf8");
+  const bad = s.match(/(?<!\$)\$\([^)]+\)\.(forEach|map|filter|some)/);
+  if (bad) throw new Error(`singleDollarArrayGuard falhou em ${rel}: ${bad[0]}`);
+}
