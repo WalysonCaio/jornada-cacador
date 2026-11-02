@@ -1,30 +1,7 @@
 node_modules/
-desktop/node_modules/
-desktop/release/
-app/android/.gradle/
-app/android/.idea/
-app/android/app/build/
-app/android/build/
-.gradle/
-.idea/
-*.log
+.DS_Store
 .env
 .env.*
-!.env.example
-.claude/
-app/index.html
-app/sw.js
-wrangler.jsonc
-# Android (projeto atual em android/)
-android/.gradle/
-android/.idea/
-android/build/
-android/app/build/
-android/local.properties
-*.jks
 *.keystore
-# Supabase local
-supabase/.temp/
-# Sistema
-.DS_Store
-Thumbs.db
+android/app/build/
+android/.gradle/

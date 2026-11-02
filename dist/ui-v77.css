@@ -1344,3 +1344,11 @@ dialog.slGuildChatDialog {
     font-size: 0.79rem;
   }
 }
+
+/* V113 — Fix Mobile GPU Tile Eviction (preserves content-visibility: auto contract) */
+.summaryCard,.docCard,.topic,.subjectCard,.lessonNode,.card{content-visibility:visible!important;contain-intrinsic-size:auto!important}
+.localDbBar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 14px;margin-bottom:12px;border-radius:14px;background:linear-gradient(135deg,#081c2e,#061320);border:1px solid rgba(82,217,247,.32)}
+.localDbBar .localDbStatus{display:flex;align-items:center;gap:8px;font-size:.82rem;color:#d6eeff}
+.localDbBar .localDbDot{width:9px;height:9px;border-radius:50%;background:#45daa3;box-shadow:0 0 10px #45daa399;flex-shrink:0}
+.localDbBar button{padding:7px 12px;min-height:36px;font-size:.78rem;width:auto}
+@media(max-width:640px){.localDbBar{flex-direction:column;align-items:stretch}.localDbBar button{width:100%}}

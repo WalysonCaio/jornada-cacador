@@ -312,7 +312,7 @@
   // 2. Filtros Avançados (Tópico, Modo Progressivo, Inéditas/Favoritas estilo TEC/Qconcursos)
   function normalizedOrigin(question){const origin=String(question?.origin||'autoral').toLocaleLowerCase('pt-BR');return /oficial|importad|prova|adaptada/.test(origin)?'oficial':'autoral'}
   function normalizedDifficulty(question){const value=String(question?.difficulty||'medio').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();return value.startsWith('fac')?'facil':value.startsWith('dif')?'dificil':'medio'}
-  function topicKey(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
+  function topicKey(value){const s=String(value||'');if(!s)return'';const c=topicKey._c||(topicKey._c=new Map());if(s.length<=160){const hit=c.get(s);if(hit!==undefined)return hit}const out=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();if(s.length<=160){if(c.size>6000)c.clear();c.set(s,out)}return out}
 
   function activeCampaignErrors(){
     return Object.entries(state?.errors||{}).filter(([,e])=>!e?.campaignId||e.campaignId===state?.activeCampaignId);
@@ -3008,10 +3008,12 @@
     return typeof window.normalizeLegalText==='function'?window.normalizeLegalText(cleaned):cleaned;
   }
 
+  let _commSyncInFlight=null;
   async function syncCommunityLibraryForActivePortal(force=false){
     if(!cloudSession)return;
     const campaign=typeof activeCampaign==='function'?activeCampaign():null;
     if(!campaign)return;
+    if(_commSyncInFlight&&!force)return _commSyncInFlight;
     const slug=normalizeExamSlug(campaign.name||'',campaign.organization||'');
     try{
       if(force||communityCache.slug!==slug||!communityCache.loadedAt||(Date.now()-communityCache.loadedAt>=60000)){
@@ -3060,6 +3062,7 @@
       }
 
       // 2) Mesclar resumos, flashcards e questões higienizados nas funções de estudo (ALL_SUMMARIES, ALL_FLASHCARDS, ALL_QUESTIONS)
+      const prevSumLen=(ALL_SUMMARIES||[]).length,prevCardLen=(ALL_FLASHCARDS||[]).length,prevQLen=(ALL_QUESTIONS||[]).length;
       const existingSumKeys=new Set((ALL_SUMMARIES||[]).map(s=>`${topicKey(s.category)}|${topicKey(s.title)}`));
       const existingCardKeys=new Set((ALL_FLASHCARDS||[]).map(c=>`${topicKey(c[0])}|${topicKey(c[1])}`));
       const existingQKeys=new Set((ALL_QUESTIONS||[]).map(qItem=>topicKey(qItem.statement).slice(0,80)));
@@ -3122,17 +3125,21 @@
         }
       }
 
-      LEARNING_SUBJECTS=typeof window.computeValidLearningSubjects==='function'?window.computeValidLearningSubjects():[...new Set([...ALL_SUMMARIES.map(x=>x.category),...ALL_FLASHCARDS.map(x=>x[0]),...ALL_QUESTIONS.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-
-      if(addedDocs>0||commDocs.length>0||commSums.length>0){
-        if(typeof renderUserDocuments==='function')renderUserDocuments();
-        if(typeof renderStudy==='function')renderStudy();
-        if(typeof renderLearning==='function')renderLearning();
-        if(typeof renderQuestionFilters==='function')renderQuestionFilters();
+      const addedContent=(ALL_SUMMARIES.length>prevSumLen)||(ALL_FLASHCARDS.length>prevCardLen)||(ALL_QUESTIONS.length>prevQLen);
+      if(addedDocs>0||addedContent){
+        LEARNING_SUBJECTS=typeof window.computeValidLearningSubjects==='function'?window.computeValidLearningSubjects():[...new Set([...ALL_SUMMARIES.map(x=>x.category),...ALL_FLASHCARDS.map(x=>x[0]),...ALL_QUESTIONS.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+        window.persistToLocalDatabase?.(state?.activeCampaignId);
+        window.markViewsDirty?.('library','study','learning','report');
+        const actId=document.querySelector('.view.active')?.id||'today';
+        if(actId==='library'&&typeof renderUserDocuments==='function')renderUserDocuments();
+        else if(actId==='study'&&typeof renderStudy==='function')renderStudy();
+        else if(actId==='learning'&&typeof renderLearning==='function')renderLearning();
+        else if(actId==='report'&&typeof renderQuestionFilters==='function'){renderQuestionFilters();populateTopicFilter();updateQuestionPool();renderExamBankHub()}
       }
-      renderCommunityCoopBanner();
+      if(document.querySelector('.view.active')?.id==='library')renderCommunityCoopBanner();
     }catch{}
   }
+  window.syncCommunityLibraryForActivePortal=syncCommunityLibraryForActivePortal;
 
   function applyCommunityEditalToPortal(){
     const campaign=typeof activeCampaign==='function'?activeCampaign():null;
@@ -5165,8 +5172,72 @@
     });
   }
 
+  function ensureLocalDbBars(){
+    const targets=[
+      {sel:'#study',id:'localDbBar_study'},
+      {sel:'#report',id:'localDbBar_report'},
+      {sel:'#library',id:'localDbBar_library'}
+    ];
+    for(const t of targets){
+      const view=q(t.sel);
+      if(!view||q(`#${t.id}`))continue;
+      const head=view.querySelector('.sectionHead');
+      const html=`<div class="localDbBar" id="${t.id}"><div class="localDbStatus"><span class="localDbDot"></span><span data-local-db-text="1">⚡ <b>Banco Local Ativo:</b> abertura instantânea de abas no aparelho</span></div><button type="button" class="ghost small" data-download-local-db="1">📥 Baixar / Atualizar Banco Local</button></div>`;
+      if(head)head.insertAdjacentHTML('afterend',html);
+      else view.insertAdjacentHTML('afterbegin',html);
+    }
+    const menuGrid=q('#moreDialog .menuGrid');
+    if(menuGrid&&!q('#menuLocalDbDownload')){
+      menuGrid.insertAdjacentHTML('beforeend','<button class="menuItem" id="menuLocalDbDownload">⚡<span>Baixar Banco Local</span></button>');
+      q('#menuLocalDbDownload').onclick=()=>{q('#moreDialog')?.close();window.downloadFullDatabaseForLocalUse?.(true)};
+    }
+    qa('[data-download-local-db]').forEach(btn=>{
+      if(!btn.dataset.boundLocalDb){
+        btn.dataset.boundLocalDb='1';
+        btn.onclick=()=>window.downloadFullDatabaseForLocalUse?.(true);
+      }
+    });
+    window.updateLocalDbBadgeUI?.();
+  }
+  window.updateLocalDbBadgeUI=function(){
+    const sLen=(typeof ALL_SUMMARIES!=='undefined'&&Array.isArray(ALL_SUMMARIES))?ALL_SUMMARIES.length:0;
+    const qLen=(typeof ALL_QUESTIONS!=='undefined'&&Array.isArray(ALL_QUESTIONS))?ALL_QUESTIONS.length:0;
+    const fLen=(typeof ALL_FLASHCARDS!=='undefined'&&Array.isArray(ALL_FLASHCARDS))?ALL_FLASHCARDS.length:0;
+    const dLen=(typeof cloudDocuments!=='undefined'&&Array.isArray(cloudDocuments))?cloudDocuments.length:0;
+    const label=(sLen||qLen||dLen)
+      ?`⚡ <b>Banco Local Ativo no Aparelho:</b> ${sLen} resumos · ${qLen} questões · ${fLen} flashcards · ${dLen} PDFs (abertura instantânea)`
+      :`⚡ <b>Modo Banco Local:</b> clique ao lado para baixar seus resumos e questões para uso instantâneo sem travamentos`;
+    qa('[data-local-db-text]').forEach(el=>{el.innerHTML=label});
+  };
+
+  function runV77ViewEnhancements(id,force=false){
+    window._v77RenderedViews=window._v77RenderedViews||new Set();
+    ensureLocalDbBars();
+    if(!force&&window._v77RenderedViews.has(id)){
+      if(id==='ranking')loadHuntersLeaderboard();
+      else if(id==='duel')loadDuelArenaHub();
+      return;
+    }
+    window._v77RenderedViews.add(id);
+    if(id==='today'){decorateDailyStepProgressLabels();updateTodayCommand();ensureTafAndRankingShortcuts()}
+    else if(id==='map'){renderReverseSchedule();decorateEditalIncidenceBadges()}
+    else if(id==='study'){enhanceFlashcardsSpacedRepetition();updateFlashcardSpacedStats();window.updateLocalDbBadgeUI?.()}
+    else if(id==='library'){renderCommunityCoopBanner();window.updateLocalDbBadgeUI?.();syncCommunityLibraryForActivePortal(false)}
+    else if(id==='essay'){enhanceEssayCenter();enhanceTypedEssayOption()}
+    else if(id==='review'){enhanceReviewCenter()}
+    else if(id==='report'){window.updateLocalDbBadgeUI?.()}
+    else if(id==='taf'){renderTafPanel()}
+    else if(id==='ranking'){renderHuntersLeaderboard();loadHuntersLeaderboard()}
+    else if(id==='duel'){renderDuelArena();loadDuelArenaHub()}
+    enhanceSoloLevelingVisuals();
+  }
+
   const baseOpenView=openView;
-  openView=function(id){baseOpenView(id);try{sessionStorage.setItem(viewKey,id)}catch{}if(id==='report'){populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()}if(id==='today'){updateTodayCommand();ensureTafAndRankingShortcuts()}if(id==='map'){renderReverseSchedule();decorateEditalIncidenceBadges()}if(id==='review')enhanceReviewCenter();if(id==='essay')enhanceTypedEssayOption();if(id==='taf')renderTafPanel();if(id==='library'){renderCommunityCoopBanner();syncCommunityLibraryForActivePortal()}if(id==='ranking'){renderHuntersLeaderboard();loadHuntersLeaderboard()}if(id==='duel'){renderDuelArena();loadDuelArenaHub()}};
+  openView=function(id){
+    baseOpenView(id);
+    try{sessionStorage.setItem(viewKey,id)}catch{}
+    runV77ViewEnhancements(id,false);
+  };
   const baseTickClock=typeof tickClock==='function'?tickClock:null;
   if(baseTickClock){
     window.tickClock=function(){
@@ -5179,32 +5250,11 @@
   render=function(){
     syncHunterStatsSnapshot();
     baseRender();
-    enhanceSoloLevelingVisuals();
     const activeId=document.querySelector('.view.active')?.id||'today';
     if(!window._v77InitialBootDone){
       window._v77InitialBootDone=true;
-      enhanceFlashcardsSpacedRepetition();
-      enhanceEssayCenter();
-      enhanceTypedEssayOption();
-      enhanceReviewCenter();
-      decorateEditalIncidenceBadges();
-      renderCommunityCoopBanner();
-      decorateDailyStepProgressLabels();
-      updateFlashcardSpacedStats();
-      updateTodayCommand();
-      ensureTafAndRankingShortcuts();
-      renderReverseSchedule();
-    }else{
-      if(activeId==='today'){decorateDailyStepProgressLabels();updateTodayCommand();ensureTafAndRankingShortcuts()}
-      else if(activeId==='map'){decorateEditalIncidenceBadges();renderReverseSchedule()}
-      else if(activeId==='study'){enhanceFlashcardsSpacedRepetition();updateFlashcardSpacedStats()}
-      else if(activeId==='library'){renderCommunityCoopBanner()}
-      else if(activeId==='essay'){enhanceEssayCenter();enhanceTypedEssayOption()}
-      else if(activeId==='review'){enhanceReviewCenter()}
-      else if(activeId==='taf'){renderTafPanel()}
-      else if(activeId==='ranking'){renderHuntersLeaderboard()}
-      else if(activeId==='duel'){renderDuelArena()}
     }
+    runV77ViewEnhancements(activeId,true);
   };
   const baseRenderReport=renderReport;
   renderReport=function(){baseRenderReport();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()};
@@ -5447,10 +5497,14 @@
       :[...new Set([...ALL_SUMMARIES.map(x=>x.category),...ALL_FLASHCARDS.map(x=>x[0]),...ALL_QUESTIONS.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
     if(changed||JSON.stringify(nextSubjects)!==JSON.stringify(LEARNING_SUBJECTS)){
       LEARNING_SUBJECTS=nextSubjects;
-      if(typeof renderStudy==='function')renderStudy();
-      if(typeof renderLearning==='function')renderLearning();
-      if(typeof renderQuestionFilters==='function')renderQuestionFilters();
+      window.persistToLocalDatabase?.(state?.activeCampaignId);
+      window.markViewsDirty?.('study','learning','report');
+      const actId=document.querySelector('.view.active')?.id||'today';
+      if(actId==='study'&&typeof renderStudy==='function')renderStudy();
+      else if(actId==='learning'&&typeof renderLearning==='function')renderLearning();
+      else if(actId==='report'&&typeof renderQuestionFilters==='function')renderQuestionFilters();
     }
+    window.updateLocalDbBadgeUI?.();
     enhanceSoloLevelingVisuals();
   }
   const baseLoadCloudDocsForSync=typeof loadCloudDocuments==='function'?loadCloudDocuments:null;
@@ -5977,23 +6031,23 @@
     }
   },1200);
   setInterval(()=>{
-    if(cloudSession&&navigator.onLine){
+    if(cloudSession&&navigator.onLine&&document.visibilityState==='visible'){
       const chatActive=Boolean(q('#guildChatDialog')?.open||q('#duel')?.classList.contains('active'));
-      if(chatActive){
+      if(chatActive&&!guildChatState.wsConnected){
         loadGuildChatMessages(true);
         if(!activeDuelSession)loadDuelArenaHub(true);
       }
     }
-  },3500);
+  },8000);
   setInterval(()=>{
-    if(cloudSession&&navigator.onLine){
+    if(cloudSession&&navigator.onLine&&document.visibilityState==='visible'){
       const chatActive=Boolean(q('#guildChatDialog')?.open||q('#duel')?.classList.contains('active'));
       if(!chatActive){
         if(!activeDuelSession)loadDuelArenaHub(true);
-        loadGuildChatMessages(true);
+        if(!guildChatState.wsConnected)loadGuildChatMessages(true);
       }
     }
-  },7500);
+  },25000);
   const remembered=(()=>{try{return sessionStorage.getItem(viewKey)}catch{return null}})();
   if(remembered&&q(`#${CSS.escape(remembered)}`)?.classList.contains('view'))openView(remembered);
   q('#aboutDialog .tag')&&(q('#aboutDialog .tag').textContent='Versão 78 · experiência orientada ao estudo');
