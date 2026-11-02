@@ -959,8 +959,6 @@
     root.className='performanceChart';root.innerHTML=rows.length?rows.map(([name,data])=>{const rate=Math.round(data.correct/data.total*100),tone=rate<60?'low':rate<80?'mid':'high';return `<div class="performanceBar ${tone}" title="${escText(name)}: ${data.correct}/${data.total}"><span>${escText(name)}</span><div class="performanceTrack"><i style="width:${rate}%"></i></div><b>${rate}%</b></div>`}).join(''):'<div class="empty">Resolva questões para visualizar sua precisão por disciplina.</div>';
     renderTacticalDiagnosis();
     renderCutoffThermometer();
-    ensureLegalHighlightToggle();
-    if(legalHighlightEnabled)setTimeout(()=>applyLegalHighlightsToTextNodes(q('#summaryList')),50);
   }
 
   // 3. Central de Provas & Alimentação do Banco (#examBankHub)
@@ -1971,6 +1969,10 @@
     }
   }
 
+  function triggerStudyLegalHighlights(){
+    ensureLegalHighlightToggle();
+    if(legalHighlightEnabled)setTimeout(()=>applyLegalHighlightsToTextNodes(q('#summaryList')),50);
+  }
   function enhanceEssayCenter(){
     const essayCard=q('#essay .card');
     if(!essayCard||q('#essayHelperBar'))return;
