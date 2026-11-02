@@ -5464,7 +5464,7 @@
     };
   }
 
-  // 19. Chat Interno da Guilda de Caçadores & Lobby Interativo (Geral / Duelos X1 / Fórum de Dúvidas)
+  // 19. Chat Interno da Guilda de Caçadores & Lobby Interativo em Tempo Real (WebSocket + Optimistic UI + Atalhos Solo Leveling)
   const guildChatState={
     channel:'all',
     sendChannel:'geral',
@@ -5472,19 +5472,24 @@
     replyTo:null,
     loading:false,
     sqlMissing:false,
+    lastFingerprint:'',
+    ws:null,
+    wsConnected:false,
     lastSeenTime:Number(localStorage.getItem('jornada-guild-last-seen-v108')||0)
   };
 
   function updateGuildUnreadBadge(){
     const badge=q('#floatingGuildUnreadBadge');
     const btn=q('#floatingGuildChatBtn');
+    const dlgOpen=Boolean(q('#guildChatDialog')?.open);
+    const onDuelTab=Boolean(q('#duel')?.classList.contains('active'));
     if(btn){
-      btn.hidden=!cloudSession&&localStorage.getItem('pmpe-guest-mode')!=='1';
+      const signedOrGuest=Boolean(cloudSession)||localStorage.getItem('pmpe-guest-mode')==='1';
+      btn.hidden=!signedOrGuest||dlgOpen||onDuelTab;
     }
     if(!badge)return;
     const myId=cloudSession?.user?.id||'';
-    const dlgOpen=Boolean(q('#guildChatDialog')?.open);
-    if(dlgOpen&&guildChatState.messages.length){
+    if((dlgOpen||onDuelTab)&&guildChatState.messages.length){
       const latest=Math.max(...guildChatState.messages.map(m=>Date.parse(m.created_at||'')||0));
       if(latest>guildChatState.lastSeenTime){
         guildChatState.lastSeenTime=latest;
@@ -5502,10 +5507,83 @@
     badge.textContent=unread>9?'9+':String(unread);
   }
 
+  function computeMessagesFingerprint(list){
+    if(!Array.isArray(list)||!list.length)return'0';
+    return `${list.length}:${list[0]?.id||''}:${list[list.length-1]?.id||''}`;
+  }
+
+  function broadcastGuildRealtimePing(kind='chat'){
+    try{
+      if(guildChatState.ws&&guildChatState.ws.readyState===1){
+        guildChatState.ws.send(JSON.stringify({
+          topic:'realtime:guild-lobby',
+          event:'broadcast',
+          payload:{type:'broadcast',event:kind,payload:{ts:Date.now()}},
+          ref:String(Date.now())
+        }));
+      }
+    }catch{}
+  }
+
+  function connectGuildRealtimeSocket(){
+    if(guildChatState.ws||!cloudSession||!navigator.onLine||typeof WebSocket==='undefined')return;
+    try{
+      const wsUrl=SUPABASE_URL.replace(/^http/i,'ws')+`/realtime/v1/websocket?apikey=${encodeURIComponent(SUPABASE_KEY)}&vsn=1.0.0`;
+      const ws=new WebSocket(wsUrl);
+      guildChatState.ws=ws;
+      ws.onopen=()=>{
+        guildChatState.wsConnected=true;
+        const token=cloudSession?.access_token||SUPABASE_KEY;
+        ws.send(JSON.stringify({
+          topic:'realtime:guild-lobby',
+          event:'phx_join',
+          payload:{config:{broadcast:{self:false},presence:{key:''}},access_token:token},
+          ref:'1'
+        }));
+        ws.send(JSON.stringify({
+          topic:'realtime:public:hunter_guild_messages',
+          event:'phx_join',
+          payload:{config:{postgres_changes:[{event:'*',schema:'public',table:'hunter_guild_messages'}]},access_token:token},
+          ref:'2'
+        }));
+        ws.send(JSON.stringify({
+          topic:'realtime:public:hunter_duels',
+          event:'phx_join',
+          payload:{config:{postgres_changes:[{event:'*',schema:'public',table:'hunter_duels'}]},access_token:token},
+          ref:'3'
+        }));
+      };
+      ws.onmessage=ev=>{
+        try{
+          const msg=JSON.parse(ev.data||'{}');
+          if(msg.event==='postgres_changes'||msg.event==='broadcast'){
+            if(String(msg.topic||'').includes('hunter_duels')||(msg.payload?.event==='duel')){
+              if(!activeDuelSession)loadDuelArenaHub(true);
+            }else{
+              loadGuildChatMessages(true);
+            }
+          }
+        }catch{}
+      };
+      ws.onclose=()=>{
+        guildChatState.ws=null;
+        guildChatState.wsConnected=false;
+      };
+      ws.onerror=()=>{
+        try{ws.close()}catch{}
+        guildChatState.ws=null;
+        guildChatState.wsConnected=false;
+      };
+    }catch{
+      guildChatState.ws=null;
+    }
+  }
+
   async function loadGuildChatMessages(silent=false){
     if(guildChatState.loading||!cloudSession||!navigator.onLine)return;
     guildChatState.loading=true;
     try{
+      connectGuildRealtimeSocket();
       const res=await cloudFetch('rpc/get_guild_chat_messages',{
         method:'POST',
         body:JSON.stringify({p_channel:'all',p_limit:90})
@@ -5513,17 +5591,17 @@
       const data=await res.json().catch(()=>null);
       if(res.ok&&data&&Array.isArray(data.messages)){
         guildChatState.sqlMissing=false;
-        const prevCount=guildChatState.messages.length;
-        const prevLastId=prevCount?guildChatState.messages[prevCount-1]?.id:'';
+        const nextFp=computeMessagesFingerprint(data.messages);
+        const changed=nextFp!==guildChatState.lastFingerprint;
         guildChatState.messages=data.messages;
-        const newLastId=data.messages.length?data.messages[data.messages.length-1]?.id:'';
+        guildChatState.lastFingerprint=nextFp;
         if(!guildChatState.lastSeenTime&&data.messages.length){
           const latest=Math.max(...data.messages.map(m=>Date.parse(m.created_at||'')||0));
           guildChatState.lastSeenTime=latest;
           try{localStorage.setItem('jornada-guild-last-seen-v108',String(latest))}catch{}
         }
         updateGuildUnreadBadge();
-        if(!silent||prevLastId!==newLastId||prevCount!==data.messages.length){
+        if(!silent||changed){
           if(q('#guildChatDialog')?.open)renderGuildChatWidget('#guildChatDialogRoot','modal',true);
           if(q('#duel')?.classList.contains('active')&&q('#duelLobbyChatSection'))renderGuildChatWidget('#duelLobbyChatSection','arena',true);
         }
@@ -5538,34 +5616,61 @@
     }
   }
 
-  async function sendGuildChatMessageFromUI(prefix='modal'){
+  async function sendGuildChatMessageFromUI(prefix='modal',overrideText=null,overrideChannel=null){
     const input=q(`#guildChatInput_${prefix}`);
     const chanSel=q(`#guildChatSendChannel_${prefix}`);
     const btn=q(`#guildChatSendBtn_${prefix}`);
-    const text=(input?.value||'').trim();
+    const text=String(overrideText!==null?overrideText:(input?.value||'')).trim();
     if(!text)return toast('Digite sua mensagem para enviar ao Lobby da Guilda.');
     if(!cloudSession)return toast('Entre na sua conta para conversar no Chat da Guilda.');
-    const channel=chanSel?.value||guildChatState.sendChannel||(guildChatState.channel==='all'?'geral':guildChatState.channel);
+    const channel=overrideChannel||chanSel?.value||guildChatState.sendChannel||(guildChatState.channel==='all'?'geral':guildChatState.channel);
     guildChatState.sendChannel=channel;
-    if(btn){btn.disabled=true;btn.textContent='⏳...'}
+    const replySnapshot=guildChatState.replyTo;
+    if(overrideText===null&&input)input.value='';
+    guildChatState.replyTo=null;
+
+    // Optimistic UI: adiciona a mensagem instantaneamente na tela (<15ms)
+    const me=typeof localHunterRow==='function'?localHunterRow():{name:'Caçador',role:'PMPE',xp:0};
+    const tempId=`temp-${Date.now()}`;
+    guildChatState.messages.push({
+      id:tempId,
+      user_id:cloudSession?.user?.id||'me',
+      is_me:true,
+      author_name:me.name||'Caçador',
+      author_role:me.role||'PMPE',
+      author_xp:me.xp||0,
+      channel,
+      message:text,
+      reply_to_id:replySnapshot?.id||null,
+      reply_author:replySnapshot?.author_name||null,
+      reply_excerpt:replySnapshot?String(replySnapshot.message||'').slice(0,120):null,
+      created_at:new Date().toISOString(),
+      optimistic:true
+    });
+    if(q('#guildChatDialog')?.open)renderGuildChatWidget('#guildChatDialogRoot','modal',true);
+    if(q('#duel')?.classList.contains('active')&&q('#duelLobbyChatSection'))renderGuildChatWidget('#duelLobbyChatSection','arena',true);
+
+    if(btn){btn.disabled=true}
     try{
       const res=await cloudFetch('rpc/send_guild_chat_message',{
         method:'POST',
         body:JSON.stringify({
           p_message:text,
           p_channel:channel,
-          p_reply_to_id:guildChatState.replyTo?.id||null
+          p_reply_to_id:replySnapshot?.id||null
         })
       });
       const created=await res.json().catch(()=>null);
       if(!res.ok)throw new Error(created?.message||'Não foi possível enviar a mensagem. Execute o SQL v97 atualizado no Supabase.');
-      if(input)input.value='';
-      guildChatState.replyTo=null;
+      broadcastGuildRealtimePing('chat');
       await loadGuildChatMessages(false);
     }catch(err){
+      guildChatState.messages=guildChatState.messages.filter(m=>m.id!==tempId);
+      if(q('#guildChatDialog')?.open)renderGuildChatWidget('#guildChatDialogRoot','modal',true);
+      if(q('#duelLobbyChatSection'))renderGuildChatWidget('#duelLobbyChatSection','arena',true);
       toast(err.message||'Erro ao enviar mensagem.');
     }finally{
-      if(btn){btn.disabled=false;btn.textContent='Enviar ➤'}
+      if(btn){btn.disabled=false}
     }
   }
 
@@ -5576,6 +5681,7 @@
         method:'POST',
         body:JSON.stringify({p_message:messageText,p_channel:'duelos',p_reply_to_id:null})
       });
+      broadcastGuildRealtimePing('duel');
       await loadGuildChatMessages(true);
     }catch{}
   }
@@ -5583,6 +5689,7 @@
   async function deleteGuildChatMessageById(msgId){
     if(!msgId||!cloudSession)return;
     guildChatState.messages=(guildChatState.messages||[]).filter(m=>String(m.id)!==String(msgId));
+    guildChatState.lastFingerprint=computeMessagesFingerprint(guildChatState.messages);
     if(q('#guildChatDialog')?.open)renderGuildChatWidget('#guildChatDialogRoot','modal',true);
     if(q('#duelLobbyChatSection'))renderGuildChatWidget('#duelLobbyChatSection','arena',true);
     try{
@@ -5590,6 +5697,7 @@
         method:'POST',
         body:JSON.stringify({p_message_id:msgId})
       });
+      broadcastGuildRealtimePing('chat');
       toast('Mensagem removida do Lobby.');
     }catch{}
   }
@@ -5598,6 +5706,8 @@
     if(!iso)return'agora';
     const d=new Date(iso);
     if(isNaN(d.getTime()))return'';
+    const diffSec=Math.floor((Date.now()-d.getTime())/1000);
+    if(diffSec>=0&&diffSec<45)return'agora';
     const now=new Date();
     const sameDay=d.toDateString()===now.toDateString();
     return sameDay
@@ -5608,6 +5718,7 @@
   function renderGuildChatWidget(selector,prefix='modal',preserveInput=false){
     const root=typeof selector==='string'?q(selector):selector;
     if(!root)return;
+    const isModal=prefix==='modal';
     const prevInputVal=preserveInput?(q(`#guildChatInput_${prefix}`)?.value||''):'';
     const myId=cloudSession?.user?.id||'local';
     const players=(duelHubData?.players||[]).filter(Boolean);
@@ -5615,50 +5726,57 @@
     const filteredMsgs=(guildChatState.messages||[]).filter(m=>guildChatState.channel==='all'||m.channel===guildChatState.channel);
     const chanBadges={
       geral:{label:'🌐 Geral',cls:'geral'},
-      duelos:{label:'⚔️ Duelos X1',cls:'duelos'},
-      duvidas:{label:'📚 Dúvidas & Bizus',cls:'duvidas'}
+      duelos:{label:'⚔️ Duelos',cls:'duelos'},
+      duvidas:{label:'📚 Bizus',cls:'duvidas'}
     };
 
-    root.innerHTML=`
-      <div class="card slGuildLobbyCard">
-        <div class="sectionHead" style="margin-bottom:8px">
-          <div>
-            <div class="eyebrow">💬 INTERAÇÃO ENTRE CAÇADORES · FÓRUM &amp; LOBBY X1</div>
-            <h3 style="margin:2px 0 0">Lobby da Guilda de Caçadores</h3>
-          </div>
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-            <span class="tag">🟢 ${onlineCount} online · ${players.length||1} na guilda</span>
-            <button type="button" class="ghost small" data-guild-refresh="${prefix}">↻ Atualizar</button>
-          </div>
-        </div>
+    const modalStatusEl=q('#guildModalStatusPill');
+    if(isModal&&modalStatusEl){
+      modalStatusEl.textContent=`🟢 ${onlineCount} online · ${players.length||1} na guilda`;
+    }
 
-        ${guildChatState.sqlMissing?`
-          <div class="lessonBox trap" style="margin-bottom:10px">
-            <b>Ative o Chat da Guilda no Supabase:</b>
-            <p class="small" style="margin:4px 0 0">Execute o arquivo SQL atualizado (<code>20261101120000_v97_complete_security_duels_optin_and_base.sql</code>) no SQL Editor do Supabase para liberar o bate-papo em tempo real entre todos os usuários.</p>
+    root.innerHTML=`
+      <div class="${isModal?'slGuildModalInner':'card slGuildLobbyCard'}">
+        ${!isModal?`
+          <div class="sectionHead" style="margin-bottom:8px">
+            <div>
+              <div class="eyebrow">💬 TEMPO REAL · FÓRUM &amp; LOBBY X1</div>
+              <h3 style="margin:2px 0 0">Lobby da Guilda de Caçadores</h3>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              <span class="tag">🟢 ${onlineCount} online · ${players.length||1} na guilda</span>
+              <button type="button" class="ghost small" data-guild-refresh="${prefix}" style="width:auto;padding:5px 10px;min-height:30px">↻</button>
+            </div>
           </div>
         `:""}
 
-        ${players.length>1?`
+        ${guildChatState.sqlMissing?`
+          <div class="lessonBox trap" style="margin-bottom:8px">
+            <b>Ative o Chat da Guilda no Supabase:</b>
+            <p class="small" style="margin:3px 0 0">Execute o SQL atualizado (<code>20261101120000_v97_complete_security_duels_optin_and_base.sql</code>) no SQL Editor do Supabase.</p>
+          </div>
+        `:""}
+
+        ${players.length>0?`
           <div class="slGuildOnlineStrip">
-            <span class="small muted" style="font-weight:700;white-space:nowrap">Caçadores no Lobby:</span>
+            <span class="slGuildStripLabel">🟢 Online (${onlineCount}/${players.length}):</span>
             <div class="slGuildPlayersRow">
               ${players.map(p=>`
                 <div class="slGuildPlayerChip ${p.is_online?'online':''}">
                   <span class="onlineDot ${p.is_online?'on':''}"></span>
                   <b>${escText(p.name)}</b>
-                  ${!p.is_me?`<button type="button" class="slMiniDuelBtn" data-guild-challenge-opp="${escText(p.user_id)}|${escText(p.name)}" title="Desafiar ${escText(p.name)} para Duelo X1">⚔️ X1</button>`:`<span class="small muted">(você)</span>`}
+                  ${!p.is_me?`<button type="button" class="slMiniDuelBtn" data-guild-challenge-opp="${escText(p.user_id)}|${escText(p.name)}" title="Desafiar ${escText(p.name)} para Duelo X1">⚔️ X1</button>`:`<span class="small muted">você</span>`}
                 </div>
               `).join('')}
             </div>
           </div>
         `:""}
 
-        <div class="notifTabsBar" style="margin-bottom:10px">
-          <button type="button" class="notifTabBtn ${guildChatState.channel==='all'?'active':''}" data-guild-chan="all" data-guild-prefix="${prefix}">🔥 Todos (${(guildChatState.messages||[]).length})</button>
-          <button type="button" class="notifTabBtn ${guildChatState.channel==='geral'?'active':''}" data-guild-chan="geral" data-guild-prefix="${prefix}">🌐 Lobby Geral</button>
-          <button type="button" class="notifTabBtn ${guildChatState.channel==='duelos'?'active':''}" data-guild-chan="duelos" data-guild-prefix="${prefix}">⚔️ Arena &amp; Duelos</button>
-          <button type="button" class="notifTabBtn ${guildChatState.channel==='duvidas'?'active':''}" data-guild-chan="duvidas" data-guild-prefix="${prefix}">📚 Dúvidas &amp; Bizus</button>
+        <div class="slGuildChannelTabs" role="tablist">
+          <button type="button" class="slGuildTabBtn ${guildChatState.channel==='all'?'active':''}" data-guild-chan="all" data-guild-prefix="${prefix}">🔥 Todos (${(guildChatState.messages||[]).length})</button>
+          <button type="button" class="slGuildTabBtn ${guildChatState.channel==='geral'?'active':''}" data-guild-chan="geral" data-guild-prefix="${prefix}">🌐 Geral</button>
+          <button type="button" class="slGuildTabBtn ${guildChatState.channel==='duelos'?'active':''}" data-guild-chan="duelos" data-guild-prefix="${prefix}">⚔️ Duelos</button>
+          <button type="button" class="slGuildTabBtn ${guildChatState.channel==='duvidas'?'active':''}" data-guild-chan="duvidas" data-guild-prefix="${prefix}">📚 Bizus</button>
         </div>
 
         <div class="slGuildFeed" id="guildChatFeed_${prefix}">
@@ -5666,17 +5784,21 @@
             const isMe=Boolean(m.is_me||String(m.user_id)===String(myId));
             const cb=chanBadges[m.channel]||chanBadges.geral;
             const rankName=typeof rankLabelForXp==='function'?rankLabelForXp(Number(m.author_xp||0)):'Caçador';
+            const shortRank=rankName.split('·')[0].trim();
+            const isDuelCall=/^⚔️/.test(String(m.message||'').trim());
+            const isStatusCard=/^📊/.test(String(m.message||'').trim());
+            const isBizuCard=/^💡/.test(String(m.message||'').trim());
             return `
-              <div class="slGuildMsg ${isMe?'isMe':''}">
+              <div class="slGuildMsg ${isMe?'isMe':''} ${isDuelCall?'duelCallMsg':isStatusCard?'statusCardMsg':isBizuCard?'bizuCardMsg':''}">
                 <div class="slGuildMsgAvatar">${escText((m.author_name||'C').trim().slice(0,1).toUpperCase())}</div>
                 <div class="slGuildMsgBody">
                   <div class="slGuildMsgHead">
-                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                    <div class="slGuildAuthorWrap">
                       <strong class="slGuildAuthor">${escText(m.author_name||'Caçador')}</strong>
-                      <span class="slGuildRankPill">${escText(rankName)}</span>
+                      <span class="slGuildRankPill">${escText(shortRank)}</span>
                       <span class="slGuildChanTag ${cb.cls}">${cb.label}</span>
                     </div>
-                    <span class="small muted">${escText(formatGuildTime(m.created_at))}</span>
+                    <span class="slGuildTime">${escText(formatGuildTime(m.created_at))}${m.optimistic?' · ⏳':''}</span>
                   </div>
                   ${m.reply_excerpt?`
                     <div class="slGuildReplyQuote">
@@ -5686,34 +5808,40 @@
                   <div class="slGuildMsgText">${escText(m.message)}</div>
                   <div class="slGuildMsgActions">
                     <button type="button" class="slGuildActLink" data-guild-reply="${escText(m.id)}" data-guild-prefix="${prefix}">↩ Responder</button>
-                    ${!isMe?`<button type="button" class="slGuildActLink duel" data-guild-challenge-opp="${escText(m.user_id)}|${escText(m.author_name)}">⚔️ Chamar para X1</button>`:""}
-                    ${isMe?`<button type="button" class="slGuildActLink danger" data-guild-del="${escText(m.id)}">🗑️ Excluir</button>`:""}
+                    ${!isMe?`<button type="button" class="slGuildActLink duel" data-guild-challenge-opp="${escText(m.user_id)}|${escText(m.author_name)}">${isDuelCall?'⚔️ Aceitar Desafio X1':'⚔️ Chamar p/ X1'}</button>`:""}
+                    ${isMe&&!m.optimistic?`<button type="button" class="slGuildActLink danger" data-guild-del="${escText(m.id)}">🗑️ Excluir</button>`:""}
                   </div>
                 </div>
               </div>
             `;
           }).join(''):`
-            <div class="empty" style="padding:22px 12px">
-              💬 Nenhuma mensagem neste canal ainda. Mande um "Salve!", tire uma dúvida ou chame alguém para um Duelo X1!
+            <div class="empty" style="padding:18px 12px;margin:auto 0">
+              💬 Nenhuma mensagem neste canal ainda. Use os botões rápidos abaixo ou mande um "Salve!" para a Guilda!
             </div>
           `}
         </div>
 
         ${guildChatState.replyTo?`
           <div class="slGuildReplyBanner">
-            <span>Respondendo a <b>${escText(guildChatState.replyTo.author_name)}</b>: “${escText((guildChatState.replyTo.message||'').slice(0,80))}”</span>
-            <button type="button" class="ghost small" data-guild-cancel-reply="${prefix}" style="width:auto;padding:2px 8px;min-height:24px">× Cancelar</button>
+            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">↩ Respondendo a <b>${escText(guildChatState.replyTo.author_name)}</b>: “${escText((guildChatState.replyTo.message||'').slice(0,65))}”</span>
+            <button type="button" class="ghost small" data-guild-cancel-reply="${prefix}" style="width:auto;padding:2px 8px;min-height:24px;flex-shrink:0">×</button>
           </div>
         `:""}
+
+        <div class="slGuildQuickBar">
+          <button type="button" class="slQuickActionChip duel" data-guild-quick="duel_call" data-guild-prefix="${prefix}">⚔️ Quem vem X1 agora?</button>
+          <button type="button" class="slQuickActionChip status" data-guild-quick="share_status" data-guild-prefix="${prefix}">📊 Meu Status</button>
+          <button type="button" class="slQuickActionChip bizu" data-guild-quick="ask_bizu" data-guild-prefix="${prefix}">💡 Pedir/Postar Bizu</button>
+        </div>
 
         <div class="slGuildComposeRow">
           <select id="guildChatSendChannel_${prefix}" class="slGuildChannelSelect" aria-label="Canal da mensagem">
             <option value="geral" ${(guildChatState.sendChannel==='geral'||guildChatState.channel==='geral')?'selected':''}>🌐 Geral</option>
-            <option value="duelos" ${(guildChatState.sendChannel==='duelos'||guildChatState.channel==='duelos')?'selected':''}>⚔️ Duelos X1</option>
-            <option value="duvidas" ${(guildChatState.sendChannel==='duvidas'||guildChatState.channel==='duvidas')?'selected':''}>📚 Dúvidas/Bizus</option>
+            <option value="duelos" ${(guildChatState.sendChannel==='duelos'||guildChatState.channel==='duelos')?'selected':''}>⚔️ Duelos</option>
+            <option value="duvidas" ${(guildChatState.sendChannel==='duvidas'||guildChatState.channel==='duvidas')?'selected':''}>📚 Bizus</option>
           </select>
-          <input type="text" id="guildChatInput_${prefix}" maxlength="600" placeholder="Escreva para a Guilda (dúvida, bizu ou chamar para X1)..." value="${escText(prevInputVal)}">
-          <button type="button" class="action small" id="guildChatSendBtn_${prefix}" style="width:auto;white-space:nowrap">Enviar ➤</button>
+          <input type="text" id="guildChatInput_${prefix}" maxlength="600" placeholder="Mensagem para a Guilda..." value="${escText(prevInputVal)}">
+          <button type="button" class="action slGuildSendBtn" id="guildChatSendBtn_${prefix}" title="Enviar mensagem">Enviar ➤</button>
         </div>
       </div>
     `;
@@ -5734,6 +5862,29 @@
         if(btn.dataset.guildChan!=='all')guildChatState.sendChannel=btn.dataset.guildChan;
         if(q('#guildChatDialog')?.open)renderGuildChatWidget('#guildChatDialogRoot','modal',true);
         if(q('#duelLobbyChatSection'))renderGuildChatWidget('#duelLobbyChatSection','arena',true);
+      };
+    });
+
+    root.querySelectorAll('[data-guild-quick]').forEach(btn=>{
+      btn.onclick=()=>{
+        const kind=btn.dataset.guildQuick;
+        const me=typeof localHunterRow==='function'?localHunterRow():{name:'Caçador',xp:0,streak:0,accuracy:0,missions_done:0};
+        const rName=typeof rankLabelForXp==='function'?rankLabelForXp(Number(me.xp||0)):'Caçador';
+        if(kind==='duel_call'){
+          const camp=(typeof activeCampaign==='function'&&activeCampaign()?.name)||'Concurso';
+          sendGuildChatMessageFromUI(prefix,`⚔️ [CONVITE ABERTO X1] Estou online na Arena (${camp})! Quem encara um duelo de 5 questões agora?`,'duelos');
+        }else if(kind==='share_status'){
+          sendGuildChatMessageFromUI(prefix,`📊 [STATUS DO CAÇADOR] ${rName} · 🔥 ${me.streak||0}d ofensiva · ⚡ ${me.xp||0} XP · 🎯 ${me.accuracy||0}% precisão (${me.missions_done||0} missões concluídas)!`,'geral');
+        }else if(kind==='ask_bizu'){
+          guildChatState.sendChannel='duvidas';
+          const chanSel=q(`#guildChatSendChannel_${prefix}`);
+          if(chanSel)chanSel.value='duvidas';
+          const inp=q(`#guildChatInput_${prefix}`);
+          if(inp){
+            if(!inp.value.trim())inp.value='💡 [BIZU / DÚVIDA] ';
+            inp.focus();
+          }
+        }
       };
     });
 
@@ -5767,6 +5918,7 @@
         selectedDuelOpponentId=uid;
         selectedDuelOpponentName=uname;
         q('#guildChatDialog')?.close();
+        updateGuildUnreadBadge();
         openView('duel');
         setTimeout(()=>{
           const sel=q('#duelOpponentSelect');
@@ -5801,20 +5953,39 @@
 
   if(q('#floatingGuildChatBtn'))q('#floatingGuildChatBtn').onclick=openGuildChatDialog;
   if(q('#menuGuildChat'))q('#menuGuildChat').onclick=()=>{q('#moreDialog')?.close();openGuildChatDialog()};
-  if(q('#closeGuildChatDialogBtn'))q('#closeGuildChatDialogBtn').onclick=()=>q('#guildChatDialog')?.close();
+  if(q('#closeGuildChatDialogBtn'))q('#closeGuildChatDialogBtn').onclick=()=>{q('#guildChatDialog')?.close();updateGuildUnreadBadge()};
+  if(q('#guildChatDialog'))q('#guildChatDialog').addEventListener('close',updateGuildUnreadBadge);
+  const prevOpenViewForGuild=openView;
+  openView=function(id){
+    prevOpenViewForGuild(id);
+    updateGuildUnreadBadge();
+  };
   setTimeout(()=>{
     syncCommunityLibraryForActivePortal();
     if(cloudSession&&navigator.onLine){
+      connectGuildRealtimeSocket();
       loadDuelArenaHub(true);
       loadGuildChatMessages(true);
     }
-  },1400);
+  },1200);
   setInterval(()=>{
     if(cloudSession&&navigator.onLine){
-      if(!activeDuelSession)loadDuelArenaHub(true);
-      loadGuildChatMessages(true);
+      const chatActive=Boolean(q('#guildChatDialog')?.open||q('#duel')?.classList.contains('active'));
+      if(chatActive){
+        loadGuildChatMessages(true);
+        if(!activeDuelSession)loadDuelArenaHub(true);
+      }
     }
-  },8000);
+  },3500);
+  setInterval(()=>{
+    if(cloudSession&&navigator.onLine){
+      const chatActive=Boolean(q('#guildChatDialog')?.open||q('#duel')?.classList.contains('active'));
+      if(!chatActive){
+        if(!activeDuelSession)loadDuelArenaHub(true);
+        loadGuildChatMessages(true);
+      }
+    }
+  },7500);
   const remembered=(()=>{try{return sessionStorage.getItem(viewKey)}catch{return null}})();
   if(remembered&&q(`#${CSS.escape(remembered)}`)?.classList.contains('view'))openView(remembered);
   q('#aboutDialog .tag')&&(q('#aboutDialog .tag').textContent='Versão 78 · experiência orientada ao estudo');

@@ -845,10 +845,14 @@ select,
   }
 }
 
-/* === v108 DUEL INVITE POPUP + GUILD CHAT LOBBY === */
+/* === v108/v109 DUEL INVITE POPUP + MODERN REAL-TIME GUILD HUB === */
+.menuGrid > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 dialog.slInviteDialog {
-  max-width: 480px !important;
-  width: calc(100% - 24px) !important;
+  max-width: 460px !important;
+  width: calc(100% - 20px) !important;
   padding: 0 !important;
   border-radius: 22px !important;
   border: 1.5px solid rgba(56, 189, 248, 0.55) !important;
@@ -857,10 +861,10 @@ dialog.slInviteDialog {
   overflow: hidden !important;
 }
 .slInviteAlertCard {
-  padding: 20px 18px 18px !important;
+  padding: 18px 16px 16px !important;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 .slInviteHeader {
   display: flex;
@@ -872,42 +876,42 @@ dialog.slInviteDialog {
 .slInviteHeroRow {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 .slInviteAvatar {
-  width: 54px;
-  height: 54px;
-  border-radius: 16px;
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
   background: radial-gradient(circle at 30% 30%, rgba(56, 189, 248, 0.32), rgba(14, 116, 144, 0.14));
   border: 1px solid rgba(56, 189, 248, 0.5);
   display: grid;
   place-items: center;
-  font-size: 1.65rem;
+  font-size: 1.5rem;
   flex-shrink: 0;
   box-shadow: 0 0 20px rgba(56, 189, 248, 0.25);
 }
 .slInviteMetaGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 7px;
 }
 .slInviteMetaItem {
   background: rgba(15, 23, 42, 0.78);
   border: 1px solid rgba(56, 189, 248, 0.22);
-  border-radius: 12px;
-  padding: 9px 10px;
+  border-radius: 11px;
+  padding: 8px 9px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 .slInviteMetaItem small {
-  font-size: 0.65rem;
-  letter-spacing: 0.06em;
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
   color: #94a3b8;
   font-weight: 700;
 }
 .slInviteMetaItem b {
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   color: #f0f9ff;
   white-space: nowrap;
   overflow: hidden;
@@ -925,31 +929,35 @@ dialog.slInviteDialog {
 /* Botão Flutuante do Chat da Guilda */
 .slFloatingGuildBtn {
   position: fixed;
-  right: 18px;
+  right: 16px;
   bottom: 22px;
   z-index: 95;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
+  gap: 7px;
+  padding: 9px 15px;
   border-radius: 999px;
   background: linear-gradient(135deg, #091e36 0%, #0f2942 100%);
-  border: 1.5px solid rgba(56, 189, 248, 0.55);
+  border: 1.5px solid rgba(56, 189, 248, 0.58);
   color: #f0f9ff;
   font-weight: 800;
-  font-size: 0.88rem;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.65), 0 0 18px rgba(56, 189, 248, 0.24);
+  font-size: 0.84rem;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.68), 0 0 18px rgba(56, 189, 248, 0.25);
   cursor: pointer;
   width: auto !important;
+  min-height: 40px !important;
   transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+.slFloatingGuildBtn[hidden] {
+  display: none !important;
 }
 .slFloatingGuildBtn:hover {
   transform: translateY(-2px);
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.75), 0 0 24px rgba(56, 189, 248, 0.4);
 }
 .slGuildDot {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #22c55e;
   box-shadow: 0 0 8px #22c55e;
@@ -957,55 +965,88 @@ dialog.slInviteDialog {
 .slGuildUnreadBadge {
   background: #ef4444;
   color: #fff;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   padding: 2px 6px;
   border-radius: 999px;
   line-height: 1.1;
 }
 
-/* Modal e Card do Lobby da Guilda */
+/* Modal e Card do Lobby da Guilda (Sem Card Duplo e Otimizado para Mobile) */
 dialog.slGuildChatDialog {
-  max-width: 720px !important;
-  width: calc(100% - 20px) !important;
+  max-width: 680px !important;
+  width: calc(100% - 16px) !important;
+  padding: 14px 14px 12px !important;
+  border-radius: 22px !important;
+  background: linear-gradient(165deg, #071323 0%, #040b16 100%) !important;
+  border: 1px solid rgba(56, 189, 248, 0.38) !important;
+}
+.slGuildDialogHead {
+  margin-bottom: 8px !important;
+  padding-bottom: 8px !important;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.16);
+}
+.slGuildModalInner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .slGuildLobbyCard {
   background: linear-gradient(165deg, #081526 0%, #050d1a 100%);
   border-color: rgba(56, 189, 248, 0.32);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px !important;
 }
+
+/* Faixa horizontal de Caçadores Online sem barra de rolagem cinza */
 .slGuildOnlineStrip {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  background: rgba(6, 16, 30, 0.75);
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(6, 16, 30, 0.82);
   border: 1px solid rgba(56, 189, 248, 0.18);
-  border-radius: 12px;
-  margin-bottom: 10px;
+  border-radius: 11px;
   overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.slGuildOnlineStrip::-webkit-scrollbar {
+  display: none;
+}
+.slGuildStripLabel {
+  font-size: 0.73rem;
+  font-weight: 800;
+  color: #94a3b8;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .slGuildPlayersRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .slGuildPlayerChip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 9px;
+  gap: 5px;
+  padding: 3px 8px;
   border-radius: 999px;
-  background: rgba(15, 29, 48, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  font-size: 0.78rem;
+  background: rgba(15, 29, 48, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  font-size: 0.75rem;
   white-space: nowrap;
 }
 .slGuildPlayerChip.online {
   border-color: rgba(34, 197, 94, 0.45);
+  background: rgba(10, 32, 28, 0.72);
 }
 .slMiniDuelBtn {
   padding: 2px 7px !important;
-  min-height: 22px !important;
-  font-size: 0.7rem !important;
+  min-height: 20px !important;
+  font-size: 0.68rem !important;
+  font-weight: 800 !important;
   border-radius: 999px !important;
   background: rgba(56, 189, 248, 0.18) !important;
   border: 1px solid rgba(56, 189, 248, 0.45) !important;
@@ -1013,40 +1054,85 @@ dialog.slGuildChatDialog {
   width: auto !important;
   cursor: pointer;
 }
+
+/* Abas de Canais em Linha Única Compacta (4 colunas iguais sem quebrar em 3+1) */
+.slGuildChannelTabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  background: rgba(4, 10, 20, 0.75);
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid rgba(30, 58, 95, 0.5);
+}
+.slGuildTabBtn {
+  padding: 6px 4px !important;
+  min-height: 32px !important;
+  border-radius: 9px !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  color: #94a3b8 !important;
+  font-size: 0.74rem !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  text-align: center !important;
+  width: 100% !important;
+}
+.slGuildTabBtn.active {
+  background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%) !important;
+  color: #04101f !important;
+  font-weight: 800 !important;
+  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.3);
+}
+
+/* Feed de Mensagens */
 .slGuildFeed {
-  max-height: 360px;
-  min-height: 200px;
+  height: 320px;
+  max-height: 44dvh;
+  min-height: 185px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 14px;
-  background: rgba(4, 10, 20, 0.78);
+  gap: 7px;
+  padding: 9px;
+  border-radius: 13px;
+  background: rgba(4, 10, 20, 0.84);
   border: 1px solid rgba(30, 58, 95, 0.55);
-  margin-bottom: 10px;
 }
 .slGuildMsg {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 9px 11px;
+  gap: 9px;
+  padding: 8px 10px;
   border-radius: 12px;
-  background: rgba(12, 25, 44, 0.85);
+  background: rgba(12, 25, 44, 0.88);
   border: 1px solid rgba(56, 189, 248, 0.16);
 }
 .slGuildMsg.isMe {
-  background: rgba(14, 38, 62, 0.92);
+  background: linear-gradient(145deg, rgba(14, 42, 68, 0.94), rgba(10, 28, 48, 0.94));
   border-color: rgba(56, 189, 248, 0.42);
 }
+.slGuildMsg.duelCallMsg {
+  border-left: 3px solid #f97316;
+  background: linear-gradient(145deg, rgba(42, 20, 16, 0.88), rgba(15, 23, 42, 0.92));
+}
+.slGuildMsg.statusCardMsg {
+  border-left: 3px solid #22c55e;
+  background: linear-gradient(145deg, rgba(10, 36, 28, 0.88), rgba(15, 23, 42, 0.92));
+}
+.slGuildMsg.bizuCardMsg {
+  border-left: 3px solid #eab308;
+}
 .slGuildMsgAvatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
   background: linear-gradient(135deg, #0ea5e9, #2563eb);
   color: #fff;
   font-weight: 900;
-  font-size: 0.88rem;
+  font-size: 0.84rem;
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -1059,58 +1145,70 @@ dialog.slGuildChatDialog {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+.slGuildAuthorWrap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   flex-wrap: wrap;
-  margin-bottom: 4px;
+  min-width: 0;
 }
 .slGuildAuthor {
-  font-size: 0.86rem;
+  font-size: 0.83rem;
   color: #f8fafc;
 }
 .slGuildRankPill {
-  font-size: 0.66rem;
+  font-size: 0.63rem;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(245, 158, 11, 0.16);
-  border: 1px solid rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.38);
   color: #fcd34d;
   font-weight: 700;
 }
 .slGuildChanTag {
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   padding: 1px 6px;
   border-radius: 999px;
   background: rgba(56, 189, 248, 0.14);
   color: #7dd3fc;
 }
 .slGuildChanTag.duelos {
-  background: rgba(239, 68, 68, 0.16);
-  color: #fca5a5;
+  background: rgba(249, 115, 22, 0.18);
+  color: #fdba74;
 }
 .slGuildChanTag.duvidas {
   background: rgba(34, 197, 94, 0.16);
   color: #86efac;
 }
+.slGuildTime {
+  font-size: 0.68rem;
+  color: #64748b;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 .slGuildReplyQuote {
-  font-size: 0.76rem;
-  padding: 5px 8px;
-  border-left: 3px solid #38bdf8;
-  background: rgba(7, 16, 30, 0.7);
+  font-size: 0.74rem;
+  padding: 4px 8px;
+  border-left: 2.5px solid #38bdf8;
+  background: rgba(7, 16, 30, 0.72);
   border-radius: 6px;
   color: #cbd5e1;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 .slGuildMsgText {
-  font-size: 0.9rem;
-  color: #e2e8f0;
-  line-height: 1.45;
+  font-size: 0.88rem;
+  color: #f1f5f9;
+  line-height: 1.42;
   white-space: pre-wrap;
   word-break: break-word;
 }
 .slGuildMsgActions {
   display: flex;
-  gap: 10px;
-  margin-top: 5px;
+  gap: 12px;
+  margin-top: 4px;
   flex-wrap: wrap;
 }
 .slGuildActLink {
@@ -1119,13 +1217,12 @@ dialog.slGuildChatDialog {
   padding: 0 !important;
   min-height: 0 !important;
   width: auto !important;
-  font-size: 0.73rem !important;
+  font-size: 0.72rem !important;
   color: #94a3b8 !important;
   cursor: pointer;
 }
 .slGuildActLink:hover {
   color: #38bdf8 !important;
-  text-decoration: underline;
 }
 .slGuildActLink.duel {
   color: #38bdf8 !important;
@@ -1139,33 +1236,111 @@ dialog.slGuildChatDialog {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  border-radius: 10px;
+  padding: 5px 9px;
+  border-radius: 9px;
   background: rgba(14, 116, 144, 0.22);
   border: 1px solid rgba(56, 189, 248, 0.35);
-  font-size: 0.78rem;
-  margin-bottom: 8px;
+  font-size: 0.75rem;
 }
+
+/* Barra de Atalhos Rápidos de 1 Toque */
+.slGuildQuickBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.slGuildQuickBar::-webkit-scrollbar {
+  display: none;
+}
+.slQuickActionChip {
+  padding: 4px 10px !important;
+  min-height: 26px !important;
+  border-radius: 999px !important;
+  font-size: 0.71rem !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+  width: auto !important;
+  background: rgba(15, 29, 48, 0.85) !important;
+  border: 1px solid rgba(56, 189, 248, 0.3) !important;
+  color: #bae6fd !important;
+  cursor: pointer;
+}
+.slQuickActionChip.duel {
+  border-color: rgba(249, 115, 22, 0.45) !important;
+  color: #fed7aa !important;
+}
+.slQuickActionChip.status {
+  border-color: rgba(34, 197, 94, 0.42) !important;
+  color: #bbf7d0 !important;
+}
+
+/* Barra de Envio em Linha Única (Desktop + Celular) */
 .slGuildComposeRow {
   display: grid;
-  grid-template-columns: 135px minmax(0, 1fr) auto;
-  gap: 8px;
+  grid-template-columns: 98px minmax(0, 1fr) auto;
+  gap: 6px;
   align-items: center;
 }
+.slGuildChannelSelect {
+  padding: 8px 6px !important;
+  min-height: 40px !important;
+  font-size: 0.76rem !important;
+  border-radius: 11px !important;
+}
+.slGuildComposeRow input[type="text"] {
+  min-height: 40px !important;
+  padding: 8px 12px !important;
+  font-size: 0.86rem !important;
+  border-radius: 11px !important;
+}
+.slGuildSendBtn {
+  width: auto !important;
+  min-height: 40px !important;
+  padding: 8px 14px !important;
+  border-radius: 11px !important;
+  font-size: 0.82rem !important;
+  font-weight: 800 !important;
+  white-space: nowrap !important;
+}
+
 @media (max-width: 640px) {
   .slInviteMetaGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .slInviteMetaGrid .slInviteMetaItem:first-child {
+    grid-column: 1 / -1;
   }
   .slInviteActions {
     grid-template-columns: 1fr;
   }
+  dialog.slGuildChatDialog {
+    width: calc(100% - 10px) !important;
+    max-height: 88dvh !important;
+    padding: 12px 11px 10px !important;
+  }
+  .slGuildFeed {
+    height: 40dvh;
+    max-height: 42dvh;
+  }
   .slGuildComposeRow {
-    grid-template-columns: 1fr;
+    grid-template-columns: 88px minmax(0, 1fr) auto;
+    gap: 5px;
+  }
+  .slGuildChannelSelect {
+    font-size: 0.72rem !important;
+    padding: 6px 4px !important;
+  }
+  .slGuildSendBtn {
+    padding: 8px 11px !important;
+    font-size: 0.78rem !important;
   }
   .slFloatingGuildBtn {
     right: 12px;
-    bottom: 76px;
+    bottom: 74px;
     padding: 8px 13px;
-    font-size: 0.8rem;
+    font-size: 0.79rem;
   }
 }
