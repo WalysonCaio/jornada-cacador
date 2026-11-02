@@ -1352,3 +1352,68 @@ dialog.slGuildChatDialog {
 .localDbBar .localDbDot{width:9px;height:9px;border-radius:50%;background:#45daa3;box-shadow:0 0 10px #45daa399;flex-shrink:0}
 .localDbBar button{padding:7px 12px;min-height:36px;font-size:.78rem;width:auto}
 @media(max-width:640px){.localDbBar{flex-direction:column;align-items:stretch}.localDbBar button{width:100%}}
+
+/* V114 — Simulador de Aprovação Legível e Acionável + Gráfico de Desempenho Responsivo + Splash Adaptativa */
+.cutoffHeaderRow{align-items:flex-start!important;gap:10px!important;flex-wrap:wrap!important}
+.cutoffHeaderRow h2{font-size:clamp(1.02rem,2.2vw,1.25rem)!important;line-height:1.3!important}
+.cutoffTrackWrap{margin-top:16px!important;padding-bottom:6px!important}
+.cutoffBar{position:relative;height:16px!important;background:#06111c;border:1px solid #294c66;border-radius:99px;overflow:visible}
+.cutoffFill{height:100%;border-radius:99px;background:linear-gradient(90deg,#ff6b7d 0%,#f7bd43 55%,#40d99b 72%,#59e6ff 100%);transition:width .35s ease}
+.cutoffCurrentPin{position:absolute;top:-24px;transform:translateX(-50%);background:#0a1e32;border:1px solid var(--cyan);color:var(--cyan);font-size:.68rem;font-weight:900;padding:2px 7px;border-radius:99px;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.45);z-index:2}
+.cutoffMarker{position:absolute;top:-4px;bottom:-4px;width:2px;background:rgba(255,255,255,.85);box-shadow:0 0 6px #000;pointer-events:none}
+.cutoffMarker.m72{width:3px;background:var(--gold);box-shadow:0 0 8px rgba(247,189,67,.8)}
+.cutoffMarker.m80{background:var(--cyan)}
+.cutoffScaleTicks{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:8px;font-size:.71rem;font-weight:800;color:var(--muted);flex-wrap:wrap}
+.cutoffScaleTicks .t60{color:#cbd5e1}
+.cutoffScaleTicks .t72{color:var(--gold)}
+.cutoffScaleTicks .t80{color:var(--cyan)}
+
+.cutoffStagesGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+.cutoffStageCard{padding:10px 12px;border-radius:12px;background:#071422;border:1px solid #223c52;display:flex;flex-direction:column;gap:4px}
+.cutoffStageCard.target{border-color:rgba(247,189,67,.45);background:linear-gradient(145deg,#131b24,#081421)}
+.cutoffStageCard.elite{border-color:rgba(89,230,255,.35)}
+.cutoffStageCard.passed{border-color:rgba(64,217,155,.55);background:linear-gradient(145deg,#0b231e,#071520)}
+.cutoffStageCard .stageTop{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.cutoffStageCard .stageTop span{font-size:.69rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:800}
+.cutoffStageCard .stagePct{font-size:1rem;color:var(--cyan);font-weight:900}
+.cutoffStageCard.target .stagePct{color:var(--gold)}
+.cutoffStageCard.passed .stagePct{color:var(--green)}
+.cutoffStageCard .stageStatus{font-size:.77rem;font-weight:750;color:#e2e8f0}
+.cutoffStageCard small{font-size:.7rem;color:var(--muted)}
+
+.cutoffDiagDivider{height:1px;background:#1e364c;margin:14px 0 12px}
+.cutoffSubHead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.cutoffSubHead b{font-size:.86rem;color:#f1f5f9}
+.cutoffBottleneckList{display:grid;gap:8px}
+.cutoffBottleneckRow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:#071320;border:1px solid #223d54}
+.cutoffBottleneckInfo{min-width:0;flex:1}
+.cutoffBottleneckTitleRow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px}
+.cutoffBottleneckTitleRow b{font-size:.88rem;color:#fff}
+.cutoffPill{display:inline-flex;padding:2px 8px;border-radius:99px;font-size:.7rem;font-weight:800}
+.cutoffPill.low{background:#381520;color:#ff9aa8;border:1px solid rgba(255,107,125,.4)}
+.cutoffPill.mid{background:#33260e;color:#fcd34d;border:1px solid rgba(247,189,67,.4)}
+.cutoffPill.high{background:#0f2e22;color:#6ee7b7;border:1px solid rgba(64,217,155,.4)}
+.cutoffFixBtn{width:auto!important;padding:8px 13px!important;min-height:36px!important;font-size:.78rem!important;white-space:nowrap;flex-shrink:0}
+
+.cutoffErrorTopicsGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.cutoffErrorTopicCard{padding:11px 12px;border-radius:12px;background:#0b1624;border:1px solid #3b202c;border-left:3px solid var(--red);display:flex;flex-direction:column;justify-content:space-between;gap:9px}
+.cutoffErrorTopicMain b{display:block;font-size:.86rem;margin-top:2px;color:#fff}
+.cutoffErrorTopicActions{display:flex;gap:6px;flex-wrap:wrap}
+.cutoffErrorTopicActions button{flex:1 1 110px;padding:6px 9px!important;min-height:33px!important;font-size:.74rem!important}
+
+/* Gráfico Desempenho por Disciplina Modernizado (Sem truncar nomes) */
+.performanceBar{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:6px!important;padding:10px 12px;border-radius:12px;background:#071422;border:1px solid #1f374d}
+.perfBarHead{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.perfSubjectName{font-size:.86rem;font-weight:800;color:#f1f5f9;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;line-height:1.3}
+.perfBarRight{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.perfMetaCount{font-size:.73rem;color:var(--muted)}
+.performanceTrack{position:relative;height:10px!important;overflow:visible!important}
+.perfCutoffTick{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--gold);z-index:2;pointer-events:none}
+.perfBarFoot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:2px}
+.perfTrainBtn{width:auto!important;padding:4px 10px!important;min-height:28px!important;font-size:.72rem!important}
+
+@media(max-width:719px){
+  .cutoffStagesGrid,.cutoffErrorTopicsGrid{grid-template-columns:1fr!important}
+  .cutoffBottleneckRow{flex-direction:column;align-items:stretch}
+  .cutoffFixBtn{width:100%!important;text-align:center}
+}

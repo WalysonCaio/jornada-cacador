@@ -639,3 +639,30 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   assert.ok(elapsed < 150, `15.000 chamadas memoizadas devem executar em menos de 150ms (levou ${elapsed}ms)`);
   console.log(`OK: Banco Local (IndexedDB), troca instantânea de abas, scroll 60fps sem tela preta e memoização O(1) (${elapsed}ms para 15.000 chamadas) validados (v113).`);
 }
+
+// ── Validação v114: Splash Screen Adaptativa (Mobile Vertical / Desktop Horizontal), Simulador de Aprovação Acionável sem Sobreposição e Refatoração Visual ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const cssSrc = readFileSync(new URL("../dist/ui-v77.css", import.meta.url), "utf8");
+  const manifestSrc = readFileSync(new URL("../dist/manifest.webmanifest", import.meta.url), "utf8");
+
+  assert.ok(
+    htmlSrc.includes('id="appBootSplash"') &&
+    htmlSrc.includes('media="(max-width: 767px), (orientation: portrait)" srcset="bancas-boss-banner.jpg"') &&
+    htmlSrc.includes("dismissAppBootSplash") &&
+    manifestSrc.includes('"form_factor": "narrow"') &&
+    manifestSrc.includes('"form_factor": "wide"'),
+    "Tela de início deve exibir o banner vertical (bancas-boss-banner.jpg) no celular e o banner horizontal (login-banner.jpg) no computador"
+  );
+  assert.ok(
+    v77Src.includes("cutoffStagesGrid") &&
+    v77Src.includes("cutoffActionableBox") &&
+    v77Src.includes("startSubjectTargetedFix") &&
+    v77Src.includes("data-cutoff-fix-subj") &&
+    v77Src.includes("data-cutoff-study-subj") &&
+    cssSrc.includes(".cutoffBottleneckRow"),
+    "Simulador de Aprovação deve ter grade responsiva sem sobreposição (60%, 72%, 80%) e diagnóstico acionável de gargalos e erros com botões de correção imediata"
+  );
+  console.log("OK: Splash Screen adaptativa (Vertical Mobile / Horizontal PC) e Simulador de Aprovação com diagnóstico acionável de erros (v114) validados.");
+}

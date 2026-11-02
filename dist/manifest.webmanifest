@@ -7,9 +7,35 @@
   "display": "standalone",
   "orientation": "any",
   "background_color": "#050a12",
-  "theme_color": "#07111f",
+  "theme_color": "#050a12",
   "icons": [
-    {"src":"icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
-    {"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "bancas-boss-banner.jpg",
+      "sizes": "900x1612",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "Jornada do Caçador — Mobile Vertical"
+    },
+    {
+      "src": "login-banner.jpg",
+      "sizes": "1600x893",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "Jornada do Caçador — Desktop Horizontal"
+    }
   ]
 }

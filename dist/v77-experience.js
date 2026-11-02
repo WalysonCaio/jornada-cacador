@@ -951,12 +951,110 @@
     });
   }
 
+  function startSubjectTargetedFix(subjectName,preferErrors=true){
+    const cleanSubj=canonicalSubjectName(subjectName);
+    const subjKey=topicKey(cleanSubj);
+    const allQ=ALL_QUESTIONS||[];
+    const subjPool=allQ.filter(item=>topicKey(learningCategory(item.subject))===subjKey);
+    const errEntries=activeCampaignErrors().filter(([,e])=>topicKey(canonicalSubjectName(e?.subject||''))===subjKey);
+    let chosenPool=[];
+    if(preferErrors&&errEntries.length){
+      const errMatched=subjPool.filter(item=>questionMatchesErrorPool(item,errEntries));
+      const synthFromErrors=errEntries.filter(([,e])=>e?.question&&e?.correctAnswer).map(([,e])=>{
+        const distractors=['Alternativa incorreta conforme a literalidade da norma e jurisprudência aplicável.','Hipótese vedada ou incompatível com o instituto jurídico cobrado.','Conceito pertencente a outro dispositivo ou regra diversa na matéria.'];
+        const wrongChosen=e.lastChosen&&e.lastChosen!==e.correctAnswer?[e.lastChosen]:[];
+        const opts=[e.correctAnswer,...wrongChosen,...distractors].slice(0,4);
+        return{subject:cleanSubj,topic:e.topic||'Correção de Erro',statement:e.question,options:opts,correct_index:0,explanation:e.explanation||`Revisão de erro: a resposta correta é "${e.correctAnswer}".`,difficulty:'medio',origin:'adaptada_do_pdf'};
+      });
+      chosenPool=[...errMatched,...synthFromErrors,...subjPool];
+    }else{
+      chosenPool=subjPool;
+    }
+    if(chosenPool.length){
+      const seen=new Set();
+      const uniquePool=chosenPool.filter(item=>{const fp=questionFingerprint(item);if(seen.has(fp))return false;seen.add(fp);return true});
+      const count=Math.min(8,uniquePool.length);
+      const selected=typeof progressiveQuestions==='function'?progressiveQuestions(uniquePool,count):uniquePool.slice(0,count);
+      activeQuestions={
+        mode:'battle',
+        subject:cleanSubj,
+        questions:selected.map(prepareQuestion),
+        current:0,
+        correct:0,
+        streak:0,
+        level:1,
+        answered:false
+      };
+      if(q('#questionDialogTitle'))q('#questionDialogTitle').textContent=`🎯 Correção de Gargalo · ${cleanSubj}`;
+      q('#questionDialog')?.showModal();
+      showQuestion();
+      return;
+    }
+    const subjSel=q('#questionSubject');
+    if(subjSel){
+      const match=[...subjSel.options].find(opt=>topicKey(opt.value)===subjKey);
+      if(match){
+        subjSel.value=match.value;
+        populateTopicFilter();
+        updateQuestionPool();
+        q('.questionTrainer')?.scrollIntoView({behavior:'smooth',block:'center'});
+        toast(`Filtro ajustado para ${cleanSubj}. Inicie a bateria para corrigir este ponto!`);
+        return;
+      }
+    }
+    switchExamHubTab('generator');
+    if(q('#genBankSubject'))q('#genBankSubject').value=cleanSubj;
+    q('#examBankHub')?.scrollIntoView({behavior:'smooth',block:'center'});
+    toast(`Gere questões comentadas de ${cleanSubj} para treinar esta disciplina!`);
+  }
+  window.startSubjectTargetedFix=startSubjectTargetedFix;
+
   function renderPerformanceChart(){
     const root=q('#performanceChart');if(!root)return;
     const scores=(state?.scores||[]).filter(item=>!item.campaignId||item.campaignId===state.activeCampaignId),groups={};
-    for(const item of scores){const name=item.subject||missionPool().find(m=>m.id===item.id)?.subject||'Conteúdo geral';groups[name]??={total:0,correct:0};groups[name].total+=Number(item.total||0);groups[name].correct+=Number(item.correct||0)}
-    const rows=Object.entries(groups).filter(([,data])=>data.total>0).sort((a,b)=>(a[1].correct/a[1].total)-(b[1].correct/b[1].total));
-    root.className='performanceChart';root.innerHTML=rows.length?rows.map(([name,data])=>{const rate=Math.round(data.correct/data.total*100),tone=rate<60?'low':rate<80?'mid':'high';return `<div class="performanceBar ${tone}" title="${escText(name)}: ${data.correct}/${data.total}"><span>${escText(name)}</span><div class="performanceTrack"><i style="width:${rate}%"></i></div><b>${rate}%</b></div>`}).join(''):'<div class="empty">Resolva questões para visualizar sua precisão por disciplina.</div>';
+    for(const item of scores){
+      const rawName=item.subject||missionPool().find(m=>m.id===item.id)?.subject||'Conteúdo geral';
+      const name=canonicalSubjectName(rawName);
+      groups[name]??={total:0,correct:0,misses:0};
+      groups[name].total+=Number(item.total||0);
+      groups[name].correct+=Number(item.correct||0);
+    }
+    for(const [,err] of activeCampaignErrors()){
+      const name=canonicalSubjectName(err?.subject||'Conteúdo geral');
+      groups[name]??={total:0,correct:0,misses:0};
+      groups[name].misses+=Number(err?.misses||1);
+    }
+    const rows=Object.entries(groups).filter(([,data])=>data.total>0||data.misses>0).sort((a,b)=>{
+      const ra=a[1].total?a[1].correct/a[1].total:0;
+      const rb=b[1].total?b[1].correct/b[1].total:0;
+      return ra-rb||(b[1].misses-a[1].misses);
+    });
+    root.className='performanceChart';
+    root.innerHTML=rows.length?rows.map(([name,data])=>{
+      const rate=data.total?Math.round(data.correct/data.total*100):0;
+      const tone=rate<60?'low':rate<72?'mid':'high';
+      const statusLabel=rate>=72?'✓ Acima do corte (≥72%)':rate>=60?'⚡ Na disputa (meta: 72%)':'🔴 Abaixo do corte (<60%)';
+      return `<div class="performanceBar ${tone}" title="${escText(name)}: ${data.correct}/${data.total}">
+        <div class="perfBarHead">
+          <span class="perfSubjectName">${escText(name)}</span>
+          <div class="perfBarRight">
+            <span class="perfMetaCount">${data.total?`${data.correct}/${data.total} acertos`:""}${data.misses?`${data.total?" · ":""}${data.misses} erro(s)`:""}</span>
+            <b>${rate}%</b>
+          </div>
+        </div>
+        <div class="performanceTrack">
+          <i style="width:${rate}%"></i>
+          <s class="perfCutoffTick" style="left:72%" title="Meta de Corte: 72%"></s>
+        </div>
+        <div class="perfBarFoot">
+          <small class="muted">${statusLabel}</small>
+          <button type="button" class="ghost small perfTrainBtn" data-perf-train-subject="${escText(name)}">${rate<72||data.misses?'🔧 Corrigir →':'Treinar →'}</button>
+        </div>
+      </div>`;
+    }).join(''):'<div class="empty">Resolva questões para visualizar sua precisão por disciplina e distância para o corte de 72%.</div>';
+    root.querySelectorAll('[data-perf-train-subject]').forEach(btn=>{
+      btn.onclick=()=>startSubjectTargetedFix(btn.dataset.perfTrainSubject,true);
+    });
     renderTacticalDiagnosis();
     renderCutoffThermometer();
   }
@@ -1636,48 +1734,252 @@
   }
 
 
-  // 5. Termômetro de Nota de Corte Policial (#cutoffThermometerPanel)
+  // 5. Simulador de Aprovação, Meta de Corte & Diagnóstico Acionável de Erros (#cutoffThermometerPanel)
   function ensureCutoffThermometer(){
     const perfGrid=q('#report #performanceSummary');
     if(!perfGrid||q('#cutoffThermometerPanel'))return;
-    perfGrid.insertAdjacentHTML('afterend',`<div class="card cutoffThermometerCard" id="cutoffThermometerPanel"><div class="sectionHead"><div><div class="eyebrow">SIMULADOR DE APROVAÇÃO · META DE CORTE</div><h2 id="cutoffStatusTitle" style="margin:3px 0 0">Termômetro de Nota de Corte</h2></div><span class="tag" id="cutoffTierBadge">Em aferição</span></div><div class="cutoffTrackWrap"><div class="cutoffBar"><div class="cutoffFill" id="cutoffFillBar" style="width:0%"></div><span class="cutoffMarker" style="left:60%" title="60% — Habilitação mínima"><i>60%</i></span><span class="cutoffMarker" style="left:72%" title="72% — Corte médio PMPE / Carreiras Policiais"><i>72% Vagas</i></span><span class="cutoffMarker" style="left:80%" title="80% — Zona Caveira / Primeiros Colocados"><i>80% Elite</i></span></div></div><p class="small muted" id="cutoffAdviceText" style="margin:14px 0 0"></p></div>`);
+    perfGrid.insertAdjacentHTML('afterend',`
+      <div class="card cutoffThermometerCard" id="cutoffThermometerPanel">
+        <div class="sectionHead cutoffHeaderRow">
+          <div>
+            <div class="eyebrow">SIMULADOR DE APROVAÇÃO · META DE CORTE &amp; CORREÇÃO DE GARGALOS</div>
+            <h2 id="cutoffStatusTitle" style="margin:3px 0 0">Termômetro de Nota de Corte</h2>
+          </div>
+          <span class="tag" id="cutoffTierBadge">Em aferição</span>
+        </div>
+        <div class="cutoffTrackWrap">
+          <div class="cutoffBar">
+            <div class="cutoffFill" id="cutoffFillBar" style="width:0%"></div>
+            <span class="cutoffCurrentPin" id="cutoffCurrentPin" style="left:0%">0%</span>
+            <span class="cutoffMarker m60" style="left:60%" title="60% — Habilitação mínima"></span>
+            <span class="cutoffMarker m72" style="left:72%" title="72% — Nota de Corte das Vagas"></span>
+            <span class="cutoffMarker m80" style="left:80%" title="80% — Faixa Elite / Primeiros Colocados"></span>
+          </div>
+          <div class="cutoffScaleTicks">
+            <span>0%</span>
+            <span class="t60">60% Mínimo</span>
+            <span class="t72">🎯 72% Vagas</span>
+            <span class="t80">🏆 80% Elite</span>
+          </div>
+        </div>
+        <div class="cutoffStagesGrid" id="cutoffStagesGrid"></div>
+        <p class="small muted" id="cutoffAdviceText" style="margin:10px 0 0"></p>
+        <div class="cutoffActionableBox" id="cutoffActionableBox"></div>
+      </div>
+    `);
   }
 
   function renderCutoffThermometer(){
     ensureCutoffThermometer();
-    const fillEl=q('#cutoffFillBar'),titleEl=q('#cutoffStatusTitle'),badgeEl=q('#cutoffTierBadge'),adviceEl=q('#cutoffAdviceText');
+    const fillEl=q('#cutoffFillBar'),pinEl=q('#cutoffCurrentPin'),titleEl=q('#cutoffStatusTitle'),badgeEl=q('#cutoffTierBadge'),adviceEl=q('#cutoffAdviceText'),stagesEl=q('#cutoffStagesGrid'),actionBox=q('#cutoffActionableBox');
     if(!fillEl)return;
     const scores=(state?.scores||[]).filter(s=>!s.campaignId||s.campaignId===state.activeCampaignId);
-    const total=scores.reduce((n,s)=>n+Number(s.total||0),0);
-    const correct=scores.reduce((n,s)=>n+Number(s.correct||0),0);
-    if(total<5){
+    const tracked=state?.questionStatsByCampaign?.[state?.activeCampaignId]||{};
+    const scoreTotal=scores.reduce((n,s)=>n+Number(s.total||0),0);
+    const scoreCorrect=scores.reduce((n,s)=>n+Number(s.correct||0),0);
+    const total=Math.max(scoreTotal,Number(tracked.total||0));
+    const correct=Number(tracked.total||0)>scoreTotal?Number(tracked.correct||0):scoreCorrect;
+    const allErrors=activeCampaignErrors();
+
+    // Calcular métricas por disciplina para identificar gargalos reais
+    const missions=typeof missionPool==='function'?missionPool():[];
+    const bySubject={};
+    for(const item of scores){
+      const name=canonicalSubjectName(item.subject||missions.find(m=>m.id===item.id)?.subject||'Conteúdo Geral');
+      bySubject[name]??={total:0,correct:0,misses:0,topics:[]};
+      bySubject[name].total+=Number(item.total||0);
+      bySubject[name].correct+=Number(item.correct||0);
+    }
+    for(const [errKey,err] of allErrors){
+      const name=canonicalSubjectName(err?.subject||'Conteúdo Geral');
+      bySubject[name]??={total:0,correct:0,misses:0,topics:[]};
+      bySubject[name].misses+=Number(err?.misses||1);
+      bySubject[name].topics.push({key:errKey,err});
+    }
+
+    const subjDiagnostics=Object.entries(bySubject).map(([name,d])=>{
+      const rate=d.total>0?Math.round(d.correct/d.total*100):(d.misses>0?35:0);
+      const neededFor72=d.total>0&&rate<72?Math.max(1,Math.ceil((0.72*d.total-d.correct)/0.28)):(d.misses>0?3:0);
+      return{name,total:d.total,correct:d.correct,misses:d.misses,rate,neededFor72,topics:d.topics};
+    }).sort((a,b)=>a.rate-b.rate||(b.misses-a.misses));
+
+    const bottlenecks=subjDiagnostics.filter(d=>d.rate<72||d.misses>0);
+    const topWeakTopics=allErrors
+      .map(([key,e])=>({key,e,subj:canonicalSubjectName(e?.subject||'Geral'),misses:Number(e?.misses||1),attempts:Math.max(Number(e?.attempts||1),Number(e?.misses||1))}))
+      .sort((a,b)=>(b.misses/b.attempts)-(a.misses/a.attempts)||b.misses-a.misses)
+      .slice(0,4);
+
+    if(total<1&&!allErrors.length){
       fillEl.style.width='0%';
-      badgeEl.textContent='Resolva 5+ questões';
-      titleEl.textContent='Resolva sua primeira bateria para medir sua faixa de corte';
-      adviceEl.textContent='As faixas de referência são: 60% (Habilitação), 72% (Zona de Vagas — padrão PMPE/Polícias) e 80%+ (Elite Caveira).';
+      if(pinEl){pinEl.style.left='0%';pinEl.textContent='0%'}
+      badgeEl.textContent='Comece a praticar';
+      titleEl.textContent='Resolva questões para medir sua nota de corte e mapear erros';
+      if(stagesEl){
+        stagesEl.innerHTML=`
+          <div class="cutoffStageCard"><span>Marco 1 · Mínimo</span><b>60% Habilitação</b><small>Nota mínima para não ser eliminado</small></div>
+          <div class="cutoffStageCard target"><span>Marco 2 · Meta Real</span><b>72% Corte Vagas</b><small>Média histórica PMPE / Polícias</small></div>
+          <div class="cutoffStageCard elite"><span>Marco 3 · Segurança</span><b>80%+ Faixa Elite</b><small>Primeiros colocados</small></div>
+        `;
+      }
+      adviceEl.textContent='Assim que você responder questões na Trilha, Batalha ou Simulados, este painel mostrará exatamente quais disciplinas e assuntos estão abaixo do corte de 72% com botões diretos para corrigir cada erro.';
+      if(actionBox)actionBox.innerHTML='';
       return;
     }
-    const rate=Math.round(correct/total*100);
-    fillEl.style.width=`${Math.min(100,rate)}%`;
+
+    const rate=total>0?Math.round(correct/total*100):0;
+    const clamped=Math.min(100,Math.max(0,rate));
+    fillEl.style.width=`${clamped}%`;
+    if(pinEl){
+      pinEl.style.left=`${Math.min(94,Math.max(6,clamped))}%`;
+      pinEl.textContent=`${rate}%`;
+    }
+
+    const needed60=rate>=60?0:Math.max(1,Math.ceil((0.60*total-correct)/0.40));
+    const needed72=rate>=72?0:Math.max(1,Math.ceil((0.72*total-correct)/0.28));
+    const needed80=rate>=80?0:Math.max(1,Math.ceil((0.80*total-correct)/0.20));
+
+    if(stagesEl){
+      stagesEl.innerHTML=`
+        <div class="cutoffStageCard ${rate>=60?'passed':'pending'}">
+          <div class="stageTop"><span>1º Marco · Habilitação</span><b class="stagePct">60%</b></div>
+          <div class="stageStatus">${rate>=60?'✓ Mínimo atingido':`Faltam +${needed60} acerto(s) seguido(s)`}</div>
+        </div>
+        <div class="cutoffStageCard target ${rate>=72?'passed':'pending'}">
+          <div class="stageTop"><span>2º Marco · Corte Vagas</span><b class="stagePct">72%</b></div>
+          <div class="stageStatus">${rate>=72?`✓ Dentro das vagas (+${rate-72}%)`:`🎯 Faltam +${needed72} acerto(s) p/ vaga`}</div>
+        </div>
+        <div class="cutoffStageCard elite ${rate>=80?'passed':'pending'}">
+          <div class="stageTop"><span>3º Marco · Elite Caveira</span><b class="stagePct">80%+</b></div>
+          <div class="stageStatus">${rate>=80?'🏆 Nível Elite conquistado':`Faltam +${needed80} acerto(s) p/ topo`}</div>
+        </div>
+      `;
+    }
+
     if(rate>=80){
       badgeEl.textContent='🏆 Faixa Elite (≥80%)';
-      titleEl.textContent=`Precisão global: ${rate}% (${correct}/${total}) — Acima do corte de elite!`;
-      adviceEl.textContent='Você está na faixa competitiva dos primeiros colocados. Mantenha o ritmo com simulados na regra líquida e revisão espaçada.';
+      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — Faixa dos Primeiros Colocados`;
+      adviceEl.textContent=bottlenecks.length
+        ?`Sua média geral (${rate}%) já é de Elite, mas ainda há ${bottlenecks.length} disciplina(s) com erros ou abaixo de 72%. Elimine esses pontos abaixo para blindar sua aprovação!`
+        :'Todas as suas disciplinas praticadas estão acima do corte! Mantenha o ritmo com simulados cronometrados e revisão espaçada.';
     }else if(rate>=72){
-      const neededFor80=Math.max(1,Math.ceil((0.80*total-correct)/0.20));
       badgeEl.textContent='✓ Zona de Vagas (≥72%)';
-      titleEl.textContent=`Precisão global: ${rate}% (${correct}/${total}) — Dentro da nota de corte!`;
-      adviceEl.textContent=`Você já superou o corte médio de 72%. Acertando mais ${neededFor80} questão(ões) seguida(s), você entra na faixa Elite (80%+).`;
+      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — Dentro da Nota de Corte!`;
+      adviceEl.textContent=`Você já superou o corte médio de 72%. Corrija os gargalos abaixo e acerte mais ${needed80} questão(ões) seguida(s) para alcançar a faixa Elite (80%+).`;
     }else if(rate>=60){
-      const neededFor72=Math.max(1,Math.ceil((0.72*total-correct)/0.28));
       badgeEl.textContent='⚡ Habilitado (60–71%)';
-      titleEl.textContent=`Precisão global: ${rate}% (${correct}/${total}) — Rumo à zona de vagas`;
-      adviceEl.textContent=`Faltam cerca de ${neededFor72} acerto(s) seguido(s) para atingir a linha de corte competitiva de 72%. Priorize as matérias do Reforço Prioritário abaixo.`;
+      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — Faltam +${needed72} acertos p/ o Corte (72%)`;
+      adviceEl.textContent=`Você já passou do mínimo de 60%, mas precisa subir ${72-rate}% para entrar na zona de vagas (72%). Veja abaixo exatamente quais matérias e assuntos estão puxando sua nota para baixo:`;
     }else{
-      const neededFor60=Math.max(1,Math.ceil((0.60*total-correct)/0.40));
-      badgeEl.textContent='🎯 Base em construção';
-      titleEl.textContent=`Precisão global: ${rate}% (${correct}/${total}) — Fortalecendo a base`;
-      adviceEl.textContent=`Use o modo Desafio Progressivo e leia as resoluções passo a passo. Mais ${neededFor60} acerto(s) levam você ao primeiro marco de 60%.`;
+      badgeEl.textContent='🎯 Abaixo do Corte (<60%)';
+      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — Foco em Corrigir os Gargalos`;
+      adviceEl.textContent=`Faltam +${needed60} acerto(s) seguido(s) para o mínimo de 60% e +${needed72} para a zona de vagas (72%). Não estude às cegas: clique nos gargalos abaixo para corrigir exatamente onde você está errando:`;
+    }
+
+    if(actionBox){
+      const bottleneckHtml=bottlenecks.slice(0,4).map(b=>{
+        const statusBadge=b.rate<60?`<span class="cutoffPill low">🔴 ${b.rate}% (Crítico)</span>`:b.rate<72?`<span class="cutoffPill mid">🟡 ${b.rate}% (Faltam +${b.neededFor72} acertos p/ 72%)</span>`:`<span class="cutoffPill high">🟢 ${b.rate}% (${b.misses} erro pendente)</span>`;
+        return `
+          <div class="cutoffBottleneckRow">
+            <div class="cutoffBottleneckInfo">
+              <div class="cutoffBottleneckTitleRow">
+                <b>${escText(b.name)}</b>
+                ${statusBadge}
+              </div>
+              <span class="small muted">${b.total?`${b.correct}/${b.total} acertos`:""}${b.misses?`${b.total?" · ":""}⚠ ${b.misses} erro(s) acumulado(s) no caderno`:""}</span>
+            </div>
+            <button type="button" class="action small cutoffFixBtn" data-cutoff-fix-subj="${escText(b.name)}">🔧 Corrigir Agora</button>
+          </div>
+        `;
+      }).join('');
+
+      const topicsHtml=topWeakTopics.map(t=>{
+        const pctErr=Math.round((t.misses/t.attempts)*100);
+        const hint=t.e?.correctAnswer?`Gabarito: ${shortLabel(t.e.correctAnswer,68)}`:(t.e?.explanation?shortLabel(t.e.explanation,75):'Revise a regra e refaça a questão.');
+        return `
+          <div class="cutoffErrorTopicCard">
+            <div class="cutoffErrorTopicMain">
+              <div class="eyebrow" style="color:#ff8fa3">${escText(t.subj)} · ${t.misses} ERRO(S) (${pctErr}% DE FALHA)</div>
+              <b>${escText(t.e?.topic||'Assunto com erro recorrente')}</b>
+              <p class="small muted" style="margin:3px 0 0">${escText(hint)}</p>
+            </div>
+            <div class="cutoffErrorTopicActions">
+              <button type="button" class="ghost small" data-cutoff-fix-topic-key="${escText(t.key)}" data-cutoff-fix-subj="${escText(t.subj)}">⚔️ Refazer Questão</button>
+              <button type="button" class="ghost small" data-cutoff-study-subj="${escText(t.subj)}" data-cutoff-study-topic="${escText(t.e?.topic||'')}">📖 Ler Teoria</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      actionBox.innerHTML=(bottlenecks.length||topWeakTopics.length)?`
+        <div class="cutoffDiagDivider"></div>
+        ${bottlenecks.length?`
+          <div class="cutoffSectionBlock">
+            <div class="cutoffSubHead">
+              <b>📉 Gargalos por Disciplina (O que está segurando sua nota abaixo de 72%)</b>
+              <span class="small muted">Toque em "Corrigir Agora" para treinar os pontos fracos da matéria</span>
+            </div>
+            <div class="cutoffBottleneckList">${bottleneckHtml}</div>
+          </div>
+        `:""}
+        ${topWeakTopics.length?`
+          <div class="cutoffSectionBlock" style="margin-top:12px">
+            <div class="cutoffSubHead">
+              <b>🎯 Assuntos Onde Você Mais Errou (Correção Cirúrgica)</b>
+              <span class="small muted">${allErrors.length} tópico(s) no Caderno de Erros</span>
+            </div>
+            <div class="cutoffErrorTopicsGrid">${topicsHtml}</div>
+          </div>
+        `:""}
+      `:`<div class="lessonBox bizu" style="margin-top:12px;margin-bottom:0"><b>✓ Nenhum gargalo crítico detectado!</b> Todas as disciplinas praticadas estão em ótimo nível e sem erros urgentes pendentes.</div>`;
+
+      actionBox.querySelectorAll('[data-cutoff-fix-subj]:not([data-cutoff-fix-topic-key])').forEach(btn=>{
+        btn.onclick=()=>startSubjectTargetedFix(btn.dataset.cutoffFixSubj,true);
+      });
+      actionBox.querySelectorAll('[data-cutoff-fix-topic-key]').forEach(btn=>{
+        btn.onclick=()=>{
+          const errKey=btn.dataset.cutoffFixTopicKey;
+          const err=state?.errors?.[errKey];
+          if(err&&err.question&&err.correctAnswer){
+            const cleanSubj=canonicalSubjectName(err.subject||'Geral');
+            const distractors=['Alternativa incorreta conforme a literalidade da norma e jurisprudência aplicável.','Hipótese vedada ou incompatível com o instituto jurídico cobrado.','Conceito pertencente a outro dispositivo ou regra diversa na matéria.'];
+            const wrongChosen=err.lastChosen&&err.lastChosen!==err.correctAnswer?[err.lastChosen]:[];
+            const opts=[err.correctAnswer,...wrongChosen,...distractors].slice(0,4);
+            const targetQ={subject:cleanSubj,topic:err.topic||'Correção de Erro',statement:err.question,options:opts,correct_index:0,explanation:err.explanation||`A alternativa correta é: ${err.correctAnswer}`,difficulty:'medio',origin:'adaptada_do_pdf'};
+            const extraPool=(ALL_QUESTIONS||[]).filter(qItem=>topicKey(learningCategory(qItem.subject))===topicKey(cleanSubj)).slice(0,4);
+            activeQuestions={
+              mode:'battle',
+              subject:cleanSubj,
+              questions:[targetQ,...extraPool].map(prepareQuestion),
+              current:0,
+              correct:0,
+              streak:0,
+              level:1,
+              answered:false
+            };
+            if(q('#questionDialogTitle'))q('#questionDialogTitle').textContent=`⚔️ Correção Cirúrgica · ${err.topic||cleanSubj}`;
+            q('#questionDialog')?.showModal();
+            showQuestion();
+            return;
+          }
+          startSubjectTargetedFix(btn.dataset.cutoffFixSubj,true);
+        };
+      });
+      actionBox.querySelectorAll('[data-cutoff-study-subj]').forEach(btn=>{
+        btn.onclick=()=>{
+          const targetSubj=btn.dataset.cutoffStudySubj;
+          const targetTopic=btn.dataset.cutoffStudyTopic||'';
+          openView('study');
+          const sf=q('#summaryFilter');
+          if(sf){
+            const match=[...sf.options].find(o=>topicKey(o.value)===topicKey(targetSubj));
+            if(match){
+              sf.value=match.value;
+              sf.dispatchEvent(new Event('change'));
+            }
+          }
+          toast(`📖 Estudar aberto em ${targetSubj}${targetTopic?` (${shortLabel(targetTopic,34)})`:''} para revisar a teoria!`);
+        };
+      });
     }
   }
 
