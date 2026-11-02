@@ -666,3 +666,30 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   );
   console.log("OK: Splash Screen adaptativa (Vertical Mobile / Horizontal PC) e Simulador de Aprovação com diagnóstico acionável de erros (v114) validados.");
 }
+
+// ── Validação v116: Conformidade Legal (LGPD, Termos, Cookies), Rodapé, Consentimento em Formulários, Acessibilidade e Auditoria 20 Itens ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const privSrc = readFileSync(new URL("../dist/privacidade.html", import.meta.url), "utf8");
+  const termsSrc = readFileSync(new URL("../dist/termos.html", import.meta.url), "utf8");
+  const cookiesSrc = readFileSync(new URL("../dist/cookies.html", import.meta.url), "utf8");
+  const robotsSrc = readFileSync(new URL("../dist/robots.txt", import.meta.url), "utf8");
+  const sitemapSrc = readFileSync(new URL("../dist/sitemap.xml", import.meta.url), "utf8");
+  const notFoundSrc = readFileSync(new URL("../dist/404.html", import.meta.url), "utf8");
+
+  assert.ok(privSrc.includes("13.709/2018") && termsSrc.includes("Termos de Uso") && cookiesSrc.includes("IndexedDB"), "Páginas dedicadas de Política de Privacidade (LGPD), Termos de Uso e Política de Cookies devem existir");
+  assert.ok(robotsSrc.includes("Sitemap:") && sitemapSrc.includes("privacidade.html") && notFoundSrc.includes("404"), "robots.txt, sitemap.xml e 404.html devem existir");
+  assert.ok(
+    htmlSrc.includes('property="og:image"') &&
+    htmlSrc.includes("og-banner-1200x630.jpg") &&
+    htmlSrc.includes('id="legalCenterDialog"') &&
+    htmlSrc.includes('id="cookieConsentBanner"') &&
+    htmlSrc.includes('id="gateLgpdConsent"') &&
+    htmlSrc.includes('class="appLegalFooter"') &&
+    !htmlSrc.includes('alt=""'),
+    "index.html deve conter imagem Open Graph 1200x630, rodapé legal, modal jurídico, banner de cookies, checkbox de consentimento LGPD e nenhum alt vazio"
+  );
+  assert.ok(v77Src.includes("openLegalCenter") && v77Src.includes("initLegalAndAccessibilityEnhancements"), "v77-experience.js deve gerenciar o modal jurídico, o banner de consentimento e a navegação por teclado nas abas");
+  console.log("OK: Conformidade Legal (LGPD/Termos/Cookies), Rodapé, Consentimento, Acessibilidade e Auditoria de 20 Itens (v116) validados.");
+}

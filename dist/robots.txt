@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jornada.wcaio.workers.dev/sitemap.xml

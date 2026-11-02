@@ -6322,8 +6322,138 @@
   const prevOpenViewForGuild=openView;
   openView=function(id){
     prevOpenViewForGuild(id);
+    qa('.tabs .tab[role="tab"]').forEach(t=>t.setAttribute('aria-selected',t.classList.contains('active')?'true':'false'));
     updateGuildUnreadBadge();
   };
+
+  // 20. Central Jurídica Interativa (LGPD, Termos de Uso, Política de Cookies), Banner de Consentimento e Acessibilidade Teclado
+  const LEGAL_DOCS_CONTENT={
+    privacidade:{
+      title:'Política de Privacidade (LGPD — Lei nº 13.709/2018)',
+      url:'privacidade.html',
+      html:`
+        <div class="lessonBox bizu" style="margin-top:0"><b>Resumo Transparente (LGPD):</b> A <b>Jornada do Caçador</b> coleta apenas os dados necessários para sincronizar seu progresso de estudos, processar seus PDFs/redações sob seu comando e permitir recursos cooperativos opcionais. Você pode exportar todo o seu histórico em JSON ou excluir definitivamente sua conta e seus dados a qualquer momento em <b>Minha Conta</b>.</div>
+        <h4>1. Dados Coletados e Finalidades</h4>
+        <ul>
+          <li><b>Identificação e Autenticação:</b> nome/apelido de exibição, e-mail e senha criptografada (via Supabase Auth) para login e sincronia entre celular e computador.</li>
+          <li><b>Progresso Pedagógico:</b> missões concluídas, tempo de foco, pontuações em questões/simulados, índices do TAF, flashcards e anotações.</li>
+          <li><b>Arquivos Enviados (PDFs e Redações):</b> editais, materiais em PDF e redações enviados pelo usuário para geração de resumos, questões e correções por IA.</li>
+          <li><b>Chave de IA Pessoal (Opcional — BYOK):</b> se configurada pelo usuário, fica guardada criptografada no Supabase Vault exclusivamente para uso da própria conta.</li>
+          <li><b>Comunidade (Ranking, Arena X1 e Guilda):</b> apelido, cargo-alvo, XP/ofensiva e mensagens enviadas no mural da Guilda.</li>
+        </ul>
+        <h4>2. Proteção Anti-CPF na Biblioteca da Comunidade</h4>
+        <p class="small">Materiais compartilhados na Biblioteca da Comunidade têm o download do PDF bruto bloqueado e passam por higienização automática (<code>sanitize_personal_watermarks</code>) que remove CPFs e e-mails. Você pode alternar qualquer arquivo seu para <b>🔒 Privado</b> a qualquer momento.</p>
+        <h4>3. Operadores de Tecnologia e Direitos do Titular (Art. 18 da LGPD)</h4>
+        <p class="small">Utilizamos Supabase (banco com isolamento RLS), Cloudflare (hospedagem HTTPS) e provedores de IA (Google Gemini, DeepSeek e Groq) acionados apenas sob seu comando. Você pode exercer a portabilidade (<i>Exportar backup JSON</i>) ou a eliminação total e imediata (<i>Redefinir perfil</i> ou <i>Excluir minha conta</i>) diretamente no aplicativo.</p>
+      `
+    },
+    termos:{
+      title:'Termos de Uso da Plataforma',
+      url:'termos.html',
+      html:`
+        <h4>1. Natureza Independente</h4>
+        <p class="small">A <b>Jornada do Caçador</b> (idealização e desenvolvimento: Walyson Caio) é uma plataforma independente de apoio aos estudos e <b>não possui vínculo oficial</b> com órgãos públicos, corporações policiais, bancas examinadoras (Cebraspe, FGV, Instituto AOCP, IDECAN) ou cursos preparatórios.</p>
+        <h4>2. Uso de Inteligência Artificial e Conferência Obrigatória</h4>
+        <p class="small">Resumos, flashcards, questões comentadas, cronogramas e correções de redação gerados por IA são instrumentos de auxílio pedagógico. Cabe ao usuário conferir artigos de lei, prazos, gabaritos definitivos e regras diretamente no <b>edital oficial do concurso</b> e na legislação vigente.</p>
+        <h4>3. Ausência de Promessa de Aprovação</h4>
+        <p class="small">Os indicadores do Simulador de Aprovação (marcos de 60%, 72% e 80%), XP e Patentes medem apenas a evolução nos treinos internos da plataforma, não representando garantia de aprovação ou classificação em concursos públicos.</p>
+        <h4>4. Convivência na Guilda e Direitos sobre Materiais</h4>
+        <p class="small">O usuário compromete-se a manter respeito no Chat da Guilda e declara possuir direito de uso sobre os PDFs que enviar para estudo, podendo definir sua visibilidade como pública ou privada.</p>
+      `
+    },
+    cookies:{
+      title:'Política de Cookies e Armazenamento Local',
+      url:'cookies.html',
+      html:`
+        <h4>1. Zero Rastreadores Publicitários</h4>
+        <p class="small">A <b>Jornada do Caçador</b> não utiliza cookies ou pixels de anúncios de terceiros para rastrear você fora do aplicativo.</p>
+        <h4>2. Armazenamento Local Estritamente Necessário</h4>
+        <ul>
+          <li><b>Sessão Segura (<code>localStorage: pmpe-supabase-session-v1</code>):</b> mantém seu login ativo no aparelho.</li>
+          <li><b>Progresso e Cronômetro (<code>localStorage: pmpe-hunter-v1</code>):</b> preserva suas missões, ofensiva e cronômetro de foco mesmo sem internet.</li>
+          <li><b>Banco Local de Alta Velocidade (<code>IndexedDB: jornada-local-cache-v1</code> e <code>missao-pmpe-caderno</code>):</b> guarda seus resumos, questões, flashcards e folhas do caderno manuscrito no aparelho para abertura instantânea de abas.</li>
+          <li><b>Service Worker PWA:</b> mantém os arquivos essenciais da interface em cache para acesso rápido e offline.</li>
+        </ul>
+      `
+    }
+  };
+
+  function openLegalCenter(tab='privacidade'){
+    const dlg=q('#legalCenterDialog'),body=q('#legalCenterBody'),title=q('#legalCenterTitle'),extLink=q('#legalExternalLink');
+    if(!dlg||!body)return;
+    const key=LEGAL_DOCS_CONTENT[tab]?tab:'privacidade';
+    const doc=LEGAL_DOCS_CONTENT[key];
+    if(title)title.textContent=doc.title;
+    if(extLink)extLink.href=doc.url;
+    body.innerHTML=doc.html;
+    qa('[data-legal-tab]').forEach(btn=>btn.classList.toggle('active',btn.dataset.legalTab===key));
+    if(!dlg.open)dlg.showModal();
+  }
+  window.openLegalCenter=openLegalCenter;
+
+  function initLegalAndAccessibilityEnhancements(){
+    const CONSENT_KEY='jornada-lgpd-consent-v1';
+    const banner=q('#cookieConsentBanner');
+    if(banner&&!localStorage.getItem(CONSENT_KEY)){
+      banner.hidden=false;
+    }
+    const acceptConsent=()=>{
+      try{localStorage.setItem(CONSENT_KEY,new Date().toISOString())}catch{}
+      if(banner)banner.hidden=true;
+      if(q('#legalCenterDialog')?.open)q('#legalCenterDialog').close();
+    };
+    if(q('#acceptCookieBannerBtn'))q('#acceptCookieBannerBtn').onclick=acceptConsent;
+    if(q('#acceptLegalFromModalBtn'))q('#acceptLegalFromModalBtn').onclick=acceptConsent;
+    if(q('#closeLegalCenterBtn'))q('#closeLegalCenterBtn').onclick=()=>q('#legalCenterDialog')?.close();
+
+    qa('[data-legal-tab]').forEach(btn=>{
+      btn.onclick=()=>openLegalCenter(btn.dataset.legalTab);
+    });
+    document.addEventListener('click',e=>{
+      const link=e.target.closest?.('[data-open-legal]');
+      if(!link)return;
+      if(e.ctrlKey||e.metaKey||e.shiftKey)return;
+      e.preventDefault();
+      openLegalCenter(link.dataset.openLegal);
+    });
+    if(q('#footerManageDataBtn')){
+      q('#footerManageDataBtn').onclick=()=>{
+        q('#diagnosticsDialog')?.showModal();
+        if(typeof runSystemDiagnostics==='function')runSystemDiagnostics();
+      };
+    }
+
+    // Validação do checkbox de consentimento LGPD ao criar conta pela interface
+    const gateSubmit=q('#gateSubmit');
+    if(gateSubmit){
+      gateSubmit.addEventListener('click',e=>{
+        const isSignup=typeof gateMode!=='undefined'&&gateMode==='signup';
+        const cb=q('#gateLgpdConsent');
+        if(isSignup&&cb&&!cb.checked){
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          const msg=q('#gateMessage');
+          if(msg)msg.textContent='Para criar sua conta, marque que concorda com os Termos de Uso e a Política de Privacidade (LGPD).';
+        }
+      },true);
+    }
+
+    // Navegação por teclado (Setas Esquerda/Direita) nas barras de abas (role="tablist")
+    qa('[role="tablist"]').forEach(tablist=>{
+      tablist.addEventListener('keydown',e=>{
+        if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft')return;
+        const tabs=[...tablist.querySelectorAll('button:not([hidden]):not([disabled])')];
+        const idx=tabs.indexOf(document.activeElement);
+        if(idx<0)return;
+        e.preventDefault();
+        const next=tabs[(idx+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length];
+        next?.focus();
+        next?.click();
+      });
+    });
+  }
+  initLegalAndAccessibilityEnhancements();
+
   setTimeout(()=>{
     syncCommunityLibraryForActivePortal();
     if(cloudSession&&navigator.onLine){
