@@ -525,15 +525,36 @@ function stripWatermarksAndMeta(text: string): string {
     if (/^#\w+$/.test(line)) continue;
     // Standalone thank-you / closing slide text
     if (/^(?:gratid[aã]o!*|muito obrigado!*|obrigado!*|valeu!*|fim|fim da aula!?|at[eé] a pr[oó]xima!?|encerramento!?)$/i.test(line)) continue;
-    // Repetitive student name alone on line (3+ capitalized words without subject keywords)
-    if (/^[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+(?:\s+[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+){2,5}$/.test(line)) {
-      if (!/\b(?:direito|constitucional|administrativo|penal|processual|portugu[eê]s|reda[çc][aã]o|matem[aá]tica|l[oó]gica|inform[aá]tica|legisla[çc][aã]o|hist[oó]ria|geografia|compreens[aã]o|interpreta[çc][aã]o|fonologia|acentua[çc][aã]o|ortografia|morfologia|sintaxe|equival[eê]ncias?)\b/i.test(line)) {
-        continue;
-      }
-    }
     filtered.push(line);
   }
   return filtered.join("\n");
+}
+
+/**
+ * Remove linhas repetidas em muitas páginas (marca d'água com nome do comprador, cabeçalho/rodapé de curso).
+ * É feito no documento inteiro: uma linha só é ruído se aparece em ao menos 40% das páginas, e títulos
+ * legítimos ("Lei Maria da Penha", "Mandado de Segurança") aparecem em poucas páginas e são preservados.
+ */
+function removeRepeatedBoilerplate(pages: TextPage[]): TextPage[] {
+  if (pages.length < 6) return pages;
+  const normalize = (line: string) => line.trim().replace(/\s+/g, " ").toLowerCase();
+  const examStructure = /julgue|assinale|marque|alternativa|quest[aã]o|certo|errado|gabarito|item\b/i;
+  const counts = new Map<string, number>();
+  for (const page of pages) {
+    const seen = new Set<string>();
+    for (const line of page.text.split("\n")) {
+      const key = normalize(line);
+      if (key.length < 12 || key.length > 120 || seen.has(key) || examStructure.test(key)) continue;
+      seen.add(key);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  const threshold = Math.max(4, Math.ceil(pages.length * 0.4));
+  const repeated = new Set([...counts].filter(([, n]) => n >= threshold).map(([key]) => key));
+  if (!repeated.size) return pages;
+  return pages
+    .map((page) => ({ page: page.page, text: page.text.split("\n").filter((line) => !repeated.has(normalize(line))).join("\n").trim() }))
+    .filter((page) => page.text.length > 0);
 }
 
 function isNonDidacticSlide(text: string): boolean {
@@ -558,9 +579,10 @@ function normalizeExtractedPage(value: unknown) {
 
 function validateExtractedPagesList(rawPages: unknown): TextPage[] | null {
   if (!Array.isArray(rawPages) || !rawPages.length) return null;
-  const pages = rawPages
+  const cleaned = rawPages
     .map((item: any, index: number) => ({ page: Number(item?.page) || index + 1, text: normalizeExtractedPage(item?.text) }))
     .filter((page: TextPage) => page.text.length > 0);
+  const pages = removeRepeatedBoilerplate(cleaned);
   // Identifica páginas com real densidade teórica/didática
   const substantivePages = pages.filter((page: TextPage) => !isNonDidacticSlide(page.text));
   const meaningfulCharacters = substantivePages.reduce((total: number, page: TextPage) => total + page.text.replace(/\s/g, "").length, 0);

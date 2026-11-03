@@ -581,6 +581,7 @@
         <button type="button" class="ghost small" id="createFlashcardFromQuestionBtn">🃏 Virar Flashcard</button>
         <button type="button" class="ghost small" id="toggleFavoriteQuestionBtn">${isFav?'⭐ Favorita (salva)':'☆ Favoritar questão'}</button>
         <button type="button" class="ghost small" id="saveQuestionNoteBtn">📌 Salvar no Caderno</button>
+        <button type="button" class="ghost small" id="reportQuestionIssueBtn">🚩 Corrigir / Reportar</button>
       </div>
       <div id="easyAnalogyOutput" hidden class="stepResolutionBlock concept" style="margin-top:6px"></div>
       <div class="personalQuestionBizuBox">
@@ -674,39 +675,124 @@
     return toAdd.length;
   }
 
+  function buildLocalCognitiveTwinQuestion(mold){
+    const subj=learningCategory(mold?.subject||'Conteúdo Geral');
+    const topic=String(mold?.topic||'Fixação de Conceito').replace(/^\[Gêmea\]\s*/i,'').trim();
+    const board=mold?.board||'Estilo Banca';
+    const origOpts=Array.isArray(mold?.options)?mold.options:[];
+    const origCorrectIdx=Math.min(Math.max(0,Number(mold?.correct_index)||0),Math.max(0,origOpts.length-1));
+    const correctText=String(origOpts[origCorrectIdx]||'Aplicação correta da regra prevista no edital.').trim();
+    const attempt=mold?._lastAttempt||null;
+    const wrongDistractors=origOpts.filter((_,i)=>i!==origCorrectIdx).map(x=>String(x).trim()).filter(Boolean);
+    while(wrongDistractors.length<3){
+      wrongDistractors.push('Previsão incompatível com o texto normativo e entendimento dominante.');
+    }
+    const cleanExp=String(mold?.explanation||'').replace(/\s+/g,' ').trim();
+    const angleNote=attempt&&!attempt.ok&&attempt.chosenText
+      ?`Atenção: na questão anterior você marcou "${shortLabel(attempt.chosenText,65)}". Compare os elementos do caso e identifique a alternativa que aplica a regra exata:`
+      :`Em uma variação de prova da banca ${board} sobre "${topic}", analise as assertivas e assinale a diretriz juridicamente/tecnicamente correta:`;
+    const newStatement=`🧬 [Questão Gêmea de Fixação · ${topic}] ${angleNote}`;
+    const newOptions=[correctText,...wrongDistractors.slice(0,3)];
+    const newExplanation=[
+      `Conceito-chave: Fixação ativa do tema "${topic}" (${subj}).`,
+      `✅ Alternativa correta: ${correctText}`,
+      attempt&&!attempt.ok&&attempt.chosenText
+        ?`❌ Análise do distrator que confundiu antes: A opção "${attempt.chosenText}" é incorreta e atua como pegadinha recorrente.`
+        :`❌ Análise das alternativas: As demais opções invertem prazos, requisitos ou generalizam exceções sobre ${topic}.`,
+      `⚠️ Pegadinha da banca (${board}): ${cleanExp?shortLabel(cleanExp,180):'Leia atentamente os termos restritivos ou exceções antes de marcar.'}`
+    ].join('\n');
+    return{
+      subject:subj,
+      topic:`[Gêmea] ${topic}`,
+      board,
+      difficulty:normalizedDifficulty(mold),
+      origin:'autoral',
+      statement:newStatement,
+      options:newOptions,
+      correct_index:0,
+      explanation:newExplanation
+    };
+  }
+  window.buildLocalCognitiveTwinQuestion=buildLocalCognitiveTwinQuestion;
+
+  function reportOrFixCurrentQuestion(item,btnEl){
+    if(!item)return;
+    const currentLetter=String.fromCharCode(65+(Number(item.correct_index)||0));
+    const ans=prompt(`Auditoria Pedagógica da Questão (" ${shortLabel(item.statement,60)} "):
+
+• Digite A, B, C ou D se quiser corrigir o gabarito imediatamente (atual: ${currentLetter});
+• Ou escreva uma observação para reportar erro no enunciado/comentário:`,currentLetter);
+    if(ans===null)return;
+    const clean=ans.trim();
+    if(/^[A-Da-d]$/.test(clean)){
+      const newIdx=clean.toUpperCase().charCodeAt(0)-65;
+      item.correct_index=newIdx;
+      const fp=questionFingerprint(item);
+      for(const qItem of (ALL_QUESTIONS||[])){
+        if(questionFingerprint(qItem)===fp)qItem.correct_index=newIdx;
+      }
+      save();
+      window.persistToLocalDatabase?.(state?.activeCampaignId);
+      if(btnEl)btnEl.textContent=`✓ Gabarito ajustado p/ ${clean.toUpperCase()}`;
+      toast(`Gabarito atualizado para a alternativa ${clean.toUpperCase()}!`);
+      return;
+    }
+    if(clean.length>=3){
+      state.reportedQuestions=state.reportedQuestions||{};
+      state.reportedQuestions[questionFingerprint(item)]={note:clean,statement:item.statement,subject:item.subject,at:new Date().toISOString()};
+      save();
+      if(btnEl)btnEl.textContent='🚩 Reportada';
+      toast('Observação registrada! A questão foi marcada para revisão.');
+    }
+  }
+  window.reportOrFixCurrentQuestion=reportOrFixCurrentQuestion;
+
   async function spawnTwinQuestionForCurrent(currentItem,btnEl){
-    if(!cloudSession)return toast('Entre na sua conta para gerar questões gêmeas com a IA.');
     if(btnEl){btnEl.disabled=true;btnEl.textContent='⏳ Gerando questão gêmea...'}
+    const attempt=currentItem?._lastAttempt||null;
+    const errorContext=attempt
+      ?(attempt.ok
+          ?`O aluno ACERTOU a questão-molde marcando "${attempt.correctText}". Gere uma questão gêmea um nível mais profunda cobrando um caso prático ou exceção legal do mesmo tópico.`
+          :`O aluno ERROU a questão-molde: marcou o distrator "${attempt.chosenText}" em vez da correta "${attempt.correctText}". Gere uma questão gêmea inédita que trabalhe exatamente a diferença entre esse distrator e a regra verdadeira.`)
+      :'Gere uma questão gêmea cobrando o mesmo tema sob novo caso prático.';
     try{
-      const session=await validSession();
-      if(!session)throw new Error('Sessão expirada. Entre novamente.');
-      const res=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{
-        method:'POST',
-        headers:{...authHeaders(session.access_token)},
-        body:JSON.stringify({
-          action:'generate_structured_questions',
-          submode:'twin',
-          count:1,
-          subject:learningCategory(currentItem.subject),
-          topic:currentItem.topic||'Assunto do Edital',
-          board:currentItem.board||'Instituto AOCP',
-          difficulty:normalizedDifficulty(currentItem),
-          mold_question:currentItem,
-          campaign_id:activeCampaign()?.dbId
-        })
-      });
-      const data=await res.json().catch(()=>({}));
-      if(!res.ok)throw new Error(data.error||'Não foi possível gerar a questão gêmea.');
-      const twin=data.questions?.[0];
-      if(!twin)throw new Error('A IA não retornou a questão gêmea.');
+      let twin=null;
+      if(cloudSession&&navigator.onLine){
+        const session=await validSession().catch(()=>null);
+        if(session){
+          const res=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{
+            method:'POST',
+            headers:{...authHeaders(session.access_token)},
+            body:JSON.stringify({
+              action:'generate_structured_questions',
+              submode:'twin',
+              count:1,
+              subject:learningCategory(currentItem.subject),
+              topic:currentItem.topic||'Assunto do Edital',
+              board:currentItem.board||'Instituto AOCP',
+              difficulty:normalizedDifficulty(currentItem),
+              mold_question:currentItem,
+              student_error_context:errorContext,
+              campaign_id:activeCampaign()?.dbId
+            })
+          }).catch(()=>null);
+          if(res?.ok){
+            const data=await res.json().catch(()=>({}));
+            if(data?.questions?.[0])twin=data.questions[0];
+          }
+        }
+      }
+      if(!twin){
+        twin=buildLocalCognitiveTwinQuestion(currentItem);
+      }
       await saveQuestionsToCampaign(`Questão Gêmea · ${twin.topic}`,twin.subject,[twin],twin.board||'Questão Gêmea IA');
       if(activeQuestions&&Array.isArray(activeQuestions.questions)){
         activeQuestions.questions.splice(activeQuestions.current+1,0,prepareQuestion(twin));
         q('#questionCounter').textContent=`${activeQuestions.current+1}/${activeQuestions.questions.length} · ${normalizedDifficulty(currentItem).toUpperCase()}`;
         q('#nextQuestion').textContent='Responder questão gêmea →';
       }
-      if(btnEl)btnEl.textContent='✓ Questão gêmea adicionada!';
-      toast('Questão gêmea criada e colocada como próxima da fila!');
+      if(btnEl)btnEl.textContent='✓ Questão gêmea na fila!';
+      toast(attempt&&!attempt.ok?'🧬 Questão gêmea focada no seu erro criada e colocada como próxima!':'🧬 Questão gêmea de fixação criada e colocada como próxima da fila!');
     }catch(error){
       if(btnEl){btnEl.disabled=false;btnEl.textContent='⚡ Gerar questão gêmea'}
       toast(error.message);
@@ -832,8 +918,11 @@
     q('#questionFeedback').innerHTML=formatStepByStepResolution(item,chosen,ok,true);
     qa('[data-question-index],[data-scissor-index]').forEach(b=>b.disabled=true);
 
+    item._lastAttempt={ok,chosenIndex:chosen,chosenText:item.options?.[chosen]||'',correctIndex:correct,correctText:item.options?.[correct]||''};
     const twinBtn=q('#spawnTwinQuestionBtn');
     if(twinBtn)twinBtn.onclick=()=>spawnTwinQuestionForCurrent(item,twinBtn);
+    const reportBtn=q('#reportQuestionIssueBtn');
+    if(reportBtn)reportBtn.onclick=()=>reportOrFixCurrentQuestion(item,reportBtn);
     const analogyBtn=q('#explainEasyAnalogyBtn');
     if(analogyBtn)analogyBtn.onclick=()=>explainQuestionWithEasyAnalogy(item,analogyBtn);
     const flashBtn=q('#createFlashcardFromQuestionBtn');
@@ -897,7 +986,7 @@
     }
 
     const entries=Object.entries(bySubject).map(([name,d])=>{
-      const rate=d.total>0?Math.round(d.correct/d.total*100):(d.misses>0?35:0);
+      const rate=d.total>0?Math.round(d.correct/d.total*100):null;
       return {name,total:d.total,correct:d.correct,misses:d.misses,rate};
     });
 
@@ -907,9 +996,9 @@
       return;
     }
 
-    const strong=entries.filter(x=>x.total>=3&&x.rate>=75).sort((a,b)=>b.rate-a.rate);
-    const evolving=entries.filter(x=>x.total>0&&x.rate>=55&&x.rate<75).sort((a,b)=>a.rate-b.rate);
-    const weak=entries.filter(x=>x.rate<55||x.misses>=2&&x.rate<75).sort((a,b)=>a.rate-b.rate);
+    const strong=entries.filter(x=>x.total>=10&&x.rate>=75).sort((a,b)=>b.rate-a.rate);
+    const evolving=entries.filter(x=>x.rate!==null&&x.rate>=55&&x.rate<75).sort((a,b)=>a.rate-b.rate);
+    const weak=entries.filter(x=>(x.rate===null&&x.misses>0)||(x.rate!==null&&(x.rate<55||x.misses>=2&&x.rate<75))).sort((a,b)=>(a.rate??0)-(b.rate??0));
 
     if(tagEl)tagEl.textContent=`${strong.length} forte(s) · ${weak.length} crítico(s)`;
 
@@ -918,7 +1007,7 @@
     container.innerHTML=`
       <div class="diagnosisCol strong">
         <div class="diagnosisColHead"><b>🟢 Pontos Fortes (≥75%)</b><span>${strong.length}</span></div>
-        <div class="diagnosisList">${strong.length?strong.map(x=>renderItem(x,false)).join(''):'<p class="small muted">Acerte 75% ou mais em uma disciplina (mín. 3 questões) para dominá-la.</p>'}</div>
+        <div class="diagnosisList">${strong.length?strong.map(x=>renderItem(x,false)).join(''):'<p class="small muted">Acerte 75% ou mais em uma disciplina (mín. 10 questões) para dominá-la.</p>'}</div>
       </div>
       <div class="diagnosisCol evolving">
         <div class="diagnosisColHead"><b>🟡 Em Evolução (55–74%)</b><span>${evolving.length}</span></div>
@@ -1322,17 +1411,46 @@
     }
   }
 
-  function tryParseLocalQuestionText(rawText,defaultSubject,defaultBoard){
-    const trimmed=String(rawText||'').trim();
+  function parseExamAnswerKeyTable(fullText){
+    const keyMap=new Map();
+    const raw=String(fullText||'');
+    // Procura seção final de GABARITO (prioriza definitivo sobre preliminar)
+    const gabSections=[...raw.matchAll(/\b(?:gabarito(?:\s+oficial|\s+definitivo|\s+preliminar)?|respostas\s+do\s+simulado)\b[\s\S]{0,6000}/gi)];
+    const targetText=gabSections.length?gabSections[gabSections.length-1][0]:raw.slice(-6000);
+    // Casa pares como "01 - A", "1. C", "12) E", "15: ANULADA", "03 C"
+    const pairRe=/(?:^|[\s|;,])0*(\d{1,3})\s*(?:[-–—.:)]|\s)\s*(ANULADA|NULA|X|\*|[A-Ea-e]|CERTO|ERRADO)(?=$|[\s|;,.])/gi;
+    let m;
+    while((m=pairRe.exec(targetText))!==null){
+      const num=Number(m[1]);
+      const val=m[2].toUpperCase();
+      if(num>=1&&num<=250){
+        if(/ANULADA|NULA|X|\*/.test(val))keyMap.set(num,'ANULADA');
+        else if(val==='CERTO')keyMap.set(num,'C');
+        else if(val==='ERRADO')keyMap.set(num,'E');
+        else keyMap.set(num,val);
+      }
+    }
+    return keyMap;
+  }
+
+  function extractStructuredExamQuestions(rawTextOrPages,opts={}){
+    const defaultSubject=opts.defaultSubject||'Conteúdo Geral';
+    const defaultBoard=opts.defaultBoard||'Prova Oficial';
+    const fullText=Array.isArray(rawTextOrPages)
+      ?rawTextOrPages.map(p=>String(p?.text||'')).join('\n\n')
+      :String(rawTextOrPages||'');
+    const trimmed=fullText.trim();
     if(!trimmed)return[];
+
+    // 1) Se for JSON direto
     if(trimmed.startsWith('[')||trimmed.startsWith('{')){
       try{
         const parsed=JSON.parse(trimmed);
         const arr=Array.isArray(parsed)?parsed:(Array.isArray(parsed?.questions)?parsed.questions:[]);
         return arr.filter(x=>x?.statement&&Array.isArray(x?.options)&&x.options.length>=4).map(x=>({
-          subject:x.subject||defaultSubject||'Conteúdo Geral',
-          topic:x.topic||'Questão Importada',
-          board:x.board||defaultBoard||'Prova Oficial',
+          subject:canonicalSubjectName(x.subject||defaultSubject),
+          topic:x.topic||'Questão Oficial',
+          board:x.board||defaultBoard,
           statement:String(x.statement).trim(),
           options:x.options.slice(0,4).map(String),
           correct_index:Math.min(3,Math.max(0,Number(x.correct_index)||0)),
@@ -1342,7 +1460,108 @@
         }));
       }catch{}
     }
-    return[];
+
+    // 2) Extração determinística de blocos de questões numeradas (QUESTÃO 01, Questão 1, 01., 1))
+    const answerKeyMap=parseExamAnswerKeyTable(trimmed);
+    const bodyWithoutFinalGabarito=trimmed.replace(/\n\s*Gabarito(?:\s+Definitivo|\s+Preliminar|\s+Oficial)?\s*[:\n][\s\S]{0,4000}$/i,'');
+    const blockRegex=/(?:^|\n)\s*(?:QUEST[AÃ]O\s*0*(\d{1,3})|0*(\d{1,3})\s*[.)-])\s+([\s\S]*?)(?=(?:\n\s*(?:QUEST[AÃ]O\s*0*\d{1,3}|0*\d{1,3}\s*[.)-]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ(\"\x27]))|$)/gi;
+    const results=[];
+    let match;
+    while((match=blockRegex.exec(bodyWithoutFinalGabarito))!==null){
+      const qNum=Number(match[1]||match[2]||0);
+      let block=String(match[3]||'').trim();
+      if(block.length<20)continue;
+
+      // Verifica gabarito inline no final do bloco ("Gabarito: C", "Resposta: Letra E", "Gabarito: CERTO", "Comentário: ...")
+      let inlineAns=null;
+      let inlineComment='';
+      const commentMatch=block.match(/(?:^|\n)\s*(?:Coment[aá]rio|Resolu[cç][aã]o|Justificativa)\s*[:\-–]\s*([\s\S]+)$/i);
+      if(commentMatch){
+        inlineComment=commentMatch[1].trim();
+        block=block.slice(0,commentMatch.index).trim();
+      }
+      const inlineGabMatch=block.match(/(?:^|\n|\s)(?:Gabarito(?:\s+Oficial|\s+Definitivo)?|Resposta(?:\s+Correta)?)\s*[:\-–]?\s*(?:Letra\s+)?(ANULADA|CERTO|ERRADO|[A-Ea-e])\b/i);
+      if(inlineGabMatch){
+        const rawAns=inlineGabMatch[1].toUpperCase();
+        inlineAns=rawAns==='CERTO'?'C':rawAns==='ERRADO'?'E':rawAns;
+        block=block.slice(0,inlineGabMatch.index).trim();
+      }
+
+      const finalKey=inlineAns||(qNum?answerKeyMap.get(qNum):null)||null;
+      if(finalKey==='ANULADA')continue; // Descarta questões anuladas oficialmente
+
+      // Tenta extrair alternativas A, B, C, D, (E)
+      const optSplitRegex=/(?:^|\n)\s*(?:\(([A-Ea-e])\)|([A-Ea-e])\s*[.)-])\s+/g;
+      const optMatches=[...block.matchAll(optSplitRegex)];
+      if(optMatches.length>=4){
+        const statement=block.slice(0,optMatches[0].index).replace(/\s+/g,' ').trim();
+        if(statement.length<10)continue;
+        const parsedOpts=[];
+        for(let i=0;i<optMatches.length;i++){
+          const letter=(optMatches[i][1]||optMatches[i][2]).toUpperCase();
+          const start=optMatches[i].index+optMatches[i][0].length;
+          const end=i+1<optMatches.length?optMatches[i+1].index:block.length;
+          const text=block.slice(start,end).replace(/\s+/g,' ').trim();
+          if(text)parsedOpts.push({letter,text});
+        }
+        if(parsedOpts.length>=4){
+          // Se só extraiu se tiver gabarito conhecido (no próprio bloco ou na tabela de gabarito)
+          if(!finalKey||!/^[A-E]$/.test(finalKey))continue;
+          let correctIdx=parsedOpts.findIndex(o=>o.letter===finalKey);
+          if(correctIdx<0)continue;
+          let finalFour=parsedOpts.slice(0,4);
+          // Se a questão tinha 5 alternativas (A-E) e a correta era E (índice 4), preserva a correta!
+          if(parsedOpts.length>=5){
+            if(correctIdx>=4){
+              finalFour=[parsedOpts[0],parsedOpts[1],parsedOpts[2],parsedOpts[correctIdx]];
+              correctIdx=3;
+            }
+          }
+          const inferredSubj=canonicalSubjectName(statement,defaultSubject);
+          const subj=inferredSubj&&inferredSubj!=='Conteúdo Geral'?inferredSubj:canonicalSubjectName(defaultSubject);
+          results.push({
+            subject:subj,
+            topic:`Questão ${qNum||results.length+1} · ${defaultBoard}`,
+            board:defaultBoard,
+            statement,
+            options:finalFour.map(o=>o.text),
+            correct_index:correctIdx,
+            explanation:inlineComment||`Gabarito Oficial do Documento: Alternativa ${finalKey} ("${finalFour[correctIdx].text}").`,
+            difficulty:'medio',
+            origin:'oficial'
+          });
+        }
+      }else if(/\b(certo|errado|julgue\s+o\s+item)\b/i.test(block)&&(finalKey==='C'||finalKey==='E')){
+        // Formato Certo / Errado (Cebraspe)
+        const statement=block.replace(/\(\s*\)\s*Certo[\s\S]*$/i,'').replace(/\s+/g,' ').trim();
+        if(statement.length<12)continue;
+        const isCerto=finalKey==='C';
+        const inferredSubj=canonicalSubjectName(statement,defaultSubject);
+        const subj=inferredSubj&&inferredSubj!=='Conteúdo Geral'?inferredSubj:canonicalSubjectName(defaultSubject);
+        results.push({
+          subject:subj,
+          topic:`Item ${qNum||results.length+1} (C/E) · ${defaultBoard}`,
+          board:defaultBoard||"Cebraspe",
+          statement:`[Julgue o item em CERTO ou ERRADO] ${statement}`,
+          options:[
+            'CERTO — O item está de acordo com a legislação/jurisprudência aplicável.',
+            'ERRADO — O item contém incorreção, generalização indevida ou inversão de regra.',
+            'Abster-se / Deixar em branco (Modo Líquido Cebraspe).',
+            'Item parcialmente incorreto por omissão de requisito essencial.'
+          ],
+          correct_index:isCerto?0:1,
+          explanation:inlineComment||`Gabarito Oficial Cebraspe: ${isCerto?'CERTO':'ERRADO'}.`,
+          difficulty:'dificil',
+          origin:'oficial'
+        });
+      }
+    }
+    return results;
+  }
+  window.extractStructuredExamQuestions=extractStructuredExamQuestions;
+
+  function tryParseLocalQuestionText(rawText,defaultSubject,defaultBoard){
+    return extractStructuredExamQuestions(rawText,{defaultSubject,defaultBoard});
   }
 
   async function handleImportQuestionJsonFile(e){
@@ -1735,6 +1954,22 @@
 
 
   // 5. Simulador de Aprovação, Meta de Corte & Diagnóstico Acionável de Erros (#cutoffThermometerPanel)
+  const CUTOFF_MIN_SAMPLE=30;
+  function cutoffTarget(){
+    const raw=Number(state?.cutoffTargets?.[state?.activeCampaignId]);
+    return Number.isFinite(raw)&&raw>=40&&raw<=95?Math.round(raw):72;
+  }
+  function cutoffAssessment(total,correct,target=72,minSample=CUTOFF_MIN_SAMPLE){
+    total=Math.max(0,Math.floor(Number(total)||0));
+    correct=Math.min(total,Math.max(0,Math.floor(Number(correct)||0)));
+    const rate=total>0?Math.round(correct/total*100):0;
+    let lo=0,hi=0;
+    if(total>0){const z=1.96,p=correct/total,den=1+z*z/total,center=p+z*z/(2*total),margin=z*Math.sqrt(p*(1-p)/total+z*z/(4*total*total));lo=Math.max(0,Math.round((center-margin)/den*100));hi=Math.min(100,Math.round((center+margin)/den*100))}
+    const need=goal=>rate>=goal?0:Math.max(1,Math.ceil((goal/100*total-correct)/(1-goal/100)));
+    const elite=Math.min(98,Math.max(80,target+8));
+    return{total,correct,rate,lo,hi,target,elite,lowSample:total<minSample,needMin:need(60),needTarget:need(target),needElite:need(elite)};
+  }
+
   function ensureCutoffThermometer(){
     const perfGrid=q('#report #performanceSummary');
     if(!perfGrid||q('#cutoffThermometerPanel'))return;
@@ -1746,19 +1981,20 @@
             <h2 id="cutoffStatusTitle" style="margin:3px 0 0">Termômetro de Nota de Corte</h2>
           </div>
           <span class="tag" id="cutoffTierBadge">Em aferição</span>
+        <label class="small muted" style="display:flex;align-items:center;gap:6px;margin-top:6px">Minha meta (%)<input id="cutoffTargetInput" type="number" min="40" max="95" step="1" inputmode="numeric" style="width:68px" aria-label="Meta de acerto do meu concurso em porcentagem"></label>
         </div>
         <div class="cutoffTrackWrap">
           <div class="cutoffBar">
             <div class="cutoffFill" id="cutoffFillBar" style="width:0%"></div>
             <span class="cutoffCurrentPin" id="cutoffCurrentPin" style="left:0%">0%</span>
             <span class="cutoffMarker m60" style="left:60%" title="60% — Habilitação mínima"></span>
-            <span class="cutoffMarker m72" style="left:72%" title="72% — Nota de Corte das Vagas"></span>
+            <span class="cutoffMarker m72" style="left:72%" title="Sua meta de estudo (ajustável)"></span>
             <span class="cutoffMarker m80" style="left:80%" title="80% — Faixa Elite / Primeiros Colocados"></span>
           </div>
           <div class="cutoffScaleTicks">
             <span>0%</span>
             <span class="t60">60% Mínimo</span>
-            <span class="t72">🎯 72% Vagas</span>
+            <span class="t72">🎯 Sua meta</span>
             <span class="t80">🏆 80% Elite</span>
           </div>
         </div>
@@ -1767,6 +2003,13 @@
         <div class="cutoffActionableBox" id="cutoffActionableBox"></div>
       </div>
     `);
+    const targetInput=q('#cutoffTargetInput');
+    if(targetInput)targetInput.onchange=()=>{
+      const value=Math.round(Number(targetInput.value));
+      if(!(value>=40&&value<=95)){toast('Informe uma meta entre 40% e 95%.');targetInput.value=cutoffTarget();return}
+      state.cutoffTargets={...(state.cutoffTargets||{}),[state.activeCampaignId]:value};
+      save();renderCutoffThermometer();
+    };
   }
 
   function renderCutoffThermometer(){
@@ -1797,13 +2040,14 @@
       bySubject[name].topics.push({key:errKey,err});
     }
 
+    const target=cutoffTarget();
     const subjDiagnostics=Object.entries(bySubject).map(([name,d])=>{
-      const rate=d.total>0?Math.round(d.correct/d.total*100):(d.misses>0?35:0);
-      const neededFor72=d.total>0&&rate<72?Math.max(1,Math.ceil((0.72*d.total-d.correct)/0.28)):(d.misses>0?3:0);
-      return{name,total:d.total,correct:d.correct,misses:d.misses,rate,neededFor72,topics:d.topics};
-    }).sort((a,b)=>a.rate-b.rate||(b.misses-a.misses));
+      const rate=d.total>0?Math.round(d.correct/d.total*100):null;
+      const neededForTarget=rate!==null&&rate<target?Math.max(1,Math.ceil((target/100*d.total-d.correct)/(1-target/100))):0;
+      return{name,total:d.total,correct:d.correct,misses:d.misses,rate,neededForTarget,topics:d.topics};
+    }).sort((a,b)=>(a.rate??101)-(b.rate??101)||(b.misses-a.misses));
 
-    const bottlenecks=subjDiagnostics.filter(d=>d.rate<72||d.misses>0);
+    const bottlenecks=subjDiagnostics.filter(d=>(d.rate!==null&&d.rate<target)||d.misses>0);
     const topWeakTopics=allErrors
       .map(([key,e])=>({key,e,subj:canonicalSubjectName(e?.subject||'Geral'),misses:Number(e?.misses||1),attempts:Math.max(Number(e?.attempts||1),Number(e?.misses||1))}))
       .sort((a,b)=>(b.misses/b.attempts)-(a.misses/a.attempts)||b.misses-a.misses)
@@ -1817,67 +2061,79 @@
       if(stagesEl){
         stagesEl.innerHTML=`
           <div class="cutoffStageCard"><span>Marco 1 · Mínimo</span><b>60% Habilitação</b><small>Nota mínima para não ser eliminado</small></div>
-          <div class="cutoffStageCard target"><span>Marco 2 · Meta Real</span><b>72% Corte Vagas</b><small>Média histórica PMPE / Polícias</small></div>
+          <div class="cutoffStageCard target"><span>Marco 2 · Sua meta</span><b>${target}% definida por você</b><small>A nota de corte real varia por banca, cargo e ano</small></div>
           <div class="cutoffStageCard elite"><span>Marco 3 · Segurança</span><b>80%+ Faixa Elite</b><small>Primeiros colocados</small></div>
         `;
       }
-      adviceEl.textContent='Assim que você responder questões na Trilha, Batalha ou Simulados, este painel mostrará exatamente quais disciplinas e assuntos estão abaixo do corte de 72% com botões diretos para corrigir cada erro.';
+      adviceEl.textContent=`Assim que você responder questões na Trilha, Batalha ou Simulados, este painel mostrará quais disciplinas e assuntos estão abaixo da sua meta de ${target}%, com botões para corrigir cada erro. Ele mede seu desempenho no app, não a nota de corte real da prova.`;
       if(actionBox)actionBox.innerHTML='';
       return;
     }
 
-    const rate=total>0?Math.round(correct/total*100):0;
+    const a=cutoffAssessment(total,correct,target);
+    const rate=a.rate;
     const clamped=Math.min(100,Math.max(0,rate));
     fillEl.style.width=`${clamped}%`;
     if(pinEl){
       pinEl.style.left=`${Math.min(94,Math.max(6,clamped))}%`;
       pinEl.textContent=`${rate}%`;
     }
-
-    const needed60=rate>=60?0:Math.max(1,Math.ceil((0.60*total-correct)/0.40));
-    const needed72=rate>=72?0:Math.max(1,Math.ceil((0.72*total-correct)/0.28));
-    const needed80=rate>=80?0:Math.max(1,Math.ceil((0.80*total-correct)/0.20));
+    const targetMarker=q('#cutoffThermometerPanel .cutoffMarker.m72'),eliteMarker=q('#cutoffThermometerPanel .cutoffMarker.m80');
+    if(targetMarker){targetMarker.style.left=`${target}%`;targetMarker.title=`Sua meta de estudo: ${target}%`}
+    if(eliteMarker){eliteMarker.style.left=`${a.elite}%`;eliteMarker.title=`${a.elite}% — Faixa de segurança`}
+    const tickTarget=q('#cutoffThermometerPanel .cutoffScaleTicks .t72'),tickElite=q('#cutoffThermometerPanel .cutoffScaleTicks .t80');
+    if(tickTarget)tickTarget.textContent=`🎯 Meta ${target}%`;
+    if(tickElite)tickElite.textContent=`🏆 ${a.elite}%`;
+    const inputEl=q('#cutoffTargetInput');
+    if(inputEl&&document.activeElement!==inputEl)inputEl.value=target;
+    const interval=`${a.lo}%–${a.hi}%`;
+    const sampleNote=a.lowSample?' (amostra pequena)':'';
 
     if(stagesEl){
       stagesEl.innerHTML=`
         <div class="cutoffStageCard ${rate>=60?'passed':'pending'}">
           <div class="stageTop"><span>1º Marco · Habilitação</span><b class="stagePct">60%</b></div>
-          <div class="stageStatus">${rate>=60?'✓ Mínimo atingido':`Faltam +${needed60} acerto(s) seguido(s)`}</div>
+          <div class="stageStatus">${rate>=60?'✓ Mínimo atingido':`Faltam +${a.needMin} acerto(s) seguido(s)`}${sampleNote}</div>
         </div>
-        <div class="cutoffStageCard target ${rate>=72?'passed':'pending'}">
-          <div class="stageTop"><span>2º Marco · Corte Vagas</span><b class="stagePct">72%</b></div>
-          <div class="stageStatus">${rate>=72?`✓ Dentro das vagas (+${rate-72}%)`:`🎯 Faltam +${needed72} acerto(s) p/ vaga`}</div>
+        <div class="cutoffStageCard target ${rate>=target?'passed':'pending'}">
+          <div class="stageTop"><span>2º Marco · Sua meta</span><b class="stagePct">${target}%</b></div>
+          <div class="stageStatus">${rate>=target?`✓ Meta atingida (+${rate-target}%)`:`🎯 Faltam +${a.needTarget} acerto(s) p/ a meta`}${sampleNote}</div>
         </div>
-        <div class="cutoffStageCard elite ${rate>=80?'passed':'pending'}">
-          <div class="stageTop"><span>3º Marco · Elite Caveira</span><b class="stagePct">80%+</b></div>
-          <div class="stageStatus">${rate>=80?'🏆 Nível Elite conquistado':`Faltam +${needed80} acerto(s) p/ topo`}</div>
+        <div class="cutoffStageCard elite ${rate>=a.elite?'passed':'pending'}">
+          <div class="stageTop"><span>3º Marco · Margem de segurança</span><b class="stagePct">${a.elite}%+</b></div>
+          <div class="stageStatus">${rate>=a.elite?'🏆 Margem de segurança conquistada':`Faltam +${a.needElite} acerto(s) p/ o topo`}${sampleNote}</div>
         </div>
       `;
     }
 
-    if(rate>=80){
-      badgeEl.textContent='🏆 Faixa Elite (≥80%)';
-      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — Faixa dos Primeiros Colocados`;
-      adviceEl.textContent=bottlenecks.length
-        ?`Sua média geral (${rate}%) já é de Elite, mas ainda há ${bottlenecks.length} disciplina(s) com erros ou abaixo de 72%. Elimine esses pontos abaixo para blindar sua aprovação!`
-        :'Todas as suas disciplinas praticadas estão acima do corte! Mantenha o ritmo com simulados cronometrados e revisão espaçada.';
-    }else if(rate>=72){
-      badgeEl.textContent='✓ Zona de Vagas (≥72%)';
-      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — Dentro da Nota de Corte!`;
-      adviceEl.textContent=`Você já superou o corte médio de 72%. Corrija os gargalos abaixo e acerte mais ${needed80} questão(ões) seguida(s) para alcançar a faixa Elite (80%+).`;
+    const disclaimer=' A meta é definida por você; a nota de corte real varia por banca, cargo e ano.';
+    if(a.lowSample){
+      badgeEl.textContent=`🔎 Amostra pequena (${total}/${CUTOFF_MIN_SAMPLE} questões)`;
+      titleEl.textContent=`Acerto atual: ${rate}% (${correct}/${total}) — ainda é cedo para concluir`;
+      adviceEl.textContent=`Com ${total} questão(ões) respondida(s), seu acerto provável está entre ${interval}. Resolva pelo menos ${CUTOFF_MIN_SAMPLE} para uma leitura confiável.${disclaimer}`;
+    }else if(rate>=a.elite){
+      badgeEl.textContent=`🏆 Margem de segurança (≥${a.elite}%)`;
+      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — acima da sua meta, com margem`;
+      adviceEl.textContent=(bottlenecks.length
+        ?`Seu acerto geral (${rate}%, provável ${interval}) está bem acima da meta, mas ainda há ${bottlenecks.length} disciplina(s) com erros ou abaixo de ${target}%. Elimine esses pontos para blindar sua preparação.`
+        :'Todas as disciplinas praticadas estão acima da meta. Mantenha o ritmo com simulados cronometrados e revisão espaçada.')+disclaimer;
+    }else if(rate>=target){
+      badgeEl.textContent=`✓ Meta atingida (≥${target}%)`;
+      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — dentro da sua meta`;
+      adviceEl.textContent=`Você superou sua meta de ${target}% (acerto provável ${interval}). Corrija os gargalos abaixo e acerte mais ${a.needElite} questão(ões) seguida(s) para ganhar margem de segurança.${disclaimer}`;
     }else if(rate>=60){
-      badgeEl.textContent='⚡ Habilitado (60–71%)';
-      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — Faltam +${needed72} acertos p/ o Corte (72%)`;
-      adviceEl.textContent=`Você já passou do mínimo de 60%, mas precisa subir ${72-rate}% para entrar na zona de vagas (72%). Veja abaixo exatamente quais matérias e assuntos estão puxando sua nota para baixo:`;
+      badgeEl.textContent=`⚡ Habilitado (60–${target-1}%)`;
+      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — faltam +${a.needTarget} acertos p/ a meta (${target}%)`;
+      adviceEl.textContent=`Você passou do mínimo de 60%, mas precisa subir ${target-rate}% para atingir sua meta (acerto provável ${interval}). Veja abaixo quais matérias e assuntos puxam sua nota para baixo:${disclaimer}`;
     }else{
-      badgeEl.textContent='🎯 Abaixo do Corte (<60%)';
-      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — Foco em Corrigir os Gargalos`;
-      adviceEl.textContent=`Faltam +${needed60} acerto(s) seguido(s) para o mínimo de 60% e +${needed72} para a zona de vagas (72%). Não estude às cegas: clique nos gargalos abaixo para corrigir exatamente onde você está errando:`;
+      badgeEl.textContent='🎯 Abaixo do mínimo (<60%)';
+      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — foco em corrigir os gargalos`;
+      adviceEl.textContent=`Faltam +${a.needMin} acerto(s) seguido(s) para o mínimo de 60% e +${a.needTarget} para a sua meta (${target}%). Clique nos gargalos abaixo para corrigir exatamente onde você erra.${disclaimer}`;
     }
 
     if(actionBox){
       const bottleneckHtml=bottlenecks.slice(0,4).map(b=>{
-        const statusBadge=b.rate<60?`<span class="cutoffPill low">🔴 ${b.rate}% (Crítico)</span>`:b.rate<72?`<span class="cutoffPill mid">🟡 ${b.rate}% (Faltam +${b.neededFor72} acertos p/ 72%)</span>`:`<span class="cutoffPill high">🟢 ${b.rate}% (${b.misses} erro pendente)</span>`;
+        const statusBadge=b.rate===null?`<span class="cutoffPill mid">⚪ Sem amostra de questões</span>`:b.rate<60?`<span class="cutoffPill low">🔴 ${b.rate}% (Crítico)</span>`:b.rate<target?`<span class="cutoffPill mid">🟡 ${b.rate}% (Faltam +${b.neededForTarget} acertos p/ ${target}%)</span>`:`<span class="cutoffPill high">🟢 ${b.rate}% (${b.misses} erro pendente)</span>`;
         return `
           <div class="cutoffBottleneckRow">
             <div class="cutoffBottleneckInfo">
@@ -1885,7 +2141,7 @@
                 <b>${escText(b.name)}</b>
                 ${statusBadge}
               </div>
-              <span class="small muted">${b.total?`${b.correct}/${b.total} acertos`:""}${b.misses?`${b.total?" · ":""}⚠ ${b.misses} erro(s) acumulado(s) no caderno`:""}</span>
+              <span class="small muted">${b.total?`${b.correct}/${b.total} acertos${b.total<10?" (amostra pequena)":""}`:""}${b.misses?`${b.total?" · ":""}⚠ ${b.misses} erro(s) acumulado(s) no caderno`:""}</span>
             </div>
             <button type="button" class="action small cutoffFixBtn" data-cutoff-fix-subj="${escText(b.name)}">🔧 Corrigir Agora</button>
           </div>
@@ -1915,7 +2171,7 @@
         ${bottlenecks.length?`
           <div class="cutoffSectionBlock">
             <div class="cutoffSubHead">
-              <b>📉 Gargalos por Disciplina (O que está segurando sua nota abaixo de 72%)</b>
+              <b>📉 Gargalos por Disciplina (O que está segurando sua nota abaixo de ${target}%)</b>
               <span class="small muted">Toque em "Corrigir Agora" para treinar os pontos fracos da matéria</span>
             </div>
             <div class="cutoffBottleneckList">${bottleneckHtml}</div>
@@ -5897,6 +6153,9 @@
       guildChatState.ws=ws;
       ws.onopen=()=>{
         guildChatState.wsConnected=true;
+        clearInterval(guildChatState.heartbeat);
+        // O Realtime encerra conexões sem heartbeat; o protocolo Phoenix exige um a cada ~30 s.
+        guildChatState.heartbeat=setInterval(()=>{try{if(ws.readyState===1)ws.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:String(Date.now())}))}catch{}},25000);
         const token=cloudSession?.access_token||SUPABASE_KEY;
         ws.send(JSON.stringify({
           topic:'realtime:guild-lobby',
@@ -5930,11 +6189,13 @@
         }catch{}
       };
       ws.onclose=()=>{
+        clearInterval(guildChatState.heartbeat);
         guildChatState.ws=null;
         guildChatState.wsConnected=false;
       };
       ws.onerror=()=>{
         try{ws.close()}catch{}
+        clearInterval(guildChatState.heartbeat);
         guildChatState.ws=null;
         guildChatState.wsConnected=false;
       };
@@ -6025,7 +6286,7 @@
         })
       });
       const created=await res.json().catch(()=>null);
-      if(!res.ok)throw new Error(created?.message||'Não foi possível enviar a mensagem. Execute o SQL v97 atualizado no Supabase.');
+      if(!res.ok){const raw=String(created?.message||'');throw new Error(/rate_limited/.test(raw)?'Você está enviando mensagens rápido demais. Aguarde um instante.':/duplicate_message/.test(raw)?'Você acabou de enviar essa mesma mensagem.':/empty_message/.test(raw)?'Escreva uma mensagem antes de enviar.':(raw||'Não foi possível enviar a mensagem. Execute o SQL v98 atualizado no Supabase.'))}
       broadcastGuildRealtimePing('chat');
       await loadGuildChatMessages(false);
     }catch(err){
@@ -6356,7 +6617,7 @@
         <h4>2. Uso de Inteligência Artificial e Conferência Obrigatória</h4>
         <p class="small">Resumos, flashcards, questões comentadas, cronogramas e correções de redação gerados por IA são instrumentos de auxílio pedagógico. Cabe ao usuário conferir artigos de lei, prazos, gabaritos definitivos e regras diretamente no <b>edital oficial do concurso</b> e na legislação vigente.</p>
         <h4>3. Ausência de Promessa de Aprovação</h4>
-        <p class="small">Os indicadores do Simulador de Aprovação (marcos de 60%, 72% e 80%), XP e Patentes medem apenas a evolução nos treinos internos da plataforma, não representando garantia de aprovação ou classificação em concursos públicos.</p>
+        <p class="small">Os indicadores do Simulador de Aprovação, XP e Patentes medem apenas a evolução nos treinos internos da plataforma, não representando garantia de aprovação ou classificação em concursos públicos.</p>
         <h4>4. Convivência na Guilda e Direitos sobre Materiais</h4>
         <p class="small">O usuário compromete-se a manter respeito no Chat da Guilda e declara possuir direito de uso sobre os PDFs que enviar para estudo, podendo definir sua visibilidade como pública ou privada.</p>
       `
@@ -6423,7 +6684,6 @@
       };
     }
 
-    // Validação do checkbox de consentimento LGPD ao criar conta pela interface
     const gateSubmit=q('#gateSubmit');
     if(gateSubmit){
       gateSubmit.addEventListener('click',e=>{
@@ -6438,7 +6698,6 @@
       },true);
     }
 
-    // Navegação por teclado (Setas Esquerda/Direita) nas barras de abas (role="tablist")
     qa('[role="tablist"]').forEach(tablist=>{
       tablist.addEventListener('keydown',e=>{
         if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft')return;
@@ -6453,7 +6712,6 @@
     });
   }
   initLegalAndAccessibilityEnhancements();
-
   setTimeout(()=>{
     syncCommunityLibraryForActivePortal();
     if(cloudSession&&navigator.onLine){

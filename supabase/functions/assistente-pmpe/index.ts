@@ -448,18 +448,21 @@ Para cada questão identificada:
 TEXTO COLADO PELO ALUNO:
 ${rawText}`
       : submode === "twin" && moldQuestion
-      ? `Crie ${count} questão(ões) GÊMEA(S) inédita(s) baseada(s) na questão-molde abaixo, cobrando o mesmo tema jurídico/técnico sob outro ângulo ou caso prático, mantendo o padrão da banca ${board}.
+      ? `Crie ${count} questão(ões) GÊMEA(S) PEDAGÓGICA(S) inédita(s) baseada(s) na questão-molde abaixo, mantendo o padrão da banca ${board}.
 Disciplina: ${moldQuestion.subject || subject}. Assunto: ${moldQuestion.topic || topic}. Dificuldade: ${moldQuestion.difficulty || difficulty}.
-QUESTÃO-MOLDE:
+QUESTÃO-MOLDE ORIGINAL:
 Enunciado: ${moldQuestion.statement}
 Alternativas: ${JSON.stringify(moldQuestion.options)}
+Gabarito da molde: ${moldQuestion.options?.[Number(moldQuestion.correct_index) || 0] || ""}
 Explicação base: ${moldQuestion.explanation || ""}
+${payload.student_error_context ? `DIAGNÓSTICO DO ALUNO NA QUESTÃO-MOLDE: ${String(payload.student_error_context).slice(0, 600)}` : ""}
 
-Regras obrigatórias:
-- 4 alternativas plausíveis (A, B, C, D) do mesmo assunto, apenas 1 correta (correct_index de 0 a 3).
-- Marque origin como "autoral".
-- No campo explanation, escreva uma RESOLUÇÃO PASSO A PASSO que ensine o aluno (estilo boaResposta):
-  "Conceito-chave: [regra ou fundamento cobrado]\n✅ Alternativa correta: [justificativa passo a passo]\n❌ Por que as outras estão erradas: [análise concisa de cada distrator]\n⚠️ Pegadinha da banca (${board}): [como não cair no erro]".`
+DIRETRIZ PEDAGÓGICA DA QUESTÃO GÊMEA (ENGENHARIA DE FIXAÇÃO E TRANSFERÊNCIA):
+1. NÃO copie o mesmo texto: mude o caso concreto, os personagens ou inverta o ângulo de cobrança (ex.: se a molde cobrou a regra geral, cobre um caso prático de aplicação ou a exceção legal; se o aluno errou confundindo uma alternativa distratora, crie um cenário que force o aluno a diferenciar exatamente o gabarito daquele distrator).
+2. Elabore 4 alternativas plausíveis (A, B, C, D) de extensão semelhante, com apenas 1 correta (correct_index de 0 a 3, variando a letra correta em relação à molde).
+3. Marque origin como "autoral".
+4. No campo explanation, escreva uma RESOLUÇÃO PASSO A PASSO cirúrgica (estilo boaResposta):
+  "Conceito-chave: [regra ou artigo exato cobrado e conexão com a questão anterior]\n✅ Alternativa correta: [justificativa passo a passo do caso concreto]\n❌ Por que as outras estão erradas: [análise concisa de cada distrator, destacando a diferença para a alternativa que confunde]\n⚠️ Pegadinha da banca (${board}): [gatilho mental para nunca mais errar este ponto]".`
       : `Elabore um caderno de ${count} questões inéditas de múltipla escolha reproduzindo FIELMENTE a engenharia de prova e pegadinhas da banca ${board}.
 Disciplina: ${subject}.
 Assunto / Tópico foco: ${topic}.

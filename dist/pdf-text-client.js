@@ -1203,6 +1203,80 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
           const savedOk = await saveTopicsToCampaignAndSync(doc, structured.topics, session, pages.length);
           if (savedOk) return;
         }
+
+        // Fast-path determinístico para Provas Oficiais e Simulados em PDF que já possuem questões numeradas + gabarito no documento
+        if (["prova", "simulado"].includes(String(doc.document_type || "")) && typeof window.extractStructuredExamQuestions === "function") {
+          const fallbackSubj = doc.detected_subject || doc.metadata?.primary_subject || "Conteúdo Geral";
+          const extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: doc.title });
+          if (Array.isArray(extractedQs) && extractedQs.length >= 3) {
+            const bySubj = {};
+            for (const qItem of extractedQs) {
+              const s = qItem.subject || fallbackSubj;
+              (bySubj[s] = bySubj[s] || []).push(qItem);
+            }
+            const dbRows = Object.entries(bySubj).map(([subj, qs]) => ({
+              campaign_id: doc.campaign_id,
+              user_id: session.user.id,
+              source_document_id: doc.id,
+              content_type: "summary",
+              title: `Questões Extraídas (${subj}) — ${doc.title}`.slice(0, 190),
+              content: {
+                is_question_pack: true,
+                subject: subj,
+                source: doc.title,
+                page_start: 1,
+                page_end: pages.length,
+                explanation: `Pacote oficial de ${qs.length} questão(ões) extraída(s) deterministicamente de ${doc.title}.`,
+                points: [],
+                flashcards: [],
+                questions: qs
+              },
+              source_refs: [{ document_id: doc.id, title: doc.title }]
+            }));
+            await cloudFetch(`generated_study_content?source_document_id=eq.${encodeURIComponent(doc.id)}`, { method: "DELETE" }).catch(() => undefined);
+            const saveRes = await cloudFetch("generated_study_content", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+              body: JSON.stringify(dbRows)
+            });
+            if (saveRes.ok) {
+              const primarySubject = Object.keys(bySubj)[0] || fallbackSubj;
+              const subjectsList = Object.keys(bySubj);
+              const coverage = {
+                estimated_pages: pages.length,
+                sections_detected: subjectsList,
+                sections_covered: subjectsList,
+                omissions: [],
+                confidence: 0.96,
+                percent: 100,
+                summary_count: extractedQs.length,
+                shallow_summaries: 0,
+                warnings: [],
+                needs_review: false
+              };
+              await cloudFetch(`study_documents?id=eq.${doc.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  processing_status: "ready",
+                  detected_subject: primarySubject,
+                  metadata: {
+                    ...(doc.metadata || {}),
+                    primary_subject: primarySubject,
+                    analyzed_at: new Date().toISOString(),
+                    analysis_progress: { stage: "completed", percent: 100, completed_sections: subjectsList.length, total_sections: subjectsList.length, updated_at: new Date().toISOString() },
+                    coverage
+                  }
+                })
+              });
+              doc.processing_status = "ready";
+              doc.metadata = { ...(doc.metadata || {}), coverage };
+              await Promise.all([loadGeneratedContent(), loadCloudDocuments()]);
+              render();
+              toast(`🎯 ${extractedQs.length} questões oficiais extraídas com gabarito de “${doc.title}” (${subjectsList.length} disciplina(s))!`);
+              return;
+            }
+          }
+        }
       }
 
       await originalProcessDocument(id);

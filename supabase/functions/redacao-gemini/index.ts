@@ -157,13 +157,13 @@ Deno.serve(async (request) => {
     geminiFileName = geminiFile.name;
     const board = String(essay.board ?? "geral");
     const boardGuidance = board === "AOCP"
-      ? "Critérios Instituto AOCP: 1) Atendimento ao tema e tipologia (0-20), 2) Coesão e coerência (0-20), 3) Argumentação e progressão temática (0-30), 4) Modalidade escrita e norma culta (0-30)."
+      ? "Referência geral para provas do Instituto AOCP (o edital pode diferir): 1) Atendimento ao tema e tipologia (0-20), 2) Coesão e coerência (0-20), 3) Argumentação e progressão temática (0-30), 4) Modalidade escrita e norma culta (0-30)."
       : board === "Cebraspe"
-      ? "Critérios Cebraspe: Macroestrutura (apresentação, tema e tópicos solicitados) e Microestrutura (descontos por erros de grafia, morfossintaxe e pontuação calculados pela extensão)."
+      ? "Referência geral para provas do Cebraspe (o edital pode diferir): Macroestrutura (apresentação, tema e tópicos solicitados) e Microestrutura (descontos por erros de grafia, morfossintaxe e pontuação calculados pela extensão)."
       : board === "FGV"
-      ? "Critérios FGV: 1) Compreensão do tema e tese (0-30), 2) Estrutura argumentativa e repertório (0-30), 3) Coesão e articulação (0-20), 4) Norma padrão e precisão vocabular (0-20)."
+      ? "Referência geral para provas da FGV (o edital pode diferir): 1) Compreensão do tema e tese (0-30), 2) Estrutura argumentativa e repertório (0-30), 3) Coesão e articulação (0-20), 4) Norma padrão e precisão vocabular (0-20)."
       : board === "IDECAN"
-      ? "Critérios IDECAN: 1) Tema e Tipologia Textual (0-25), 2) Estrutura Argumentativa e Repertório (0-25), 3) Coesão e Coerência (0-25), 4) Domínio da Norma Padrão (0-25)."
+      ? "Referência geral para provas do IDECAN (o edital pode diferir): 1) Tema e Tipologia Textual (0-25), 2) Estrutura Argumentativa e Repertório (0-25), 3) Coesão e Coerência (0-25), 4) Domínio da Norma Padrão (0-25)."
       : "Use os 4 eixos padrão de concursos públicos: 1) Tema e Tipologia (0-25), 2) Argumentação e Repertório (0-25), 3) Coesão e Coerência (0-25), 4) Domínio da Norma Padrão (0-25).";
 
     const prompt = `Atue como corretor sênior de bancas de concursos públicos brasileiros. Analise o texto manuscrito ou digitado presente no arquivo.
@@ -176,8 +176,8 @@ Instruções adicionais: ${essay.instructions || "nenhuma"}.
 
 DEVOLUTIVA EXIGIDA:
 1. Avalie legibilidade (readable: boolean) e faça observação sobre linhas e apresentação (line_observation).
-2. Nota geral de 0 a 100 (score) e diagnóstico direto e honesto (diagnosis).
-3. Espelho oficial por critérios (criteria): forneça 4 critérios com name, max_score, score obtido e commentary detalhado justificando a pontuação. A soma das notas dos critérios deve equivaler ao score total.
+2. Nota geral de 0 a 100 (score) e diagnóstico direto e honesto (diagnosis). Deixe claro no diagnóstico que a nota é uma ESTIMATIVA pedagógica, e não a nota oficial da banca.
+3. Espelho ESTIMADO por critérios (criteria), baseado em referência geral da banca e NÃO na correção oficial: forneça 4 critérios com name, max_score, score obtido e commentary detalhado justificando a pontuação. A soma das notas dos critérios deve equivaler ao score total.
 4. Apontamento de desvios linha a linha (deviations): liste desvios gramaticais, de crase, regência, concordância ou pontuação citando line ("Linha X"), snippet (trecho como o aluno escreveu), issue (natureza do erro) e suggestion (forma correta).
 5. Pontos fortes (strengths): liste de 2 a 5 pontos fortes reais da redação.
 6. O que melhorar (improvements): liste problemas encontrados com category, problem e recommendation prática.

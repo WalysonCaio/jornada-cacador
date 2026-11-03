@@ -5,3 +5,4 @@ node_modules/
 *.keystore
 android/app/build/
 android/.gradle/
+CLAUDE.md

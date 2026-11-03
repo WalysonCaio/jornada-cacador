@@ -693,3 +693,82 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   assert.ok(v77Src.includes("openLegalCenter") && v77Src.includes("initLegalAndAccessibilityEnhancements"), "v77-experience.js deve gerenciar o modal jurídico, o banner de consentimento e a navegação por teclado nas abas");
   console.log("OK: Conformidade Legal (LGPD/Termos/Cookies), Rodapé, Consentimento, Acessibilidade e Auditoria de 20 Itens (v116) validados.");
 }
+
+// ── Validação v117: Extrator Determinístico de Provas/Simulados (A–D, A–E com gabarito E, Certo/Errado, Anuladas) e Motor Cognitivo de Questões Gêmeas ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const scriptSrc = htmlSrc.match(/<script>([\s\S]*?)<\/script>/)[1];
+
+  const fnSlice = [
+    scriptSrc.slice(scriptSrc.indexOf("function normalizeText("), scriptSrc.indexOf("function missionForQuestion(")),
+    "function learningCategory(s){return canonicalSubjectName(s)}",
+    "function normalizedDifficulty(q){return q?.difficulty||'medio'}",
+    "const shortLabel=(t,m=52)=>String(t||'').slice(0,m);",
+    v77Src.slice(v77Src.indexOf("function buildLocalCognitiveTwinQuestion("), v77Src.indexOf("async function spawnTwinQuestionForCurrent(")),
+    v77Src.slice(v77Src.indexOf("function parseExamAnswerKeyTable("), v77Src.indexOf("async function handleImportQuestionJsonFile(")),
+  ].join("\n");
+
+  const ctx = { window: {}, state: { customCampaign: { missions: [] } } };
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(fnSlice, ctx);
+
+  const sampleExamText = `
+QUESTÃO 01
+Nos termos do art. 5º da Constituição Federal de 1988, sobre os direitos e deveres individuais e coletivos, assinale a alternativa correta:
+A) É livre a manifestação do pensamento, sendo permitido o anonimato.
+B) A casa é asilo inviolável do indivíduo, ninguém nela podendo penetrar sem consentimento do morador, salvo em caso de flagrante delito ou desastre, ou para prestar socorro, ou, durante o dia, por determinação judicial.
+C) A criação de associações depende de autorização estatal prévia.
+D) Todos podem reunir-se pacificamente, desde que haja autorização prévia da autoridade policial.
+
+QUESTÃO 02
+No que tange à teoria do crime no Direito Penal, assinale a opção que apresenta todas as excludentes de ilicitude previstas no art. 23 do Código Penal:
+A) Coação moral irresistível e obediência hierárquica.
+B) Erro de tipo essencial e erro de proibição inevitável.
+C) Menoridade penal e embriaguez completa acidental.
+D) Arrependimento eficaz e desistência voluntária.
+E) Estado de necessidade, legítima defesa, estrito cumprimento de dever legal e exercício regular de direito.
+
+QUESTÃO 03
+Questão sobre informática que foi anulada pela banca organizadora:
+A) Windows 10.
+B) Linux Ubuntu.
+C) LibreOffice Writer.
+D) Mozilla Firefox.
+
+QUESTÃO 04
+Julgue o item a seguir acerca do inquérito policial no processo penal:
+O inquérito policial possui natureza de processo administrativo contraditório, podendo a autoridade policial mandar arquivar autos de inquérito de ofício.
+( ) Certo
+( ) Errado
+
+GABARITO DEFINITIVO
+01 - B | 02 - E | 03 - ANULADA | 04 - ERRADO
+  `;
+
+  const extracted = ctx.window.extractStructuredExamQuestions(sampleExamText, { defaultSubject: "Geral", defaultBoard: "Instituto AOCP" });
+  assert.equal(extracted.length, 3, `Deve extrair 3 questões válidas e descartar a questão 03 anulada (obteve ${extracted.length})`);
+  assert.equal(extracted[0].subject, "Direito Constitucional", "Questão 01 deve ser classificada em Direito Constitucional");
+  assert.equal(extracted[0].correct_index, 1, "Questão 01 tem gabarito B (índice 1)");
+  assert.equal(extracted[1].subject, "Direito Penal", "Questão 02 deve ser classificada em Direito Penal");
+  assert.equal(extracted[1].correct_index, 3, "Questão 02 de 5 alternativas (A–E) com gabarito E deve preservar a alternativa E correta no índice 3");
+  assert.ok(extracted[1].options[3].includes("Estado de necessidade, legítima defesa"), "Texto da alternativa E correta deve ser preservado");
+  assert.equal(extracted[2].subject, "Direito Processual Penal", "Questão 04 deve ser classificada em Direito Processual Penal");
+  assert.equal(extracted[2].correct_index, 1, "Questão 04 Certo/Errado com gabarito ERRADO deve ter correct_index = 1");
+
+  // Teste da Questão Gêmea Cognitiva quando o aluno erra marcando um distrator
+  const moldWithError = {
+    ...extracted[0],
+    _lastAttempt: {
+      ok: false,
+      chosenIndex: 0,
+      chosenText: extracted[0].options[0],
+      correctIndex: 1,
+      correctText: extracted[0].options[1],
+    },
+  };
+  const twin = ctx.window.buildLocalCognitiveTwinQuestion(moldWithError);
+  assert.ok(twin.statement.includes("Questão Gêmea de Fixação") && twin.explanation.includes("Análise do distrator que confundiu antes"), "Questão gêmea deve trabalhar o distrator que o aluno marcou por engano");
+  console.log("OK: Extrator Determinístico de Provas (A–D, A–E com gabarito E, Certo/Errado, Anuladas) e Motor Cognitivo de Questões Gêmeas (v117) validados.");
+}

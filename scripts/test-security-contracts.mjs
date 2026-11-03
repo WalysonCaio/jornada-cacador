@@ -56,3 +56,20 @@ const v97 = read("supabase/migrations/20261101120000_v97_complete_security_duels
 assert(/redact_duel_questions_for_player/.test(v97) && /grade_hunter_duel_question/.test(v97), "v97 deve ocultar gabarito de duelos pendentes e corrigir questão no servidor");
 assert(/set_document_community_sharing/.test(v97) && /share_with_community/.test(v97), "v97 deve exigir opt-in por documento na biblioteca comunitária");
 console.log("OK: contratos v97/v105 (user_state base, duelo sem gabarito exposto, opt-in comunidade e CSP ativa) validados.");
+
+// ── v98: chat da guilda só pode ser escrito pela função (sem personificação nem flood) ──
+{
+  const files = readdirSync(new URL("supabase/migrations/", root)).filter((f) => f.endsWith(".sql")).sort();
+  const v98 = read("supabase/migrations/" + files.find((f) => f.includes("v98_guild_chat_hardening")));
+  assert(/drop policy if exists "Autenticados enviam mensagem propria na guilda"/.test(v98), "v98 deve remover o INSERT direto do chat");
+  assert(/revoke insert, update on public\.hunter_guild_messages from anon, authenticated/.test(v98), "v98 deve revogar INSERT/UPDATE diretos");
+  assert(/rate_limited/.test(v98) && /duplicate_message/.test(v98), "a função de envio deve limitar flood e repetição");
+  assert((v98.match(/\$\$/g) || []).length % 2 === 0, "v98: $$ desbalanceado");
+  const code98 = v98.replace(/--[^\n]*/g, "").replace(/'(?:[^']|'')*'/g, "''"); let d98 = 0; for (const ch of code98) { if (ch === "(") d98++; if (ch === ")") d98--; assert(d98 >= 0, "v98: parêntese fechado sem abrir"); } assert.equal(d98, 0, "v98: parênteses desbalanceados");
+  // front: heartbeat do realtime e erros amigáveis do chat
+  const v77 = read("dist/v77-experience.js");
+  assert(/event:'heartbeat'/.test(v77), "o WebSocket do chat precisa de heartbeat");
+  assert(/rate_limited/.test(v77) && /duplicate_message/.test(v77), "o front deve traduzir os erros do chat");
+  assert(!/onclick=importCampaign/.test(read("dist/index.html")), "referência morta a importCampaign");
+}
+console.log("OK: contratos v98 (chat, heartbeat, referência morta) validados.");
