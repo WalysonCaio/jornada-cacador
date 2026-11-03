@@ -864,7 +864,7 @@ body:before{display:none!important;content:none!important;mask-image:none!import
 @media (prefers-reduced-motion:reduce){#appBootSplash,#appBootSplash *{animation:none!important;transition:none!important}}
 </style></head>
 <body>
-<div class="appBootSplash" id="appBootSplash" role="status" aria-label="Carregando Jornada do Caçador">
+<div class="appBootSplash" id="appBootSplash" role="status" aria-label="Carregando Jornada do Caçador" onclick="this.classList.add('hide');this.hidden=true">
   <picture class="appBootSplashPic">
     <source media="(max-width: 767px), (orientation: portrait)" srcset="bancas-boss-banner.jpg">
     <img src="login-banner.jpg" alt="Jornada do Caçador — Rumo à Aprovação" class="appBootSplashImg">
@@ -1069,6 +1069,19 @@ body:before{display:none!important;content:none!important;mask-image:none!import
 <script src="content-summaries.js"></script>
 <script src="material-deep-dives.js"></script>
 <script>
+window.dismissAppBootSplash=function(){const sp=document.getElementById('appBootSplash');if(!sp||sp.dataset.dismissed)return;sp.dataset.dismissed='1';const fill=document.getElementById('appBootProgressFill');if(fill)fill.style.width='100%';sp.classList.add('hide');setTimeout(()=>{sp.hidden=true},320)};
+document.getElementById('appBootSplash')?.addEventListener('pointerdown',()=>window.dismissAppBootSplash?.(),{passive:true});
+document.getElementById('appBootSplash')?.addEventListener('click',()=>window.dismissAppBootSplash?.(),{passive:true});
+setTimeout(()=>window.dismissAppBootSplash?.(),850);
+var KNOWN_CANONICAL_SUBJECTS = new Set([
+  'Língua Portuguesa','Raciocínio Lógico-Matemático','Informática','História de Pernambuco','História do Brasil',
+  'Geografia de Pernambuco','Geografia do Brasil','Direito Constitucional','Direito Administrativo','Direito Penal',
+  'Direito Processual Penal','Legislação Extravagante','Execução Penal','Direitos Humanos','Direito Militar',
+  'Legislação Estadual','Ética no Serviço Público','Atualidades','Física','Biologia','Química','Redação',
+  'Administração Pública','Contabilidade','Arquivologia','Criminologia','Medicina Legal','Criminalística',
+  'Legislação de Trânsito','Língua Inglesa','Língua Espanhola','Defesa Civil','Primeiros Socorros'
+]);
+window.KNOWN_CANONICAL_SUBJECTS = KNOWN_CANONICAL_SUBJECTS;
 const DATA=[
  {n:'Português',c:'#59e6ff',t:['Compreensão e intelecção de textos','Tipologias e gêneros textuais - item 2','Tipologias e gêneros textuais - item 3','Acentuação gráfica','Emprego das classes de palavras','Emprego do sinal indicativo de crase','Sintaxe da oração e do período','Mecanismos de coesão textual','Pontuação','Concordância nominal e verbal','Regência nominal e verbal','Colocação pronominal','Significação das palavras','Variação linguística','Redação oficial - Manual da Presidência da República/2018']},
  {n:'História de Pernambuco',c:'#f7bd43',t:['Ocupação e colonização; contatos iniciais; Capitanias Hereditárias; Duarte Coelho','A importância do açúcar para a economia local','Formação de Olinda e Recife','Presença holandesa e governo de Maurício de Nassau','Quilombos e Insurreição Pernambucana (1654)','Guerra dos Mascates (1710)','Revolução Pernambucana (1817)','Confederação do Equador (1824)','Guerra dos Cabanos (1835)','Revolução Praieira (1848)','Pernambuco e a República','Cultura popular: frevo, maracatu, culinária e festas','Herança afrodescendente em Pernambuco']},
@@ -1775,42 +1788,7 @@ function normalizeLegalText(raw){
   return s;
 }
 window.normalizeLegalText=normalizeLegalText;
-const KNOWN_CANONICAL_SUBJECTS = new Set([
-  'Língua Portuguesa',
-  'Raciocínio Lógico-Matemático',
-  'Informática',
-  'História de Pernambuco',
-  'História do Brasil',
-  'Geografia de Pernambuco',
-  'Geografia do Brasil',
-  'Direito Constitucional',
-  'Direito Administrativo',
-  'Direito Penal',
-  'Direito Processual Penal',
-  'Legislação Extravagante',
-  'Execução Penal',
-  'Direitos Humanos',
-  'Direito Militar',
-  'Legislação Estadual',
-  'Ética no Serviço Público',
-  'Atualidades',
-  'Física',
-  'Biologia',
-  'Química',
-  'Redação',
-  'Administração Pública',
-  'Contabilidade',
-  'Arquivologia',
-  'Criminologia',
-  'Medicina Legal',
-  'Criminalística',
-  'Legislação de Trânsito',
-  'Língua Inglesa',
-  'Língua Espanhola',
-  'Defesa Civil',
-  'Primeiros Socorros'
-]);
-window.KNOWN_CANONICAL_SUBJECTS = KNOWN_CANONICAL_SUBJECTS;
+var KNOWN_CANONICAL_SUBJECTS = window.KNOWN_CANONICAL_SUBJECTS;
 
 function canonicalSubjectName(value,contextHint=''){
   const mLen=(typeof state!=='undefined'&&Array.isArray(state?.customCampaign?.missions))?state.customCampaign.missions.length:0;
@@ -1861,7 +1839,7 @@ function canonicalSubjectName(value,contextHint=''){
   for(const [pattern,label] of rules){if(pattern.test(combined))return _store(label)}
   if(isNoisyQuestionHeader)return _store('Conteúdo Geral');
   const titled=raw.split(' ').map(word=>/^(de|da|do|das|dos|e|em|a|o|as|os|no|na|nos|nas|ao|aos)$/i.test(word)?word.toLowerCase():word.charAt(0).toLocaleUpperCase('pt-BR')+word.slice(1).toLocaleLowerCase('pt-BR')).join(' ');
-  if(KNOWN_CANONICAL_SUBJECTS.has(titled))return _store(titled);
+  if(typeof KNOWN_CANONICAL_SUBJECTS!=='undefined'&&KNOWN_CANONICAL_SUBJECTS?.has?.(titled))return _store(titled);
   if(raw.length>38||/[:?!.;]|\b(ano|banca|prova|questao|alternativa|item)\b/i.test(key))return _store('Conteúdo Geral');
   return _store(titled);
 }

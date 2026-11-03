@@ -1113,6 +1113,12 @@ GABARITO DEFINITIVO
   const bcmSubjs = [...unpackedBcm.map((x) => x.subject)];
   assert.deepEqual(bcmSubjs, ["Língua Portuguesa", "Física", "Química", "Biologia"], "Um edital inserido no perfil BCM PE deve separar Língua Portuguesa, Física, Química e Biologia sem agrupar sob 'BCM PE'");
 
+
+  // 6) Verifica que KNOWN_CANONICAL_SUBJECTS está inicializado antes de state (evita ReferenceError TDZ que travava #appBootSplash)
+  const idxScript = htmlSrc.match(/<script>([\s\S]*?)<\/script>/)[1];
+  assert.ok(idxScript.indexOf("var KNOWN_CANONICAL_SUBJECTS") < idxScript.indexOf("let state="), "KNOWN_CANONICAL_SUBJECTS deve ser inicializado antes de let state= para nunca causar ReferenceError (TDZ) no boot");
+  assert.ok(idxScript.indexOf("window.dismissAppBootSplash=function()") < idxScript.indexOf("let state="), "dismissAppBootSplash deve ser registrado na primeira linha do script para dispensar o splash imediatamente");
+
   // 5) Verifica SQL v99 de blindagem individual do edital e RLS
   assert.ok(sqlV99.includes("BLINDAGEM DE EDITAL INDIVIDUAL POR USUÁRIO") && sqlV99.includes("edital-comm-%"), "A migração SQL v99 deve conter a blindagem individual de editais e limpeza de user_state contaminado");
 
