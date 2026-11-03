@@ -963,3 +963,27 @@ GABARITO DEFINITIVO
 
   console.log("OK: Bloqueio de Flashcards de Ruído Estrutural, Mnemônicos Honestos e Radar da Banca com Busca Web (v118-C) validados.");
 }
+
+
+// ── Validação v118-D: Banco Nativo Policial/Militar (Instituto AOCP, Cebraspe, FGV, UPENET/IAUPE, IBFC), Treino Rápido 1-Clique (Estilo boaResposta), Trilha Aprimorada e Duelo X1 com Bots da Banca ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+
+  // 1) Verifica presença do Banco Nativo com Instituto AOCP e demais bancas
+  assert.ok(v77Src.includes("NATIVE_POLICE_QUESTION_BANK"), "Deve conter NATIVE_POLICE_QUESTION_BANK em v77-experience.js");
+  assert.ok(v77Src.includes("board: 'Instituto AOCP'") && v77Src.includes("board: 'Cebraspe'") && v77Src.includes("board: 'FGV Conhecimento'") && v77Src.includes("board: 'UPENET/IAUPE'") && v77Src.includes("board: 'IBFC'"), "O banco nativo deve incluir questões do Instituto AOCP, Cebraspe, FGV Conhecimento, UPENET/IAUPE e IBFC");
+  assert.ok(v77Src.includes("questionBoardFilter") && v77Src.includes("quickBoaRespostaBar"), "Deve conter o Seletor de Banca (#questionBoardFilter) e a Barra de Treino Rápido em 1 Clique (#quickBoaRespostaBar)");
+  assert.ok(v77Src.includes("directChoiceComparison") && v77Src.includes("SUA ESCOLHA") && v77Src.includes("GABARITO OFICIAL"), "formatStepByStepResolution deve exibir o Card de Comparação Direta (Sua Escolha vs. Gabarito)");
+
+  // 2) Verifica melhorias na Trilha de Aprendizagem (#learning)
+  assert.ok(!htmlSrc.includes("Desconsiderar os requisitos legais específicos em provas da área."), "Deve ter removido os distratores genéricos artificiais da Trilha de Aprendizagem");
+  assert.ok(htmlSrc.includes("restoreTrailHeartsNow") && v77Src.includes("trailBoardFilter"), "A Trilha deve ter filtro de banca (#trailBoardFilter) e restauração imediata de 3 vidas (restoreTrailHeartsNow)");
+
+  // 3) Verifica melhorias no Duelo X1 (#duel)
+  assert.ok(v77Src.includes("DUEL_EXAMINER_BOTS") && v77Src.includes("bot:aocp") && v77Src.includes("Examinador Instituto AOCP"), "O Duelo X1 deve ter Bots Examinadores das Bancas (incluindo Examinador Instituto AOCP) para jogo solo instantâneo");
+  assert.ok(v77Src.includes("duelBoardSelect") && v77Src.includes("quickDuelBotAocpBtn"), "O Duelo X1 deve ter seletor de banca (#duelBoardSelect) e botão de duelo rápido contra o Examinador AOCP");
+  assert.ok(v77Src.includes("activeDuelSession.submittingAnswer"), "answerDuelQuestion deve ter trava contra race condition de timer/rede (submittingAnswer)");
+
+  console.log("OK: Banco Nativo (Instituto AOCP e bancas), Treino Rápido 1-Clique (boaResposta), Trilha de Aprendizagem e Duelo X1 com Bots validados (v118-D).");
+}

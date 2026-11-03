@@ -335,6 +335,717 @@
       : `Cumprindo cerca de ${perWeek} missões por semana (${perStudyDay} por dia de estudo), você fechará 100% do edital antes da prova.`;
   }
 
+  // 2A. Banco Base Nativo Policial/Militar (Instituto AOCP, Cebraspe, FGV, UPENET/IAUPE, IBFC) + Modo boaResposta
+  const NATIVE_POLICE_QUESTION_BANK = [
+    {
+      subject: 'Língua Portuguesa',
+      topic: 'Crase e Regência Nominal/Verbal',
+      board: 'Instituto AOCP',
+      difficulty: 'facil',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — Padrão PMPE/CBMPE) Assinale a alternativa em que o emprego do acento grave indicativo de crase está em total conformidade com a norma-padrão da língua portuguesa:',
+      options: [
+        'A viatura retornou à base operacional exatamente às dezoito horas para a troca de turno.',
+        'O relatório disciplinar foi encaminhado à Vossa Senhoria para análise imediata.',
+        'Os recrutas ficaram frente à frente com o comandante durante a formatura matinal.',
+        'O patrulhamento ostensivo passou à ser realizado com o apoio de aeronaves.'
+      ],
+      correct_index: 0,
+      explanation: 'Conceito-chave: A crase ocorre pela fusão da preposição "a" com o artigo definido feminino "a" (à base) e nas locuções adverbiais femininas de horas exatas (às dezoito horas). | ✅ Alternativa correta: A) "Retornou à base" (quem retorna, retorna a algum lugar + substantivo feminino "base") e "às dezoito horas" (horas determinadas exigem crase). | ❌ Análise das alternativas: B) Não ocorre crase antes de pronomes de tratamento (Vossa Senhoria); C) Expressões com palavras repetidas ("frente a frente", "cara a cara") não levam crase; D) Não ocorre crase antes de verbo no infinitivo ("a ser"). | ⚠️ Pegadinha da banca: O Instituto AOCP cobra reiteradamente a proibição de crase antes de verbo ("passou a ser") e antes de palavras repetidas ("gota a gota", "frente a frente").'
+    },
+    {
+      subject: 'Língua Portuguesa',
+      topic: 'Concordância Verbal e Verbos Impessoais',
+      board: 'Instituto AOCP',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — Carreiras Policiais) Tendo em vista as regras de concordância verbal da norma-padrão, assinale a alternativa CORRETA:',
+      options: [
+        'Houveram diversas ocorrências de perturbação do sossego no último feriado.',
+        'Fazem dois anos que o novo grupamento tático foi inaugurado no interior.',
+        'Existiam fortes indícios de autoria e materialidade no inquérito policial concluído.',
+        'Devem haver novos editais para a área de segurança pública neste semestre.'
+      ],
+      correct_index: 2,
+      explanation: 'Conceito-chave: O verbo "haver" no sentido de existir/ocorrer e o verbo "fazer" indicando tempo decorrido são impessoais (sem sujeito) e permanecem obrigatoriamente na 3ª pessoa do singular, inclusive quando acompanhados de verbo auxiliar. | ✅ Alternativa correta: C) O verbo "existir" é pessoal e concorda normalmente no plural com o sujeito "fortes indícios". | ❌ Análise das alternativas: A) O correto é "Houve diversas ocorrências"; B) O correto é "Faz dois anos"; D) O auxiliar de verbo impessoal também fica no singular: "Deve haver novos editais". | ⚠️ Pegadinha da banca: O Instituto AOCP costuma colocar o verbo "haver" em locução verbal ("Devem haver") para induzir o candidato ao erro; lembre-se de que "existir" varia ("Devem existir"), mas "haver" não ("Deve haver").'
+    },
+    {
+      subject: 'Língua Portuguesa',
+      topic: 'Conjunções e Relações Lógico-Semânticas',
+      board: 'Cebraspe',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Cebraspe — Segurança Pública) No período "Conquanto chovesse torrencialmente na madrugada, a equipe de resgate manteve as buscas na encosta", a conjunção em destaque exprime relação de:',
+      options: [
+        'Concessão, podendo ser substituída por "Embora" ou "Posto que" sem alteração semântica.',
+        'Causa, podendo ser substituída por "Porquanto" ou "Já que".',
+        'Condição, equivalendo a "Caso" ou "Contanto que".',
+        'Conformidade, equivalendo a "Consoante" ou "Segundo".'
+      ],
+      correct_index: 0,
+      explanation: 'Conceito-chave: As conjunções subordinativas adverbiais concessivas introduzem uma ressalva ou fato contrário que não impede a realização da ação principal. | ✅ Alternativa correta: A) "Conquanto", "Embora", "Posto que", "Ainda que" e "Mesmo que" são conjunções concessivas clássicas. | ❌ Análise das alternativas: B) "Porquanto" é causal/explicativa (não confunda com "Conquanto"); C) "Contanto que" é condicional; D) "Consoante" é conformativa. | ⚠️ Pegadinha da banca: As bancas adoram confundir "Conquanto" (concessiva = embora), "Porquanto" (causal/explicativa = porque) e "Contanto que" (condicional = desde que).'
+    },
+    {
+      subject: 'Língua Portuguesa',
+      topic: 'Colocação Pronominal e Reescrita',
+      board: 'FGV Conhecimento',
+      difficulty: 'dificil',
+      origin: 'oficial',
+      statement: '(FGV Conhecimento) Assinale a alternativa em que a colocação do pronome oblíquo átono obedece rigorosamente à prescrição da gramática normativa:',
+      options: [
+        'Me informaram ontem sobre a alteração do local de prova.',
+        'Os candidatos que inscreveram-se no certame devem conferir o cartão de confirmação.',
+        'Nunca afaste-se dos princípios da legalidade e da moralidade administrativa.',
+        'Em se tratando de flagrante delito, a entrada no domicílio independe de mandado judicial.'
+      ],
+      correct_index: 3,
+      explanation: 'Conceito-chave: Palavras atrativas (advérbios como "nunca", pronomes relativos como "que", e a estrutura "Em + gerúndio") exigem próclise, sendo vedado iniciar período com pronome oblíquo átono. | ✅ Alternativa correta: D) Na estrutura "Em + se + gerúndio" ("Em se tratando"), a próclise ao gerúndio é obrigatória. | ❌ Análise das alternativas: A) Proibido iniciar frase com pronome átono ("Informaram-me"); B) O pronome relativo "que" atrai o pronome ("que se inscreveram"); C) O advérbio "Nunca" atrai o pronome ("Nunca se afaste"). | ⚠️ Pegadinha da banca: A FGV explora o pronome relativo "que" distante ou colado ao verbo; sempre que houver "que", "não", "nunca", "jamais" ou "embora" sem pausa, a próclise é obrigatória.'
+    },
+    {
+      subject: 'Língua Portuguesa',
+      topic: 'Regência Verbal (Assistir, Visar, Implicar)',
+      board: 'UPENET/IAUPE',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(UPENET/IAUPE — PMPE/CBMPE) De acordo com a regência verbal culta, assinale a frase gramaticalmente CORRETA:',
+      options: [
+        'A nova diretriz operacional implica em imediata redistribuição do efetivo.',
+        'O curso de formação visa ao aperfeiçoamento técnico e ético do militar estadual.',
+        'Os instrutores assistiram os novos soldados durante o treinamento de tiro defensivo, no sentido de presenciar.',
+        'O candidato preferiu mais o turno matutino do que o turno noturno.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: O verbo "visar" no sentido de "ter por objetivo/almejar" é transitivo indireto (rege preposição "a"), admitindo também uso direto na linguagem contemporânea, mas "visar ao" é a forma padrão consagrada em provas. | ✅ Alternativa correta: B) "Visa ao aperfeiçoamento" segue rigorosamente a regência padrão. | ❌ Análise das alternativas: A) "Implicar" no sentido de acarretar é transitivo direto ("implica imediata redistribuição", sem "em"); C) "Assistir" no sentido de ver/presenciar exige preposição "a" ("assistiram aos"); D) "Preferir" exige "preferir X a Y", sem "mais... do que". | ⚠️ Pegadinha da banca: "Implicar em" (no sentido de resultar) e "Preferir mais X do que Y" são dois dos desvios mais cobrados pela UPENET e pelo Instituto AOCP.'
+    },
+    {
+      subject: 'Raciocínio Lógico-Matemático',
+      topic: 'Negação da Condicional (Se... então)',
+      board: 'Instituto AOCP',
+      difficulty: 'facil',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — PMPE) Considere a proposição composta: "Se o soldado conclui a ronda, então o perímetro está seguro". A negação lógica correta dessa proposição é:',
+      options: [
+        'Se o soldado não conclui a ronda, então o perímetro não está seguro.',
+        'O soldado conclui a ronda e o perímetro não está seguro.',
+        'O soldado não conclui a ronda ou o perímetro está seguro.',
+        'Se o perímetro não está seguro, então o soldado não conclui a ronda.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: A negação de uma condicional ~(P -> Q) NUNCA se faz com outra condicional; aplica-se a regra do MANÉ (Mantém a primeira E Nega a segunda: P ^ ~Q). | ✅ Alternativa correta: B) Mantém "O soldado conclui a ronda" + conectivo "e" + nega a segunda ("o perímetro não está seguro"). | ❌ Análise das alternativas: A) Tentou negar com "Se... então"; C) Trata-se da equivalência (Neymar), não da negação; D) Trata-se da equivalência contrapositiva (~Q -> ~P), não da negação. | ⚠️ Pegadinha da banca: O Instituto AOCP coloca a equivalência contrapositiva (letra D) e a equivalência disjunção (letra C) como distratores quando pede a NEGAÇÃO da condicional!'
+    },
+    {
+      subject: 'Raciocínio Lógico-Matemático',
+      topic: 'Equivalência Lógica da Condicional (Contrapositiva)',
+      board: 'Instituto AOCP',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Instituto AOCP) Uma proposição logicamente equivalente a "Se há flagrante delito, então a prisão é realizada" é:',
+      options: [
+        'Se não há flagrante delito, então a prisão não é realizada.',
+        'Há flagrante delito e a prisão não é realizada.',
+        'Se a prisão não é realizada, então não há flagrante delito.',
+        'Há flagrante delito ou a prisão não é realizada.'
+      ],
+      correct_index: 2,
+      explanation: 'Conceito-chave: A condicional (P -> Q) possui duas equivalências fundamentais: 1) Contrapositiva (~Q -> ~P: inverte e nega ambas) e 2) Disjunção (~P v Q: nega a primeira ou mantém a segunda). | ✅ Alternativa correta: C) Inverteu e negou os dois termos (~Q -> ~P): "Se a prisão não é realizada, então não há flagrante delito". | ❌ Análise das alternativas: A) Apenas negou sem inverter (falácia da negação do antecedente); B) É a negação (MANÉ); D) Não negou a primeira parte. | ⚠️ Pegadinha da banca: Quando a banca pede EQUIVALÊNCIA com "Se... então", você deve INVERTER E NEGAR os dois lados (~Q -> ~P), jamais apenas negar na mesma ordem.'
+    },
+    {
+      subject: 'Raciocínio Lógico-Matemático',
+      topic: 'Negação de Quantificadores (Todo / Algum / Nenhum)',
+      board: 'Cebraspe',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Cebraspe) A negação lógica da proposição universal "Todos os bombeiros militares do quartel possuem curso de salvamento aquático" é:',
+      options: [
+        'Nenhum bombeiro militar do quartel possui curso de salvamento aquático.',
+        'Todos os bombeiros militares do quartel não possuem curso de salvamento aquático.',
+        'Pelo menos um bombeiro militar do quartel não possui curso de salvamento aquático.',
+        'Apenas um bombeiro militar do quartel possui curso de salvamento aquático.'
+      ],
+      correct_index: 2,
+      explanation: 'Conceito-chave: Para negar o quantificador universal "Todo A é B", basta apresentar um contraexemplo existencial: "Algum A não é B" ("Pelo menos um A não é B" / "Existe um A que não é B"). | ✅ Alternativa correta: C) Substitui "Todos" por "Pelo menos um" e nega o predicado ("não possui"). | ❌ Análise das alternativas: A) "Nenhum" nunca nega "Todo" (é o erro mais comum em prova!); B) Continua universal; D) Restringe a "apenas um". | ⚠️ Pegadinha da banca: Jamais negue "Todo" com "Nenhum"! A regra de ouro é: Todo <-> Algum... não (PEA + Não).'
+    },
+    {
+      subject: 'Raciocínio Lógico-Matemático',
+      topic: 'Análise Combinatória — Combinação Simples',
+      board: 'FGV Conhecimento',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(FGV) Um comandante dispõe de 6 soldados habilitados e precisa escolher uma equipe de 3 soldados para compor uma guarnição de guarda, sem distinção de função entre os escolhidos. O número de maneiras distintas de formar essa equipe é:',
+      options: [
+        '18 maneiras.',
+        '20 maneiras.',
+        '120 maneiras.',
+        '216 maneiras.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: Quando a ordem de escolha dos elementos NÃO importa (formar comissão, equipe ou grupo sem cargos distintos), utiliza-se Combinação Simples: C(n, p) = n! / [p! (n - p)!]. | ✅ Alternativa correta: B) C(6, 3) = (6 × 5 × 4) / (3 × 2 × 1) = 120 / 6 = 20 maneiras. | ❌ Análise das alternativas: A) Multiplicou 6 × 3; C) Calculou Arranjo A(6,3) = 120, esquecendo de dividir por 3! = 6; D) Calculou 6³. | ⚠️ Pegadinha da banca: A alternativa C (120) é o resultado do Arranjo; sempre pergunte "Se eu trocar a ordem dos escolhidos, muda a equipe?". Se não muda, divida pelo fatorial de p!'
+    },
+    {
+      subject: 'Informática',
+      topic: 'Segurança da Informação — Ransomware vs Phishing',
+      board: 'Instituto AOCP',
+      difficulty: 'facil',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — PMPE) Na Segurança da Informação, o código malicioso (malware) que torna inacessíveis os dados armazenados em um equipamento, geralmente usando criptografia, e que exige pagamento de resgate (normalmente em criptomoedas) para restabelecer o acesso ao usuário denomina-se:',
+      options: [
+        'Spyware.',
+        'Ransomware.',
+        'Rootkit.',
+        'Adware.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: Segundo a Cartilha de Segurança para Internet do CERT.br, Ransomware (do inglês "ransom" = resgate) é o malware que sequestra dados por criptografia (Ransomware Crypto) ou bloqueia a tela (Ransomware Locker) exigindo pagamento de resgate. | ✅ Alternativa correta: B) Ransomware = sequestro de dados + criptografia + exigência de resgate. | ❌ Análise das alternativas: A) Spyware monitora atividades (keylogger/screenlogger); C) Rootkit oculta a presença de invasores no sistema; D) Adware exibe anúncios indesejados. | ⚠️ Pegadinha da banca: O Instituto AOCP cobra literalmente as definições da Cartilha CERT.br; associe imediatamente "criptografia de arquivos + pedido de resgate" a Ransomware.'
+    },
+    {
+      subject: 'Informática',
+      topic: 'Correio Eletrônico — Campos Para, Cc e Cco',
+      board: 'Instituto AOCP',
+      difficulty: 'facil',
+      origin: 'oficial',
+      statement: '(Instituto AOCP) Ao enviar um e-mail institucional para três destinatários (A no campo "Para", B no campo "Cc" e C no campo "Cco"), é CORRETO afirmar que:',
+      options: [
+        'A e B conseguem visualizar que C recebeu a mensagem.',
+        'C consegue visualizar que A e B receberam a mensagem, mas nem A nem B sabem que C a recebeu.',
+        'Nenhum dos três destinatários consegue ver o endereço eletrônico dos demais.',
+        'O campo Cco impede o envio de arquivos anexos por motivos de segurança.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: O campo Cco (Cópia Carbono Oculta / Bcc) oculta os destinatários nele inseridos de todos os demais destinatários da mensagem. | ✅ Alternativa correta: B) Quem está em Cco vê quem está em "Para" e "Cc", mas quem está em "Para", "Cc" (ou mesmo outro destinatário em "Cco") não vê quem está listado em Cco. | ❌ Análise das alternativas: A) A e B não veem C; C) A e B veem um ao outro; D) Cco aceita anexos normalmente. | ⚠️ Pegadinha da banca: Se houver dois destinatários (C e D) dentro do campo Cco, C também NÃO vê D (os destinatários em Cco ficam ocultos até entre si).'
+    },
+    {
+      subject: 'Informática',
+      topic: 'Redes de Computadores e Protocolos (HTTPS, DNS, DHCP)',
+      board: 'Cebraspe',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Cebraspe) A respeito dos protocolos da camada de aplicação da arquitetura TCP/IP utilizados na Internet e em intranets policiais, assinale a opção CORRETA:',
+      options: [
+        'O protocolo DNS é responsável por atribuir dinamicamente endereços IP às estações de trabalho da rede local.',
+        'O protocolo HTTPS utiliza o protocolo TLS/SSL para garantir confidencialidade, integridade e autenticidade na comunicação web, operando por padrão na porta TCP 443.',
+        'O protocolo SMTP é utilizado exclusivamente para a leitura e sincronização de mensagens recebidas na caixa de entrada.',
+        'O navegador em modo de navegação anônima oculta o tráfego de rede do provedor de internet (ISP) e do administrador do firewall corporativo.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: HTTPS = HTTP sobre TLS/SSL (porta padrão 443), garantindo criptografia fim a fim entre o navegador e o servidor web. | ✅ Alternativa correta: B) O HTTPS assegura confidencialidade, integridade e autenticação do servidor na porta 443. | ❌ Análise das alternativas: A) Quem atribui IP dinamicamente é o DHCP (o DNS traduz nomes de domínio em endereços IP); C) SMTP é para ENVIO de e-mails (Sua Mensagem Tá Partindo), enquanto IMAP/POP3 são para recebimento; D) A guia anônima apenas não salva histórico/cookies localmente no PC, mas o provedor e o roteador da empresa continuam vendo os acessos. | ⚠️ Pegadinha da banca: Guia anônima NÃO torna o usuário invisível para o provedor de internet nem substitui uma VPN!'
+    },
+    {
+      subject: 'História de Pernambuco',
+      topic: 'Revolução Pernambucana de 1817 ("Revolução dos Padres")',
+      board: 'Instituto AOCP',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — PMPE) A Revolução Pernambucana de 1817 constituiu um dos mais importantes movimentos emancipacionistas do período joanino no Brasil. Sobre esse movimento histórico, assinale a alternativa CORRETA:',
+      options: [
+        'Defendia a manutenção do absolutismo monárquico de D. João VI, exigindo apenas a redução dos impostos sobre o café.',
+        'Instaurou um Governo Provisório republicano em Pernambuco por mais de 70 dias, proclamando a liberdade de imprensa e de consciência religiosa, embora não tenha abolido de imediato a escravidão.',
+        'Ficou restrita exclusivamente à cidade de Olinda, sem qualquer adesão de províncias vizinhas como Paraíba, Rio Grande do Norte e Ceará.',
+        'Teve como principal líder o Frei Caneca na luta contra a outorga da Constituição Imperial de 1824.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: A Revolução Pernambucana de 1817 foi o único movimento emancipacionista do período colonial/joanino que conseguiu tomar o poder e instalar um Governo Provisório republicano (Inspirado no Iluminismo e na Maçonaria/Aerópago de Itambé). | ✅ Alternativa correta: B) O Governo Provisório de 1817 adotou a Lei Orgânica com liberdade de imprensa e tolerância religiosa, mas recuou quanto à abolição imediata da escravidão para não perder o apoio dos senhores de engenho. | ❌ Análise das alternativas: A) Era republicana e antimonárquica; C) Espalhou-se pela Paraíba, RN e Ceará; D) A luta contra a Constituição de 1824 foi a Confederação do Equador (1824), não a Revolução de 1817. | ⚠️ Pegadinha da banca: O Instituto AOCP e a UPENET sempre tentam misturar 1817 (período de D. João VI) com a Confederação do Equador de 1824 (período de D. Pedro I e a Constituição outorgada).'
+    },
+    {
+      subject: 'História de Pernambuco',
+      topic: 'Insurreição Pernambucana e Batalhas dos Guararapes (1648–1649)',
+      board: 'UPENET/IAUPE',
+      difficulty: 'facil',
+      origin: 'oficial',
+      statement: '(UPENET/IAUPE — PMPE/CBMPE) No contexto do domínio holandês no Nordeste (1630–1654), a saída de Maurício de Nassau e a cobrança rigorosa das dívidas dos senhores de engenho pela Companhia das Índias Ocidentais (WIC) desencadearam a Insurreição Pernambucana (1645–1654), cujo marco militar decisivo ocorreu:',
+      options: [
+        'Na Guerra dos Mascates, que opôs os comerciantes do Recife à nobreza açucareira de Olinda em 1710.',
+        'Nas duas Batalhas dos Montes Guararapes (1648 e 1649), simbolizadas pela união das forças comandadas por João Fernandes Vieira, André Vidal de Negreiros, Henrique Dias e Filipe Camarão.',
+        'Na Revolução Praieira de 1848, liderada por Borges da Fonseca e Pedro Ivo.',
+        'Na Conspiração dos Suassunas, ocorrida em 1801 na comarca de Goiana.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: A Insurreição Pernambucana (1645–1654) expulsou os holandeses da Nova Holanda, tendo como vitórias decisivas as duas Batalhas dos Guararapes (1648 e 1649), consideradas o berço histórico do Exército Brasileiro. | ✅ Alternativa correta: B) Destaca os quatro líderes clássicos da Restauração Pernambucana (João Fernandes Vieira, André Vidal de Negreiros, o líder negro Henrique Dias e o líder indígena Filipe Camarão). | ❌ Análise das alternativas: A) Guerra dos Mascates ocorreu em 1710–1711; C) Praieira foi em 1848; D) Suassunas foi em 1801. | ⚠️ Pegadinha da banca: Memorize a cronologia pernambucana: Insurreição Pernambucana (1645-1654) -> Mascates (1710) -> Suassunas (1801) -> Revolução Pernambucana (1817) -> Confederação do Equador (1824) -> Praieira (1848).'
+    },
+    {
+      subject: 'História de Pernambuco',
+      topic: 'Confederação do Equador (1824) e Revolução Praieira (1848)',
+      board: 'Instituto AOCP',
+      difficulty: 'dificil',
+      origin: 'oficial',
+      statement: '(Instituto AOCP) Assinale a alternativa que diferencia corretamente a Confederação do Equador (1824) da Revolução Praieira (1848) na história política de Pernambuco:',
+      options: [
+        'A Confederação do Equador (1824) reagiu ao fechamento da Assembleia Constituinte e ao centralismo da Constituição outorgada por D. Pedro I, tendo caráter republicano e separatista; já a Praieira (1848) ocorreu no Segundo Reinado, defendendo o voto livre e universal, a liberdade de imprensa e a nacionalização do comércio a retalho.',
+        'A Confederação do Equador ocorreu no Segundo Reinado sob liderança de Pedro Ivo, enquanto a Revolução Praieira ocorreu no Primeiro Reinado sob liderança de Cipriano Barata.',
+        'Ambos os movimentos defenderam o fortalecimento do Poder Moderador e o monopólio comercial dos comerciantes portugueses no Recife.',
+        'A Revolução Praieira de 1848 proclamou a independência da República de Olinda com apoio naval da Inglaterra.'
+      ],
+      correct_index: 0,
+      explanation: 'Conceito-chave: A Confederação do Equador (1824, 1º Reinado, Frei Caneca e Manoel de Carvalho Paes de Andrade) foi separatista e republicana contra o Poder Moderador de D. Pedro I; a Revolução Praieira (1848, 2º Reinado, Manifesto ao Mundo de Borges da Fonseca) lutou contra a hegemonia da família Cavalcanti e o monopólio português no comércio a retalho. | ✅ Alternativa correta: A) Sintetiza com precisão os marcos de 1824 e de 1848 ("Manifesto ao Mundo"). | ❌ Análise das alternativas: B) Inverteu os reinados e líderes; C) Ambos combateram o autoritarismo e a lusofobia estava presente; D) Não houve independência de Olinda com apoio inglês em 1848. | ⚠️ Pegadinha da banca: Falou em "Manifesto ao Mundo", "Jornal Diário Novo (Rua da Praia)", "nacionalização do comércio a retalho" e o dístico "Quem viver em Pernambuco há de estar enganado: que ou há de ser Cavalcanti, ou há de ser cavalgado" -> marque Revolução Praieira (1848)!'
+    },
+    {
+      subject: 'Direito Constitucional',
+      topic: 'Art. 5º, XI — Inviolabilidade Domiciliar',
+      board: 'Instituto AOCP',
+      difficulty: 'facil',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — PMPE/CBMPE) Nos termos expressos do art. 5º, inciso XI, da Constituição Federal de 1988, a casa é asilo inviolável do indivíduo, ninguém nela podendo penetrar sem consentimento do morador, SALVO:',
+      options: [
+        'Em caso de flagrante delito ou desastre, ou para prestar socorro, a qualquer hora; ou, durante o dia, por determinação judicial.',
+        'Durante a noite, mediante mandado de busca e apreensão expedido pelo Juiz de Direito ou pelo Delegado de Polícia.',
+        'Apenas durante o dia, inclusive nas hipóteses de flagrante delito, desastre ou prestação de socorro.',
+        'Em qualquer horário do dia ou da noite, desde que haja requisição direta do Ministério Público.'
+      ],
+      correct_index: 0,
+      explanation: 'Conceito-chave: O art. 5º, XI, da CF/88 prevê 3 exceções que admitem ingresso sem consentimento a QUALQUER HORA (dia ou noite): flagrante delito, desastre ou prestar socorro; e 1 exceção que só pode ser cumprida DURANTE O DIA: determinação judicial. | ✅ Alternativa correta: A) Reproduz com exatidão a regra constitucional. | ❌ Análise das alternativas: B) Mandado judicial nunca pode ser cumprido à noite sem consentimento, e Delegado não expede mandado de busca domiciliar (reserva de jurisdição); C) Flagrante, desastre e socorro podem ocorrer à noite; D) MP não substitui ordem judicial. | ⚠️ Pegadinha da banca: O Instituto AOCP adora trocar "determinação judicial" por "determinação policial" ou dizer que o mandado judicial pode ser cumprido à noite.'
+    },
+    {
+      subject: 'Direito Constitucional',
+      topic: 'Art. 144 — Segurança Pública (PM, CBM e Polícia Penal)',
+      board: 'Instituto AOCP',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — Segurança Pública) De acordo com o art. 144 da Constituição Federal de 1988, atualizado até a Emenda Constitucional nº 104/2019, assinale a alternativa CORRETA:',
+      options: [
+        'Às polícias militares cabem a polícia ostensiva e a preservação da ordem pública; aos corpos de bombeiros militares, além das atribuições definidas em lei, incumbe a execução de atividades de defesa civil.',
+        'As polícias penais são subordinadas diretamente aos Comandantes-Gerais das Polícias Militares de cada Estado.',
+        'Às polícias civis, dirigidas por delegados de polícia de carreira, incumbem as funções de polícia judiciária e a apuração das infrações penais, inclusive as militares.',
+        'As guardas municipais integram o rol taxativo do caput do art. 144 com atribuição de polícia judiciária estadual.'
+      ],
+      correct_index: 0,
+      explanation: 'Conceito-chave: O art. 144, § 5º, da CF/88 define a competência da PM (polícia ostensiva e preservação da ordem pública) e do CBM (defesa civil + atribuições legais). Ambos são forças auxiliares e reserva do Exército, subordinados aos Governadores dos Estados/DF (§ 6º). | ✅ Alternativa correta: A) Transcreve fielmente o § 5º do art. 144 da CF/88. | ❌ Análise das alternativas: B) As polícias penais são vinculadas ao órgão administrador do sistema penal da unidade federativa e subordinadas ao Governador (§ 5º-A e § 6º); C) O § 4º exclui expressamente as infrações penais MILITARES da competência da Polícia Civil ("exceto as militares"); D) Guardas municipais estão no § 8º (proteção de bens, serviços e instalações municipais) e não exercem polícia judiciária. | ⚠️ Pegadinha da banca: Atenção ao termo "exceto as militares" no § 4º (Polícia Civil não apura crime militar) e ao vínculo das Polícias Penais (vinculadas ao órgão administrador do sistema penal e subordinadas ao Governador).'
+    },
+    {
+      subject: 'Direito Constitucional',
+      topic: 'Remédios Constitucionais (HC, MS, HD, MI e Ação Popular)',
+      board: 'Cebraspe',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Cebraspe) Acerca dos remédios constitucionais previstos no art. 5º da Constituição Federal, assinale a opção CORRETA:',
+      options: [
+        'Qualquer cidadão é parte legítima para propor ação popular que vise a anular ato lesivo ao patrimônio público, à moralidade administrativa, ao meio ambiente e ao patrimônio histórico e cultural, ficando o autor, salvo comprovada má-fé, isento de custas judiciais e do ônus da sucumbência.',
+        'O habeas data é o remédio cabível para proteger direito líquido e certo não amparado por habeas corpus, quando o responsável pelo abuso de poder for autoridade pública.',
+        'São gratuitas as ações de mandado de segurança e mandado de injunção, e, na forma da lei, os atos necessários ao exercício da cidadania.',
+        'O mandado de segurança coletivo pode ser impetrado por partido político sem representação no Congresso Nacional.'
+      ],
+      correct_index: 0,
+      explanation: 'Conceito-chave: A Ação Popular (art. 5º, LXXIII, CF/88) é privativa do CIDADÃO (eleitor em pleno gozo dos direitos políticos) e visa anular ato lesivo ao patrimônio público, moralidade administrativa, meio ambiente e patrimônio histórico/cultural. | ✅ Alternativa correta: A) Literalidade do art. 5º, LXXIII, da CF/88. | ❌ Análise das alternativas: B) Essa é a definição do Mandado de Segurança (o Habeas Data serve para conhecer ou retificar dados pessoais do próprio impetrante em bancos governamentais ou de caráter público); C) As ações gratuitas pela CF (art. 5º, LXXVII) são o Habeas Corpus e o Habeas Data (não o MS e o MI); D) O partido político precisa ter representação no Congresso Nacional (art. 5º, LXX, "a"). | ⚠️ Pegadinha da banca: As ações gratuitas no inciso LXXVII são as duas que começam com "H": Habeas Corpus e Habeas Data!'
+    },
+    {
+      subject: 'Direito Constitucional',
+      topic: 'Nacionalidade e Cargos Privativos de Brasileiro Nato (Art. 12, § 3º)',
+      board: 'FGV Conhecimento',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(FGV Conhecimento) Segundo o art. 12, § 3º, da Constituição Federal, são cargos privativos de brasileiro NATO, EXCETO:',
+      options: [
+        'Oficial das Forças Armadas.',
+        'Ministro de Estado da Defesa.',
+        'Carreira diplomática.',
+        'Senador da República.'
+      ],
+      correct_index: 3,
+      explanation: 'Conceito-chave: Pelo mnemônico clássico MP3.COM, são privativos de brasileiro nato: Ministro do STF, Presidente e Vice da República, Presidente da Câmara dos Deputados, Presidente do Senado Federal, Carreira Diplomática, Oficial das Forças Armadas e Ministro de Estado da Defesa. | ✅ Alternativa correta: D) Um brasileiro naturalizado pode ser Deputado Federal ou Senador da República; o que ele NÃO pode ser é Presidente da Câmara ou Presidente do Senado! | ❌ Análise das alternativas: A, B e C constam expressamente no rol taxativo do art. 12, § 3º, da CF/88. | ⚠️ Pegadinha da banca: Senador e Deputado Federal PODEM ser brasileiros naturalizados (apenas a Presidência da Câmara e a Presidência do Senado exigem brasileiro nato); além disso, Oficial da PM/CBM estadual não está no rol das Forças Armadas (Exército, Marinha e Aeronáutica).'
+    },
+    {
+      subject: 'Direito Administrativo',
+      topic: 'Poderes Administrativos — Poder de Polícia e seus Atributos',
+      board: 'Instituto AOCP',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Instituto AOCP) No estudo dos poderes administrativos, o atributo do Poder de Polícia que permite à Administração Pública executar diretamente suas medidas de polícia por seus próprios meios, sem necessidade de prévia intervenção do Poder Judiciário, nos casos previstos em lei ou de urgência, denomina-se:',
+      options: [
+        'Discricionariedade.',
+        'Autoexecutoriedade.',
+        'Coercibilidade.',
+        'Tipicidade.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: Os atributos clássicos do Poder de Polícia formam o mnemônico DAC: Discricionariedade, Autoexecutoriedade e Coercibilidade. | ✅ Alternativa correta: B) A Autoexecutoriedade é a prerrogativa de a Administração executar materialmente seus atos sem precisar pedir autorização prévia ao Judiciário (dividindo-se em exigibilidade e executoriedade). | ❌ Análise das alternativas: A) Discricionariedade é a margem legal de conveniência e oportunidade; C) Coercibilidade é a imposição imperativa/obrigatória ao particular; D) Tipicidade é atributo dos atos administrativos. | ⚠️ Pegadinha da banca: Lembre-se de que a cobrança de MULTA administrativa, embora decorra do poder de polícia, NÃO possui autoexecutoriedade (se o particular não pagar, o Estado precisa inscrever em dívida ativa e ajuizar execução fiscal).'
+    },
+    {
+      subject: 'Direito Administrativo',
+      topic: 'Atos Administrativos — Anulação vs Revogação (Súmula 473 do STF)',
+      board: 'Instituto AOCP',
+      difficulty: 'facil',
+      origin: 'oficial',
+      statement: '(Instituto AOCP) Nos termos da Súmula 473 do Supremo Tribunal Federal e da doutrina de Direito Administrativo, sobre a extinção dos atos administrativos, assinale a alternativa CORRETA:',
+      options: [
+        'A Administração pode anular seus próprios atos, quando eivados de vícios que os tornam ilegais, porque deles não se originam direitos; ou revogá-los, por motivo de conveniência ou oportunidade, respeitados os direitos adquiridos.',
+        'O Poder Judiciário pode revogar atos discricionários praticados pelo Poder Executivo sempre que discordar do mérito administrativo.',
+        'A revogação incide sobre atos ilegais e produz efeitos retroativos (ex tunc).',
+        'Os atos vinculados e os atos já exauridos admitem revogação a qualquer tempo pela autoridade superior.'
+      ],
+      correct_index: 0,
+      explanation: 'Conceito-chave: Anulação = vício de legalidade, efeitos retroativos (ex tunc), feita pela Administração (autotutela) ou pelo Judiciário. Revogação = mérito (conveniência e oportunidade) sobre ato válido e discricionário, efeitos prospectivos (ex nunc), feita EXCLUSIVAMENTE pela Administração. | ✅ Alternativa correta: A) Reproduz a célebre Súmula 473 do STF. | ❌ Análise das alternativas: B) O Judiciário NUNCA revoga ato de outro Poder (só controla legalidade/anulação); C) Revogação incide sobre ato VÁLIDO e tem efeito ex nunc; D) Atos vinculados, consumados ou que geraram direito adquirido são irrevogáveis. | ⚠️ Pegadinha da banca: Grave a regra de ouro: Judiciário ANULA ato ilegal, mas jamais REVOGA ato de outro Poder!'
+    },
+    {
+      subject: 'Direito Administrativo',
+      topic: 'Responsabilidade Civil do Estado (Art. 37, § 6º, da CF/88)',
+      board: 'Cebraspe',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Cebraspe — Polícias) Durante perseguição policial em via pública, uma viatura da Polícia Militar colidiu acidentalmente contra o veículo de um morador que estava regularmente estacionado. À luz do art. 37, § 6º, da Constituição Federal e da jurisprudência do STF:',
+      options: [
+        'O Estado responde objetivamente pelos danos causados ao terceiro, na modalidade do risco administrativo, assegurado o direito de regresso contra o agente público nos casos de dolo ou culpa.',
+        'A vítima deve ajuizar a ação indenizatória diretamente contra o motorista da viatura policial, comprovando a culpa grave deste.',
+        'Adota-se no Brasil, como regra geral para acidentes de trânsito envolvendo viaturas, a teoria do risco integral, que não admite nenhuma excludente de responsabilidade.',
+        'O Estado somente responderá se ficar comprovado dolo específico do policial militar na condução da viatura.'
+      ],
+      correct_index: 0,
+      explanation: 'Conceito-chave: Pelo art. 37, § 6º, da CF/88, o Estado responde OBJETIVAMENTE (independentemente de dolo ou culpa) pelos danos que seus agentes, nessa qualidade, causarem a terceiros, sob a Teoria do Risco Administrativo (que admite excludentes como culpa exclusiva da vítima, caso fortuito ou força maior). | ✅ Alternativa correta: A) Responsabilidade objetiva do Estado + ação regressiva subjetiva (exige dolo ou culpa do agente). | ❌ Análise das alternativas: B) Pelo Tema 940 do STF (Dupla Garantia), a ação deve ser proposta contra o Estado, não diretamente contra o servidor; C) A regra é o Risco Administrativo, não o Risco Integral; D) A responsabilidade do Estado independe de dolo ou culpa. | ⚠️ Pegadinha da banca: Pelo STF (Tema 940), o particular lesado NÃO pode processar diretamente o agente público pelo ato funcional; deve processar o Estado, e o Estado cobra do agente em regresso se houver dolo ou culpa!'
+    },
+    {
+      subject: 'Direito Penal',
+      topic: 'Excludentes de Ilicitude — Legítima Defesa (Art. 25 do CP)',
+      board: 'Instituto AOCP',
+      difficulty: 'facil',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — PMPE) De acordo com o art. 25 do Código Penal, incluído o parágrafo único pela Lei nº 13.964/2019 (Pacote Anticrime), entende-se em legítima defesa:',
+      options: [
+        'Quem pratica o fato para salvar de perigo atual, que não provocou por sua vontade, direito próprio ou alheio, cujo sacrifício não era razoável exigir-se.',
+        'Quem, usando moderadamente dos meios necessários, repele injusta agressão, atual ou iminente, a direito seu ou de outrem, considerando-se também em legítima defesa o agente de segurança pública que repele agressão ou risco de agressão a vítima mantida refém durante a prática de crimes.',
+        'Apenas quem repele agressão injusta futura ou já inteiramente cessada contra seu patrimônio.',
+        'O agente que age sob coação moral irresistível ou em estrita obediência a ordem manifestamente ilegal de superior hierárquico.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: A legítima defesa (art. 25 do CP) exige agressão INJUSTA, ATUAL ou IMINENTE, uso moderado dos meios necessários e proteção de direito próprio ou alheio. O Pacote Anticrime incluiu o parágrafo único contemplando expressamente o agente de segurança pública no caso de vítima mantida refém. | ✅ Alternativa correta: B) Reúne o caput e o parágrafo único do art. 25 do Código Penal. | ❌ Análise das alternativas: A) Define o Estado de Necessidade (art. 24); C) Agressão passada é vingança e agressão futura é mera suposição (não admitem legítima defesa); D) Coação moral irresistível e obediência hierárquica a ordem NÃO manifestamente ilegal excluem a culpabilidade (art. 22), não a ilicitude. | ⚠️ Pegadinha da banca: No Estado de Necessidade há "perigo atual" (não fala em iminente); na Legítima Defesa há "injusta agressão, atual OU iminente".'
+    },
+    {
+      subject: 'Direito Penal',
+      topic: 'Desistência Voluntária e Arrependimento Eficaz (Art. 15 do CP)',
+      board: 'Instituto AOCP',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — Carreiras Policiais) O agente que, voluntariamente, desiste de prosseguir na execução do crime ou impede que o resultado se produza, nos termos do art. 15 do Código Penal ("Ponte de Ouro"):',
+      options: [
+        'Responde pelo crime tentado, com a pena reduzida de um a dois terços.',
+        'Só responde pelos atos já praticados.',
+        'Tem a sua pena reduzida de um sexto a um terço a título de arrependimento posterior.',
+        'É isento de qualquer pena, ainda que os atos anteriores configurem lesão corporal ou porte ilegal de arma.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: Na desistência voluntária (interrompe os atos executórios podendo continuar) e no arrependimento eficaz (esgota os atos executórios, mas age para impedir a consumação e tem sucesso), o art. 15 do CP afasta a tentativa e determina que o agente "só responde pelos atos já praticados". | ✅ Alternativa correta: B) Literalidade do art. 15 do Código Penal. | ❌ Análise das alternativas: A) É a consequência da tentativa (quando não se consuma por circunstâncias alheias à vontade do agente, art. 14, II); C) É o arrependimento posterior (art. 16, em crimes sem violência ou grave ameaça); D) Ele responde pelos atos anteriores que já forem típicos (ex.: violação de domicílio ou lesão corporal). | ⚠️ Pegadinha da banca: Se o agente para porque ouviu a sirene da viatura da PM, a circunstância é ALHEIA à vontade dele -> responde por TENTATIVA (art. 14, II); se ele pode prosseguir e para por vontade própria ("posso prosseguir, mas não quero" — Fórmula de Frank) -> Desistência Voluntária (art. 15).'
+    },
+    {
+      subject: 'Direito Penal',
+      topic: 'Crimes contra a Administração Pública — Concussão vs Corrupção Passiva',
+      board: 'FGV Conhecimento',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(FGV Conhecimento) Um agente público que, no exercício de suas funções, EXIGE para si vantagem indevida, impondo temor à vítima em razão da autoridade do seu cargo, pratica o crime de:',
+      options: [
+        'Corrupção passiva (art. 317 do CP).',
+        'Concussão (art. 316 do CP).',
+        'Peculato-apropriação (art. 312 do CP).',
+        'Prevaricação (art. 319 do CP).'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: A diferença nuclear entre os tipos penais está no verbo: EXIGIR vantagem indevida = Concussão (art. 316 do CP, pena de reclusão de 2 a 12 anos, aumentada pelo Pacote Anticrime); SOLICITAR, RECEBER ou ACEITAR promessa de vantagem indevida = Corrupção Passiva (art. 317 do CP). | ✅ Alternativa correta: B) O verbo "exigir" caracteriza o crime formal de Concussão (art. 316 do CP). | ❌ Análise das alternativas: A) Corrupção passiva tem os verbos solicitar, receber ou aceitar promessa; C) Peculato é apropriar-se, desviar ou subtrair bem público ou particular de que tem a posse em razão do cargo; D) Prevaricação é retardar ou deixar de praticar ato de ofício para satisfazer interesse ou sentimento pessoal. | ⚠️ Pegadinha da banca: Se a questão trouxer o verbo EXIGIR, mas a exigência for de tributo ou contribuição social que sabe indevido, aí passa a ser Excesso de Exação (art. 316, § 1º)!'
+    },
+    {
+      subject: 'Direito Processual Penal',
+      topic: 'Inquérito Policial — Características e Súmula Vinculante 14',
+      board: 'Instituto AOCP',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — Polícias) A respeito do Inquérito Policial no Código de Processo Penal e na jurisprudência vinculante do STF, assinale a alternativa CORRETA:',
+      options: [
+        'A autoridade policial poderá mandar arquivar autos de inquérito sempre que verificar a inexistência de crime.',
+        'É direito do defensor, no interesse do representado, ter acesso amplo aos elementos de prova que, já documentados em procedimento investigatório realizado por órgão com competência de polícia judiciária, digam respeito ao exercício do direito de defesa.',
+        'O inquérito policial é peça indispensável para o oferecimento da denúncia pelo Ministério Público em qualquer infração penal.',
+        'Por ser procedimento sigiloso, o advogado precisa apresentar procuração com poderes especiais mesmo quando os autos não estiverem sujeitos a sigilo decretado.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: O Inquérito Policial é procedimento administrativo, escrito, sigiloso, inquisitivo, oficioso, oficial, indisponível e dispensável (Bizu: ECLIPSE / IDOSO). Pela Súmula Vinculante 14 do STF, o sigilo não alcança o defensor quanto às diligências JÁ DOCUMENTADAS nos autos. | ✅ Alternativa correta: B) Reproduz literalmente a Súmula Vinculante nº 14 do STF. | ❌ Análise das alternativas: A) Art. 17 do CPP: "A autoridade policial não poderá mandar arquivar autos de inquérito" (indisponibilidade); C) O IP é dispensável se o titular da ação penal já possuir elementos informativos suficientes; D) Sem sigilo especial, o advogado pode examinar autos sem procuração (Estatuto da OAB). | ⚠️ Pegadinha da banca: Pela SV 14, o advogado tem acesso ao que JÁ ESTÁ DOCUMENTADO nos autos, mas NÃO às diligências ainda em andamento (como interceptação telefônica em curso)!'
+    },
+    {
+      subject: 'Direito Processual Penal',
+      topic: 'Prisão em Flagrante (Art. 302 do CPP) e Uso de Algemas (SV 11)',
+      board: 'Cebraspe',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Cebraspe) Nos termos do Código de Processo Penal e da Súmula Vinculante nº 11 do STF, assinale a opção CORRETA acerca da prisão em flagrante e do uso de algemas:',
+      options: [
+        'Qualquer do povo DEVERÁ e as autoridades policiais e seus agentes PODERÃO prender quem quer que seja encontrado em flagrante delito.',
+        'Só é lícito o uso de algemas em casos de resistência e de fundado receio de fuga ou de perigo à integridade física própria ou alheia, por parte do preso ou de terceiros, justificada a excepcionalidade por escrito, sob pena de responsabilidade disciplinar, civil e penal do agente ou da autoridade e de nulidade da prisão ou do ato processual a que se refere.',
+        'A falta de testemunhas da infração impede a lavratura do auto de prisão em flagrante pela autoridade policial.',
+        'O flagrante preparado ou provocado por agente policial é plenamente válido no ordenamento jurídico brasileiro.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: A Súmula Vinculante 11 do STF condiciona a licitude do uso de algemas a 3 hipóteses (resistência, fundado receio de fuga ou perigo à integridade física própria ou alheia) + justificativa por escrito. | ✅ Alternativa correta: B) Texto literal da Súmula Vinculante 11 do STF. | ❌ Análise das alternativas: A) O art. 301 do CPP diz o inverso: "Qualquer do povo PODERÁ (facultativo) e as autoridades policiais e seus agentes DEVERÃO (obrigatório) prender..."; C) Art. 304, § 2º: a falta de testemunhas da infração não impede o auto de prisão em flagrante (assinam duas testemunhas de apresentação); D) Súmula 145 do STF: não há crime quando a preparação do flagrante pela polícia torna impossível a sua consumação (crime impossível). | ⚠️ Pegadinha da banca: O art. 301 do CPP é campeão de cobrança: Qualquer do povo PODERÁ (flagrante facultativo); Policiais DEVERÃO (flagrante obrigatório/compulsório)!'
+    },
+    {
+      subject: 'Direitos Humanos',
+      topic: 'Declaração Universal dos Direitos Humanos (DUDH — 1948)',
+      board: 'Instituto AOCP',
+      difficulty: 'facil',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — PMPE) A Declaração Universal dos Direitos Humanos (DUDH), adotada pela Assembleia Geral da ONU em 10 de dezembro de 1948, constitui marco fundamental da proteção internacional da pessoa humana. Sobre a DUDH, assinale a alternativa CORRETA:',
+      options: [
+        'Foi aprovada sob a forma de tratado internacional solene com força coercitiva imediata e tribunal penal próprio.',
+        'Consagra simultaneamente direitos civis e políticos (1ª geração/dimensão) e direitos econômicos, sociais e culturais (2ª geração/dimensão), afirmando que todos os seres humanos nascem livres e iguais em dignidade e direitos.',
+        'Admite a aplicação de tortura ou tratamento cruel em casos excepcionais de guerra declarada ou terrorismo internacional.',
+        'Restringe a titularidade dos direitos fundamentais apenas aos cidadãos natos dos Estados-membros signatários da ONU.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: A DUDH (Resolução 217-A III da Assembleia Geral da ONU, 1948) une em um único texto os direitos de 1ª dimensão (arts. 3º a 21: vida, liberdade, segurança, presunção de inocência, asilo, nacionalidade) e os de 2ª dimensão (arts. 22 a 27: segurança social, trabalho, lazer, saúde, educação). | ✅ Alternativa correta: B) Reflete a indivisibilidade e universalidade dos direitos de 1ª e 2ª dimensões na DUDH. | ❌ Análise das alternativas: A) Formalmente foi adotada como Resolução da Assembleia Geral da ONU (não como tratado em sentido estrito); C) A vedação à tortura (art. 5º da DUDH) é absoluta e não comporta exceção; D) Os direitos da DUDH são universais, sem distinção de qualquer espécie (art. 2º). | ⚠️ Pegadinha da banca: O Instituto AOCP cobra com frequência se a DUDH traz apenas direitos de 1ª geração — ERRADO! Ela traz direitos de 1ª E de 2ª geração (civis/políticos + sociais/econômicos/culturais).'
+    },
+    {
+      subject: 'Direitos Humanos',
+      topic: 'Incorporação de Tratados de Direitos Humanos (Art. 5º, § 3º, da CF/88)',
+      board: 'Instituto AOCP',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — Polícias) De acordo com o art. 5º, § 3º, da Constituição Federal (incluído pela EC nº 45/2004) e a jurisprudência do Supremo Tribunal Federal, os tratados e convenções internacionais sobre direitos humanos:',
+      options: [
+        'Têm sempre status de lei ordinária federal, independentemente do quórum de aprovação no Congresso Nacional.',
+        'Quando aprovados, em cada Casa do Congresso Nacional, em dois turnos, por três quintos dos votos dos respectivos membros, serão equivalentes às emendas constitucionais; se aprovados pelo rito comum, possuem status supralegal (abaixo da Constituição e acima das leis ordinárias).',
+        'Precisam ser aprovados em turno único por maioria simples do Senado Federal para adquirirem status constitucional.',
+        'Ingressam automaticamente no ordenamento jurídico brasileiro com status constitucional no momento da assinatura pelo Presidente da República.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: Tratado de Direitos Humanos aprovado pelo rito especial do art. 5º, § 3º (2 casas, 2 turnos, 3/5 dos membros — Bizu: 2-2-3/5) = equivalente a Emenda Constitucional (bloco de constitucionalidade). Tratado de Direitos Humanos aprovado pelo rito ordinário (como o Pacto de San José da Costa Rica) = Status SUPRALEGAL (acima das leis e abaixo da CF). Tratado comum (comercial/tributário) = Lei Ordinária. | ✅ Alternativa correta: B) Explica com perfeição a dupla posição hierárquica dos tratados de Direitos Humanos no Brasil. | ❌ Análise das alternativas: A) Tratado de DH nunca é mera lei ordinária (é no mínimo supralegal); C e D) Violam o rito do art. 5º, § 3º (2 turnos, nas 2 Casas, por 3/5). | ⚠️ Pegadinha da banca: O Pacto de San José da Costa Rica tem status SUPRALEGAL (foi por isso que paralisou a prisão civil do depositário infiel — Súmula Vinculante 25 do STF)!'
+    },
+    {
+      subject: 'Legislação Extravagante',
+      topic: 'Lei Maria da Penha (Lei nº 11.340/2006 e Súmula 542 do STJ)',
+      board: 'Instituto AOCP',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — PMPE) Acerca da Lei nº 11.340/2006 (Lei Maria da Penha) e do entendimento sumulado do Superior Tribunal de Justiça, assinale a alternativa CORRETA:',
+      options: [
+        'Aos crimes praticados com violência doméstica e familiar contra a mulher, independentemente da pena prevista, não se aplica a Lei nº 9.099/1995 (Juizados Especiais), sendo a ação penal relativa ao crime de lesão corporal resultante de violência doméstica contra a mulher pública incondicionada.',
+        'Para a configuração da violência doméstica e familiar baseada no gênero, é indispensável a coabitação atual entre o agressor e a ofendida.',
+        'Na hipótese de renúncia à representação nos crimes de ação pública condicionada, a ofendida poderá manifestá-la diretamente perante a autoridade policial na delegacia.',
+        'O crime de descumprimento de medida protetiva de urgência (art. 24-A) só se configura se a medida tiver sido deferida por juiz criminal.'
+      ],
+      correct_index: 0,
+      explanation: 'Conceito-chave: O art. 41 da Lei 11.340/2006 afasta integralmente a Lei 9.099/1995 nos crimes praticados com violência doméstica contra a mulher, e a Súmula 542 do STJ estabelece que a lesão corporal praticada contra a mulher no âmbito doméstico é de ação penal pública INCONDICIONADA. | ✅ Alternativa correta: A) Soma a literalidade do art. 41 da Lei 11.340/06 com a Súmula 542 do STJ. | ❌ Análise das alternativas: B) Art. 5º, III: independe de coabitação; C) Art. 16: a retratação/renúncia à representação só será admitida PERANTE O JUIZ, em audiência especialmente designada com essa finalidade, antes do recebimento da denúncia e ouvido o MP; D) Art. 24-A, § 1º: a configuração do crime independe da competência civil ou criminal do juiz que deferiu as medidas. | ⚠️ Pegadinha da banca: Lesão corporal na Lei Maria da Penha = Ação Pública INCONDICIONADA (mesmo que leve!). Ameaça na Lei Maria da Penha = Ação Pública CONDICIONADA à representação (e a retratação só vale perante o JUIZ antes do recebimento da denúncia).'
+    },
+    {
+      subject: 'Legislação Extravagante',
+      topic: 'Lei de Abuso de Autoridade (Lei nº 13.869/2019)',
+      board: 'Instituto AOCP',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — Polícias) Nos termos dos artigos 1º a 4º da Lei nº 13.869/2019 (Nova Lei de Abuso de Autoridade), assinale a alternativa CORRETA:',
+      options: [
+        'A divergência na interpretação de lei ou na avaliação de fatos e provas configura crime de abuso de autoridade na modalidade culposa.',
+        'As condutas descritas na lei constituem crime de abuso de autoridade quando praticadas pelo agente com a finalidade específica de prejudicar outrem ou beneficiar a si mesmo ou a terceiro, ou, ainda, por mero capricho ou satisfação pessoal.',
+        'Os crimes previstos na Lei nº 13.869/2019 são de ação penal pública condicionada à representação do ofendido.',
+        'A perda do cargo, do mandato ou da função pública é efeito automático da primeira condenação por crime de abuso de autoridade.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: Todos os crimes da Lei 13.869/2019 são DOLOSOS e exigem dolo específico (elemento subjetivo especial do tipo previsto no art. 1º, § 1º: prejudicar outrem, beneficiar a si ou a terceiro, ou agir por mero capricho ou satisfação pessoal). | ✅ Alternativa correta: B) Literalidade do art. 1º, § 1º, da Lei 13.869/2019. | ❌ Análise das alternativas: A) Art. 1º, § 2º: a divergência na interpretação de lei ou na avaliação de fatos e provas NÃO configura abuso de autoridade (vedação ao crime de hermenêutica), e não existe abuso de autoridade culposo; C) Art. 3º: todos os crimes da lei são de ação penal pública INCONDICIONADA; D) Art. 4º, parágrafo único: a perda do cargo e a inabilitação (de 1 a 5 anos) NÃO são automáticas — exigem REINCIDÊNCIA em crime de abuso de autoridade e devem ser declaradas motivadamente na sentença! | ⚠️ Pegadinha da banca: Compare Tortura (perda do cargo é AUTOMÁTICA) x Abuso de Autoridade (perda do cargo NÃO é automática e exige REINCIDÊNCIA específica em crime de abuso de autoridade)!'
+    },
+    {
+      subject: 'Legislação Extravagante',
+      topic: 'Lei de Tortura (Lei nº 9.455/1997)',
+      board: 'Cebraspe',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Cebraspe) À luz da Lei nº 9.455/1997 (Lei de Tortura), assinale a opção CORRETA:',
+      options: [
+        'No Brasil, o crime de tortura é crime próprio em todas as suas modalidades, só podendo figurar como sujeito ativo o agente público.',
+        'Aquele que se omite em face das condutas de tortura, quando tinha o dever de evitá-las ou apurá-las, incorre na pena de detenção de um a quatro anos, e a condenação acarretará a perda do cargo, função ou emprego público e a interdição para seu exercício pelo dobro do prazo da pena aplicada.',
+        'A Lei de Tortura aplica-se exclusivamente aos crimes cometidos dentro do território nacional.',
+        'O crime de tortura admite concessão de fiança pela autoridade policial no caso da modalidade omissiva.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: No Brasil (diferente da Convenção da ONU), a tortura é, em regra, CRIME COMUM (qualquer pessoa pode praticar, exceto na tortura-castigo de preso/pessoa submetida a medida de segurança do art. 1º, § 1º, e na tortura omissiva do § 2º). Na tortura omissiva (tortura imprópria), a pena é de DETENÇÃO de 1 a 4 anos. | ✅ Alternativa correta: B) Reúne o art. 1º, § 2º (detenção de 1 a 4 anos na omissão) e o § 5º (perda automática do cargo + interdição pelo dobro do prazo da pena aplicada). | ❌ Análise das alternativas: A) Em regra é crime comum (e se cometido por agente público, aumenta a pena de 1/6 a 1/3 — art. 1º, § 4º, I); C) Art. 2º: tem extraterritorialidade incondicionada se a vítima for brasileira ou se o agente encontrar-se em local sob jurisdição brasileira; D) O crime de tortura é inafiançável e insuscetível de graça ou anistia (§ 6º). | ⚠️ Pegadinha da banca: Na Lei de Tortura, a perda do cargo é efeito AUTOMÁTICO da condenação e a interdição vale pelo DOBRO do prazo da pena aplicada!'
+    },
+    {
+      subject: 'Legislação Extravagante',
+      topic: 'Lei de Drogas (Lei nº 11.343/2006 — Art. 28 vs Art. 33)',
+      board: 'Instituto AOCP',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — PMPE) De acordo com o art. 28 da Lei nº 11.343/2006 (Lei de Drogas), quem adquirir, guardar, tiver em depósito, transportar ou trouxer consigo, para consumo pessoal, drogas sem autorização ou em desacordo com determinação legal ou regulamentar será submetido às seguintes medidas, EXCETO:',
+      options: [
+        'Advertência sobre os efeitos das drogas.',
+        'Prestação de serviços à comunidade.',
+        'Medida educativa de comparecimento a programa ou curso educativo.',
+        'Pena privativa de liberdade de detenção de seis meses a dois anos.'
+      ],
+      correct_index: 3,
+      explanation: 'Conceito-chave: O art. 28 da Lei 11.343/2006 (porte de droga para consumo pessoal) NUNCA prevê pena privativa de liberdade (nem prisão em flagrante, nem detenção, nem reclusão)! As três medidas são apenas: I - advertência; II - prestação de serviços à comunidade; III - comparecimento a programa ou curso educativo. | ✅ Alternativa correta: D) Não existe pena de detenção ou reclusão para o art. 28 da Lei de Drogas. | ❌ Análise das alternativas: A, B e C constam nos incisos I, II e III do art. 28 da Lei 11.343/2006. | ⚠️ Pegadinha da banca: Mesmo que o indivíduo descumpra injustificadamente as medidas do art. 28, o juiz só pode aplicar admoestação verbal e multa (art. 28, § 6º) — jamais conversão em prisão!'
+    },
+    {
+      subject: 'Legislação Extravagante',
+      topic: 'Estatuto do Desarmamento (Lei nº 10.826/2003 — Posse vs Porte)',
+      board: 'FGV Conhecimento',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(FGV Conhecimento) À luz da Lei nº 10.826/2003 (Estatuto do Desarmamento), assinale a alternativa que distingue corretamente os crimes de posse irregular (art. 12) e porte ilegal (art. 14) de arma de fogo de uso permitido:',
+      options: [
+        'A posse irregular (art. 12) consiste em possuir ou manter sob sua guarda arma de fogo de uso permitido no interior de sua residência ou dependência desta, ou no seu local de trabalho, desde que seja o titular ou o responsável legal do estabelecimento ou empresa; já o porte fora desses locais configura o crime do art. 14.',
+        'Qualquer empregado subalterno que mantenha arma de fogo sem registro dentro da empresa em que trabalha responde apenas por posse irregular (art. 12).',
+        'O crime de posse irregular de arma de fogo de uso permitido (art. 12) é punido com reclusão de 4 a 8 anos e é inafiançável.',
+        'Portar arma de fogo desmuniciada em via pública é conduta absolutamente atípica segundo a jurisprudência consolidada do STF.'
+      ],
+      correct_index: 0,
+      explanation: 'Conceito-chave: Posse irregular (art. 12, detenção de 1 a 3 anos) ocorre no interior da residência/dependência ou no local de trabalho (desde que o agente seja o TITULAR ou RESPONSÁVEL LEGAL da empresa). Fora desses locais, ou no local de trabalho quando o agente NÃO é o titular/responsável legal, configura-se PORTE ilegal (art. 14, reclusão de 2 a 4 anos). | ✅ Alternativa correta: A) Distingue exatamente o critério espacial e subjetivo dos arts. 12 e 14 da Lei 10.826/2003. | ❌ Análise das alternativas: B) Se o empregado não é o titular/responsável legal do estabelecimento, manter arma no trabalho configura PORTE ilegal (art. 14); C) A pena do art. 12 é detenção de 1 a 3 anos e multa; D) Para o STF e STJ, os crimes dos arts. 12, 14 e 16 são de perigo abstrato (portar arma desmuniciada, porém apta a disparar, continua sendo crime). | ⚠️ Pegadinha da banca: Funcionário comum (que não é dono nem gerente/responsável legal) que guarda arma na gaveta do escritório comete PORTE ILEGAL (art. 14), e não posse!'
+    },
+    {
+      subject: 'Direito Militar',
+      topic: 'Estatuto dos Militares de PE (Lei Estadual nº 6.783/1974 — Hierarquia e Disciplina)',
+      board: 'Instituto AOCP',
+      difficulty: 'facil',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — PMPE/CBMPE) Nos termos do art. 12 da Lei Estadual nº 6.783/1974 (Estatuto dos Policiais Militares do Estado de Pernambuco), constituem a base institucional da Polícia Militar, crescendo a autoridade e a responsabilidade com a elevação do grau hierárquico:',
+      options: [
+        'A discricionariedade e a conveniência administrativa.',
+        'A hierarquia e a disciplina.',
+        'A inamovibilidade e a vitaliciedade.',
+        'A subordinação civil e a livre sindicalização.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: Tanto pelo art. 42 e art. 142 da CF/88 quanto pelo art. 12 da Lei Estadual 6.783/1974, a HIERARQUIA e a DISCIPLINA são a base institucional das Corporações Militares Estaduais (PMPE e CBMPE). | ✅ Alternativa correta: B) Literalidade do art. 12 da Lei 6.783/1974: Hierarquia é a ordenação da autoridade em níveis diferentes dentro da estrutura da Corporação (por postos e graduações); Disciplina é a rigorosa observância e o acatamento integral das leis, regulamentos, normas e disposições. | ❌ Análise das alternativas: A) São conceitos do ato administrativo discricionário; C) São garantias da magistratura; D) Ao militar são proibidas a sindicalização e a greve (art. 142, § 3º, IV, CF/88). | ⚠️ Pegadinha da banca: O Instituto AOCP costuma inverter os conceitos de Posto e Graduação do art. 14 da Lei 6.783/74: POSTO é o grau hierárquico do OFICIAL (conferido por ato do Governador); GRADUAÇÃO é o grau hierárquico da PRAÇA (conferido pelo Comandante-Geral)!'
+    },
+    {
+      subject: 'Direito Militar',
+      topic: 'Estatuto dos Militares de PE (Lei nº 6.783/1974 — Agregação vs Reversão vs Excedente)',
+      board: 'Instituto AOCP',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — PMPE/CBMPE) Segundo a Lei Estadual nº 6.783/1974 (Estatuto dos Militares de Pernambuco), a situação na qual o policial militar da ativa deixa de ocupar vaga na escala hierárquica do seu Quadro, nela permanecendo sem número, denomina-se:',
+      options: [
+        'Reversão.',
+        'Agregação.',
+        'Reforma compulsória.',
+        'Transferência para a reserva remunerada.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: Pelo art. 75 da Lei 6.783/1974, a AGREGAÇÃO é a situação na qual o militar da ativa deixa de ocupar vaga na escala hierárquica do seu Quadro, nela permanecendo sem número. Já a REVERSÃO (art. 80) é o ato pelo qual o militar agregado retorna ao respectivo Quadro tão logo cesse o motivo que determinou a sua agregação. | ✅ Alternativa correta: B) Define exatamente o instituto da Agregação (art. 75). | ❌ Análise das alternativas: A) Reversão é o retorno do agregado à escala ativa (art. 80); C e D) Reforma e Reserva são formas de inatividade (o agregado continua sendo militar da ATIVA!). | ⚠️ Pegadinha da banca: O militar AGREGADO continua na ATIVA (não foi para a inatividade!), apenas fica "sem número" no quadro; quando cessa o motivo da agregação, ele retorna por meio da REVERSÃO.'
+    },
+    {
+      subject: 'Direito Militar',
+      topic: 'Código Penal Militar — Crime Militar em Tempo de Paz (Art. 9º do CPM)',
+      board: 'Cebraspe',
+      difficulty: 'dificil',
+      origin: 'oficial',
+      statement: '(Cebraspe — Polícias Militares e Bombeiros) Com base no art. 9º do Código Penal Militar (com a redação dada pela Lei nº 13.491/2017) e no art. 125, § 4º, da Constituição Federal, assinale a opção CORRETA:',
+      options: [
+        'Apenas os crimes previstos de modo exclusivo no Código Penal Militar podem ser considerados crimes militares em tempo de paz.',
+        'Os crimes previstos na legislação penal comum (como abuso de autoridade, tortura ou crimes do Código Penal), quando praticados por militar em serviço ou atuando em razão da função, passam a ser considerados crimes militares por extensão.',
+        'Os crimes dolosos contra a vida de civil praticados por policial militar estadual em serviço são julgados monocraticamente pelo Juiz de Direito do Juízo Militar.',
+        'Compete à Justiça Militar Estadual processar e julgar civis que praticarem crime de desacato contra guarnição da Polícia Militar.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: A Lei 13.491/2017 alterou o inciso II do art. 9º do CPM para abranger não apenas os crimes previstos no CPM, mas também os previstos na legislação penal comum (crimes militares por extensão/extravagantes), quando preenchidas as hipóteses do inciso II (ex.: militar em serviço ou atuando em razão da função). | ✅ Alternativa correta: B) Reflete a ampliação da competência da Justiça Militar operada pela Lei 13.491/2017. | ❌ Análise das alternativas: A) Ignora a Lei 13.491/2017; C) Pelo art. 125, § 4º, da CF/88 e art. 9º, § 1º, do CPM, os crimes dolosos contra a vida de civil praticados por militares estaduais são da competência do TRIBUNAL DO JÚRI; D) A Justiça Militar ESTADUAL nunca julga civis (art. 125, § 4º, da CF/88: compete à JME processar e julgar os MILITARES dos Estados). | ⚠️ Pegadinha da banca: A Justiça Militar da UNIÃO (Federal) pode julgar civis em hipóteses restritas, mas a Justiça Militar ESTADUAL (PMPE/CBMPE) NUNCA julga civil!'
+    },
+    {
+      subject: 'Física',
+      topic: 'Termologia e Propagação de Calor (Condução, Convecção e Irradiação — CBMPE)',
+      board: 'Instituto AOCP',
+      difficulty: 'facil',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — CBMPE Bombeiro Militar) Na dinâmica dos incêndios estruturais, o calor propaga-se de uma região de maior temperatura para outra de menor temperatura por três processos físicos fundamentais. O processo de transferência de calor que ocorre predominantemente em fluidos (líquidos e gases) mediante o deslocamento de massas de diferentes densidades — fazendo com que a fumaça e os gases superaquecidos subam até o teto do ambiente — denomina-se:',
+      options: [
+        'Condução térmica.',
+        'Convecção térmica.',
+        'Irradiação térmica.',
+        'Sublimação adiabática.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: Condução = transferência partícula a partícula sem transporte de matéria (predominante nos sólidos/metais); Convecção = transferência por movimentação de massas de fluido (líquidos e gases) devido à diferença de densidade; Irradiação = ondas eletromagnéticas (infravermelho), única que ocorre até no vácuo. | ✅ Alternativa correta: B) A subida dos gases quentes e da fumaça para o teto em um incêndio ocorre por Convecção térmica. | ❌ Análise das alternativas: A) Condução ocorre sem transporte de matéria (ex.: barra de ferro aquecida); C) Irradiação ocorre por ondas eletromagnéticas sem exigir meio material; D) Sublimação é mudança de estado físico. | ⚠️ Pegadinha da banca: Em provas do Corpo de Bombeiros (CBMPE), lembre-se de que nos SÓLIDOS não há convecção (apenas condução), e no VÁCUO só ocorre irradiação!'
+    },
+    {
+      subject: 'Biologia',
+      topic: 'Fisiologia Humana e Atendimento Pré-Hospitalar (CBMPE)',
+      board: 'Instituto AOCP',
+      difficulty: 'medio',
+      origin: 'oficial',
+      statement: '(Instituto AOCP — CBMPE) No estudo da fisiologia circulatória e respiratória aplicada ao socorro de urgência, o vaso sanguíneo que transporta sangue rico em oxigênio (sangue arterial) diretamente dos pulmões para o átrio esquerdo do coração é:',
+      options: [
+        'A artéria pulmonar.',
+        'A veia cava superior.',
+        'As veias pulmonares.',
+        'A artéria aorta.'
+      ],
+      correct_index: 2,
+      explanation: 'Conceito-chave: Artéria é todo vaso que SAI do coração (ventrículos); Veia é todo vaso que CHEGA ao coração (átrios). Na pequena circulação (pulmonar), ocorre a exceção clássica: a artéria pulmonar leva sangue venoso (rico em CO2) do ventrículo direito aos pulmões, e as VEIAS PULMONARES trazem sangue arterial (rico em O2) dos pulmões para o átrio esquerdo. | ✅ Alternativa correta: C) As quatro veias pulmonares desembocam no átrio esquerdo trazendo sangue oxigenado dos pulmões. | ❌ Análise das alternativas: A) Artéria pulmonar carrega sangue venoso para os pulmões; B) Veia cava traz sangue venoso do corpo para o átrio direito; D) Artéria aorta sai do ventrículo esquerdo para o corpo. | ⚠️ Pegadinha da banca: Nunca associe "veia = sangue venoso" de forma absoluta! As veias pulmonares carregam sangue ARTERIAL (rico em O2), e as artérias pulmonares carregam sangue VENOSO (rico em CO2).'
+    },
+    {
+      subject: 'Língua Portuguesa',
+      topic: 'Vozes Verbais e Transposição para a Voz Passiva',
+      board: 'IBFC',
+      difficulty: 'facil',
+      origin: 'oficial',
+      statement: '(IBFC — Polícias) Ao transpor a oração na voz ativa "A guarnição apreendeu dois simulacros durante a abordagem" para a voz passiva analítica, mantendo-se o mesmo tempo e modo verbal, obtém-se:',
+      options: [
+        'Dois simulacros são apreendidos pela guarnição durante a abordagem.',
+        'Dois simulacros foram apreendidos pela guarnição durante a abordagem.',
+        'Dois simulacros tinham sido apreendidos pela guarnição durante a abordagem.',
+        'Apreenderam-se dois simulacros durante a abordagem.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: Na transposição da voz ativa para a passiva analítica, o objeto direto ("dois simulacros") vira sujeito paciente, e o verbo auxiliar "ser" deve ficar no MESMO tempo e modo do verbo principal da ativa ("apreendeu" = pretérito perfeito do indicativo -> "foram apreendidos"). | ✅ Alternativa correta: B) "Apreendeu" (pretérito perfeito) -> "foram apreendidos". | ❌ Análise das alternativas: A) "São apreendidos" está no presente; C) "Tinham sido" está no pretérito mais-que-perfeito composto; D) Trata-se da voz passiva sintética (pronominal), e não analítica. | ⚠️ Pegadinha da banca: O IBFC e o Instituto AOCP sempre trocam o tempo do verbo auxiliar ("são" / "foram" / "serão") ou oferecem a passiva sintética quando o enunciado pede a passiva analítica.'
+    },
+    {
+      subject: 'Direito Constitucional',
+      topic: 'Art. 37 — Administração Pública (Princípios LIMPE e Súmula Vinculante 13)',
+      board: 'IBFC',
+      difficulty: 'facil',
+      origin: 'oficial',
+      statement: '(IBFC) Nos termos da Súmula Vinculante nº 13 do Supremo Tribunal Federal, a vedação ao nepotismo na Administração Pública direta e indireta de qualquer dos Poderes da União, dos Estados, do Distrito Federal e dos Municípios decorre diretamente dos princípios constitucionais do art. 37, caput, alcançando parentes em linha reta, colateral ou por afinidade até o:',
+      options: [
+        'Segundo grau, necessitando de lei municipal ou estadual específica para produzir efeitos.',
+        'Terceiro grau, inclusive, independendo da edição de lei formal específica, por decorrer diretamente da moralidade e da impessoalidade.',
+        'Quarto grau, aplicando-se inclusive aos cargos políticos de Secretário de Estado e Ministro de Estado em qualquer hipótese.',
+        'Primeiro grau apenas, limitando-se a cônjuge e filhos.'
+      ],
+      correct_index: 1,
+      explanation: 'Conceito-chave: A Súmula Vinculante 13 do STF veda a nomeação de cônjuge, companheiro ou parente em linha reta, colateral ou por afinidade, até o 3º GRAU, inclusive, para cargos em comissão ou funções de confiança, bem como o nepotismo cruzado, diretamente por força do art. 37, caput (moralidade e impessoalidade). | ✅ Alternativa correta: B) Parentesco até o 3º grau, inclusive (pais, filhos, avós, netos, irmãos, tios, sobrinhos, sogros, cunhados etc.), sem depender de lei específica. | ❌ Análise das alternativas: A) Vai até o 3º grau e independe de lei formal; C) Não alcança o 4º grau (primos são 4º grau!) e, em regra, não se aplica a cargos de natureza política (salvo fraude/ausência de qualificação); D) Vai até o 3º grau. | ⚠️ Pegadinha da banca: PRIMO é parente colateral de 4º GRAU, portanto a nomeação de primo NÃO é vedada pela Súmula Vinculante 13!'
+    }
+  ];
+  window.NATIVE_POLICE_QUESTION_BANK = NATIVE_POLICE_QUESTION_BANK;
+
+  function questionMatchesBoardFilter(item, boardFilter) {
+    if (!boardFilter || boardFilter === 'all') return true;
+    const target = String(boardFilter).toLocaleLowerCase('pt-BR').trim();
+    const hay = `${item?.board || ''} ${item?.statement || ''} ${item?.explanation || ''} ${item?.topic || ''}`.toLocaleLowerCase('pt-BR');
+    if (target.includes('aocp')) return /aocp/.test(hay);
+    if (target.includes('cebraspe') || target.includes('cespe')) return /cebraspe|cespe/.test(hay);
+    if (target.includes('fgv')) return /fgv|fundacao getulio vargas/.test(hay);
+    if (target.includes('upenet') || target.includes('iaupe')) return /upenet|iaupe/.test(hay);
+    if (target.includes('ibfc')) return /ibfc/.test(hay);
+    if (target.includes('idecan')) return /idecan/.test(hay);
+    return hay.includes(target);
+  }
+  window.questionMatchesBoardFilter = questionMatchesBoardFilter;
+
+  function ensureNativeQuestionBankLoaded() {
+    if (typeof ALL_QUESTIONS === 'undefined' || !Array.isArray(ALL_QUESTIONS)) return;
+    const existingFp = new Set(ALL_QUESTIONS.map(qItem => questionFingerprint(qItem)));
+    let added = 0;
+    for (const item of NATIVE_POLICE_QUESTION_BANK) {
+      const normalized = {
+        ...item,
+        subject: canonicalSubjectName(item.subject),
+        is_native_bank: true
+      };
+      const fp = questionFingerprint(normalized);
+      if (!existingFp.has(fp)) {
+        existingFp.add(fp);
+        ALL_QUESTIONS.push(normalized);
+        added++;
+      }
+    }
+    if (added > 0 && typeof window.updateLocalDbBadgeUI === 'function') {
+      window.updateLocalDbBadgeUI();
+    }
+  }
+  window.ensureNativeQuestionBankLoaded = ensureNativeQuestionBankLoaded;
+
+  function getNativeQuestionsForSubject(subject, boardFilter = 'all') {
+    const sKey = subjectKey(learningCategory(subject));
+    let matches = NATIVE_POLICE_QUESTION_BANK.filter(qItem => subjectKey(learningCategory(qItem.subject)) === sKey);
+    if (!matches.length) matches = NATIVE_POLICE_QUESTION_BANK.slice(0, 6);
+    if (boardFilter && boardFilter !== 'all') {
+      const byBoard = matches.filter(qItem => questionMatchesBoardFilter(qItem, boardFilter));
+      const others = matches.filter(qItem => !questionMatchesBoardFilter(qItem, boardFilter));
+      return [...byBoard, ...others];
+    }
+    return matches;
+  }
+  window.getNativeQuestionsForSubject = getNativeQuestionsForSubject;
+
   // 2. Filtros Avançados (Tópico, Modo Progressivo, Inéditas/Favoritas estilo TEC/Qconcursos)
   function normalizedOrigin(question){const origin=String(question?.origin||'autoral').toLocaleLowerCase('pt-BR');return /oficial|importad|prova|adaptada/.test(origin)?'oficial':'autoral'}
   function normalizedDifficulty(question){const value=String(question?.difficulty||'medio').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();return value.startsWith('fac')?'facil':value.startsWith('dif')?'dificil':'medio'}
@@ -367,9 +1078,95 @@
     return Boolean(state?.answeredQuestionFingerprints?.[fp]);
   }
 
+  function renderQuickBoaRespostaBar(){
+    ensureNativeQuestionBankLoaded();
+    const trainer=q('.questionTrainer');
+    if(!trainer)return;
+    let bar=q('#quickBoaRespostaBar');
+    if(!bar){
+      const head=trainer.querySelector('.sectionHead');
+      const html=`<div class="quickBoaRespostaBox" id="quickBoaRespostaBar"></div>`;
+      if(head)head.insertAdjacentHTML('afterend',html);
+      else trainer.insertAdjacentHTML('afterbegin',html);
+      bar=q('#quickBoaRespostaBar');
+    }
+    if(!bar)return;
+    const currentBoard=q('#questionBoardFilter')?.value||'all';
+    const boards=[
+      {val:'all',label:'Todas as Bancas'},
+      {val:'Instituto AOCP',label:'🎯 Instituto AOCP'},
+      {val:'Cebraspe',label:'⚖️ Cebraspe'},
+      {val:'FGV Conhecimento',label:'🏛️ FGV'},
+      {val:'UPENET/IAUPE',label:'🛡️ UPENET/IAUPE'},
+      {val:'IBFC',label:'📋 IBFC'}
+    ];
+    const allQs=(ALL_QUESTIONS||[]).filter(item=>questionMatchesBoardFilter(item,currentBoard));
+    const countsBySubj=new Map();
+    for(const item of allQs){
+      const s=learningCategory(item.subject)||'Geral';
+      if(isInvalidTrailSubject(s))continue;
+      countsBySubj.set(s,(countsBySubj.get(s)||0)+1);
+    }
+    const subjects=[...countsBySubj.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'pt-BR'));
+    bar.innerHTML=`
+      <div class="quickBoaHeader">
+        <div>
+          <span class="eyebrow" style="color:var(--cyan)">⚡ TREINO RÁPIDO EM 1 CLIQUE (ESTILO BOARESPOSTA)</span>
+          <p class="small muted" style="margin:2px 0 0">Escolha a banca examinadora abaixo e toque em qualquer disciplina para abrir uma sessão progressiva imediata com gabarito passo a passo:</p>
+        </div>
+        <span class="tag">${allQs.length} questões ${currentBoard==='all'?'no banco':escText(currentBoard)}</span>
+      </div>
+      <div class="quickBoardPills" role="group" aria-label="Filtro rápido de banca examinadora">
+        ${boards.map(b=>`<button type="button" class="quickBoardPill ${currentBoard===b.val?'active':''}" data-quick-board="${escText(b.val)}">${escText(b.label)}</button>`).join('')}
+      </div>
+      <div class="quickSubjectChips">
+        ${subjects.map(([subj,cnt])=>`<button type="button" class="quickSubjectChip" data-quick-subject-launch="${escText(subj)}"><b>${escText(subj)}</b><span>${cnt} q. →</span></button>`).join('')}
+      </div>
+    `;
+    qa('[data-quick-board]').forEach(btn=>{
+      btn.onclick=()=>{
+        const bVal=btn.dataset.quickBoard||'all';
+        if(q('#questionBoardFilter'))q('#questionBoardFilter').value=bVal;
+        populateTopicFilter();
+        updateQuestionPool();
+        renderQuickBoaRespostaBar();
+      };
+    });
+    qa('[data-quick-subject-launch]').forEach(btn=>{
+      btn.onclick=()=>{
+        const subj=btn.dataset.quickSubjectLaunch;
+        const subjSel=q('#questionSubject');
+        if(subjSel){
+          if(![...subjSel.options].some(o=>o.value===subj)){
+            subjSel.insertAdjacentHTML('beforeend',`<option value="${escText(subj)}">${escText(subj)}</option>`);
+          }
+          subjSel.value=subj;
+        }
+        if(q('#questionTopic'))q('#questionTopic').value='all';
+        if(q('#questionBattleMode'))q('#questionBattleMode').value='progressive';
+        populateTopicFilter();
+        updateQuestionPool();
+        startFilteredBattle();
+      };
+    });
+  }
+  window.renderQuickBoaRespostaBar=renderQuickBoaRespostaBar;
+
   function ensureTopicFilterSelect(){
+    ensureNativeQuestionBankLoaded();
     const filters=q('.questionFilters');
     if(!filters)return;
+    if(!q('#questionBoardFilter')){
+      const subjectField=q('#questionSubject')?.closest('.field');
+      const boardHtml=`<label class="field">Banca Examinadora<select id="questionBoardFilter"><option value="all">Todas as bancas (Banco completo)</option><option value="Instituto AOCP">🎯 Instituto AOCP (PMPE / CBMPE / Polícias)</option><option value="Cebraspe">⚖️ Cebraspe (CESPE)</option><option value="FGV Conhecimento">🏛️ FGV Conhecimento</option><option value="UPENET/IAUPE">🛡️ UPENET / IAUPE (Concursos PE)</option><option value="IBFC">📋 IBFC</option><option value="IDECAN">🦅 IDECAN</option></select></label>`;
+      if(subjectField)subjectField.insertAdjacentHTML('beforebegin',boardHtml);
+      else filters.insertAdjacentHTML('afterbegin',boardHtml);
+      q('#questionBoardFilter')?.addEventListener('change',()=>{
+        populateTopicFilter();
+        updateQuestionPool();
+        renderQuickBoaRespostaBar();
+      });
+    }
     if(!q('#questionTopic')){
       const subjectField=q('#questionSubject')?.closest('.field');
       const html=`<label class="field">Assunto / Tópico<select id="questionTopic"><option value="all">Todos os assuntos</option></select></label>`;
@@ -399,6 +1196,7 @@
         q('#printQuestionBookletBtn').onclick=exportPrintableQuestionBooklet;
       }
     }
+    renderQuickBoaRespostaBar();
   }
 
   function populateTopicFilter(){
@@ -406,9 +1204,10 @@
     const topicSelect=q('#questionTopic');
     if(!topicSelect)return;
     const subject=q('#questionSubject')?.value||'all';
+    const board=q('#questionBoardFilter')?.value||'all';
     const currentTopic=topicSelect.value||'all';
     const baseSource=typeof questionsForMode==='function'?questionsForMode('battle',subject):(ALL_QUESTIONS||[]);
-    const allForSubject=(ALL_QUESTIONS||[]).filter(item=>subject==='all'||learningCategory(item.subject)===subject);
+    const allForSubject=(ALL_QUESTIONS||[]).filter(item=>(subject==='all'||learningCategory(item.subject)===subject)&&questionMatchesBoardFilter(item,board));
     const pool=allForSubject.length?allForSubject:baseSource;
     const topicsMap=new Map();
     for(const item of pool){
@@ -423,11 +1222,12 @@
   }
 
   function filteredQuestionPool(){
-    const subject=q('#questionSubject')?.value||'all',topic=q('#questionTopic')?.value||'all',difficulty=q('#questionDifficulty')?.value||'all',origin=q('#questionOrigin')?.value||'all',battleMode=q('#questionBattleMode')?.value||'progressive',historyFilter=q('#questionHistoryFilter')?.value||'all';
+    ensureNativeQuestionBankLoaded();
+    const subject=q('#questionSubject')?.value||'all',board=q('#questionBoardFilter')?.value||'all',topic=q('#questionTopic')?.value||'all',difficulty=q('#questionDifficulty')?.value||'all',origin=q('#questionOrigin')?.value||'all',battleMode=q('#questionBattleMode')?.value||'progressive',historyFilter=q('#questionHistoryFilter')?.value||'all';
     const baseSource=typeof questionsForMode==='function'?questionsForMode('battle',subject):(ALL_QUESTIONS||[]);
     const allMatchingSubject=(ALL_QUESTIONS||[]).filter(item=>subject==='all'||learningCategory(item.subject)===subject);
     const source=allMatchingSubject.length?allMatchingSubject:baseSource;
-    let filtered=source.filter(item=>(topic==='all'||topicKey(item?.topic)===topic)&&(difficulty==='all'||normalizedDifficulty(item)===difficulty)&&(origin==='all'||normalizedOrigin(item)===origin));
+    let filtered=source.filter(item=>questionMatchesBoardFilter(item,board)&&(topic==='all'||topicKey(item?.topic)===topic)&&(difficulty==='all'||normalizedDifficulty(item)===difficulty)&&(origin==='all'||normalizedOrigin(item)===origin));
     if(historyFilter==='unanswered'){
       const unanswered=filtered.filter(item=>!isQuestionAnsweredBefore(item));
       if(unanswered.length)filtered=unanswered;
@@ -617,6 +1417,21 @@
         </div>
       </div>` : '';
 
+    const chosenText=(Number.isInteger(chosenIndex)&&chosenIndex>=0&&item.options?.[chosenIndex])?item.options[chosenIndex]:'';
+    const correctText=item.options?.[correctIndex]||'';
+    const directComparisonHtml=(!ok&&chosenText)?`
+      <div class="directChoiceComparison">
+        <div class="choiceCompareCard wrongPick">
+          <span class="choiceCompareLabel">✗ SUA ESCOLHA (ALTERNATIVA ${chosenLetter})</span>
+          <p>${escText(chosenText)}</p>
+        </div>
+        <div class="choiceCompareCard rightPick">
+          <span class="choiceCompareLabel">✓ GABARITO OFICIAL (ALTERNATIVA ${correctLetter})</span>
+          <p>${escText(correctText)}</p>
+        </div>
+      </div>
+    `:'';
+
     return `<div class="boaRespostaResolution ${ok?'isGood':'isBad'}">
       <div class="resolutionHeader">
         <div>
@@ -625,6 +1440,7 @@
         </div>
         <span class="tag">${escText(item.board||(normalizedOrigin(item)==='oficial'?'Prova Oficial':'Estilo Banca'))}</span>
       </div>
+      ${directComparisonHtml}
       ${stepsHtml}
       <details class="resolutionOptionsDetails" ${!ok?'open':''}>
         <summary>Ver conferência alternativa por alternativa (A–D)</summary>
@@ -4534,11 +5350,25 @@
     {subject:'Direito Processual Penal',topic:'Inquérito Policial',difficulty:'medio',statement:'Assinale a característica CORRETA do Inquérito Policial no direito brasileiro:',options:['É procedimento escrito, inquisitivo, sigiloso e dispensável para o oferecimento da denúncia quando já houver justa causa.','É procedimento contraditório obrigatório, sob pena de nulidade absoluta da ação penal subsequente.','A autoridade policial pode mandar arquivar os autos do inquérito policial sempre que verificar atipicidade.','O ofendido não pode requerer diligências durante o curso do inquérito policial.'],correct_index:0,explanation:'O IP é escrito, sigiloso, inquisitivo e dispensável (se o MP já dispuser de elementos de informação suficientes). Pelo art. 17 do CPP, a autoridade policial NUNCA pode mandar arquivar autos de inquérito.'}
   ];
 
-  function buildDuelQuestionPack(subjectFilter='all',mode='misto',count=5){
+  const DUEL_EXAMINER_BOTS=[
+    {user_id:'bot:aocp',name:'🤖 Examinador Instituto AOCP',role:'Bot da Banca · Letra da Lei & Prazos',board:'Instituto AOCP',accuracy:0.72,avgTimeS:12,xp:3200,is_bot:true,is_online:true},
+    {user_id:'bot:cebraspe',name:'🤖 Examinador Cebraspe',role:'Bot da Banca · Jurisprudência & Casos',board:'Cebraspe',accuracy:0.78,avgTimeS:11,xp:4100,is_bot:true,is_online:true},
+    {user_id:'bot:fgv',name:'🤖 Examinador FGV Conhecimento',role:'Bot da Banca · Casos Práticos',board:'FGV Conhecimento',accuracy:0.76,avgTimeS:13,xp:3900,is_bot:true,is_online:true},
+    {user_id:'bot:sombra',name:'🤖 Sombra Rank S (Monarca)',role:'Bot Elite · Desafio Máximo',board:'all',accuracy:0.88,avgTimeS:9,xp:5200,is_bot:true,is_online:true}
+  ];
+  window.DUEL_EXAMINER_BOTS=DUEL_EXAMINER_BOTS;
+
+  function buildDuelQuestionPack(subjectFilter='all',mode='misto',count=5,boardFilter='all'){
+    ensureNativeQuestionBankLoaded();
     let pool=(ALL_QUESTIONS||[]).filter(qItem=>Array.isArray(qItem.options)&&qItem.options.length===4&&Number.isInteger(qItem.correct_index));
     if(subjectFilter&&subjectFilter!=='all'){
-      const bySubj=pool.filter(qItem=>topicKey(qItem.subject)===topicKey(subjectFilter));
+      const bySubj=pool.filter(qItem=>topicKey(learningCategory(qItem.subject))===topicKey(learningCategory(subjectFilter))||topicKey(qItem.subject)===topicKey(subjectFilter));
       if(bySubj.length>=3)pool=bySubj;
+    }
+    if(boardFilter&&boardFilter!=='all'){
+      const byBoard=pool.filter(qItem=>questionMatchesBoardFilter(qItem,boardFilter));
+      const others=pool.filter(qItem=>!questionMatchesBoardFilter(qItem,boardFilter));
+      pool=byBoard.length>=count?byBoard:[...byBoard,...others];
     }
     if(mode==='dificil'){
       const hard=pool.filter(qItem=>normalizeText(qItem.difficulty||'').startsWith('dif'));
@@ -4548,7 +5378,7 @@
       if(easyMed.length>=3)pool=easyMed;
     }
     if(pool.length<count){
-      pool=[...pool,...FALLBACK_DUEL_QUESTIONS];
+      pool=[...pool,...NATIVE_POLICE_QUESTION_BANK,...FALLBACK_DUEL_QUESTIONS];
     }
     const shuffled=pool.slice().sort(()=>Math.random()-0.5);
     const picked=[];
@@ -4560,6 +5390,7 @@
       picked.push({
         subject:canonicalSubjectName(item.subject||'Geral'),
         topic:item.topic||item.subject||'Desafio X1',
+        board:item.board||(boardFilter!=='all'?boardFilter:'Estilo Banca'),
         difficulty:item.difficulty||'medio',
         statement:typeof window.formatQuestionStatementText==='function'?window.formatQuestionStatementText(item.statement):item.statement,
         options:item.options.slice(0,4),
@@ -4805,14 +5636,16 @@
     }
   }
 
-  async function launchDuelChallenge(useAiGeneration=false){
-    const oppSelect=q('#duelOpponentSelect'),subjSelect=q('#duelSubjectSelect'),modeSelect=q('#duelModeSelect'),countSelect=q('#duelCountSelect');
-    const oppId=oppSelect?.value||selectedDuelOpponentId;
-    if(!oppId)return toast('Escolha um caçador oponente para desafiar no X1!');
+  async function launchDuelChallenge(useAiGeneration=false,forcedOpponentId=null){
+    const oppSelect=q('#duelOpponentSelect'),subjSelect=q('#duelSubjectSelect'),boardSelect=q('#duelBoardSelect'),modeSelect=q('#duelModeSelect'),countSelect=q('#duelCountSelect');
+    const oppId=forcedOpponentId||oppSelect?.value||selectedDuelOpponentId||'bot:aocp';
+    if(!oppId)return toast('Escolha um caçador ou Bot Examinador para desafiar no X1!');
+    const botProfile=DUEL_EXAMINER_BOTS.find(b=>b.user_id===oppId)||null;
     const subj=subjSelect?.value||'all';
+    const board=boardSelect?.value||(botProfile&&botProfile.board!=='all'?botProfile.board:'all');
     const mode=modeSelect?.value||'misto';
     const count=Math.min(10,Math.max(3,Number(countSelect?.value)||5));
-    const oppPlayer=(duelHubData.players||[]).find(p=>String(p.user_id)===String(oppId));
+    const oppPlayer=botProfile||(duelHubData.players||[]).find(p=>String(p.user_id)===String(oppId));
     const oppName=oppPlayer?.name||selectedDuelOpponentName||'Oponente';
 
     let questions=[];
@@ -4823,8 +5656,9 @@
         const session=await validSession();
         const campaignName=(typeof activeCampaign==='function'?activeCampaign()?.name:'Concurso Policial')||'Concurso Policial';
         const subjText=subj==='all'?'Direito Constitucional, Direito Penal, Legislação Extravagante, Língua Portuguesa e Direito Militar':subj;
+        const boardLabel=board!=='all'?` no estilo da banca ${board}`:'';
         const diffLabel=mode==='dificil'?'difíceis com pegadinhas de banca':mode==='fixacao'?'diretas de fixação de conceitos e lei seca':'equilibradas entre fixação e questões difíceis';
-        const prompt=`Crie ${count} questões inéditas de múltipla escolha (4 alternativas A, B, C, D) ${diffLabel} sobre "${subjText}" para o concurso "${campaignName}".\nResponda EXCLUSIVAMENTE com um array JSON válido no formato:\n[{"subject":"Disciplina","topic":"Assunto","difficulty":"${mode==='dificil'?'dificil':'medio'}","statement":"Enunciado claro","options":["Alternativa A","Alternativa B","Alternativa C","Alternativa D"],"correct_index":0,"explanation":"Gabarito comentado curto"}]`;
+        const prompt=`Crie ${count} questões inéditas de múltipla escolha (4 alternativas A, B, C, D) ${diffLabel}${boardLabel} sobre "${subjText}" para o concurso "${campaignName}".\nResponda EXCLUSIVAMENTE com um array JSON válido no formato:\n[{"subject":"Disciplina","topic":"Assunto","board":"${board!=='all'?board:'Instituto AOCP'}","difficulty":"${mode==='dificil'?'dificil':'medio'}","statement":"Enunciado claro","options":["Alternativa A","Alternativa B","Alternativa C","Alternativa D"],"correct_index":0,"explanation":"Conceito-chave: ... | ✅ Alternativa correta: ... | ❌ Análise das alternativas: ... | ⚠️ Pegadinha da banca: ..."}]`;
         const r=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{
           method:'POST',
           headers:authHeaders(session.access_token),
@@ -4839,6 +5673,7 @@
             questions=parsed.filter(x=>Array.isArray(x.options)&&x.options.length>=4).slice(0,count).map(x=>({
               subject:canonicalSubjectName(x.subject||subjText),
               topic:String(x.topic||'Desafio IA X1'),
+              board:String(x.board||(board!=='all'?board:'Estilo Banca')),
               difficulty:String(x.difficulty||mode),
               statement:typeof window.formatQuestionStatementText==='function'?window.formatQuestionStatementText(x.statement):String(x.statement),
               options:x.options.slice(0,4).map(String),
@@ -4848,12 +5683,35 @@
           }
         }
       }catch{}finally{
-        if(aiBtn){aiBtn.disabled=false;aiBtn.textContent='✨ Desafiar com Questões Criadas pela IA'}
+        if(aiBtn){aiBtn.disabled=false;aiBtn.textContent='✨ Desafiar com Questões Inéditas IA'}
       }
     }
 
     if(!questions.length){
-      questions=buildDuelQuestionPack(subj,mode,count);
+      questions=buildDuelQuestionPack(subj,mode,count,board);
+    }
+
+    const subjectLabel=(subj==='all'?'Roleta Mista (Perguntados)':subj)+(board!=='all'?` · ${board}`:'');
+
+    // Modo Bot Examinador da Banca (Simulação X1 Instantânea sem depender de outro jogador online)
+    if(botProfile||String(oppId).startsWith('bot:')){
+      const myId=cloudSession?.user?.id||'local';
+      const botDuel={
+        id:`bot-duel-${Date.now()}`,
+        is_bot_duel:true,
+        bot_profile:botProfile||DUEL_EXAMINER_BOTS[0],
+        challenger_id:myId,
+        opponent_id:oppId,
+        challenger_name:localHunterRow().name,
+        opponent_name:oppName,
+        subject:subjectLabel,
+        board:board,
+        difficulty_mode:mode,
+        questions:questions.map(qItem=>prepareQuestion(qItem))
+      };
+      toast(`🤖 Duelo X1 iniciado contra ${oppName}! Mostre sua velocidade e precisão!`);
+      startPlayingDuel(botDuel);
+      return;
     }
 
     try{
@@ -4861,7 +5719,7 @@
         method:'POST',
         body:JSON.stringify({
           p_opponent_id:oppId,
-          p_subject:subj==='all'?'Roleta Mista (Perguntados)':subj,
+          p_subject:subjectLabel,
           p_mode:mode,
           p_questions:questions
         })
@@ -4870,7 +5728,7 @@
       if(!res.ok||!created?.duel_id)throw new Error(duelErrorMessage(created?.message,'Não foi possível criar o duelo. Verifique se as migrações v95 e v96 foram executadas no Supabase.'));
       toast(`⚔️ Desafio X1 criado contra ${oppName}! Responda sua rodada agora!`);
       if(typeof postSystemDuelNoticeToGuild==='function'){
-        postSystemDuelNoticeToGuild(`⚔️ Lancei um Desafio X1 contra ${oppName} em ${subj==='all'?'Roleta Mista':subj} (${count} questões)!`).catch(()=>undefined);
+        postSystemDuelNoticeToGuild(`⚔️ Lancei um Desafio X1 contra ${oppName} em ${subjectLabel} (${count} questões)!`).catch(()=>undefined);
       }
       await loadDuelArenaHub(true);
       const myDuel=(duelHubData.my_duels||[]).find(d=>d.id===created.duel_id)||{
@@ -4879,7 +5737,7 @@
         opponent_id:oppId,
         challenger_name:localHunterRow().name,
         opponent_name:oppName,
-        subject:subj==='all'?'Roleta Mista (Perguntados)':subj,
+        subject:subjectLabel,
         difficulty_mode:mode,
         questions
       };
@@ -4888,6 +5746,7 @@
       toast(err.message||'Não foi possível iniciar o duelo.');
     }
   }
+  window.launchDuelChallenge=launchDuelChallenge;
 
   function startPlayingDuel(duel){
     if(!duel||!Array.isArray(duel.questions)||!duel.questions.length)return toast('Este duelo não possui questões válidas.');
@@ -4900,6 +5759,7 @@
       questionStartMs:Date.now(),
       secondsLeft:25,
       answered:false,
+      submittingAnswer:false,
       answers:[]
     };
     renderDuelArena();
@@ -4912,7 +5772,7 @@
     activeDuelSession.secondsLeft=25;
     activeDuelSession.questionStartMs=Date.now();
     duelRoundTimer=setInterval(()=>{
-      if(!activeDuelSession||activeDuelSession.answered)return;
+      if(!activeDuelSession||activeDuelSession.answered||activeDuelSession.submittingAnswer)return;
       const elapsed=Math.floor((Date.now()-activeDuelSession.questionStartMs)/1000);
       const rem=Math.max(0,25-elapsed);
       activeDuelSession.secondsLeft=rem;
@@ -4926,7 +5786,8 @@
   }
 
   async function answerDuelQuestion(chosenIdx){
-    if(!activeDuelSession||activeDuelSession.answered)return;
+    if(!activeDuelSession||activeDuelSession.answered||activeDuelSession.submittingAnswer)return;
+    activeDuelSession.submittingAnswer=true;
     activeDuelSession.answered=true;
     if(duelRoundTimer){clearInterval(duelRoundTimer);duelRoundTimer=null}
     const spent=Math.min(25,Math.max(1,Math.round((Date.now()-activeDuelSession.questionStartMs)/1000)));
@@ -4936,7 +5797,7 @@
 
     let correctIdx=curQ.correct_index;
     let explanationText=curQ.explanation||'';
-    if((correctIdx===null||correctIdx===undefined)&&cloudSession&&activeDuelSession.duel?.id){
+    if((correctIdx===null||correctIdx===undefined)&&cloudSession&&activeDuelSession.duel?.id&&!activeDuelSession.duel?.is_bot_duel){
       try{
         const gRes=await cloudFetch('rpc/grade_hunter_duel_question',{
           method:'POST',
@@ -4954,6 +5815,7 @@
     const isCorrect=chosenIdx===Number(correctIdx??0);
     if(isCorrect)activeDuelSession.score++;
     activeDuelSession.answers.push({index:activeDuelSession.index,chosen:chosenIdx,correct:isCorrect,time_s:spent});
+    if(typeof recordQuestionResult==='function')recordQuestionResult(curQ,isCorrect,chosenIdx);
 
     qa('[data-duel-opt]').forEach(btn=>{
       const idx=Number(btn.dataset.duelOpt);
@@ -4965,19 +5827,18 @@
     const fb=q('#duelRoundFeedback');
     if(fb){
       fb.hidden=false;
+      const stepRes=typeof formatStepByStepResolution==='function'?formatStepByStepResolution(curQ,chosenIdx,isCorrect,false):`<div class="lessonBox ${isCorrect?'bizu':'trap'}" style="margin-top:10px"><b>${chosenIdx<0?'⏰ Tempo esgotado!':isCorrect?`✓ Acertou em ${spent}s!`:'✗ Resposta incorreta'}</b><p style="margin:4px 0 0">${escText(curQ.explanation||'Revise este ponto no seu material.')}</p></div>`;
       fb.innerHTML=`
-        <div class="lessonBox ${isCorrect?'bizu':'trap'}" style="margin-top:10px">
-          <b>${chosenIdx<0?'⏰ Tempo esgotado!':isCorrect?`✓ Acertou em ${spent}s!`:'✗ Resposta incorreta'}</b>
-          <p style="margin:4px 0 0">${escText(curQ.explanation||'Revise este ponto no seu material.')}</p>
-        </div>
+        <div style="margin-top:10px">${stepRes}</div>
         <button type="button" class="action" id="nextDuelQuestionBtn" style="margin-top:10px;width:100%">
-          ${activeDuelSession.index+1<activeDuelSession.duel.questions.length?'Próxima questão do duelo →':'Finalizar minha rodada e enviar placar 🏆'}
+          ${activeDuelSession.index+1<activeDuelSession.duel.questions.length?'Próxima questão do duelo →':'Finalizar minha rodada e ver placar 🏆'}
         </button>
       `;
       q('#nextDuelQuestionBtn').onclick=async()=>{
         if(activeDuelSession.index+1<activeDuelSession.duel.questions.length){
           activeDuelSession.index++;
           activeDuelSession.answered=false;
+          activeDuelSession.submittingAnswer=false;
           renderDuelArena();
           startDuelQuestionCountdown();
         }else{
@@ -4994,8 +5855,8 @@
       duel_closed:'Este duelo já foi encerrado.',
       duel_not_found:'Duelo não encontrado.',
       not_participant:'Você não participa deste duelo.',
-      not_authenticated:'Entre na sua conta para jogar o X1.',
-      invalid_opponent:'Oponente inválido. Escolha outro caçador.',
+      not_authenticated:'Entre na sua conta para jogar o X1 contra outros jogadores online (ou escolha um Bot Examinador da Banca para jogar imediatamente!).',
+      invalid_opponent:'Oponente inválido. Escolha outro caçador ou Bot Examinador.',
       invalid_questions:'Não foi possível montar as questões do duelo. Tente outra disciplina.',
       too_many_pending_duels:'Você já tem muitos desafios pendentes hoje. Aguarde seus oponentes responderem.'
     };
@@ -5007,7 +5868,57 @@
     if(!activeDuelSession)return;
     const {duel,score,totalTimeS,answers}=activeDuelSession;
     const btn=q('#nextDuelQuestionBtn');
-    if(btn){btn.disabled=true;btn.textContent='⏳ Salvando seu placar na Arena...'}
+    if(btn){btn.disabled=true;btn.textContent='⏳ Apurando placar da Arena...'}
+
+    // Simulação completa se for duelo contra Bot Examinador da Banca
+    if(duel.is_bot_duel||String(duel.opponent_id||'').startsWith('bot:')){
+      const bot=duel.bot_profile||DUEL_EXAMINER_BOTS[0];
+      const totalQ=duel.questions.length;
+      let botScore=0,botTimeS=0;
+      for(let i=0;i<totalQ;i++){
+        const qDiff=normalizedDifficulty(duel.questions[i]);
+        const diffMod=qDiff==='dificil'?-0.08:qDiff==='facil'?0.08:0;
+        const hitProb=Math.min(0.95,Math.max(0.45,(bot.accuracy||0.72)+diffMod));
+        if(Math.random()<hitProb)botScore++;
+        botTimeS+=Math.max(5,Math.min(23,Math.round((bot.avgTimeS||12)+(Math.random()*6-3))));
+      }
+      const myId=cloudSession?.user?.id||'local';
+      const isDraw=(score===botScore&&totalTimeS===botTimeS);
+      const iWon=(score>botScore)||(score===botScore&&totalTimeS<botTimeS);
+      const completedRecord={
+        id:duel.id,
+        status:'completed',
+        challenger_id:myId,
+        opponent_id:bot.user_id,
+        challenger_name:duel.challenger_name||localHunterRow().name,
+        opponent_name:bot.name,
+        subject:duel.subject,
+        difficulty_mode:duel.difficulty_mode||'misto',
+        questions:duel.questions,
+        challenger_score:score,
+        challenger_time_s:totalTimeS,
+        opponent_score:botScore,
+        opponent_time_s:botTimeS,
+        challenger_done:true,
+        opponent_done:true,
+        is_draw:isDraw,
+        winner_id:isDraw?null:(iWon?myId:bot.user_id),
+        completed_at:new Date().toISOString(),
+        created_at:new Date().toISOString()
+      };
+      state.localBotDuels=Array.isArray(state.localBotDuels)?state.localBotDuels:[];
+      state.localBotDuels.unshift(completedRecord);
+      state.localBotDuels=state.localBotDuels.slice(0,30);
+      save();
+      duelHubData.my_duels=[completedRecord,...(duelHubData.my_duels||[])];
+      duelHubData.completed_duels=[completedRecord,...(duelHubData.completed_duels||[])];
+      playCompletionChime();
+      activeDuelSession=null;
+      renderDuelArena();
+      toast(isDraw?`🤝 Empate técnico contra ${bot.name} (${score}/${totalQ} em ${totalTimeS}s)!`:iWon?`🏆 VITÓRIA NO X1 CONTRA ${bot.name.toUpperCase()}! Placar: ${score}/${totalQ} (${totalTimeS}s) × ${botScore}/${totalQ} (${botTimeS}s)!`:`⚔️ ${bot.name} venceu por ${botScore}/${totalQ} (${botTimeS}s) contra ${score}/${totalQ} (${totalTimeS}s). Tente a revanche!`);
+      return;
+    }
+
     try{
       const res=await cloudFetch('rpc/submit_hunter_duel_round',{
         method:'POST',
@@ -5087,12 +5998,21 @@
       return;
     }
 
+    const localBotDuels=Array.isArray(state?.localBotDuels)?state.localBotDuels:[];
+    const existingIds=new Set((duelHubData.my_duels||[]).map(d=>d.id));
+    for(const bd of localBotDuels){
+      if(!existingIds.has(bd.id)){
+        duelHubData.my_duels=[bd,...(duelHubData.my_duels||[])];
+        duelHubData.completed_duels=[bd,...(duelHubData.completed_duels||[])];
+        existingIds.add(bd.id);
+      }
+    }
     const {ranking,dominations,pairHistory}=computeArenaStatsAndRivalries();
     const opponents=(duelHubData.players||[]).filter(p=>!p.is_me&&String(p.user_id)!==String(myId));
     const pendingForMe=(duelHubData.my_duels||[]).filter(d=>d.status==='pending'&&((d.challenger_id===myId&&!d.challenger_done)||(d.opponent_id===myId&&!d.opponent_done)));
     const waitingOpponent=(duelHubData.my_duels||[]).filter(d=>d.status==='pending'&&((d.challenger_id===myId&&d.challenger_done&&!d.opponent_done)||(d.opponent_id===myId&&d.opponent_done&&!d.challenger_done)));
     const finishedMy=(duelHubData.my_duels||[]).filter(d=>d.status==='completed').slice(0,12);
-    const subjects=[...new Set([...LEARNING_SUBJECTS,'Direito Constitucional','Direito Militar','Legislação Extravagante','Direito Penal','Direito Processual Penal','Língua Portuguesa','Raciocínio Lógico-Matemático','Informática'])];
+    const subjects=[...new Set([...LEARNING_SUBJECTS,'Língua Portuguesa','Raciocínio Lógico-Matemático','Informática','História de Pernambuco','Direito Constitucional','Direito Administrativo','Direito Penal','Direito Processual Penal','Direitos Humanos','Legislação Extravagante','Direito Militar','Física','Biologia'])];
 
     root.innerHTML=`
       <div class="card duelHero" style="margin-bottom:12px">
@@ -5162,9 +6082,22 @@
           <span class="tag">25s por questão</span>
         </div>
         <div class="essayGrid">
-          <label class="field">Desafiar Caçador
+          <label class="field">Desafiar Caçador ou Bot da Banca
             <select id="duelOpponentSelect">
-              ${opponents.length?opponents.map(p=>`<option value="${escText(p.user_id)}" ${String(p.user_id)===String(selectedDuelOpponentId)?'selected':''}>${p.is_online?'🟢 [Online agora] ':'⚪ '}${escText(p.name)} (${escText(p.role||'PMPE')})</option>`).join(''):'<option value="">Aguardando outros caçadores no banco</option>'}
+              ${opponents.length?`<optgroup label="👥 Caçadores da Comunidade">${opponents.map(p=>`<option value="${escText(p.user_id)}" ${String(p.user_id)===String(selectedDuelOpponentId)?'selected':''}>${p.is_online?'🟢 [Online agora] ':'⚪ '}${escText(p.name)} (${escText(p.role||'PMPE')})</option>`).join('')}</optgroup>`:''}
+              <optgroup label="🤖 Simulação Solo contra Examinador da Banca (Instantâneo)">
+                ${DUEL_EXAMINER_BOTS.map(b=>`<option value="${escText(b.user_id)}" ${String(b.user_id)===String(selectedDuelOpponentId)||(!selectedDuelOpponentId&&!opponents.length&&b.user_id==='bot:aocp')?'selected':''}>${escText(b.name)} (${escText(b.role)})</option>`).join('')}
+              </optgroup>
+            </select>
+          </label>
+          <label class="field">Banca Examinadora do Duelo
+            <select id="duelBoardSelect">
+              <option value="all">Todas as Bancas (Banco Completo)</option>
+              <option value="Instituto AOCP">🎯 Instituto AOCP (PMPE / CBMPE / Polícias)</option>
+              <option value="Cebraspe">⚖️ Cebraspe (CESPE)</option>
+              <option value="FGV Conhecimento">🏛️ FGV Conhecimento</option>
+              <option value="UPENET/IAUPE">🛡️ UPENET / IAUPE</option>
+              <option value="IBFC">📋 IBFC</option>
             </select>
           </label>
           <label class="field">Disciplina (Banco / Biblioteca / Edital)
@@ -5173,23 +6106,24 @@
               ${subjects.map(s=>`<option value="${escText(s)}">${escText(s)}</option>`).join('')}
             </select>
           </label>
-          <label class="field">Nível do Duelo
-            <select id="duelModeSelect">
-              <option value="misto">⚖️ Equilibrado (Fixação + Questões Difíceis)</option>
-              <option value="fixacao">⚡ Fixação Rápida (Conceitos e Lei Seca)</option>
-              <option value="dificil">🔥 Somente Difíceis e Pegadinhas de Banca</option>
-            </select>
-          </label>
-          <label class="field">Quantidade de Questões
-            <select id="duelCountSelect">
-              <option value="5" selected>5 questões (Rápido ~2 min)</option>
-              <option value="7">7 questões (Disputa completa)</option>
-            </select>
+          <label class="field">Nível e Quantidade
+            <div style="display:grid;grid-template-columns:1.3fr .7fr;gap:8px">
+              <select id="duelModeSelect" aria-label="Nível do Duelo">
+                <option value="misto">⚖️ Equilibrado</option>
+                <option value="fixacao">⚡ Fixação Rápida</option>
+                <option value="dificil">🔥 Só Difíceis</option>
+              </select>
+              <select id="duelCountSelect" aria-label="Quantidade de Questões">
+                <option value="5" selected>5 questões</option>
+                <option value="7">7 questões</option>
+              </select>
+            </div>
           </label>
         </div>
         <div class="essayHelperBar" style="margin-top:12px;margin-bottom:0;padding-bottom:0;border-bottom:0">
-          <button type="button" class="action" id="createDuelBankBtn">⚔️ Iniciar Duelo X1 (Banco da Biblioteca)</button>
-          <button type="button" class="ghost" id="createDuelAiBtn">✨ Desafiar com Questões Criadas pela IA</button>
+          <button type="button" class="action" id="createDuelBankBtn">⚔️ Iniciar Duelo X1 Agora</button>
+          <button type="button" class="ghost" id="quickDuelBotAocpBtn">🤖 Duelo Rápido contra Examinador AOCP</button>
+          <button type="button" class="ghost" id="createDuelAiBtn">✨ Desafiar com Questões Inéditas IA</button>
         </div>
       </div>
 
@@ -5314,6 +6248,11 @@
 
     if(q('#refreshDuelHubBtn'))q('#refreshDuelHubBtn').onclick=()=>loadDuelArenaHub(false);
     if(q('#createDuelBankBtn'))q('#createDuelBankBtn').onclick=()=>launchDuelChallenge(false);
+    if(q('#quickDuelBotAocpBtn'))q('#quickDuelBotAocpBtn').onclick=()=>{
+      if(q('#duelOpponentSelect'))q('#duelOpponentSelect').value='bot:aocp';
+      if(q('#duelBoardSelect'))q('#duelBoardSelect').value='Instituto AOCP';
+      launchDuelChallenge(false,'bot:aocp');
+    };
     if(q('#createDuelAiBtn'))q('#createDuelAiBtn').onclick=()=>launchDuelChallenge(true);
     const lobbyContainer=document.createElement('div');
     lobbyContainer.id='duelLobbyChatSection';
@@ -6151,17 +7090,65 @@
       }
       const statsEl=q('#slTrailSourceStats');
       if(statsEl){
+        ensureNativeQuestionBankLoaded();
         const subj=typeof selectedLearningSubject!=='undefined'?selectedLearningSubject:'';
         const sKey=typeof subjectKey==='function'?subjectKey(subj):'';
         const matCount=(ALL_SUMMARIES||[]).filter(s=>!sKey||subjectKey(s.category)===sKey).length;
         const subjQs=(ALL_QUESTIONS||[]).filter(item=>!sKey||subjectKey(learningCategory(item.subject))===sKey);
         const aiQCount=subjQs.filter(item=>normalizedOrigin(item)==='autoral').length;
         const simQCount=subjQs.filter(item=>normalizedOrigin(item)!=='autoral').length;
+        const aocpCount=subjQs.filter(item=>questionMatchesBoardFilter(item,'Instituto AOCP')).length;
         statsEl.innerHTML=`
           <span class="slStatChip">📚 <b>${matCount}</b> resumo(s) de material</span>
+          <span class="slStatChip">🎯 <b>${simQCount}</b> de provas/bancas (${aocpCount} AOCP)</span>
           <span class="slStatChip">✨ <b>${aiQCount}</b> questão(ões) IA</span>
-          <span class="slStatChip">🎯 <b>${simQCount}</b> de provas/simulados</span>
         `;
+      }
+      const rail=q('#disciplineRail');
+      if(rail&&!q('#trailControlToolbar')){
+        const savedTrailBoard=localStorage.getItem('jornada-trail-board-v118')||'all';
+        window._selectedTrailBoard=savedTrailBoard;
+        rail.insertAdjacentHTML('beforebegin',`
+          <div class="trailControlToolbar" id="trailControlToolbar">
+            <label class="trailBoardField">
+              <span>🎯 Banca prioritária na Trilha:</span>
+              <select id="trailBoardFilter">
+                <option value="all">Todas as Bancas (Completa)</option>
+                <option value="Instituto AOCP">Instituto AOCP (PMPE / CBMPE)</option>
+                <option value="Cebraspe">Cebraspe (CESPE)</option>
+                <option value="FGV Conhecimento">FGV Conhecimento</option>
+                <option value="UPENET/IAUPE">UPENET / IAUPE</option>
+                <option value="IBFC">IBFC</option>
+              </select>
+            </label>
+            <div class="trailHeartsBox">
+              <span id="trailHeartsStatusBadge">♥♥♥ 3/3 vidas</span>
+              <button type="button" class="ghost small" id="restoreTrailHeartsToolbarBtn">❤️ Restaurar 3 Vidas</button>
+            </div>
+          </div>
+        `);
+        const tbSel=q('#trailBoardFilter');
+        if(tbSel){
+          tbSel.value=savedTrailBoard;
+          tbSel.onchange=()=>{
+            window._selectedTrailBoard=tbSel.value||'all';
+            try{localStorage.setItem('jornada-trail-board-v118',window._selectedTrailBoard)}catch{}
+            if(typeof renderLearning==='function')renderLearning();
+            enhanceSoloLevelingVisuals();
+          };
+        }
+        const rhBtn=q('#restoreTrailHeartsToolbarBtn');
+        if(rhBtn){
+          rhBtn.onclick=()=>{
+            if(typeof window.restoreTrailHeartsNow==='function')window.restoreTrailHeartsNow();
+            enhanceSoloLevelingVisuals();
+          };
+        }
+      }
+      const heartsBadge=q('#trailHeartsStatusBadge');
+      if(heartsBadge&&typeof availableTrailHearts==='function'){
+        const h=availableTrailHearts();
+        heartsBadge.textContent=`${'♥'.repeat(Math.max(0,h))}${'♡'.repeat(Math.max(0,3-h))} ${h}/3 vidas`;
       }
     }
 
@@ -6997,6 +7984,10 @@
       });
     });
   }
+  ensureNativeQuestionBankLoaded();
+  LEARNING_SUBJECTS=typeof window.computeValidLearningSubjects==='function'?window.computeValidLearningSubjects():LEARNING_SUBJECTS;
+  if(typeof renderQuestionFilters==='function')renderQuestionFilters();
+  if(typeof renderLearning==='function')renderLearning();
   initLegalAndAccessibilityEnhancements();
   setTimeout(()=>{
     syncCommunityLibraryForActivePortal();
