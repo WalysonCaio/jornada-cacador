@@ -987,3 +987,30 @@ GABARITO DEFINITIVO
 
   console.log("OK: Banco Nativo (Instituto AOCP e bancas), Treino Rápido 1-Clique (boaResposta), Trilha de Aprendizagem e Duelo X1 com Bots validados (v118-D).");
 }
+
+
+// ── Validação v118-E: Redesign Moderno e Responsivo do Banco/Caixas de Questões, Duelo Rápido Multi-Bancas (AOCP, Cebraspe, FGV, UPENET, Sombra) e Popup de Confirmação ao Sair do Duelo ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+
+  // 1) Verifica Caixa de Perguntas Moderna e Responsiva (#questionDialog, #lessonDialog e .duelPlayStage)
+  assert.ok(htmlSrc.includes('id="questionProgressFill"') && htmlSrc.includes('id="questionMetaPills"') && htmlSrc.includes('id="closeQuestionsTopBtn"'), "O modal de questões deve possuir barra de progresso no topo, pílulas de metadados e botão rápido de fechar");
+  assert.ok(v77Src.includes("optLetterBadge") && v77Src.includes("formatStatementWithHighlights") && v77Src.includes("subjectIconForName"), "As alternativas devem exibir badges circulares (A, B, C, D), ícones por disciplina e destaque de comando no enunciado");
+
+  // 2) Verifica Duelo Rápido contra múltiplas bancas (AOCP, Cebraspe, FGV, UPENET e Sombra Rank S)
+  assert.ok(
+    v77Src.includes("quickDuelBotAocpBtn") &&
+    v77Src.includes("quickDuelBotCebraspeBtn") &&
+    v77Src.includes("quickDuelBotFgvBtn") &&
+    v77Src.includes("quickDuelBotUpenetBtn") &&
+    v77Src.includes("quickDuelBotSombraBtn"),
+    "A Arena de Duelo X1 deve ter botões de Duelo Rápido em 1 clique para Instituto AOCP, Cebraspe, FGV, UPENET e Sombra Rank S"
+  );
+
+  // 3) Verifica Botão de Sair do Duelo Ativo + Popup de Confirmação com Pausa de Cronômetro
+  assert.ok(htmlSrc.includes('id="confirmExitDuelDialog"') && htmlSrc.includes('id="cancelExitDuelBtn"') && htmlSrc.includes('id="confirmExitDuelActionBtn"'), "Deve existir o modal de confirmação #confirmExitDuelDialog no HTML");
+  assert.ok(v77Src.includes("exitActiveDuelBtn") && v77Src.includes("requestExitActiveDuel") && v77Src.includes("confirmExitActiveDuel") && v77Src.includes("cancelExitActiveDuel"), "Deve existir o fluxo completo de pedir confirmação para sair do duelo (pausando e retomando o timer se cancelar)");
+
+  console.log("OK: Redesign Moderno das Caixas de Questões, Duelo Rápido Multi-Bancas (AOCP, Cebraspe, FGV, UPENET) e Popup de Confirmação ao Sair do Duelo validados (v118-E).");
+}

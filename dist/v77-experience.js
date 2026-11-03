@@ -1002,12 +1002,37 @@
     const hay = `${item?.board || ''} ${item?.statement || ''} ${item?.explanation || ''} ${item?.topic || ''}`.toLocaleLowerCase('pt-BR');
     if (target.includes('aocp')) return /aocp/.test(hay);
     if (target.includes('cebraspe') || target.includes('cespe')) return /cebraspe|cespe/.test(hay);
-    if (target.includes('fgv')) return /fgv|fundacao getulio vargas/.test(hay);
+    if (target.includes('fgv')) return /\bfgv\b|fundacao getulio vargas/.test(hay);
     if (target.includes('upenet') || target.includes('iaupe')) return /upenet|iaupe/.test(hay);
-    if (target.includes('ibfc')) return /ibfc/.test(hay);
+    if (target.includes('ibfc')) return /\bibfc\b/.test(hay);
     if (target.includes('idecan')) return /idecan/.test(hay);
     return hay.includes(target);
   }
+
+  function subjectIconForName(subj) {
+    const k = String(subj || '').toLocaleLowerCase('pt-BR');
+    if (/portugues|redacao|gramatica/.test(k)) return '📘';
+    if (/constitucional/.test(k)) return '⚖️';
+    if (/extravagante|especial|drogas|maria|tortura|abuso/.test(k)) return '🚨';
+    if (/processual\s+penal|processo\s+penal/.test(k)) return '🔎';
+    if (/penal/.test(k)) return '🚔';
+    if (/administrativo/.test(k)) return '🏛️';
+    if (/raciocinio|logico|rlm|matematica/.test(k)) return '🧠';
+    if (/informatica|computa/.test(k)) return '💻';
+    if (/historia|geografia|pernambuco/.test(k)) return '🏺';
+    if (/humanos|dudh/.test(k)) return '🕊️';
+    if (/militar|estatuto/.test(k)) return '🎖️';
+    if (/fisica|incendio/.test(k)) return '🔥';
+    if (/biologia|socorro|anatomia/.test(k)) return '🧬';
+    return '🎯';
+  }
+  window.subjectIconForName = subjectIconForName;
+
+  function formatStatementWithHighlights(rawText) {
+    const safe = escText(String(rawText || '').trim());
+    return safe.replace(/\b(INCORRETA|INCORRETO|CORRETA|CORRETO|EXCETO|SALVO|NÃO|ERRADA|ERRADO)\b/g, '<span class="qCmdHighlight">$1</span>');
+  }
+  window.formatStatementWithHighlights = formatStatementWithHighlights;
   window.questionMatchesBoardFilter = questionMatchesBoardFilter;
 
   function ensureNativeQuestionBankLoaded() {
@@ -1120,7 +1145,7 @@
         ${boards.map(b=>`<button type="button" class="quickBoardPill ${currentBoard===b.val?'active':''}" data-quick-board="${escText(b.val)}">${escText(b.label)}</button>`).join('')}
       </div>
       <div class="quickSubjectChips">
-        ${subjects.map(([subj,cnt])=>`<button type="button" class="quickSubjectChip" data-quick-subject-launch="${escText(subj)}"><b>${escText(subj)}</b><span>${cnt} q. →</span></button>`).join('')}
+        ${subjects.map(([subj,cnt])=>`<button type="button" class="quickSubjectChip" data-quick-subject-launch="${escText(subj)}"><div class="quickSubjectChipLeft"><span class="quickSubjIcon">${subjectIconForName(subj)}</span><div class="quickSubjText"><b>${escText(subj)}</b><small class="quickSubjSub">Treino progressivo · 1 clique</small></div></div><span class="quickSubjCount">${cnt} q. →</span></button>`).join('')}
       </div>
     `;
     qa('[data-quick-board]').forEach(btn=>{
@@ -1695,23 +1720,35 @@
     toast('Questão e resolução passo a passo salvas nas suas Anotações!');
   }
 
-  // Sobrescreve showQuestion e answerQuestion com Tesoura de Alternativas (TEC/Qconcursos) + Resolução Passo a Passo
+  // Sobrescreve showQuestion e answerQuestion com Caixa de Pergunta Moderna (Estilo Qconcursos / TEC / boaResposta + Solo Leveling)
   window.showQuestion=function(){
     const battle=activeQuestions;
     if(!battle)return;
     const item=battle.questions[battle.current];
     const diff=normalizedDifficulty(item);
-    const diffLabel={facil:'FÁCIL',medio:'MÉDIA',dificil:'DIFÍCIL'}[diff]||'MÉDIA';
-    const origin=normalizedOrigin(item)==='oficial'?'OFICIAL/PROVA':'AUTORAL IA';
-    const levelLabel=battle.mode==='progressive'
-      ? ` · NÍVEL ${diff==='facil'?'1 (BASE)':diff==='medio'?'2 (APLICAÇÃO)':'3 (DOMÍNIO)'}`
-      : '';
-    q('#questionCounter').textContent=`${battle.current+1}/${battle.questions.length} · ${diffLabel} · ${origin}${levelLabel}`;
-    q('#questionText').textContent=item.statement;
-    q('#questionOptions').innerHTML=(item.options||[]).map((o,i)=>`<div class="optionWithScissors"><button type="button" class="optionMainBtn" data-question-index="${i}"><b>${String.fromCharCode(65+i)}.</b> ${escText(o)}</button><button type="button" class="scissorBtn" data-scissor-index="${i}" title="Riscar/eliminar alternativa (estilo TEC/Qconcursos)" aria-label="Riscar alternativa ${String.fromCharCode(65+i)}">✂</button></div>`).join('');
+    const diffLabel={facil:'🟢 Fácil',medio:'🟡 Média',dificil:'🔴 Difícil'}[diff]||'🟡 Média';
+    const boardLabel=item.board||(normalizedOrigin(item)==='oficial'?'Prova Oficial':'Autoral IA');
+    const subjName=learningCategory(item.subject)||'Disciplina';
+    const topicName=shortLabel(item.topic||'Geral',42);
+    const pct=Math.round(((battle.current+1)/Math.max(1,battle.questions.length))*100);
+    if(q('#questionProgressFill'))q('#questionProgressFill').style.width=`${pct}%`;
+    if(q('#questionMetaPills')){
+      q('#questionMetaPills').innerHTML=`
+        <span class="qMetaPill board">🎯 ${escText(boardLabel)}</span>
+        <span class="qMetaPill">${subjectIconForName(subjName)} ${escText(subjName)}</span>
+        <span class="qMetaPill">📌 ${escText(topicName)}</span>
+        <span class="qMetaPill ${diff}">${diffLabel}</span>
+      `;
+    }
+    q('#questionCounter').textContent=`Questão ${battle.current+1} de ${battle.questions.length}`;
+    q('#questionText').innerHTML=formatStatementWithHighlights(item.statement);
+    q('#questionOptions').innerHTML=(item.options||[]).map((o,i)=>`<div class="optionWithScissors"><button type="button" class="optionMainBtn" data-question-index="${i}"><span class="optLetterBadge">${String.fromCharCode(65+i)}</span><span class="optBodyText">${escText(o)}</span></button><button type="button" class="scissorBtn" data-scissor-index="${i}" title="Riscar/eliminar alternativa (estilo TEC/Qconcursos)" aria-label="Riscar alternativa ${String.fromCharCode(65+i)}">✂</button></div>`).join('');
     q('#questionFeedback').innerHTML='';
     q('#nextQuestion').hidden=true;
     battle.answered=false;
+    if(q('#closeQuestionsTopBtn')){
+      q('#closeQuestionsTopBtn').onclick=()=>{activeQuestions=null;q('#questionDialog')?.close()};
+    }
     qa('[data-question-index]').forEach(b=>b.onclick=()=>window.answerQuestion(b,item));
     qa('[data-scissor-index]').forEach(sBtn=>sBtn.onclick=e=>{
       e.stopPropagation();
@@ -5351,10 +5388,11 @@
   ];
 
   const DUEL_EXAMINER_BOTS=[
-    {user_id:'bot:aocp',name:'🤖 Examinador Instituto AOCP',role:'Bot da Banca · Letra da Lei & Prazos',board:'Instituto AOCP',accuracy:0.72,avgTimeS:12,xp:3200,is_bot:true,is_online:true},
-    {user_id:'bot:cebraspe',name:'🤖 Examinador Cebraspe',role:'Bot da Banca · Jurisprudência & Casos',board:'Cebraspe',accuracy:0.78,avgTimeS:11,xp:4100,is_bot:true,is_online:true},
-    {user_id:'bot:fgv',name:'🤖 Examinador FGV Conhecimento',role:'Bot da Banca · Casos Práticos',board:'FGV Conhecimento',accuracy:0.76,avgTimeS:13,xp:3900,is_bot:true,is_online:true},
-    {user_id:'bot:sombra',name:'🤖 Sombra Rank S (Monarca)',role:'Bot Elite · Desafio Máximo',board:'all',accuracy:0.88,avgTimeS:9,xp:5200,is_bot:true,is_online:true}
+    {user_id:'bot:aocp',name:'🤖 Examinador Instituto AOCP',shortBtn:'🎯 Duelo Rápido AOCP',role:'Bot da Banca · Letra da Lei & Prazos',board:'Instituto AOCP',accuracy:0.72,avgTimeS:12,xp:3200,is_bot:true,is_online:true},
+    {user_id:'bot:cebraspe',name:'🤖 Examinador Cebraspe',shortBtn:'⚖️ Duelo Rápido CEBRASPE',role:'Bot da Banca · Jurisprudência & Casos',board:'Cebraspe',accuracy:0.78,avgTimeS:11,xp:4100,is_bot:true,is_online:true},
+    {user_id:'bot:fgv',name:'🤖 Examinador FGV Conhecimento',shortBtn:'🏛️ Duelo Rápido FGV',role:'Bot da Banca · Casos Práticos',board:'FGV Conhecimento',accuracy:0.76,avgTimeS:13,xp:3900,is_bot:true,is_online:true},
+    {user_id:'bot:upenet',name:'🤖 Examinador UPENET/IAUPE',shortBtn:'🛡️ Duelo Rápido UPENET',role:'Bot da Banca · Concursos PE',board:'UPENET/IAUPE',accuracy:0.74,avgTimeS:12,xp:3400,is_bot:true,is_online:true},
+    {user_id:'bot:sombra',name:'🤖 Sombra Rank S (Monarca)',shortBtn:'👑 Desafio Sombra Rank S',role:'Bot Elite · Desafio Máximo',board:'all',accuracy:0.88,avgTimeS:9,xp:5200,is_bot:true,is_online:true}
   ];
   window.DUEL_EXAMINER_BOTS=DUEL_EXAMINER_BOTS;
 
@@ -5766,13 +5804,76 @@
     startDuelQuestionCountdown();
   }
 
+  let pendingDuelExitTargetView=null;
+
+  function requestExitActiveDuel(targetViewId=null){
+    if(!activeDuelSession)return;
+    pendingDuelExitTargetView=targetViewId||null;
+    activeDuelSession.isPaused=true;
+    activeDuelSession.pausedAtMs=Date.now();
+    const dlg=q('#confirmExitDuelDialog');
+    const txt=q('#confirmExitDuelText');
+    const myId=cloudSession?.user?.id||'local';
+    const oppName=activeDuelSession.duel?.challenger_id===myId?activeDuelSession.duel?.opponent_name:activeDuelSession.duel?.challenger_name;
+    if(txt){
+      txt.innerHTML=`Você está na <b>rodada ${activeDuelSession.index+1} de ${activeDuelSession.duel?.questions?.length||5}</b> contra <b>${escText(oppName||'o oponente')}</b>.<br>O cronômetro foi pausado. Deseja realmente abandonar a partida e voltar ao lobby? <i>(Seu XP de estudo nunca é afetado.)</i>`;
+    }
+    if(dlg){
+      if(q('#cancelExitDuelBtn'))q('#cancelExitDuelBtn').onclick=()=>cancelExitActiveDuel();
+      if(q('#confirmExitDuelActionBtn'))q('#confirmExitDuelActionBtn').onclick=()=>confirmExitActiveDuel();
+      if(!dlg.open)dlg.showModal();
+    }else if(confirm('Deseja realmente sair do Duelo X1 em andamento?')){
+      confirmExitActiveDuel();
+    }else{
+      cancelExitActiveDuel();
+    }
+  }
+  window.requestExitActiveDuel=requestExitActiveDuel;
+
+  function cancelExitActiveDuel(){
+    const dlg=q('#confirmExitDuelDialog');
+    if(dlg?.open)dlg.close();
+    if(activeDuelSession&&activeDuelSession.isPaused){
+      const pausedDuration=Math.max(0,Date.now()-(activeDuelSession.pausedAtMs||Date.now()));
+      activeDuelSession.questionStartMs+=pausedDuration;
+      activeDuelSession.isPaused=false;
+      activeDuelSession.pausedAtMs=null;
+    }
+    pendingDuelExitTargetView=null;
+  }
+  window.cancelExitActiveDuel=cancelExitActiveDuel;
+
+  function confirmExitActiveDuel(){
+    const dlg=q('#confirmExitDuelDialog');
+    if(dlg?.open)dlg.close();
+    if(duelRoundTimer){clearInterval(duelRoundTimer);duelRoundTimer=null}
+    const abandoningDuel=activeDuelSession?.duel;
+    activeDuelSession=null;
+    const myId=cloudSession?.user?.id||'local';
+    if(abandoningDuel&&!abandoningDuel.is_bot_duel&&abandoningDuel.id&&abandoningDuel.challenger_id===myId&&!abandoningDuel.challenger_done){
+      cloudFetch('rpc/decline_hunter_duel',{method:'POST',body:JSON.stringify({p_duel_id:abandoningDuel.id})}).catch(()=>undefined);
+      if(Array.isArray(duelHubData?.my_duels)){
+        duelHubData.my_duels=duelHubData.my_duels.filter(d=>String(d.id)!==String(abandoningDuel.id));
+      }
+    }
+    const targetView=pendingDuelExitTargetView;
+    pendingDuelExitTargetView=null;
+    renderDuelArena();
+    if(targetView&&targetView!=='duel'){
+      openView(targetView);
+    }
+    toast('🚪 Você saiu do Duelo X1. Seu progresso e XP de estudo permanecem intactos!');
+  }
+  window.confirmExitActiveDuel=confirmExitActiveDuel;
+
   function startDuelQuestionCountdown(){
     if(duelRoundTimer)clearInterval(duelRoundTimer);
     if(!activeDuelSession)return;
     activeDuelSession.secondsLeft=25;
     activeDuelSession.questionStartMs=Date.now();
+    activeDuelSession.isPaused=false;
     duelRoundTimer=setInterval(()=>{
-      if(!activeDuelSession||activeDuelSession.answered||activeDuelSession.submittingAnswer)return;
+      if(!activeDuelSession||activeDuelSession.answered||activeDuelSession.submittingAnswer||activeDuelSession.isPaused)return;
       const elapsed=Math.floor((Date.now()-activeDuelSession.questionStartMs)/1000);
       const rem=Math.max(0,25-elapsed);
       activeDuelSession.secondsLeft=rem;
@@ -5967,21 +6068,31 @@
       const curQ=duel.questions[index];
       const oppName=duel.challenger_id===myId?duel.opponent_name:duel.challenger_name;
       const letters=['A','B','C','D'];
+      const qDiff=normalizedDifficulty(curQ);
+      const diffBadge={facil:'🟢 Fácil',medio:'🟡 Média',dificil:'🔴 Difícil'}[qDiff]||'🟡 Média';
       root.innerHTML=`
         <div class="duelPlayStage">
-          <div class="sectionHead" style="margin-bottom:6px">
-            <div>
-              <div class="eyebrow">⚔️ DUELO X1 CONTRA ${escText((oppName||'OPONENTE').toUpperCase())} · RODADA ${index+1}/${duel.questions.length}</div>
-              <h2 style="margin:2px 0 0">${escText(curQ.subject||'Disciplina')} · <span style="font-size:.9rem;color:var(--cyan)">${escText(curQ.topic||'Questão')}</span></h2>
+          <div class="sectionHead" style="margin-bottom:8px;align-items:flex-start">
+            <div style="min-width:0;flex:1">
+              <div class="qModalMetaPills" style="margin-bottom:6px">
+                <span class="qMetaPill board">⚔️ VS ${escText(oppName||'Oponente')}</span>
+                <span class="qMetaPill">🎯 ${escText(curQ.board||duel.board||'Estilo Banca')}</span>
+                <span class="qMetaPill">${subjectIconForName(curQ.subject)} ${escText(curQ.subject||'Disciplina')}</span>
+                <span class="qMetaPill ${qDiff}">${diffBadge}</span>
+              </div>
+              <h2 style="margin:2px 0 0;font-size:1.06rem">${escText(curQ.topic||'Desafio X1')} · <span style="font-size:.86rem;color:var(--cyan)">Rodada ${index+1} de ${duel.questions.length}</span></h2>
             </div>
-            <div style="text-align:right">
-              <span class="tag" id="duelLiveTimerText" style="font-size:.95rem;font-weight:900">⏱️ ${secondsLeft}s</span>
-              <div class="small muted" style="margin-top:3px">Placar parcial: <b>${score}/${index}</b> (${totalTimeS}s)</div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="tag" id="duelLiveTimerText" style="font-size:.95rem;font-weight:900">⏱️ ${secondsLeft}s</span>
+                <button type="button" class="ghost danger small" id="exitActiveDuelBtn" style="width:auto;padding:5px 11px;min-height:34px;font-size:.78rem" title="Sair desta partida">🚪 Sair do Duelo</button>
+              </div>
+              <div class="small muted">Placar parcial: <b>${score}/${index}</b> (${totalTimeS}s)</div>
             </div>
           </div>
           <div class="duelTimerBar"><div class="duelTimerFill" id="duelLiveTimerFill" style="width:${Math.round((secondsLeft/25)*100)}%"></div></div>
-          <div id="duelQuestionStatement" style="white-space:pre-line;line-height:1.68;padding:14px;border-radius:12px;background:#071422;border:1px solid #1f3c56;margin-bottom:14px;font-size:.96rem">${escText(curQ.statement)}</div>
-          <div>
+          <div id="duelQuestionStatement">${formatStatementWithHighlights(curQ.statement)}</div>
+          <div class="modernOptionsList">
             ${(curQ.options||[]).map((opt,i)=>`
               <button type="button" class="duelOptBtn" data-duel-opt="${i}">
                 <b>${letters[i]||i+1}</b>
@@ -5992,6 +6103,7 @@
           <div id="duelRoundFeedback" hidden></div>
         </div>
       `;
+      if(q('#exitActiveDuelBtn'))q('#exitActiveDuelBtn').onclick=()=>requestExitActiveDuel(null);
       qa('[data-duel-opt]').forEach(btn=>{
         btn.onclick=()=>answerDuelQuestion(Number(btn.dataset.duelOpt));
       });
@@ -6121,9 +6233,21 @@
           </label>
         </div>
         <div class="essayHelperBar" style="margin-top:12px;margin-bottom:0;padding-bottom:0;border-bottom:0">
-          <button type="button" class="action" id="createDuelBankBtn">⚔️ Iniciar Duelo X1 Agora</button>
-          <button type="button" class="ghost" id="quickDuelBotAocpBtn">🤖 Duelo Rápido contra Examinador AOCP</button>
-          <button type="button" class="ghost" id="createDuelAiBtn">✨ Desafiar com Questões Inéditas IA</button>
+          <button type="button" class="action" id="createDuelBankBtn">⚔️ Iniciar Duelo X1 com a Seleção Acima</button>
+          <button type="button" class="ghost" id="createDuelAiBtn">✨ Desafiar com Questões Inéditas Criadas pela IA</button>
+        </div>
+        <div class="duelQuickBotsBar">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="eyebrow" style="color:var(--cyan)">⚡ DUELO RÁPIDO EM 1 CLIQUE CONTRA AS BANCAS (SIMULAÇÃO SOLO X1)</span>
+            <span class="small muted">Partida imediata · 25s por questão</span>
+          </div>
+          <div class="duelQuickBotsGrid">
+            <button type="button" class="duelQuickBotBtn" id="quickDuelBotAocpBtn" data-quick-bot-duel="bot:aocp|Instituto AOCP"><span>🎯 Examinador AOCP</span><small>Jogar →</small></button>
+            <button type="button" class="duelQuickBotBtn" id="quickDuelBotCebraspeBtn" data-quick-bot-duel="bot:cebraspe|Cebraspe"><span>⚖️ Examinador CEBRASPE</span><small>Jogar →</small></button>
+            <button type="button" class="duelQuickBotBtn" id="quickDuelBotFgvBtn" data-quick-bot-duel="bot:fgv|FGV Conhecimento"><span>🏛️ Examinador FGV</span><small>Jogar →</small></button>
+            <button type="button" class="duelQuickBotBtn" id="quickDuelBotUpenetBtn" data-quick-bot-duel="bot:upenet|UPENET/IAUPE"><span>🛡️ Examinador UPENET</span><small>Jogar →</small></button>
+            <button type="button" class="duelQuickBotBtn" id="quickDuelBotSombraBtn" data-quick-bot-duel="bot:sombra|all"><span>👑 Sombra Rank S</span><small>Elite →</small></button>
+          </div>
         </div>
       </div>
 
@@ -6248,11 +6372,15 @@
 
     if(q('#refreshDuelHubBtn'))q('#refreshDuelHubBtn').onclick=()=>loadDuelArenaHub(false);
     if(q('#createDuelBankBtn'))q('#createDuelBankBtn').onclick=()=>launchDuelChallenge(false);
-    if(q('#quickDuelBotAocpBtn'))q('#quickDuelBotAocpBtn').onclick=()=>{
-      if(q('#duelOpponentSelect'))q('#duelOpponentSelect').value='bot:aocp';
-      if(q('#duelBoardSelect'))q('#duelBoardSelect').value='Instituto AOCP';
-      launchDuelChallenge(false,'bot:aocp');
-    };
+    qa('[data-quick-bot-duel]').forEach(btn=>{
+      btn.onclick=()=>{
+        const [botId,boardVal]=(btn.dataset.quickBotDuel||'bot:aocp|Instituto AOCP').split('|');
+        if(q('#duelOpponentSelect'))q('#duelOpponentSelect').value=botId;
+        if(q('#duelBoardSelect'))q('#duelBoardSelect').value=boardVal||'all';
+        if(botId==='bot:sombra'&&q('#duelModeSelect'))q('#duelModeSelect').value='dificil';
+        launchDuelChallenge(false,botId);
+      };
+    });
     if(q('#createDuelAiBtn'))q('#createDuelAiBtn').onclick=()=>launchDuelChallenge(true);
     const lobbyContainer=document.createElement('div');
     lobbyContainer.id='duelLobbyChatSection';
@@ -7017,6 +7145,10 @@
 
   const baseOpenView=openView;
   openView=function(id){
+    if(activeDuelSession&&id!=='duel'){
+      requestExitActiveDuel(id);
+      return;
+    }
     baseOpenView(id);
     try{sessionStorage.setItem(viewKey,id)}catch{}
     runV77ViewEnhancements(id,false);
@@ -7155,7 +7287,7 @@
     // 3) Banner "Chefes das Bancas (AOCP · CEBRASPE · FGV · IDECAN)" na Central de Questões (#report)
     const reportView=q('#report');
     if(reportView&&!q('#slBossesRaidBanner')){
-      const anchor=q('#examBankHub')||reportView.querySelector('.sectionHead');
+      const anchor=q('#examBankHub')||q('#report .reportColumns')||q('#report .questionTrainer');
       if(anchor){
         const bannerHtml=`
           <div class="slBannerCard slBossesBanner" id="slBossesRaidBanner">
