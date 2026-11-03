@@ -2355,14 +2355,187 @@
   }
 
 
-  // 8. Repetição Espaçada SM-2 nos Flashcards (Estilo Anki / Caveira) + Atalhos 1/2/3
+  // 8. Repetição Espaçada SM-2 nos Flashcards (Estilo Anki / Caveira) + Professor Coordenador IA + Limpeza Pedagógica
+  async function purgeNoisyFlashcardsNow(showFeedback=true){
+    const checkValid=(qTxt,aTxt)=>typeof window.isValidFlashcardItem==='function'?window.isValidFlashcardItem(qTxt,aTxt):Boolean(qTxt&&aTxt);
+    const beforeLen=(ALL_FLASHCARDS||[]).length;
+    ALL_FLASHCARDS=(ALL_FLASHCARDS||[]).filter(c=>checkValid(c?.[1],c?.[2]));
+    const removedMem=Math.max(0,beforeLen-ALL_FLASHCARDS.length);
+    if(state?.customFlashcardsByCampaign){
+      for(const k of Object.keys(state.customFlashcardsByCampaign)){
+        if(Array.isArray(state.customFlashcardsByCampaign[k])){
+          state.customFlashcardsByCampaign[k]=state.customFlashcardsByCampaign[k].filter(c=>checkValid(c?.[1],c?.[2]));
+        }
+      }
+    }
+    // Também limpa no Supabase os cartões fora do padrão na campanha ativa
+    let cleanedDbRows=0;
+    if(cloudSession&&navigator.onLine&&activeCampaign()?.dbId){
+      try{
+        const res=await cloudFetch(`generated_study_content?campaign_id=eq.${activeCampaign().dbId}&select=id,content,content_type,source_document_id`).catch(()=>null);
+        const rows=res?.ok?await res.json().catch(()=>[]):[];
+        for(const r of (Array.isArray(rows)?rows:[])){
+          const fcs=r?.content?.flashcards;
+          if(!Array.isArray(fcs)||!fcs.length)continue;
+          const pDoc=(cloudDocuments||[]).find(d=>String(d.id)===String(r.source_document_id))||null;
+          const allowRow=typeof window.isAllowedFlashcardRow==='function'?window.isAllowedFlashcardRow(r,pDoc):true;
+          const nextFcs=allowRow?fcs.filter(c=>checkValid(c?.question,c?.answer)):[];
+          if(nextFcs.length!==fcs.length){
+            cleanedDbRows++;
+            await cloudFetch(`generated_study_content?id=eq.${encodeURIComponent(r.id)}`,{
+              method:'PATCH',
+              body:JSON.stringify({content:{...r.content,flashcards:nextFcs}})
+            }).catch(()=>undefined);
+          }
+        }
+      }catch{}
+    }
+    save();
+    window.persistToLocalDatabase?.(state?.activeCampaignId);
+    if(typeof renderCard==='function')renderCard();
+    updateFlashcardSpacedStats();
+    if(showFeedback){
+      toast(removedMem>0||cleanedDbRows>0
+        ?`🧹 Limpeza concluída: ${removedMem} cartão(ões) fora do padrão removido(s) da fila e ${cleanedDbRows} pacote(s) higienizado(s) no banco!`
+        :'✓ Todos os flashcards atuais já estão no padrão pedagógico (Active Recall)!');
+    }
+  }
+  window.purgeNoisyFlashcardsNow=purgeNoisyFlashcardsNow;
+
+  async function generateProfessorFlashcardsForSubject(btnEl){
+    if(!cloudSession)return toast('Entre na sua conta para gerar Flashcards de Alta Incidência com o Professor IA.');
+    const filterVal=q('#cardFilter')?.value||'all';
+    const missions=typeof missionPool==='function'?missionPool():[];
+    const subjects=[...new Set([...missions.map(m=>canonicalSubjectName(m.subject)),...(LEARNING_SUBJECTS||[])])].filter(Boolean);
+    const defaultSubj=filterVal!=='all'?filterVal:(subjects[0]||'Língua Portuguesa');
+    const chosenSubj=filterVal!=='all'?filterVal:prompt(`Para qual disciplina deseja gerar 8 Flashcards de Alta Incidência (Método Anki / Professor Coordenador)?\n\nDisciplinas disponíveis: ${subjects.slice(0,8).join(', ')}`,defaultSubj);
+    if(!chosenSubj||!chosenSubj.trim())return;
+    const subj=canonicalSubjectName(chosenSubj.trim());
+    const subjMissions=missions.filter(m=>topicKey(canonicalSubjectName(m.subject))===topicKey(subj)).map(m=>m.name).slice(0,20);
+    const contextStr=subjMissions.length?`Tópicos do edital de ${subj}: ${subjMissions.join('; ')}`:`Concurso: ${activeCampaign()?.name||'Carreira Policial'}`;
+    if(btnEl){btnEl.disabled=true;btnEl.textContent='⏳ Professor IA criando cartões...'}
+    try{
+      const session=await validSession();
+      if(!session)throw new Error('Sessão expirada.');
+      const res=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{
+        method:'POST',
+        headers:{...authHeaders(session.access_token)},
+        body:JSON.stringify({
+          action:'generate_pedagogical_flashcards',
+          subject:subj,
+          topic:`Pontos de Alta Incidência em ${subj}`,
+          board:'Instituto AOCP / Cebraspe / FGV',
+          count:8,
+          context:contextStr,
+          campaign_id:activeCampaign()?.dbId
+        })
+      });
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok)throw new Error(data.error||'Não foi possível gerar os flashcards.');
+      const cards=(Array.isArray(data.flashcards)?data.flashcards:[]).filter(c=>typeof window.isValidFlashcardItem==='function'?window.isValidFlashcardItem(c.question,c.answer):Boolean(c.question&&c.answer));
+      if(!cards.length)throw new Error('Nenhum cartão válido retornado. Tente novamente.');
+      const existingKeys=new Set((ALL_FLASHCARDS||[]).map(c=>`${topicKey(c[0])}|${topicKey(c[1])}`));
+      let added=0;
+      state.customFlashcardsByCampaign=state.customFlashcardsByCampaign||{};
+      const campId=state.activeCampaignId;
+      state.customFlashcardsByCampaign[campId]=state.customFlashcardsByCampaign[campId]||[];
+      for(const c of cards){
+        const k=`${topicKey(subj)}|${topicKey(c.question)}`;
+        if(!existingKeys.has(k)){
+          ALL_FLASHCARDS.unshift([subj,c.question,c.answer]);
+          state.customFlashcardsByCampaign[campId].push([subj,c.question,c.answer]);
+          existingKeys.add(k);
+          added++;
+        }
+      }
+      save();
+      window.persistToLocalDatabase?.(campId);
+      if(typeof renderStudy==='function')renderStudy();
+      if(q('#cardFilter')&&[...q('#cardFilter').options].some(o=>o.value===subj)){
+        q('#cardFilter').value=subj;
+        currentCard=0;
+        if(typeof renderCard==='function')renderCard();
+      }
+      updateFlashcardSpacedStats();
+      toast(`✨ ${added} Flashcards de Alta Incidência de ${subj} criados pelo Professor IA!`);
+    }catch(err){
+      toast(err.message);
+    }finally{
+      if(btnEl){btnEl.disabled=false;btnEl.textContent='✨ Gerar Flashcards da Banca (IA)'}
+    }
+  }
+
+  function createManualUserFlashcard(){
+    const filterVal=q('#cardFilter')?.value||'all';
+    const defaultSubj=filterVal!=='all'?filterVal:(LEARNING_SUBJECTS?.[0]||'Língua Portuguesa');
+    const subjInput=prompt('Disciplina do Flashcard:',defaultSubj);
+    if(!subjInput||!subjInput.trim())return;
+    const front=prompt('FRENTE DO CARTÃO (Pergunta direta de memorização, conceito ou artigo):');
+    if(!front||front.trim().length<6)return toast('Digite uma pergunta clara para a frente do cartão.');
+    const back=prompt('VERSO DO CARTÃO (Resposta direta e objetiva):');
+    if(!back||back.trim().length<3)return toast('Digite a resposta para o verso do cartão.');
+    const subj=canonicalSubjectName(subjInput.trim());
+    state.customFlashcardsByCampaign=state.customFlashcardsByCampaign||{};
+    const campId=state.activeCampaignId;
+    state.customFlashcardsByCampaign[campId]=state.customFlashcardsByCampaign[campId]||[];
+    state.customFlashcardsByCampaign[campId].unshift([subj,front.trim(),back.trim()]);
+    ALL_FLASHCARDS.unshift([subj,front.trim(),back.trim()]);
+    save();
+    window.persistToLocalDatabase?.(campId);
+    currentCard=0;
+    if(typeof renderStudy==='function')renderStudy();
+    updateFlashcardSpacedStats();
+    toast(`🃏 Flashcard manual adicionado em ${subj}!`);
+  }
+
+  function dismissCurrentDisplayedFlashcard(){
+    const cardEl=q('#flashcard');
+    const key=cardEl?.dataset?.card;
+    const qTxt=q('#cardQuestion')?.textContent||'';
+    if(!key||!qTxt)return toast('Nenhum cartão selecionado.');
+    state.dismissedFlashcardKeys=state.dismissedFlashcardKeys||{};
+    state.dismissedFlashcardKeys[key]=true;
+    ALL_FLASHCARDS=(ALL_FLASHCARDS||[]).filter(c=>fcKey(c)!==key&&c?.[1]!==qTxt);
+    if(state.customFlashcardsByCampaign?.[state.activeCampaignId]){
+      state.customFlashcardsByCampaign[state.activeCampaignId]=state.customFlashcardsByCampaign[state.activeCampaignId].filter(c=>fcKey(c)!==key&&c?.[1]!==qTxt);
+    }
+    save();
+    window.persistToLocalDatabase?.(state?.activeCampaignId);
+    if(typeof renderCard==='function')renderCard();
+    updateFlashcardSpacedStats();
+    toast('🗑️ Cartão removido do seu baralho!');
+  }
+
   function enhanceFlashcardsSpacedRepetition(){
     const cardsPanel=q('#cards');
-    if(!cardsPanel||q('#flashcardSpacedBar'))return;
-    const head=cardsPanel.querySelector('.sectionHead');
-    if(head){
-      head.insertAdjacentHTML('afterend',`<div class="flashSpacedBar" id="flashcardSpacedBar"><span class="small muted" id="flashSpacedStats">Repetição espaçada ativa (1=Difícil · 2=Rever · 3=Fácil · Espaço=Virar)</span><label class="small" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="flashDueOnlyToggle"> Apenas pendentes/difíceis</label></div>`);
-      q('#flashDueOnlyToggle').onchange=()=>{if(typeof renderCard==='function')renderCard();updateFlashcardSpacedStats()};
+    if(!cardsPanel)return;
+    // Sempre higieniza cartões de ruído na memória ao abrir a aba
+    if(typeof window.isValidFlashcardItem==='function'&&Array.isArray(ALL_FLASHCARDS)){
+      ALL_FLASHCARDS=ALL_FLASHCARDS.filter(c=>window.isValidFlashcardItem(c?.[1],c?.[2]));
+    }
+    if(!q('#flashcardSpacedBar')){
+      const head=cardsPanel.querySelector('.sectionHead');
+      if(head){
+        head.insertAdjacentHTML('afterend',`
+          <div class="flashSpacedBar" id="flashcardSpacedBar" style="flex-direction:column;align-items:stretch;gap:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+              <span class="small muted" id="flashSpacedStats">Repetição espaçada ativa (1=Difícil · 2=Rever · 3=Fácil · Espaço=Virar)</span>
+              <label class="small" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="flashDueOnlyToggle"> Apenas pendentes/difíceis</label>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-top:6px;border-top:1px solid rgba(56,189,248,.16)">
+              <button type="button" class="action small" id="generateAiProfessorFlashcardsBtn" style="width:auto;padding:6px 11px;font-size:.76rem">✨ Gerar Flashcards da Banca (IA)</button>
+              <button type="button" class="ghost small" id="createManualFlashcardBtn" style="width:auto;padding:6px 10px;font-size:.76rem">➕ Criar Cartão</button>
+              <button type="button" class="ghost small" id="purgeNoisyFlashcardsBtn" style="width:auto;padding:6px 10px;font-size:.76rem">🧹 Limpar Cartões Fora do Padrão</button>
+              <button type="button" class="ghost danger small" id="deleteCurrentFlashcardBtn" style="width:auto;padding:6px 10px;font-size:.76rem;margin-left:auto">🗑️ Excluir este Cartão</button>
+            </div>
+          </div>
+        `);
+        q('#flashDueOnlyToggle').onchange=()=>{if(typeof renderCard==='function')renderCard();updateFlashcardSpacedStats()};
+        q('#generateAiProfessorFlashcardsBtn').onclick=e=>generateProfessorFlashcardsForSubject(e.currentTarget);
+        q('#createManualFlashcardBtn').onclick=createManualUserFlashcard;
+        q('#purgeNoisyFlashcardsBtn').onclick=()=>purgeNoisyFlashcardsNow(true);
+        q('#deleteCurrentFlashcardBtn').onclick=dismissCurrentDisplayedFlashcard;
+      }
     }
     if(!window._v77FlashListenersBound){
       window._v77FlashListenersBound=true;
@@ -2375,13 +2548,16 @@
         else if(e.key==='3'){e.preventDefault();window.gradeCard?.('easy')}
       });
     }
+    if(typeof renderCard==='function')renderCard();
     updateFlashcardSpacedStats();
   }
 
   function updateFlashcardSpacedStats(){
     const statsEl=q('#flashSpacedStats');
     if(!statsEl)return;
-    const now=Date.now(),cards=(ALL_FLASHCARDS||[]).map((c,i)=>({c,i,key:fcKey(c)}));
+    const validList=(ALL_FLASHCARDS||[]).filter(c=>typeof window.isValidFlashcardItem==='function'?window.isValidFlashcardItem(c?.[1],c?.[2]):true);
+    if(validList.length!==(ALL_FLASHCARDS||[]).length)ALL_FLASHCARDS=validList;
+    const now=Date.now(),cards=validList.map((c,i)=>({c,i,key:fcKey(c)}));
     let due=0,hard=0,mastered=0;
     for(const x of cards){const p=fcProgress(x);if(fcDue(p,now))due++;if(p?.level==='hard')hard++;if(p&&Number(p.streak||0)>=3)mastered++}
     statsEl.textContent=`Total: ${cards.length} cartões · ${due} para revisar agora · ${hard} difíceis · ${mastered} dominados (Atalhos: 1, 2, 3)`;
@@ -3735,7 +3911,9 @@
         const cleanTitle=sanitizePersonalWatermarks(row.title||'Assunto da Comunidade');
         if(typeof window.isInvalidTrailSubject==='function'&&window.isInvalidTrailSubject(cat,cleanTitle,row.content?.source||'',parentDoc))continue;
         const sumKey=`${topicKey(cat)}|${topicKey(cleanTitle)}`;
-        if(!isQuestionPackRow&&!existingSumKeys.has(sumKey)){
+        const isValidSum=typeof window.isValidPedagogicalSummary==='function'?window.isValidPedagogicalSummary(row):true;
+        if(!isQuestionPackRow&&isValidSum&&!existingSumKeys.has(sumKey)){
+          const rawMnem=sanitizePersonalWatermarks(row.content?.mnemonic||'');
           ALL_SUMMARIES.push({
             id:row.id,
             documentId:row.source_document_id,
@@ -3746,7 +3924,7 @@
             points:(row.content?.points||[]).map(sanitizePersonalWatermarks),
             example:sanitizePersonalWatermarks(row.content?.example||''),
             bizu:sanitizePersonalWatermarks(row.content?.bizu||''),
-            mnemonic:sanitizePersonalWatermarks(row.content?.mnemonic||''),
+            mnemonic:typeof window.cleanPedagogicalMnemonic==='function'?window.cleanPedagogicalMnemonic(rawMnem):rawMnem,
             trap:sanitizePersonalWatermarks(row.content?.trap||''),
             is_community:true
           });

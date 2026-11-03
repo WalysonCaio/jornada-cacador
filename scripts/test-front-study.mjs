@@ -917,3 +917,49 @@ GABARITO DEFINITIVO
 
   console.log("OK: Botão 🔗 Unificar editais (limite máx. 2 provas), Contagem Regressiva Dupla e Desunificação sem Perda de Progresso (v118-B) validados.");
 }
+
+
+// ── Validação v118-C: Bloqueio de Flashcards de Ruído Estrutural ("Quais páginas compõem este bloco textual?", "Existe conteúdo... nestas páginas?"), Mnemônicos Honestos e Radar da Banca com Busca Web ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const astSrc = readFileSync(new URL("../supabase/functions/assistente-pmpe/index.ts", import.meta.url), "utf8");
+  const matSrc = readFileSync(new URL("../supabase/functions/material-gemini/index.ts", import.meta.url), "utf8");
+  const sqlV99 = readFileSync(new URL("../supabase/migrations/20261103120000_v99_universal_community_library.sql", import.meta.url), "utf8");
+  const scriptSrc = htmlSrc.match(/<script>([\s\S]*?)<\/script>/)[1];
+
+  const fnSlice = [
+    scriptSrc.slice(scriptSrc.indexOf("function normalizeText("), scriptSrc.indexOf("function missionForQuestion(")),
+    "function belongsToActiveCampaign(item){return true} function fcKey(c){return String(c?.[1]||'')}",
+    scriptSrc.slice(scriptSrc.indexOf("function isAllowedFlashcardDocType("), scriptSrc.indexOf("async function loadGeneratedContent(")),
+  ].join("\n");
+
+  const ctx = { window: {}, state: { dismissedFlashcardKeys: {} } };
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(fnSlice, ctx);
+
+  // 1) Testa os 2 cartões exatos das capturas de tela do usuário: devem ser BLOQUEADOS imediatamente!
+  assert.equal(ctx.isValidFlashcardItem("Quais páginas compõem este bloco textual?", "As páginas 12 a 18 da apostila."), false, "Deve bloquear pergunta sobre páginas que compõem bloco textual");
+  assert.equal(ctx.isValidFlashcardItem("Existe conteúdo morfológico detalhado nestas páginas específicas?", "Não, estas páginas trazem apenas exercícios."), false, "Deve bloquear pergunta sobre existência de conteúdo nestas páginas específicas");
+  assert.equal(ctx.isValidFlashcardItem("O que é abordado neste trecho do PDF?", "Conceitos iniciais da aula."), false, "Deve bloquear meta-perguntas sobre trecho do PDF");
+  assert.equal(ctx.isValidFlashcardItem("Qual a diferença entre adjunto adnominal e complemento nominal?", "O adjunto adnominal acompanha substantivo (concreto ou abstrato, com valor agente/posse); o complemento nominal completa substantivo abstrato (valor paciente), adjetivo ou advérbio."), true, "Flashcard pedagógico real de Língua Portuguesa deve ser aprovado");
+
+  // 2) Testa Mnemônicos: falsos/vazios ("Não há", "Sem mnemônico específico") viram "", enquanto mnemônico real do autor permanece
+  assert.equal(ctx.cleanPedagogicalMnemonic("Não há mnemônico específico neste trecho."), "");
+  assert.equal(ctx.cleanPedagogicalMnemonic("Nenhum"), "");
+  assert.equal(ctx.cleanPedagogicalMnemonic("N/A"), "");
+  assert.equal(ctx.cleanPedagogicalMnemonic("LIMPE: Legalidade, Impessoalidade, Moralidade, Publicidade e Eficiência."), "LIMPE: Legalidade, Impessoalidade, Moralidade, Publicidade e Eficiência.");
+
+  // 3) Testa Resumos: resumos que falam sobre "bloco textual" ou "nestas páginas específicas" são bloqueados
+  assert.equal(ctx.isValidPedagogicalSummary({ title: "Bloco 2 — Páginas 10 a 15", explanation: "Neste bloco textual não há conteúdo detalhado." }), false);
+  assert.equal(ctx.isValidPedagogicalSummary({ title: "Emprego do Sinal Indicativo de Crase", explanation: "A crase é a fusão da preposição a com o artigo definido feminino a..." }), true);
+
+  // 4) Verifica Google Search Grounding (google_search), Gerador de Flashcards Anki e SQL de limpeza automática
+  assert.ok(astSrc.includes("google_search") && astSrc.includes("generate_pedagogical_flashcards"), "assistente-pmpe deve ter Google Search Grounding e gerador de flashcards pedagógicos");
+  assert.ok(matSrc.includes("minItems: 0") && matSrc.includes("sanitizeMnemonic"), "material-gemini deve permitir minItems: 0 para não forçar cartões de ruído e higienizar mnemônicos");
+  assert.ok(sqlV99.includes("is_valid_pedagogical_flashcard"), "SQL v99 deve limpar automaticamente os flashcards inválidos já salvos no banco");
+  assert.ok(v77Src.includes("generateAiProfessorFlashcardsBtn") && v77Src.includes("purgeNoisyFlashcardsNow"), "Aba Flashcards deve ter botões de Gerar Flashcards da Banca (IA) e Limpar Cartões Fora do Padrão");
+
+  console.log("OK: Bloqueio de Flashcards de Ruído Estrutural, Mnemônicos Honestos e Radar da Banca com Busca Web (v118-C) validados.");
+}

@@ -702,7 +702,7 @@ async function callOpenAiCompatibleProvider(
       return null;
     }
     const parsed = jsonFromModelText(data?.choices?.[0]?.message?.content);
-    if (!Array.isArray(parsed?.summaries) || !parsed.summaries.length) throw new Error("EMPTY_PROVIDER_SUMMARIES");
+    if (!Array.isArray(parsed?.summaries)) throw new Error("EMPTY_PROVIDER_SUMMARIES");
     console.log("AI provider fallback succeeded", provider, config.model);
     return { parsed, provider, model: config.model };
   } catch (error) {
@@ -740,32 +740,44 @@ TEXTO EXTRAÍDO:
 ${chunk.text}`;
   }
 
-  return `Analise exclusivamente o trecho abaixo, extraído das páginas ${chunk.pageStart} a ${chunk.pageEnd} do PDF “${title}”. Este é o bloco ${chunk.index + 1} de ${totalChunks}. Não use conhecimento externo para completar lacunas.
+  return `Atue como um PROFESSOR COORDENADOR ESPECIALISTA EM CONCURSOS PÚBLICOS (com domínio profundo das bancas Instituto AOCP, Cebraspe, FGV, IBFC, IDECAN, UPENET/IAUPE e FCC).
+Analise o trecho abaixo, extraído das páginas ${chunk.pageStart} a ${chunk.pageEnd} do material “${title}” (Bloco ${chunk.index + 1} de ${totalChunks}).
 
-Crie entre 1 e 4 resumos, respeitando a ordem pedagógica do texto. Para cada resumo devolva exatamente os campos: subject, title, page_start, page_end, explanation, points, example, bizu, mnemonic, trap, flashcards e questions.
+DIRETRIZ PEDAGÓGICA E METODOLÓGICA OBRIGATÓRIA:
+1. OLHAR CLÍNICO DE PROFESSOR (CONTEÚDO REAL vs. ESTRUTURA DO ARQUIVO):
+   - O aluno quer aprender a MATÉRIA DA PROVA, nunca metadados sobre o arquivo PDF.
+   - É TERMINANTEMENTE PROIBIDO criar resumos, flashcards ou questões perguntando ou mencionando "Quais páginas compõem este bloco textual?", "Existe conteúdo detalhado nestas páginas?", "O que este trecho/slide aborda?", "Qual o nome do professor/curso?" ou qualquer referência a páginas, blocos, slides ou capítulos.
+   - Se o material for composto por slides esquemáticos ou tópicos curtos, use sua bagagem de Professor Especialista para explicar a regra gramatical, jurídica, lógica ou científica daquele tópico com clareza, rigor técnico e foco no que cai em prova, sem jamais dizer "nestas páginas não há detalhes".
+   - Se o trecho contiver APENAS capa, contracapa, sumário, agradecimentos ou propaganda sem nenhum tópico de estudo identificável, devolva {"summaries": []}.
 
-Regras pedagógicas e anti-alucinação:
-- NUNCA crie resumos, tópicos ou questões sobre capas, títulos soltos de disciplinas, nomes ou perfis de professores (@prof..., contatos), sumários, contracapas, agradecimentos ('GRATIDÃO', 'OBRIGADO'), encerramentos ('Fim da aula', 'Até a próxima') ou mensagens motivacionais. Ignore completamente essas páginas e ruídos de metadados;
-- O foco deve ser 100% no conteúdo teórico/programático de concurso (conceitos, regras gramaticais, artigos de lei, fórmulas lógicas, procedimentos e exceções);
-- Se o trecho não contiver conteúdo didático substantivo (por ser apenas capa, agradecimento ou propaganda), ignore-o e devolva {"summaries": []};
-- explanation deve ser uma aula detalhada, clara e autossuficiente para iniciante;
-- points deve possuir de 5 a 10 itens com regras e conceitos reais;
-- flashcards deve possuir de 5 a 8 objetos com question e answer focados exclusivamente em conceitos teóricos, regras gramaticais, fórmulas ou artigos de lei autossuficientes (PROIBIDO criar flashcards de questões de interpretação de texto que dependam de ler um texto/parágrafo externo ou de enunciados de múltipla escolha);
-- questions deve possuir exatamente 5 questões de concurso com statement, options (4 alternativas plausíveis do mesmo assunto), correct_index (0 a 3), explanation (resolução passo a passo com Conceito-chave, justificativa da correta, erro das demais e pegadinha), difficulty, topic e origin;
-- NUNCA faça perguntas sobre quem é o professor, se o documento é capa ou sobre agradecimentos/marcas d'água;
-- use a progressão: 1 fácil, 2 médias e 2 difíceis;
-- não invente artigo, lei, exceção, banca ou dado ausente;
-- em referências jurídicas use “Art. 4°”, nunca “Art. 4o”;
-- page_start e page_end devem ficar entre ${chunk.pageStart} e ${chunk.pageEnd};
-- se o trecho apenas continuar um assunto anterior, ainda produza um resumo compreensível, sem fingir que viu páginas ausentes;
-- responda apenas JSON no formato {"summaries":[...]}.
+2. RESUMO CLÍNICO E DIRECIONAMENTO DE BANCA (SEM ERROS):
+   - explanation: escreva uma aula escrita impecável, didática e completa para que o aluno compreenda a regra geral, as exceções, as classificações e como o tema é cobrado nas provas.
+   - points: liste de 5 a 10 regras, conceitos-chave, requisitos ou diferenças essenciais da matéria.
+   - bizu: indique o ÍNDICE DE COBRANÇA EM PROVA (Alta, Média ou Baixa incidência) e dê o norte exato de como a banca costuma cobrar este assunto.
+   - trap: explique a pegadinha clássica que as bancas usam para derrubar candidatos neste tópico.
+
+3. MNEMÔNICOS E DICAS DO CRIADOR DO CONTEÚDO (PROIBIDO INVENTAR):
+   - Verifique se o autor/professor do PDF incluiu algum mnemônico, macete, sigla ou dica especial no texto. Se houver no arquivo, extraia-o fielmente!
+   - Caso o PDF não traga mnemônico próprio, só preencha o campo mnemonic se existir um mnemônico clássico e universalmente consagrado em concursos para essa regra exata (ex.: LIMPE, SOCIDIVAPLU, MP3.COM).
+   - Se NÃO houver mnemônico no arquivo nem mnemônico clássico consagrado, devolva OBRIGATORIAMENTE mnemonic como string vazia ("")! NUNCA invente siglas forçadas ou frases sem sentido.
+
+4. METODOLOGIA CIENTÍFICA DE FLASHCARDS (ACTIVE RECALL / ESTILO ANKI):
+   - Flashcards servem exclusivamente para memorização ativa de conceitos, regras, artigos de lei, prazos, fórmulas e distinções técnicas.
+   - Crie de 4 a 8 flashcards autossuficientes por tópico:
+     * question (Frente): pergunta conceitual direta, curta e específica da matéria (ex.: "Qual a diferença entre adjunto adnominal e complemento nominal?", "Em quais casos a crase é proibida?", "Quais são os requisitos da legítima defesa no Código Penal?").
+     * answer (Verso): resposta direta, enxuta e fácil de memorizar em até 3 frases curtas.
+   - PROIBIDO criar flashcards sobre número de páginas, "bloco textual", se existe conteúdo na página, ou questões de interpretação que dependam de ler um texto externo.
+
+5. QUESTÕES DE CONCURSO NO PADRÃO DA BANCA:
+   - Crie 5 questões de múltipla escolha (1 fácil, 2 médias, 2 difíceis) com 4 alternativas (A a D), correct_index (0 a 3) e explanation passo a passo ("Conceito-chave: ... | ✅ Correta: ... | ❌ Demais alternativas: ... | ⚠️ Pegadinha: ...").
+   - Em referências jurídicas use “Art. 4°” ou “Art. 5º”, nunca “Art. 4o”.
 
 TIPO: ${documentType}.
-CONTEXTO DO EDITAL (somente para nomear a disciplina):
-${campaignContext || "Sem edital sincronizado."}
+CONTEXTO DO EDITAL (para alinhar a disciplina e o foco da banca):
+${campaignContext || "Concurso policial/militar — priorize a cobrança das bancas AOCP, Cebraspe, FGV e IBFC."}
 
 TÍTULOS DETECTADOS NESTE BLOCO:
-${chunk.headings.join(" | ") || "Nenhum título inequívoco detectado."}
+${chunk.headings.join(" | ") || "Identifique o tópico pelo conteúdo teórico abaixo."}
 
 TEXTO EXTRAÍDO:
 ${chunk.text}`;
@@ -776,7 +788,7 @@ const CHUNK_SUMMARY_SCHEMA = {
   properties: {
     summaries: {
       type: "ARRAY",
-      minItems: 1,
+      minItems: 0,
       maxItems: 6,
       items: {
         type: "OBJECT",
@@ -816,7 +828,7 @@ const CHUNK_SUMMARY_SCHEMA = {
             },
           },
         },
-        required: ["subject", "title", "explanation", "points", "example", "bizu", "mnemonic", "trap", "flashcards", "questions"],
+        required: ["subject", "title", "explanation", "points", "example", "bizu", "trap", "flashcards", "questions"],
       },
     },
   },
@@ -831,7 +843,7 @@ async function generateChunkWithFallback(chunk: TextChunk, totalChunks: number, 
     for (const candidateKey of geminiKeys) {
       try {
         const result = await createGeminiInteraction([{ type: "text", text: prompt }], CHUNK_SUMMARY_SCHEMA, 24576, 34000, candidateKey);
-        if (!Array.isArray(result.parsed?.summaries) || !result.parsed.summaries.length) throw new Error("EMPTY_GEMINI_SUMMARIES");
+        if (!Array.isArray(result.parsed?.summaries)) throw new Error("EMPTY_GEMINI_SUMMARIES");
         return { ...result, provider: "gemini", attempts };
       } catch (error) {
         const status = Number((error as { providerStatus?: number })?.providerStatus || 500);
@@ -1087,7 +1099,7 @@ function sanitizeQuestions(value: unknown, fallbackTopic: string) {
     const key = statement.toLocaleLowerCase("pt-BR");
     // Descarta questões sobre capas, nomes de professores, agradecimentos ou marcas d'água
     const noiseCheck = `${statement} ${options.join(" ")} ${explanation}`.toLocaleLowerCase("pt-BR");
-    if (/@prof|gratid[aã]o|pouca densidade conceitual|nome do professor|marca d['’]água|aparenta ser uma capa/i.test(noiseCheck)) continue;
+    if (/@prof|gratid[aã]o|pouca densidade conceitual|nome do professor|marca d['’]água|aparenta ser uma capa|bloco textual|nestas p[aá]ginas espec[ií]ficas|quais p[aá]ginas comp[oõ]em/i.test(noiseCheck)) continue;
     if (statement.length < 10 || options.length !== 4 || options.some((option: string) => option.length < 1)) continue;
     if (new Set(normalizedOptions).size !== 4 || !Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
     if (explanation.length < 8 || seen.has(key)) continue;
@@ -1108,21 +1120,46 @@ function sanitizeStrings(value: unknown, maxItems: number, maxLength: number) {
 }
 
 function isNonDidacticSummary(title: string, explanation: string, points: string[]): boolean {
-  const t = title.toLocaleLowerCase("pt-BR");
-  if (/^(?:gratid[aã]o!?|obrigado!?|muito obrigado!?|agradecimento|capa|encerramento|final da aula|prof[.\s]|redes sociais|abertura|apresenta[çc][aã]o|sum[aá]rio)/i.test(t)) {
+  const isMetaDocumentNoise = (text: string): boolean => {
+    const s = String(text || "").toLocaleLowerCase("pt-BR").trim();
+    if (!s) return true;
+    return /\b(bloco textual|este bloco|neste bloco|deste bloco|nestas p[aá]ginas|estas p[aá]ginas|quais p[aá]ginas|p[aá]ginas espec[ií]ficas|p[aá]ginas comp[oõ]em|neste trecho|este trecho|deste trecho|neste slide|este slide|neste pdf|este pdf|neste arquivo|este arquivo|neste documento|este documento|no trecho analisado|no bloco analisado|trecho extra[ií]do|existe conte[uú]do .* nestas|h[aá] conte[uú]do .* nestas|qual o objetivo deste slide|qual o objetivo deste bloco|o que [eé] abordado neste bloco|sem detalhamento te[oó]rico nestas)\b/i.test(s);
+  };
+  const t = title.toLocaleLowerCase("pt-BR").trim();
+  if (/^(?:gratid[aã]o!?|obrigado!?|muito obrigado!?|agradecimento|capa|encerramento|final da aula|prof[.\s]|redes sociais|abertura|apresenta[çc][aã]o|sum[aá]rio|bloco \d+|p[aá]ginas? \d+)/i.test(t)) {
     return true;
   }
   const full = `${title} ${explanation} ${points.join(" ")}`.toLocaleLowerCase("pt-BR");
-  if (/(?:pouca densidade conceitual|sem aprofundamento|mensagem de agradecimento|agradece(?:ndo)? aos alunos|encerramento da aula|indica(?:ndo)? a autoria)/i.test(full)) {
+  if (/(?:pouca densidade conceitual|sem aprofundamento|mensagem de agradecimento|agradece(?:ndo)? aos alunos|encerramento da aula|indica(?:ndo)? a autoria|n[aã]o h[aá] conte[uú]do did[aá]tico|n[aã]o apresenta conte[uú]do te[oó]rico)/i.test(full)) {
+    return true;
+  }
+  if (isMetaDocumentNoise(title) || isMetaDocumentNoise(explanation)) {
     return true;
   }
   return false;
 }
 
+function isMetaDocumentNoise(text: string): boolean {
+  const s = String(text || "").toLocaleLowerCase("pt-BR").trim();
+  if (!s) return true;
+  return /\b(bloco textual|este bloco|neste bloco|deste bloco|nestas p[aá]ginas|estas p[aá]ginas|quais p[aá]ginas|p[aá]ginas espec[ií]ficas|p[aá]ginas comp[oõ]em|neste trecho|este trecho|deste trecho|neste slide|este slide|neste pdf|este pdf|neste arquivo|este arquivo|neste documento|este documento|no trecho analisado|no bloco analisado|trecho extra[ií]do|existe conte[uú]do .* nestas|h[aá] conte[uú]do .* nestas|qual o objetivo deste slide|qual o objetivo deste bloco|o que [eé] abordado neste bloco|sem detalhamento te[oó]rico nestas)\b/i.test(s);
+}
+
 function isValidFlashcardContent(question: string, answer: string): boolean {
   const q = String(question || "").trim();
   const a = String(answer || "").trim();
-  if (q.length < 8 || a.length < 4) return false;
+  if (q.length < 10 || a.length < 5) return false;
+  // Bloqueia meta-perguntas sobre páginas, blocos, slides, arquivos ou se "existe conteúdo"
+  if (isMetaDocumentNoise(q) || isMetaDocumentNoise(a)) return false;
+  if (/^(?:existe|h[aá])\s+(?:conte[uú]do|explica[cç][aã]o|detalhamento|informa[cç][aã]o|men[cç][aã]o|regra|assunto|t[oó]pico)\b/i.test(q)) {
+    return false;
+  }
+  if (/^(?:p[aá]ginas?\s*\d+|as p[aá]ginas\s*\d+|n[aã]o[,.;\s]|sim[,.;\s]\s*(?:apenas|somente)|este bloco|neste trecho)/i.test(a)) {
+    return false;
+  }
+  if (/\b(?:composto pelas p[aá]ginas|p[aá]ginas \d+\s*(?:a|at[eé]|e|–|-)\s*\d+|n[aã]o h[aá] conte[uú]do|n[aã]o apresenta conte[uú]do|apenas o t[ií]tulo|somente exerc[ií]cios|quem [eé] o professor|quem [eé] o autor|qual o nome da apostila)\b/i.test(`${q} ${a}`)) {
+    return false;
+  }
   // Nunca permitir flashcards que dependam de leitura de texto externo (interpretação de texto)
   if (/\b(segundo o texto|de acordo com o texto|conforme o texto|no texto acima|no texto lido|leia o texto|leia o trecho|leia a tirinha|leia o poema|leia a charge|leia o fragmento|no trecho acima|no excerto|no fragmento|no \d+[º°ª]?\s*par[aá]grafo|primeiro par[aá]grafo|segundo par[aá]grafo|terceiro par[aá]grafo|[uú]ltimo par[aá]grafo|na linha \d+|nas linhas \d+|no verso \d+|nos versos \d+|o autor do texto|o narrador do texto|infere-se do texto|depreende-se do texto|conclui-se do texto|a leitura do texto|ao longo do texto|no contexto do texto|passagem do texto|trecho do texto)\b/i.test(q)) {
     return false;
@@ -1137,9 +1174,21 @@ function isValidFlashcardContent(question: string, answer: string): boolean {
   return true;
 }
 
+function sanitizeMnemonic(value: unknown): string {
+  const m = normalizeLegalNotation(value, 600).trim();
+  if (!m || m.length < 4 || m.length > 320) return "";
+  if (/^(?:n[aã]o h[aá]|nenhum|sem mnem[oô]nico|n\/a|n[aã]o consta|n[aã]o informado|n[aã]o se aplica|inexistente|null|undefined|-|\.)$/i.test(m)) {
+    return "";
+  }
+  if (/\b(?:n[aã]o h[aá] mnem[oô]nico|sem mnem[oô]nico espec[ií]fico|n[aã]o foi apresentado mnem[oô]nico|o material n[aã]o traz mnem[oô]nico)\b/i.test(m)) {
+    return "";
+  }
+  return m;
+}
+
 function sanitizeSummary(value: any, knownSubjects: string[], documentType = "material") {
   const title = normalizeLegalNotation(value?.title || "Resumo", 300);
-  const rawPoints = Array.isArray(value?.points) ? value.points.map((p: unknown) => String(p || "")) : [];
+  const rawPoints = Array.isArray(value?.points) ? value.points.map((p: unknown) => String(p || "")).filter((p) => !isMetaDocumentNoise(p)) : [];
   if (isNonDidacticSummary(title, String(value?.explanation || ""), rawPoints)) {
     return { title: "", explanation: "" };
   }
@@ -1154,11 +1203,11 @@ function sanitizeSummary(value: any, knownSubjects: string[], documentType = "ma
     title,
     page_start: Math.max(0, Math.floor(Number(value?.page_start) || 0)),
     page_end: Math.max(0, Math.floor(Number(value?.page_end) || 0)),
-    explanation: normalizeLegalNotation(value?.explanation || (Array.isArray(value?.points) ? value.points.join(". ") : ""), 18000),
-    points: Array.isArray(value?.points) ? [...new Set(value.points.map((item: unknown) => normalizeLegalNotation(item, 1200)).filter(Boolean))].slice(0, 15) : [],
+    explanation: normalizeLegalNotation(value?.explanation || (rawPoints.length ? rawPoints.join(". ") : ""), 18000),
+    points: [...new Set(rawPoints.map((item: unknown) => normalizeLegalNotation(item, 1200)).filter(Boolean))].slice(0, 15),
     example: normalizeLegalNotation(value?.example, 6000),
     bizu: normalizeLegalNotation(value?.bizu, 3000),
-    mnemonic: normalizeLegalNotation(value?.mnemonic, 2000),
+    mnemonic: sanitizeMnemonic(value?.mnemonic),
     trap: normalizeLegalNotation(value?.trap, 3000),
     flashcards,
     questions: sanitizeQuestions(value?.questions, title),

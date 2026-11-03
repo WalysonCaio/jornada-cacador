@@ -199,31 +199,48 @@ async function askDeepSeek(systemPrompt: string, userPrompt: string) {
   return { answer, model: DEEPSEEK_MODEL, provider: "deepseek" };
 }
 
-async function askGemini(systemPrompt: string, userPrompt: string, geminiKey = GEMINI_API_KEY) {
+async function askGemini(systemPrompt: string, userPrompt: string, geminiKey = GEMINI_API_KEY, enableWebSearch = true) {
   if (!geminiKey) throw new Error("GEMINI_NOT_CONFIGURED");
   const models = await availableGeminiModels(geminiKey);
   let lastError = "GEMINI_FAILED";
   for (const model of models) {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-        generationConfig: { temperature: 0.25, maxOutputTokens: 3500 },
-      }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      lastError = `GEMINI_${response.status}:${data?.error?.message ?? "falha"}`;
-      if (response.status === 429 || response.status === 503 || response.status === 404 || response.status === 400) continue;
-      throw new Error(lastError);
+    const configs = enableWebSearch
+      ? [
+          { systemInstruction: { parts: [{ text: systemPrompt }] }, contents: [{ role: "user", parts: [{ text: userPrompt }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0.2, maxOutputTokens: 4096 } },
+          { systemInstruction: { parts: [{ text: systemPrompt }] }, contents: [{ role: "user", parts: [{ text: userPrompt }] }], generationConfig: { temperature: 0.25, maxOutputTokens: 4096 } },
+        ]
+      : [
+          { systemInstruction: { parts: [{ text: systemPrompt }] }, contents: [{ role: "user", parts: [{ text: userPrompt }] }], generationConfig: { temperature: 0.25, maxOutputTokens: 4096 } },
+        ];
+    for (const bodyObj of configs) {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
+        body: JSON.stringify(bodyObj),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        lastError = `GEMINI_${response.status}:${data?.error?.message ?? "falha"}`;
+        if (response.status === 400 && (bodyObj as any).tools) continue;
+        if (response.status === 429 || response.status === 503 || response.status === 404 || response.status === 400) break;
+        throw new Error(lastError);
+      }
+      const parts = Array.isArray(data?.candidates?.[0]?.content?.parts)
+        ? data.candidates[0].content.parts.filter((part: any) => !part?.thought)
+        : [];
+      let answer = (parts.length ? parts : data?.candidates?.[0]?.content?.parts || []).map((part: { text?: string }) => part.text ?? "").join("").trim();
+      const chunks = data?.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      if (answer && Array.isArray(chunks) && chunks.length) {
+        const webSources = chunks
+          .map((c: any) => c?.web?.title && c?.web?.uri ? `- ${c.web.title} (${c.web.uri})` : null)
+          .filter(Boolean)
+          .slice(0, 4);
+        if (webSources.length && !answer.includes("Fontes consultadas")) {
+          answer += `\n\n---\n**🌐 Fontes de Pesquisa da Banca consultadas em tempo real:**\n${webSources.join("\n")}`;
+        }
+      }
+      if (answer) return { answer, model, provider: "gemini" };
     }
-    const parts = Array.isArray(data?.candidates?.[0]?.content?.parts)
-      ? data.candidates[0].content.parts.filter((part: any) => !part?.thought)
-      : [];
-    const answer = (parts.length ? parts : data?.candidates?.[0]?.content?.parts || []).map((part: { text?: string }) => part.text ?? "").join("").trim();
-    if (answer) return { answer, model, provider: "gemini" };
   }
   throw new Error(lastError);
 }
@@ -412,6 +429,79 @@ Deno.serve(async (request) => {
 
     const questions = [...seen.values()];
     return json(request, { questions, count: questions.length });
+  }
+
+  if (payload.action === "generate_pedagogical_flashcards") {
+    if (!DEEPSEEK_API_KEY && !GROQ_API_KEY && !activeGeminiKey) {
+      return json(request, { error: "Configure sua chave Gemini em Minha conta → Configurar minha IA." }, 503);
+    }
+    const campaignId = String(payload.campaign_id ?? "").trim();
+    const subject = String(payload.subject ?? "Conteúdo Geral").trim().slice(0, 120);
+    const topic = String(payload.topic ?? "Tópicos de Alta Incidência").trim().slice(0, 180);
+    const board = String(payload.board ?? "Instituto AOCP / Cebraspe / FGV").trim().slice(0, 80);
+    const count = Math.min(12, Math.max(4, Number(payload.count) || 8));
+    const context = String(payload.context ?? "").trim().slice(0, 16000);
+
+    const usage = await reserveUsage(user.id, campaignId || undefined);
+    if (!usage.allowed) {
+      if (usage.reason === "DAILY_LIMIT") return json(request, { error: `Limite diário atingido (${usage.limit || 40}).`, code: "DAILY_LIMIT" }, 429);
+      return json(request, { error: "Proteção de consumo temporariamente indisponível.", code: usage.reason }, 503);
+    }
+
+    const fcPrompt = `Atue como um PROFESSOR COORDENADOR ESPECIALISTA EM CONCURSOS PÚBLICOS (${board}) e especialista no método científico de repetição espaçada (Anki / Active Recall).
+Gere exatamente ${count} FLASHCARDS DE MEMORIZAÇÃO ATIVA E ALTA INCIDÊNCIA para a disciplina "${subject}" (Foco: ${topic}).
+${context ? `CONTEXTO E TÓPICOS DO EDITAL/MATERIAL:\n${context}\n` : ""}
+REGRAS PEDAGÓGICAS OBRIGATÓRIAS DOS FLASHCARDS:
+1. Cada flashcard deve testar 1 único conceito-chave, regra gramatical, prazo, artigo de lei, competência, requisito, exceção ou fórmula de altíssima incidência nas provas da banca ${board}.
+2. question (Frente do cartão): Pergunta conceitual direta, curta, clara e 100% autossuficiente (ex.: "Qual a diferença entre adjunto adnominal e complemento nominal?", "Em quais casos a crase é obrigatória?", "Quais são os crimes inafiançáveis e imprescritíveis segundo o Art. 5º da CF?").
+3. answer (Verso do cartão): Resposta direta, enxuta e estruturada para memorização rápida em até 3 frases curtas (inclua o bizu ou mnemônico real apenas se já existir na doutrina/material; nunca invente mnemônicos forçados).
+4. PROIBIDO criar perguntas sobre páginas, blocos, estrutura de PDF, ou perguntas que dependam de texto externo ("segundo o texto") ou alternativas A/B/C/D.
+Responda EXCLUSIVAMENTE com um JSON válido no formato:
+{"flashcards":[{"subject":"${subject}","topic":"Assunto específico","question":"Pergunta direta da frente?","answer":"Resposta objetiva do verso."}]}`;
+
+    try {
+      const sysJson = "Você é um Professor Coordenador especialista em Flashcards estilo Anki para concursos públicos. Responda EXCLUSIVAMENTE com JSON puro no formato {\"flashcards\":[...]}.";
+      let rawAns = "";
+      let provider = "gemini";
+      let model = "gemini";
+      if (activeGeminiKey) {
+        try {
+          const gRes = await askGemini(sysJson, fcPrompt, activeGeminiKey, false);
+          rawAns = gRes.answer;
+          provider = "gemini";
+          model = gRes.model;
+        } catch (e) {
+          console.warn("Gemini flashcards fallback", e);
+        }
+      }
+      if (!rawAns && DEEPSEEK_API_KEY) {
+        const dRes = await askDeepSeek(sysJson, fcPrompt);
+        rawAns = dRes.answer;
+        provider = "deepseek";
+        model = dRes.model;
+      }
+      if (!rawAns && GROQ_API_KEY) {
+        const grRes = await askGroq(sysJson, fcPrompt);
+        rawAns = grRes.answer;
+        provider = "groq";
+        model = grRes.model;
+      }
+      const parsed = parseGenericJson(rawAns);
+      const cards = (Array.isArray(parsed?.flashcards) ? parsed.flashcards : [])
+        .filter((c: any) => c?.question && c?.answer && String(c.question).trim().length >= 10 && String(c.answer).trim().length >= 5)
+        .map((c: any) => ({
+          subject: String(c.subject || subject).trim(),
+          topic: String(c.topic || topic).trim(),
+          question: String(c.question).trim(),
+          answer: String(c.answer).trim(),
+        }));
+      if (!cards.length) throw new Error("EMPTY_FLASHCARDS");
+      await finishUsage(usage.event_id, "success", provider, model);
+      return json(request, { flashcards: cards, provider, model });
+    } catch (err) {
+      await finishUsage(usage.event_id, "error", undefined, undefined, "FLASHCARDS_FAILED");
+      return json(request, { error: "Não foi possível gerar os flashcards neste momento. Tente novamente." }, 502);
+    }
   }
 
   if (payload.action === "generate_structured_questions") {
@@ -608,16 +698,20 @@ Regras obrigatórias de qualidade (estilo boaResposta):
     return json(request, { error: "A proteção de consumo da IA está temporariamente indisponível. Tente novamente em alguns minutos.", code: usage.reason }, 503);
   }
 
-  const systemPrompt = `Você é o Instrutor de Estudos do aplicativo Jornada do Caçador.
-Explique em português brasileiro, com clareza, precisão e linguagem de aula escrita.
-O estudante está começando do zero. Organize a resposta com títulos curtos quando útil.
-Use a campanha, o edital e o material de referência fornecidos pelo estudante; não presuma que ele estuda para a PMPE.
-Quando solicitado, produza explicação detalhada, resumo, bizus, mnemônicos, flashcards ou questões comentadas.
-Em assuntos jurídicos, diferencie texto legal, explicação e dica de prova.
-Não invente artigos, prazos, penas, jurisprudência, fontes ou questões supostamente reais.
-Se o contexto fornecido não sustentar uma afirmação jurídica, declare que é necessário conferir a fonte oficial atualizada.
-Não trate questões geradas como questões reais de banca. Identifique-as como autorais.
-Modo solicitado: ${mode}.`;
+  const systemPrompt = `Você é o PROFESSOR COORDENADOR E ESTRATEGISTA DE CONCURSOS da plataforma Jornada do Caçador.
+Sua missão é dar o NORTE PEDAGÓGICO exato para o aluno ser aprovado, combinando didática clínica de cursinho preparatório de elite com inteligência estatística de bancas examinadoras (Instituto AOCP, Cebraspe, FGV, IBFC, IDECAN, UPENET/IAUPE, FCC e Vunesp).
+
+DIRETRIZES DO PROFESSOR COORDENADOR:
+1. DÊ O NORTE AO ALUNO (ÍNDICE DE COBRANÇA E PARETO 80/20):
+   - Sempre destaque no início ou no fechamento o NÍVEL DE INCIDÊNCIA DO TEMA EM PROVA (🔥 Alta Incidência, ⚡ Média Incidência ou 📌 Complementar) e exatamente O QUE A BANCA MAIS COBRA dentro daquele assunto (os 20% da matéria que respondem por 80% das questões).
+2. AULA CLÍNICA E RIGOR TÉCNICO:
+   - Explique como um professor experiente em sala de aula: apresente o conceito central, a regra geral, as exceções que caem em prova, quadros comparativos e exemplos práticos aplicados.
+   - Em temas jurídicos, diferencie claramente: (a) Letra da Lei Seca, (b) Jurisprudência/Súmulas (STF/STJ) e (c) Pegadinha da Banca.
+3. MNEMÔNICOS E DICAS DO MATERIAL (ZERO INVENÇÃO):
+   - Se o material do aluno trouxer uma dica do professor/autor ou se houver um mnemônico clássico consagrado de concurso (ex.: LIMPE, SOCIDIVAPLU, MP3.COM), destaque-o. Se NÃO houver mnemônico real para o tema, NÃO invente siglas forçadas!
+4. QUANDO O ALUNO PEDIR FLASHCARDS:
+   - Use a metodologia científica Active Recall / Anki: Frente com pergunta conceitual direta e autossuficiente; Verso com resposta curta, objetiva e memorizável em segundos.
+Modo pedagógico solicitado pelo aluno: ${mode}.`;
 
   const userPrompt = context
     ? `MATERIAL DE REFERÊNCIA:\n${context}\n\nPEDIDO DO ESTUDANTE:\n${question}`
