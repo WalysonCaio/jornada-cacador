@@ -189,7 +189,7 @@ grant execute on function public.set_document_community_sharing(uuid, boolean) t
 
 -- Atualizar get_community_exam_library para exibir todos os materiais prontos da comunidade (exceto editais)
 create or replace function public.get_community_exam_library(
-  p_exam_name text,
+  p_exam_name text default '',
   p_exam_org text default ''
 )
 returns jsonb
@@ -207,6 +207,8 @@ begin
     raise exception 'not_authenticated';
   end if;
 
+  -- Acervo universal: qualquer usuário autenticado acessa todos os documentos prontos
+  -- compartilhados no banco, independentemente do perfil/concurso (PMPE, CBMPE, PPPE, etc.).
   select coalesce(
     jsonb_agg(
       jsonb_build_object(
@@ -223,27 +225,26 @@ begin
         ),
         'created_at', d.created_at,
         'is_community', true,
-        'exam_slug', public.normalize_exam_slug(sc.name, coalesce(sc.organization, '')),
-        'portal_name', sc.name,
+        'exam_slug', coalesce(public.normalize_exam_slug(sc.name, coalesce(sc.organization, '')), 'universal'),
+        'portal_name', coalesce(sc.name, 'Acervo Universal'),
         'author_name', coalesce(
           nullif(trim(us.state->'publicProfile'->>'name'), ''),
           nullif(trim(us.state->'hunterStats'->>'name'), ''),
           nullif(trim(u.raw_user_meta_data->>'full_name'), ''),
           nullif(trim(u.raw_user_meta_data->>'name'), ''),
-          'Colega de ' || upper(v_slug)
+          'Colega da Comunidade'
         )
       )
-      order by (public.normalize_exam_slug(sc.name, coalesce(sc.organization, '')) = v_slug) desc, d.created_at desc
+      order by d.created_at desc
     ),
     '[]'::jsonb
   )
   into v_docs
   from public.study_documents d
-  join public.study_campaigns sc on sc.id = d.campaign_id
+  left join public.study_campaigns sc on sc.id = d.campaign_id
   left join auth.users u on u.id = d.user_id
   left join public.user_state us on us.user_id = d.user_id
-  where d.user_id <> uid
-    and d.processing_status = 'ready'
+  where d.processing_status = 'ready'
     and d.document_type not in ('edital', 'edital_concurso')
     and coalesce(d.share_with_community, true) = true
     and coalesce(d.metadata->>'private_only', 'false') <> 'true';
@@ -253,12 +254,14 @@ begin
       jsonb_build_object(
         'id', g.id,
         'source_document_id', g.source_document_id,
+        'content_type', g.content_type,
         'title', public.sanitize_personal_watermarks(g.title),
         'content', public.sanitize_generated_jsonb(g.content),
         'source_refs', g.source_refs,
         'created_at', g.created_at,
         'is_community', true,
-        'exam_slug', v_slug
+        'exam_slug', 'universal',
+        'document_type', coalesce(g.doc_type, 'material')
       )
       order by g.created_at asc
     ),
@@ -266,23 +269,22 @@ begin
   )
   into v_summaries
   from (
-    select g.*
+    select g.*, sd.document_type as doc_type
     from public.generated_study_content g
-    join public.study_campaigns sc on sc.id = g.campaign_id
+    left join public.study_campaigns sc on sc.id = g.campaign_id
     left join public.study_documents sd on sd.id = g.source_document_id
-    where g.user_id <> uid
-      and g.content_type = 'summary'
+    where g.content_type in ('summary', 'question_pack')
       and (sd.id is null or (
         sd.document_type not in ('edital', 'edital_concurso')
         and coalesce(sd.share_with_community, true) = true
         and coalesce(sd.metadata->>'private_only', 'false') <> 'true'
       ))
-    order by (public.normalize_exam_slug(sc.name, coalesce(sc.organization, '')) = v_slug) desc, g.created_at desc
-    limit 250
+    order by g.created_at desc
+    limit 1000
   ) g;
 
   return jsonb_build_object(
-    'exam_slug', v_slug,
+    'exam_slug', 'universal',
     'documents', v_docs,
     'summaries', v_summaries,
     'edital_topics', '[]'::jsonb

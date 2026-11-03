@@ -578,7 +578,6 @@
       <div class="resolutionActionBar">
         <button type="button" class="ghost small" id="spawnTwinQuestionBtn">⚡ Gerar questão gêmea</button>
         <button type="button" class="ghost small" id="explainEasyAnalogyBtn">🧠 Explicar fácil (analogia)</button>
-        <button type="button" class="ghost small" id="createFlashcardFromQuestionBtn">🃏 Virar Flashcard</button>
         <button type="button" class="ghost small" id="toggleFavoriteQuestionBtn">${isFav?'⭐ Favorita (salva)':'☆ Favoritar questão'}</button>
         <button type="button" class="ghost small" id="saveQuestionNoteBtn">📌 Salvar no Caderno</button>
         <button type="button" class="ghost small" id="reportQuestionIssueBtn">🚩 Corrigir / Reportar</button>
@@ -826,20 +825,8 @@
   }
 
   function createFlashcardFromQuestion(item,btnEl){
-    const correctIdx=Number(item.correct_index)||0;
-    const correctOpt=item.options?.[correctIdx]||'';
-    const subj=canonicalSubjectName(item.subject||'Geral');
-    const cardQ=`[${item.topic||subj}] ${item.statement}`;
-    const cardA=`✅ ${correctOpt}\n\n${item.explanation||''}`.trim();
-    state.customFlashcardsByCampaign=state.customFlashcardsByCampaign||{};
-    const campId=state.activeCampaignId;
-    state.customFlashcardsByCampaign[campId]=state.customFlashcardsByCampaign[campId]||[];
-    state.customFlashcardsByCampaign[campId].push([subj,cardQ,cardA]);
-    ALL_FLASHCARDS.push([subj,cardQ,cardA]);
-    save();
-    if(typeof renderCard==='function')renderCard();
-    if(btnEl){btnEl.disabled=true;btnEl.textContent='✓ Virada em Flashcard!'}
-    toast('Flashcard criado e adicionado à Central de Estudo!');
+    if(btnEl){btnEl.disabled=true;btnEl.hidden=true}
+    toast('Flashcards são extraídos exclusivamente de Materiais de estudo, Anotações e Textos de Lei.');
   }
 
   function saveCurrentQuestionToNotes(item){
@@ -3572,20 +3559,73 @@
     const campaign=typeof activeCampaign==='function'?activeCampaign():null;
     if(!campaign)return;
     if(_commSyncInFlight&&!force)return _commSyncInFlight;
-    const slug=normalizeExamSlug(campaign.name||'',campaign.organization||'');
+    const slug='universal';
     try{
       if(force||communityCache.slug!==slug||!communityCache.loadedAt||(Date.now()-communityCache.loadedAt>=60000)){
-        const res=await cloudFetch('rpc/get_community_exam_library',{
+        // Busca universal: consulta o RPC universal e, caso o banco ainda esteja em versão anterior que filtrava por slug,
+        // agrega simultaneamente os principais perfis (PMPE, CBMPE, PPPE, PCPE e o portal ativo) + outros portais da própria conta.
+        const probeExams=[
+          {p_exam_name:campaign.name||'',p_exam_org:campaign.organization||''},
+          {p_exam_name:'PMPE — Soldado',p_exam_org:'Polícia Militar de Pernambuco'},
+          {p_exam_name:'CBMPE — Bombeiros PE',p_exam_org:'Corpo de Bombeiros Militar de PE'},
+          {p_exam_name:'PPPE — Polícia Penal de PE',p_exam_org:'Polícia Penal de Pernambuco'},
+          {p_exam_name:'PCPE — Polícia Civil de PE',p_exam_org:'Polícia Civil de Pernambuco'}
+        ];
+        const firstRes=await cloudFetch('rpc/get_community_exam_library',{
           method:'POST',
-          body:JSON.stringify({p_exam_name:campaign.name||'',p_exam_org:campaign.organization||''})
-        });
-        const data=await res.json().catch(()=>null);
-        if(res.ok&&data){
-          // Filtrar estritamente: NUNCA compartilhar 'edital' / 'edital_concurso' de outros usuários
-          const fetchedDocs=(Array.isArray(data.documents)?data.documents:[]).filter(d=>!['edital','edital_concurso'].includes(d.document_type));
-          const fetchedSums=Array.isArray(data.summaries)?data.summaries:[];
-          communityCache={slug:data.exam_slug||slug,documents:fetchedDocs,summaries:fetchedSums,editalTopics:[],loadedAt:Date.now()};
+          body:JSON.stringify(probeExams[0])
+        }).catch(()=>null);
+        const firstData=firstRes&&firstRes.ok?await firstRes.json().catch(()=>null):null;
+        const docMap=new Map();
+        const sumMap=new Map();
+        const mergePayload=payload=>{
+          if(!payload)return;
+          for(const d of (Array.isArray(payload.documents)?payload.documents:[])){
+            if(d?.id&&!['edital','edital_concurso'].includes(d.document_type)&&!docMap.has(String(d.id)))docMap.set(String(d.id),d);
+          }
+          for(const s of (Array.isArray(payload.summaries)?payload.summaries:[])){
+            if(s?.id&&!sumMap.has(String(s.id)))sumMap.set(String(s.id),s);
+          }
+        };
+        mergePayload(firstData);
+        // Se o RPC no Supabase ainda não for o v99 universal (exam_slug !== "universal"), consulta os demais perfis em paralelo
+        if(!firstData||firstData.exam_slug!=='universal'){
+          const seenSlugs=new Set([normalizeExamSlug(probeExams[0].p_exam_name,probeExams[0].p_exam_org)]);
+          const extraProbes=probeExams.slice(1).filter(p=>{
+            const s=normalizeExamSlug(p.p_exam_name,p.p_exam_org);
+            if(seenSlugs.has(s))return false;
+            seenSlugs.add(s);
+            return true;
+          });
+          const extraResults=await Promise.all(extraProbes.map(p=>cloudFetch('rpc/get_community_exam_library',{method:'POST',body:JSON.stringify(p)}).then(r=>r.ok?r.json():null).catch(()=>null)));
+          extraResults.forEach(mergePayload);
         }
+        // Também inclui documentos e conteúdos prontos de outros portais do próprio usuário (ex.: PMPE <-> CBM PE)
+        const [ownOtherDocsRes,ownOtherSumsRes]=await Promise.all([
+          cloudFetch(`study_documents?processing_status=eq.ready&document_type=not.in.(edital,edital_concurso)&select=*&order=created_at.desc&limit=200`).catch(()=>null),
+          cloudFetch(`generated_study_content?content_type=in.(summary,question_pack)&select=id,title,content_type,content,source_refs,source_document_id,created_at&order=created_at.asc&limit=500`).catch(()=>null)
+        ]);
+        const ownOtherDocs=ownOtherDocsRes?.ok?await ownOtherDocsRes.json().catch(()=>[]):[];
+        const ownOtherSums=ownOtherSumsRes?.ok?await ownOtherSumsRes.json().catch(()=>[]):[];
+        if(Array.isArray(ownOtherDocs)){
+          for(const d of ownOtherDocs){
+            if(!d?.id||String(d.campaign_id)===String(campaign.dbId))continue;
+            if(d.share_with_community===false||d.metadata?.private_only===true)continue;
+            if(!docMap.has(String(d.id))){
+              docMap.set(String(d.id),{...d,is_community:true,portal_name:d.portal_name||'Meu Outro Portal',author_name:d.author_name||'Sua Biblioteca'});
+            }
+          }
+        }
+        if(Array.isArray(ownOtherSums)){
+          for(const s of ownOtherSums){
+            if(!s?.id||sumMap.has(String(s.id)))continue;
+            const pDoc=docMap.get(String(s.source_document_id));
+            if(pDoc||!s.source_document_id){
+              sumMap.set(String(s.id),{...s,is_community:true,document_type:pDoc?.document_type||'material'});
+            }
+          }
+        }
+        communityCache={slug:'universal',documents:[...docMap.values()],summaries:[...sumMap.values()],editalTopics:[],loadedAt:Date.now()};
       }
       const commDocs=Array.isArray(communityCache.documents)?communityCache.documents:[];
       const commSums=Array.isArray(communityCache.summaries)?communityCache.summaries:[];
@@ -3597,7 +3637,7 @@
         }
       }
 
-      // 1) Mesclar apenas materiais, leis, provas, simulados e anotações da comunidade em cloudDocuments (SEM storage_path)
+      // 1) Mesclar todos os materiais, leis, provas, simulados e anotações da comunidade universal em cloudDocuments (SEM storage_path)
       const stdTitle=t=>typeof window.standardizeDocumentTitle==='function'?window.standardizeDocumentTitle(sanitizePersonalWatermarks(t)):sanitizePersonalWatermarks(t).toUpperCase();
       const ownTitles=new Set((cloudDocuments||[]).filter(d=>!d.is_community).map(d=>`${d.document_type}|${topicKey(stdTitle(d.title))}`));
       const existingIds=new Set((cloudDocuments||[]).map(d=>d.id));
@@ -3626,19 +3666,21 @@
       const existingQKeys=new Set((ALL_QUESTIONS||[]).map(qItem=>topicKey(qItem.statement).slice(0,80)));
 
       for(const row of commSums){
-        const parentDoc=(cloudDocuments||[]).find(d=>String(d.id)===String(row.source_document_id))||null;
+        const parentDoc=(cloudDocuments||[]).find(d=>String(d.id)===String(row.source_document_id))||commDocs.find(d=>String(d.id)===String(row.source_document_id))||null;
+        const docType=String(parentDoc?.document_type||row.document_type||'material').toLowerCase();
+        const isQuestionPackRow=Boolean(row.content?.is_question_pack||row.content_type==='question_pack'||['prova','simulado'].includes(docType));
         const cat=typeof window.resolveDocumentDiscipline==='function'
           ?window.resolveDocumentDiscipline(parentDoc,row.content?.subject||'',`${row.content?.source||''} ${row.title||''}`)
           :canonicalSubjectName(row.content?.subject||'Conteúdo geral',`${row.content?.source||''} ${row.title||''}`);
         const cleanTitle=sanitizePersonalWatermarks(row.title||'Assunto da Comunidade');
         if(typeof window.isInvalidTrailSubject==='function'&&window.isInvalidTrailSubject(cat,cleanTitle,row.content?.source||'',parentDoc))continue;
         const sumKey=`${topicKey(cat)}|${topicKey(cleanTitle)}`;
-        if(!existingSumKeys.has(sumKey)){
+        if(!isQuestionPackRow&&!existingSumKeys.has(sumKey)){
           ALL_SUMMARIES.push({
             id:row.id,
             documentId:row.source_document_id,
             title:cleanTitle,
-            source:`🤝 Comunidade (${sanitizePersonalWatermarks(row.content?.source||'Material compartilhado')})`,
+            source:`🌐 Comunidade (${sanitizePersonalWatermarks(row.content?.source||'Acervo Universal')})`,
             category:cat,
             explanation:sanitizePersonalWatermarks(row.content?.explanation||''),
             points:(row.content?.points||[]).map(sanitizePersonalWatermarks),
@@ -3651,13 +3693,20 @@
           existingSumKeys.add(sumKey);
         }
 
-        for(const card of (row.content?.flashcards||[])){
-          const qText=sanitizePersonalWatermarks(card.question||'');
-          const aText=sanitizePersonalWatermarks(card.answer||'');
-          const cKey=`${topicKey(cat)}|${topicKey(qText)}`;
-          if(qText&&aText&&!existingCardKeys.has(cKey)){
-            ALL_FLASHCARDS.push([cat,qText,aText]);
-            existingCardKeys.add(cKey);
+        // Flashcards: APENAS de materiais, anotações e textos de lei, e sem questões de interpretação de texto externo
+        const allowFlashcardsForRow=typeof window.isAllowedFlashcardRow==='function'
+          ?window.isAllowedFlashcardRow(row,parentDoc)
+          :(!isQuestionPackRow&&['material','anotacao','lei'].includes(docType));
+        if(allowFlashcardsForRow){
+          for(const card of (row.content?.flashcards||[])){
+            const qText=sanitizePersonalWatermarks(card.question||'');
+            const aText=sanitizePersonalWatermarks(card.answer||'');
+            const isValidCard=typeof window.isValidFlashcardItem==='function'?window.isValidFlashcardItem(qText,aText):Boolean(qText&&aText);
+            const cKey=`${topicKey(cat)}|${topicKey(qText)}`;
+            if(isValidCard&&!existingCardKeys.has(cKey)){
+              ALL_FLASHCARDS.push([cat,qText,aText]);
+              existingCardKeys.add(cKey);
+            }
           }
         }
 
@@ -3808,16 +3857,15 @@
         }
       }
       if(banner){
-        const slugUpper=(communityCache.slug||normalizeExamSlug(campaign?.name||'')).toUpperCase();
         banner.innerHTML=`
           <div>
-            <div class="eyebrow">🤝 REDE COOPERATIVA DO CONCURSO · PERFIL ${escText(slugUpper)}</div>
-            <b>Biblioteca Compartilhada da Comunidade (${escText(campaign?.name||'Concurso')})</b>
-            <div class="small muted">Materiais de estudo, leis, provas e simulados analisados por colegas do mesmo concurso ficam disponíveis para visualização protegida e estudo (o Edital permanece individual de cada usuário e o PDF original fica bloqueado contra download).</div>
+            <div class="eyebrow">🌐 REDE COOPERATIVA UNIVERSAL · TODOS OS PERFIS E CONCURSOS</div>
+            <b>Biblioteca Compartilhada Universal da Comunidade</b>
+            <div class="small muted">Acesso universal liberado para todos os usuários e perfis do banco (PMPE, CBMPE, PPPE, PCPE e demais concursos): materiais de estudo, leis, anotações, provas e simulados compartilhados ficam disponíveis em qualquer portal (o Edital permanece individual e o PDF original segue protegido contra download).</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <span class="tag">${commDocs.length} material(is) da comunidade · ${commSums.length} resumos · ${commQs.length} questões</span>
-            <button type="button" class="ghost small" id="syncCommunityNowBtn">↻ Sincronizar Acervo</button>
+            <span class="tag">${commDocs.length} material(is) universais · ${commSums.length} resumos · ${commQs.length} questões</span>
+            <button type="button" class="ghost small" id="syncCommunityNowBtn">↻ Sincronizar Acervo Universal</button>
           </div>
         `;
         if(q('#syncCommunityNowBtn'))q('#syncCommunityNowBtn').onclick=async()=>{
@@ -6018,7 +6066,7 @@
       if(ALL_SUMMARIES.length!==beforeSum)changed=true;
 
       const beforeCards=(ALL_FLASHCARDS||[]).length;
-      ALL_FLASHCARDS=(ALL_FLASHCARDS||[]).filter(c=>!window.isInvalidTrailSubject(c?.[0],c?.[1]));
+      ALL_FLASHCARDS=(ALL_FLASHCARDS||[]).filter(c=>!window.isInvalidTrailSubject(c?.[0],c?.[1])&&(typeof window.isValidFlashcardItem!=='function'||window.isValidFlashcardItem(c?.[1],c?.[2])));
       if(ALL_FLASHCARDS.length!==beforeCards)changed=true;
 
       const beforeQs=(ALL_QUESTIONS||[]).length;

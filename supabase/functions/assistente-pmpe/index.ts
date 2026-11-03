@@ -376,7 +376,7 @@ Deno.serve(async (request) => {
     }
 
     // 2. Também agrega questões oficiais/adaptadas de provas já processadas em generated_study_content
-    const contentRes = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?content_type=eq.summary&select=title,content&order=created_at.desc&limit=250`, {
+    const contentRes = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?content_type=in.(summary,question_pack)&select=title,content&order=created_at.desc&limit=350`, {
       headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY },
     }).catch(() => null);
     if (contentRes?.ok) {

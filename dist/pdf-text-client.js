@@ -1069,14 +1069,19 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
     const summaries = Array.isArray(parsed?.summaries) ? parsed.summaries.filter((s) => s?.title && s?.explanation) : [];
     if (!summaries.length) return false;
 
+    const allowFlashcards = ["material", "anotacao", "lei"].includes(String(doc.document_type || "material").toLowerCase());
     const dbRows = summaries.map((content) => ({
       campaign_id: doc.campaign_id,
       user_id: session.user.id,
       source_document_id: doc.id,
-      content_type: "summary",
+      content_type: isExam ? "question_pack" : "summary",
       title: String(content.title || doc.title).slice(0, 200),
       content: {
         ...content,
+        is_question_pack: isExam,
+        flashcards: allowFlashcards && Array.isArray(content.flashcards)
+          ? content.flashcards.filter((c) => typeof window.isValidFlashcardItem === "function" ? window.isValidFlashcardItem(c?.question, c?.answer) : Boolean(c?.question && c?.answer))
+          : [],
         subject: typeof canonicalSubjectName === "function" ? canonicalSubjectName(content.subject || "Conteúdo Geral") : (content.subject || "Conteúdo Geral"),
         source: doc.title,
       },

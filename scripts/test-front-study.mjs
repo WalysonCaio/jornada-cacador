@@ -772,3 +772,62 @@ GABARITO DEFINITIVO
   assert.ok(twin.statement.includes("Questão Gêmea de Fixação") && twin.explanation.includes("Análise do distrator que confundiu antes"), "Questão gêmea deve trabalhar o distrator que o aluno marcou por engano");
   console.log("OK: Extrator Determinístico de Provas (A–D, A–E com gabarito E, Certo/Errado, Anuladas) e Motor Cognitivo de Questões Gêmeas (v117) validados.");
 }
+
+
+// ── Validação v118: Flashcards restritos a Materiais/Anotações/Leis (sem questões nem textos externos) + Biblioteca Comunitária Universal ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const sqlV99 = readFileSync(new URL("../supabase/migrations/20261103120000_v99_universal_community_library.sql", import.meta.url), "utf8");
+  const scriptSrc = htmlSrc.match(/<script>([\s\S]*?)<\/script>/)[1];
+
+  const fnSlice = [
+    scriptSrc.slice(scriptSrc.indexOf("function normalizeText("), scriptSrc.indexOf("function missionForQuestion(")),
+    "function belongsToActiveCampaign(item){return item.campaignId?item.campaignId===state.activeCampaignId:true}",
+    scriptSrc.slice(scriptSrc.indexOf("function isAllowedFlashcardDocType("), scriptSrc.indexOf("async function loadGeneratedContent(")),
+  ].join("\n");
+
+  const ctx = {
+    window: {},
+    state: {
+      activeCampaignId: "pmpe",
+      userNotes: [
+        { id: "n1", title: "Art. 5º, XI — Inviolabilidade Domiciliar", content: "A casa é asilo inviolável do indivíduo; entrada forçada só em flagrante, desastre, socorro ou ordem judicial durante o dia.", subject: "Direito Constitucional", campaignId: "pmpe" },
+        { id: "n2", title: "Questão comentada: Crase", content: "Disciplina: Língua Portuguesa\n\nEnunciado: Assinale a alternativa correta...", subject: "Língua Portuguesa", campaignId: "pmpe" },
+      ],
+    },
+  };
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(fnSlice, ctx);
+
+  // 1) Somente material, anotacao e lei geram flashcards; prova, simulado e question_pack são bloqueados
+  assert.equal(ctx.isAllowedFlashcardDocType("material"), true);
+  assert.equal(ctx.isAllowedFlashcardDocType("anotacao"), true);
+  assert.equal(ctx.isAllowedFlashcardDocType("lei"), true);
+  assert.equal(ctx.isAllowedFlashcardDocType("prova"), false);
+  assert.equal(ctx.isAllowedFlashcardDocType("simulado"), false);
+  assert.equal(ctx.isAllowedFlashcardDocType("edital"), false);
+
+  assert.equal(ctx.isAllowedFlashcardRow({ title: "Morfologia e Classes de Palavras", content: {} }, { document_type: "material", title: "APOSTILA PORTUGUÊS" }), true);
+  assert.equal(ctx.isAllowedFlashcardRow({ title: "Caderno de Questões", content: { is_question_pack: true } }, { document_type: "material", title: "APOSTILA PORTUGUÊS" }), false);
+  assert.equal(ctx.isAllowedFlashcardRow({ title: "Simulado Geral PMPE", content: {} }, { document_type: "simulado", title: "SIMULADO 01" }), false);
+  assert.equal(ctx.isAllowedFlashcardRow({ title: "Prova Oficial AOCP", content: {} }, { document_type: "prova", title: "PROVA PMPE" }), false);
+
+  // 2) Questões de interpretação de texto ("segundo o texto", "no primeiro parágrafo") ou múltipla escolha são bloqueadas de virar flashcard
+  assert.equal(ctx.isValidFlashcardItem("Segundo o texto acima, qual é a intenção do autor no primeiro parágrafo?", "Criticar a burocracia estatal."), false);
+  assert.equal(ctx.isValidFlashcardItem("De acordo com o texto lido, na linha 14 o termo destacado exerce função de:", "Objeto direto."), false);
+  assert.equal(ctx.isValidFlashcardItem("Assinale a alternativa correta acerca dos pronomes átonos:", "A próclise é obrigatória com palavras negativas."), false);
+  assert.equal(ctx.isValidFlashcardItem("[Crase] Qual a regra geral da crase?", "✅ A) Fusão da preposição a com o artigo a"), false);
+  assert.equal(ctx.isValidFlashcardItem("Quando a próclise é obrigatória na colocação pronominal?", "Quando houver palavra atrativa antes do verbo (negação, advérbios sem pausa, pronomes relativos, indefinidos ou conjunções subordinativas)."), true);
+
+  // 3) Anotações do usuário viram flashcards, mas questões salvas no caderno não viram flashcards
+  const noteCards = ctx.extractFlashcardsFromUserNotes();
+  assert.equal(noteCards.length, 1, "Deve extrair flashcard apenas da anotação genuína e ignorar questão salva no caderno");
+  assert.equal(noteCards[0][0], "Direito Constitucional");
+
+  // 4) Biblioteca Comunitária é 100% Universal (sem restrição por slug PMPE — Soldado)
+  assert.ok(sqlV99.includes("'exam_slug', 'universal'") && !sqlV99.includes("= v_slug"), "SQL v99 deve tornar get_community_exam_library 100% universal sem filtro por v_slug");
+  assert.ok(v77Src.includes("Biblioteca Compartilhada Universal da Comunidade") && !v77Src.includes("id=\"createFlashcardFromQuestionBtn\""), "v77-experience.js deve exibir Biblioteca Universal e remover botão de virar questão em flashcard");
+  console.log("OK: Flashcards restritos a Materiais/Anotações/Leis (sem textos externos) e Biblioteca Comunitária Universal (v118) validados.");
+}

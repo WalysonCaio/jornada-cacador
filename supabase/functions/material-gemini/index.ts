@@ -750,7 +750,7 @@ Regras pedagógicas e anti-alucinação:
 - Se o trecho não contiver conteúdo didático substantivo (por ser apenas capa, agradecimento ou propaganda), ignore-o e devolva {"summaries": []};
 - explanation deve ser uma aula detalhada, clara e autossuficiente para iniciante;
 - points deve possuir de 5 a 10 itens com regras e conceitos reais;
-- flashcards deve possuir de 5 a 8 objetos com question e answer focados no conteúdo didático;
+- flashcards deve possuir de 5 a 8 objetos com question e answer focados exclusivamente em conceitos teóricos, regras gramaticais, fórmulas ou artigos de lei autossuficientes (PROIBIDO criar flashcards de questões de interpretação de texto que dependam de ler um texto/parágrafo externo ou de enunciados de múltipla escolha);
 - questions deve possuir exatamente 5 questões de concurso com statement, options (4 alternativas plausíveis do mesmo assunto), correct_index (0 a 3), explanation (resolução passo a passo com Conceito-chave, justificativa da correta, erro das demais e pegadinha), difficulty, topic e origin;
 - NUNCA faça perguntas sobre quem é o professor, se o documento é capa ou sobre agradecimentos/marcas d'água;
 - use a progressão: 1 fácil, 2 médias e 2 difíceis;
@@ -1119,16 +1119,35 @@ function isNonDidacticSummary(title: string, explanation: string, points: string
   return false;
 }
 
-function sanitizeSummary(value: any, knownSubjects: string[]) {
+function isValidFlashcardContent(question: string, answer: string): boolean {
+  const q = String(question || "").trim();
+  const a = String(answer || "").trim();
+  if (q.length < 8 || a.length < 4) return false;
+  // Nunca permitir flashcards que dependam de leitura de texto externo (interpretação de texto)
+  if (/\b(segundo o texto|de acordo com o texto|conforme o texto|no texto acima|no texto lido|leia o texto|leia o trecho|leia a tirinha|leia o poema|leia a charge|leia o fragmento|no trecho acima|no excerto|no fragmento|no \d+[º°ª]?\s*par[aá]grafo|primeiro par[aá]grafo|segundo par[aá]grafo|terceiro par[aá]grafo|[uú]ltimo par[aá]grafo|na linha \d+|nas linhas \d+|no verso \d+|nos versos \d+|o autor do texto|o narrador do texto|infere-se do texto|depreende-se do texto|conclui-se do texto|a leitura do texto|ao longo do texto|no contexto do texto|passagem do texto|trecho do texto)\b/i.test(q)) {
+    return false;
+  }
+  // Nunca permitir enunciados de questões de múltipla escolha virarem flashcards
+  if (/\b(assinale a alternativa|marque a alternativa|assinale a op[cç][aã]o|marque a op[cç][aã]o|julgue os itens|analise as assertivas|analise as afirmativas|analise os itens|sobre as assertivas|qual das alternativas|dentre as alternativas|a alternativa correta)\b/i.test(q)) {
+    return false;
+  }
+  if (/(?:^|\s)(?:[A-D]\)|\([A-D]\))\s+\S+[\s\S]+(?:[B-E]\)|\([B-E]\))\s+\S+/i.test(q)) {
+    return false;
+  }
+  return true;
+}
+
+function sanitizeSummary(value: any, knownSubjects: string[], documentType = "material") {
   const title = normalizeLegalNotation(value?.title || "Resumo", 300);
   const rawPoints = Array.isArray(value?.points) ? value.points.map((p: unknown) => String(p || "")) : [];
   if (isNonDidacticSummary(title, String(value?.explanation || ""), rawPoints)) {
     return { title: "", explanation: "" };
   }
-  const flashcards = Array.isArray(value?.flashcards) ? value.flashcards.map((card: any) => ({
+  const allowFlashcards = ["material", "anotacao", "lei"].includes(String(documentType || "material").toLowerCase());
+  const flashcards = allowFlashcards && Array.isArray(value?.flashcards) ? value.flashcards.map((card: any) => ({
     question: cleanGeneratedText(card?.question, 1000),
     answer: cleanGeneratedText(card?.answer, 2400),
-  })).filter((card: { question: string; answer: string }) => card.question.length >= 8 && card.answer.length >= 8).slice(0, 10) : [];
+  })).filter((card: { question: string; answer: string }) => isValidFlashcardContent(card.question, card.answer)).slice(0, 10) : [];
   return {
     ...value,
     subject: resolveSubject(value?.subject || "Conteúdo", knownSubjects),
@@ -1154,7 +1173,7 @@ function coverageReport(value: any, summaries: any[]) {
   const coveredKeys = covered.map(subjectKey);
   const matched = detected.filter((section) => { const key = subjectKey(section); return coveredKeys.some((coveredKey) => coveredKey === key || (key.length >= 8 && (coveredKey.includes(key) || key.includes(coveredKey)))); }).length;
   const percent = detected.length ? Math.round((matched / detected.length) * 100) : Math.round(confidence * 100);
-  const shallow = summaries.filter((summary) => summary.explanation.length < 220 || summary.points.length < 3 || summary.flashcards.length < 3).length;
+  const shallow = summaries.filter((summary) => !summary.is_question_pack && (summary.explanation.length < 220 || summary.points.length < 3)).length;
   const warnings = [];
   if (percent < 80) warnings.push(`Cobertura declarada de ${percent}% das seções detectadas.`);
   if (confidence < 0.7) warnings.push("A IA informou baixa confiança na leitura integral do PDF.");
@@ -1328,7 +1347,7 @@ Deno.serve(async (request) => {
     // validação determinística. Evitar uma terceira chamada grande reduz timeout,
     // consumo de cota e falhas depois de o PDF já ter sido lido com sucesso.
     const rawSummaries = generatedSummaries;
-    const summaries = rawSummaries.map((content: Record<string, unknown>) => sanitizeSummary(content, knownSubjects)).filter((content: { title?: string; explanation?: string }) => Boolean(content.title && content.explanation));
+    const summaries = rawSummaries.map((content: Record<string, unknown>) => sanitizeSummary(content, knownSubjects, documentType)).filter((content: { title?: string; explanation?: string }) => Boolean(content.title && content.explanation));
     if (!summaries.length) { await setDocumentStatus(documentId, user.id, "error"); await finishUsage(usage.event_id,"error",undefined,undefined,"INSUFFICIENT_CONTENT");await updateJob(documentId,{status:"failed",last_error:"INSUFFICIENT_CONTENT"});return response({ error: "Não encontrei conteúdo de estudo suficiente no PDF." }, 422); }
     const coverage = coverageReport(parsed?.coverage, summaries);
     const hasDeclaredCoverage = Array.isArray(parsed?.coverage?.sections_detected) && parsed.coverage.sections_detected.length > 0;
