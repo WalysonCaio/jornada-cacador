@@ -1014,3 +1014,107 @@ GABARITO DEFINITIVO
 
   console.log("OK: Redesign Moderno das Caixas de Questões, Duelo Rápido Multi-Bancas (AOCP, Cebraspe, FGV, UPENET) e Popup de Confirmação ao Sair do Duelo validados (v118-E).");
 }
+
+
+// ── Validação v118-F: Bloqueio de Reanálise Automática no Login, Proteção contra PDFs de Simulado/Material virarem Missão, Ordem Pedagógica Estrita (1 -> 2 -> 3) e Higienização de Disciplinas ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const pdfClientSrc = readFileSync(new URL("../dist/pdf-text-client.js", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+
+  // 1) Verifica que runNextProcessingJob está desativado para não reanalisar documentos automaticamente ao logar em outro dispositivo
+  assert.ok(htmlSrc.includes("async function runNextProcessingJob(){return}"), "runNextProcessingJob deve ser no-op para impedir reanálise automática no login/troca de aparelho");
+  assert.ok(pdfClientSrc.includes("if (!isEditalType(doc))"), "saveTopicsToCampaignAndSync deve bloquear estritamente qualquer PDF que não seja do tipo edital");
+
+  // 2) Testa higienização de disciplinas (canonicalSubjectName) e ordenação pedagógica sequencial (normalizeAndOrderEditalMissions)
+  const fnSlice = [
+    slice("function normalizeText(", "function missionForQuestion("),
+    slice("function isContaminatedNonEditalMission(", "function missionPool("),
+  ].join("\n");
+  const ctx = { window: {} };
+  vm.createContext(ctx);
+  vm.runInContext(fnSlice, ctx);
+
+  // Enunciados vazados de simulado ou cabeçalhos "Ano: 2022..." não podem virar disciplinas válidas
+  const noisySubj1 = ctx.canonicalSubjectName("...Adolescente e ao Jovem, Relativamente À Idade Mínima Para Admissão ao Trabalho, Assinale a Alternativa Correta . Alternativa S", "Estatuto da Criança e do Adolescente - Lei 8.069/90");
+  assert.equal(noisySubj1, "Legislação Extravagante", "Enunciado vazado com contexto de ECA deve ser mapeado para Legislação Extravagante");
+
+  const noisySubj2 = ctx.canonicalSubjectName("Ano: 2022 Banca: INSTITUTO AOCP Órgão: PC-RO", "Lógica Proposicional - Equivalência e Negação");
+  assert.equal(noisySubj2, "Raciocínio Lógico-Matemático", "Cabeçalho Ano/Banca com tópico de Lógica Proposicional deve ser mapeado para Raciocínio Lógico-Matemático");
+
+  const subtopicSubj = ctx.canonicalSubjectName("Lógica Proposicional - Equivalência e Negação");
+  assert.equal(subtopicSubj, "Raciocínio Lógico-Matemático", "Subtópico Lógica Proposicional deve ser agrupado na macrodisciplina Raciocínio Lógico-Matemático");
+
+  const subtopicPort = ctx.canonicalSubjectName("Sinonímia e Antonímia");
+  assert.equal(subtopicPort, "Língua Portuguesa", "Subtópico Sinonímia deve ser agrupado em Língua Portuguesa");
+
+  // 3) Testa que normalizeAndOrderEditalMissions remove missões contaminadas por simulados e ordena 1 -> 2 -> 3 com pré-requisito sequencial
+  const dirtyMissions = [
+    { id: "m2", subject: "Língua Portuguesa", name: "2. Tipologias e gêneros textuais.", editalOrder: 9, learningOrder: 9 },
+    { id: "m_dirty_1", subject: "...2022 - Pc - Ro - Agente de Polícia", name: "Assinale a alternativa correta relativamente à idade mínima para admissão ao trabalho. Alternativa S", editalOrder: 0, learningOrder: 0 },
+    { id: "m3", subject: "Sinonímia e Antonímia", name: "3. Ortografia oficial e acentuação gráfica.", editalOrder: 5, learningOrder: 5 },
+    { id: "m1", subject: "Língua Portuguesa", name: "1. Compreensão e interpretação de textos.", editalOrder: 12, learningOrder: 12 },
+  ];
+  const ordered = JSON.parse(vm.runInContext(`JSON.stringify(normalizeAndOrderEditalMissions(${JSON.stringify(dirtyMissions)}))`, ctx));
+  assert.equal(ordered.length, 3, "Deve remover a missão contaminada por questão de simulado e manter as 3 missões reais do edital");
+  assert.equal(ordered[0].name, "1. Compreensão e interpretação de textos.", "A missão 1 deve vir primeiro");
+  assert.equal(ordered[1].name, "2. Tipologias e gêneros textuais.", "A missão 2 deve vir em segundo lugar");
+  assert.equal(ordered[2].name, "3. Ortografia oficial e acentuação gráfica.", "A missão 3 deve vir em terceiro lugar");
+  assert.equal(ordered[0].prerequisite, "", "O tópico 1 não possui pré-requisito anterior");
+  assert.equal(ordered[1].prerequisite, "1. Compreensão e interpretação de textos.", "O tópico 2 exige o tópico 1 como pré-requisito");
+  assert.equal(ordered[2].prerequisite, "2. Tipologias e gêneros textuais.", "O tópico 3 exige o tópico 2 como pré-requisito");
+
+  const v59Src = readFileSync(new URL("../dist/v59-enhancements.js", import.meta.url), "utf8");
+  assert.ok(v59Src.includes("isInvalidTrailSubject(q.subject,q.topic)") && v77Src.includes("isInvalidTrailSubject(resolvedSubj)"), "v59-enhancements.js e v77-experience.js devem filtrar rótulos de disciplinas no seletor #questionSubject e nos cards rápidos");
+
+  console.log("OK: Bloqueio de Reanálise Automática, Filtro Anti-Simulado nas Missões, Ordem Pedagógica Estrita (1 -> 2 -> 3) e Higienização de Disciplinas validados (v118-F).");
+}
+
+
+// ── Validação v118-G: Edital 100% Individual por Usuário e Perfil (PM PE, BCM PE, CBM PE), Isolamento de Cache por UserID e Bloqueio Total de Edital na Comunidade ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const sqlV99 = readFileSync(new URL("../supabase/migrations/20261103120000_v99_universal_community_library.sql", import.meta.url), "utf8");
+
+  // 1) Verifica que o cache local IndexedDB é isolado por user_id (localCachePortalKey)
+  assert.ok(htmlSrc.includes("function localCachePortalKey(") && htmlSrc.includes("cached.userId!==currentUid"), "O cache local IndexedDB deve isolar os dados de cada portal pelo user_id logado");
+
+  // 2) Verifica que uploadStudyDocument mantém o edital no perfil ativo do usuário (PM PE, BCM PE, CBM PE, etc.) sem trocar de portal nem compartilhar com a comunidade
+  assert.ok(!htmlSrc.includes('toast(`Novo portal "${detectedPortal.name}" criado automaticamente para este edital!`)'), "uploadStudyDocument não deve criar outro portal forçado ao enviar um edital no perfil escolhido pelo usuário");
+  assert.ok(htmlSrc.includes("const isEditalFile=type==='edital'||isEditalDocumentOrTitle(") && htmlSrc.includes("const shareOptIn=!isEditalFile"), "Editais devem ter share_with_community = false obrigatoriamente");
+
+  // 3) Verifica suporte a BCM PE e CBM PE e bloqueio de missões comunitárias ('edital-comm-')
+  const fnSlice = [
+    slice("function normalizeText(", "function missionForQuestion("),
+    slice("function isEditalDocumentOrTitle(", "async function ensureSecondaryPortalMissionsLoaded("),
+    slice("function isContaminatedNonEditalMission(", "function missionPool("),
+    slice("function inferExamPortalInfo(", "async function toggleDocumentCommunitySharing("),
+    slice("window.unpackEditalTopicsList=function(", "window._activeProcessingDocs="),
+  ].join("\n");
+  const ctx = { window: {}, cloudSession: { user: { id: "user-abc-123" } }, state: { _ownerUserId: "user-abc-123", activeCampaignId: "pmpe" } };
+  vm.createContext(ctx);
+  vm.runInContext(fnSlice, ctx);
+
+  assert.equal(ctx.localCachePortalKey("pmpe"), "user-abc-123:pmpe", "A chave do cache local deve prefixar o ID do usuário antes do ID do portal");
+  assert.equal(ctx.inferExamPortalInfo("BCM PE")?.slug, "cbmpe", "O perfil BCM PE deve ser reconhecido como Bombeiros PE (cbmpe)");
+  assert.equal(ctx.inferExamPortalInfo("PM PE")?.slug, "pmpe", "O perfil PM PE deve ser reconhecido como Polícia Militar PE (pmpe)");
+  assert.equal(ctx.isContaminatedNonEditalMission({ id: "edital-comm-0", subject: "Língua Portuguesa", name: "1. Compreensão de textos" }), true, "Missões herdadas de edital comunitário (edital-comm-*) devem ser bloqueadas/removidas");
+  assert.equal(ctx.isEditalDocumentOrTitle({ document_type: "material", title: "EDITAL VERTICALIZADO PMPE 2026" }), true, "Arquivos cujo título é Edital Verticalizado devem ser reconhecidos como edital mesmo se enviados como material");
+
+  // 4) Verifica desdobramento de edital em perfil nomeado "BCM PE" (incluindo Física, Química e Biologia)
+  const bcmTopics = [
+    { subject: "BCM PE", topic: "1. Compreensão e interpretação de textos." },
+    { subject: "BCM PE", topic: "1. Cinemática, dinâmica, leis de Newton e termologia." },
+    { subject: "BCM PE", topic: "1. Tabela periódica, ligações químicas e reações de combustão." },
+    { subject: "BCM PE", topic: "1. Anatomia humana, fisiologia e primeiros socorros em hemorragias." },
+  ];
+  const unpackedBcm = ctx.window.unpackEditalTopicsList(bcmTopics, "BCM PE", "EDITAL BCM PE");
+  const bcmSubjs = [...unpackedBcm.map((x) => x.subject)];
+  assert.deepEqual(bcmSubjs, ["Língua Portuguesa", "Física", "Química", "Biologia"], "Um edital inserido no perfil BCM PE deve separar Língua Portuguesa, Física, Química e Biologia sem agrupar sob 'BCM PE'");
+
+  // 5) Verifica SQL v99 de blindagem individual do edital e RLS
+  assert.ok(sqlV99.includes("BLINDAGEM DE EDITAL INDIVIDUAL POR USUÁRIO") && sqlV99.includes("edital-comm-%"), "A migração SQL v99 deve conter a blindagem individual de editais e limpeza de user_state contaminado");
+
+  console.log("OK: Edital 100% Individual por Usuário e Perfil (PM PE / BCM PE / CBM PE), Cache Isolado por UserID e Bloqueio de Edital na Comunidade validados (v118-G).");
+}

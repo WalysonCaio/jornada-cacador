@@ -1128,9 +1128,10 @@
     const allQs=(ALL_QUESTIONS||[]).filter(item=>questionMatchesBoardFilter(item,currentBoard));
     const countsBySubj=new Map();
     for(const item of allQs){
-      const s=learningCategory(item.subject)||'Geral';
-      if(isInvalidTrailSubject(s))continue;
-      countsBySubj.set(s,(countsBySubj.get(s)||0)+1);
+      const resolvedSubj=canonicalSubjectName(item.subject,`${item.topic||''} ${item.statement||''}`);
+      if(isInvalidTrailSubject(resolvedSubj))continue;
+      item.subject=resolvedSubj;
+      countsBySubj.set(resolvedSubj,(countsBySubj.get(resolvedSubj)||0)+1);
     }
     const subjects=[...countsBySubj.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'pt-BR'));
     bar.innerHTML=`
@@ -1840,13 +1841,15 @@
     const missions=typeof missionPool==='function'?missionPool():[];
     const bySubject={};
     for(const item of scores){
-      const name=canonicalSubjectName(item.subject||missions.find(m=>m.id===item.id)?.subject||'Conteúdo Geral');
+      const name=canonicalSubjectName(item.subject||missions.find(m=>m.id===item.id)?.subject||'Conteúdo Geral', `${item.topic||''} ${item.name||''}`);
+      if(isInvalidTrailSubject(name))continue;
       bySubject[name]??={total:0,correct:0,misses:0};
       bySubject[name].total+=Number(item.total||0);
       bySubject[name].correct+=Number(item.correct||0);
     }
     for(const [,err] of activeCampaignErrors()){
-      const name=canonicalSubjectName(err?.subject||'Conteúdo Geral');
+      const name=canonicalSubjectName(err?.subject||'Conteúdo Geral', `${err?.topic||''} ${err?.question||''}`);
+      if(isInvalidTrailSubject(name))continue;
       bySubject[name]??={total:0,correct:0,misses:0};
       bySubject[name].misses+=Number(err?.misses||1);
     }
@@ -1969,13 +1972,15 @@
     const scores=(state?.scores||[]).filter(item=>!item.campaignId||item.campaignId===state.activeCampaignId),groups={};
     for(const item of scores){
       const rawName=item.subject||missionPool().find(m=>m.id===item.id)?.subject||'Conteúdo geral';
-      const name=canonicalSubjectName(rawName);
+      const name=canonicalSubjectName(rawName, `${item.topic||''} ${item.name||''}`);
+      if(isInvalidTrailSubject(name))continue;
       groups[name]??={total:0,correct:0,misses:0};
       groups[name].total+=Number(item.total||0);
       groups[name].correct+=Number(item.correct||0);
     }
     for(const [,err] of activeCampaignErrors()){
-      const name=canonicalSubjectName(err?.subject||'Conteúdo geral');
+      const name=canonicalSubjectName(err?.subject||'Conteúdo geral', `${err?.topic||''} ${err?.question||''}`);
+      if(isInvalidTrailSubject(name))continue;
       groups[name]??={total:0,correct:0,misses:0};
       groups[name].misses+=Number(err?.misses||1);
     }
@@ -4667,13 +4672,14 @@
         const firstData=firstRes&&firstRes.ok?await firstRes.json().catch(()=>null):null;
         const docMap=new Map();
         const sumMap=new Map();
+        const isEditalItem=item=>typeof window.isEditalDocumentOrTitle==='function'?window.isEditalDocumentOrTitle(item):(['edital','edital_concurso'].includes(String(item?.document_type||'').toLowerCase())||/\b(edital\s+verticalizado|edital\s+do\s+concurso|edital\s+de\s+abertura)\b/i.test(`${item?.title||''} ${item?.source_name||''} ${item?.content?.source||''}`));
         const mergePayload=payload=>{
           if(!payload)return;
           for(const d of (Array.isArray(payload.documents)?payload.documents:[])){
-            if(d?.id&&!['edital','edital_concurso'].includes(d.document_type)&&!docMap.has(String(d.id)))docMap.set(String(d.id),d);
+            if(d?.id&&!['edital','edital_concurso'].includes(d.document_type)&&!isEditalItem(d)&&!docMap.has(String(d.id)))docMap.set(String(d.id),d);
           }
           for(const s of (Array.isArray(payload.summaries)?payload.summaries:[])){
-            if(s?.id&&!sumMap.has(String(s.id)))sumMap.set(String(s.id),s);
+            if(s?.id&&!isEditalItem(s)&&!sumMap.has(String(s.id)))sumMap.set(String(s.id),s);
           }
         };
         mergePayload(firstData);
@@ -4689,16 +4695,17 @@
           const extraResults=await Promise.all(extraProbes.map(p=>cloudFetch('rpc/get_community_exam_library',{method:'POST',body:JSON.stringify(p)}).then(r=>r.ok?r.json():null).catch(()=>null)));
           extraResults.forEach(mergePayload);
         }
-        // Também inclui documentos e conteúdos prontos de outros portais do próprio usuário (ex.: PMPE <-> CBM PE)
-        const [ownOtherDocsRes,ownOtherSumsRes]=await Promise.all([
-          cloudFetch(`study_documents?processing_status=eq.ready&document_type=not.in.(edital,edital_concurso)&select=*&order=created_at.desc&limit=200`).catch(()=>null),
-          cloudFetch(`generated_study_content?content_type=in.(summary,question_pack)&select=id,title,content_type,content,source_refs,source_document_id,created_at&order=created_at.asc&limit=500`).catch(()=>null)
-        ]);
+        // Também inclui documentos e conteúdos prontos de outros portais do próprio usuário (ex.: PMPE <-> CBM PE / BCM PE), NUNCA editais
+        const ownUid=cloudSession?.user?.id||'';
+        const [ownOtherDocsRes,ownOtherSumsRes]=ownUid?await Promise.all([
+          cloudFetch(`study_documents?user_id=eq.${encodeURIComponent(ownUid)}&processing_status=eq.ready&document_type=not.in.(edital,edital_concurso)&select=*&order=created_at.desc&limit=200`).catch(()=>null),
+          cloudFetch(`generated_study_content?user_id=eq.${encodeURIComponent(ownUid)}&content_type=in.(summary,question_pack)&select=id,title,content_type,content,source_refs,source_document_id,created_at&order=created_at.asc&limit=500`).catch(()=>null)
+        ]):[null,null];
         const ownOtherDocs=ownOtherDocsRes?.ok?await ownOtherDocsRes.json().catch(()=>[]):[];
         const ownOtherSums=ownOtherSumsRes?.ok?await ownOtherSumsRes.json().catch(()=>[]):[];
         if(Array.isArray(ownOtherDocs)){
           for(const d of ownOtherDocs){
-            if(!d?.id||String(d.campaign_id)===String(campaign.dbId))continue;
+            if(!d?.id||String(d.campaign_id)===String(campaign.dbId)||isEditalItem(d))continue;
             if(d.share_with_community===false||d.metadata?.private_only===true)continue;
             if(!docMap.has(String(d.id))){
               docMap.set(String(d.id),{...d,is_community:true,portal_name:d.portal_name||'Meu Outro Portal',author_name:d.author_name||'Sua Biblioteca'});
@@ -4707,9 +4714,9 @@
         }
         if(Array.isArray(ownOtherSums)){
           for(const s of ownOtherSums){
-            if(!s?.id||sumMap.has(String(s.id)))continue;
+            if(!s?.id||sumMap.has(String(s.id))||isEditalItem(s))continue;
             const pDoc=docMap.get(String(s.source_document_id));
-            if(pDoc||!s.source_document_id){
+            if(pDoc&&!isEditalItem(pDoc)){
               sumMap.set(String(s.id),{...s,is_community:true,document_type:pDoc?.document_type||'material'});
             }
           }
@@ -4840,9 +4847,10 @@
   window.syncCommunityLibraryForActivePortal=syncCommunityLibraryForActivePortal;
 
   function applyCommunityEditalToPortal(){
+    return toast('🔒 O edital é individual por usuário! Envie o seu próprio PDF na Biblioteca marcando a opção "Edital do concurso".');
     const campaign=typeof activeCampaign==='function'?activeCampaign():null;
-    const rows=communityCache.editalTopics||[];
-    if(!campaign||!rows.length)return toast('Nenhum edital da comunidade encontrado para este concurso.');
+    const rows=[];
+    if(!campaign||!rows.length)return;
     const unpacked=typeof window.unpackEditalTopicsList==='function'?window.unpackEditalTopicsList(rows,campaign.name):rows;
     const missions=unpacked.map((row,i)=>({
       id:`edital-comm-${i}`,
@@ -7445,8 +7453,10 @@
         }
       }
       for(const qItem of (ALL_QUESTIONS||[])){
-        const doc=qItem.documentId?cloudDocuments.find(d=>String(d.id)===String(qItem.documentId)):null;
-        const nextCat=window.resolveDocumentDiscipline(doc,qItem.subject,`${doc?.title||''} ${qItem.topic||''}`);
+        const doc=(qItem.documentId||qItem.sourceDocumentId)?(cloudDocuments||[]).find(d=>String(d.id)===String(qItem.documentId||qItem.sourceDocumentId)):null;
+        const nextCat=typeof window.resolveDocumentDiscipline==='function'
+          ?window.resolveDocumentDiscipline(doc,qItem.subject,`${doc?.title||''} ${qItem.topic||''} ${qItem.statement||''}`)
+          :canonicalSubjectName(qItem.subject,`${qItem.topic||''} ${qItem.statement||''}`);
         if(nextCat&&!window.isInvalidTrailSubject?.(nextCat,qItem.topic,'',doc)&&nextCat!==qItem.subject){qItem.subject=nextCat;changed=true}
       }
     }

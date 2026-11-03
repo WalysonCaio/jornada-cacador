@@ -67,6 +67,8 @@ begin
   left join public.user_state us on us.user_id = d.user_id
   where d.processing_status = 'ready'
     and d.document_type not in ('edital', 'edital_concurso')
+    and coalesce(d.title, '') !~* '\m(edital\s+verticalizado|edital\s+esquematizado|edital\s+sintetizado|edital\s+do\s+concurso|edital\s+de\s+abertura|edital\s+n[ºo°]|conte[uú]do\s+program[aá]tico\s+verticalizado)\M'
+    and coalesce(d.source_name, '') !~* '\m(edital\s+verticalizado|edital\s+do\s+concurso|edital\s+de\s+abertura)\M'
     and coalesce(d.share_with_community, true) = true
     and coalesce(d.metadata->>'private_only', 'false') <> 'true';
 
@@ -95,11 +97,13 @@ begin
     left join public.study_campaigns sc on sc.id = g.campaign_id
     left join public.study_documents sd on sd.id = g.source_document_id
     where g.content_type in ('summary', 'question_pack')
-      and (sd.id is null or (
-        sd.document_type not in ('edital', 'edital_concurso')
-        and coalesce(sd.share_with_community, true) = true
-        and coalesce(sd.metadata->>'private_only', 'false') <> 'true'
-      ))
+      and coalesce(g.title, '') !~* '\m(edital\s+verticalizado|edital\s+do\s+concurso|edital\s+de\s+abertura)\M'
+      and coalesce(g.content->>'source', '') !~* '\m(edital\s+verticalizado|edital\s+do\s+concurso|edital\s+de\s+abertura)\M'
+      and sd.id is not null
+      and sd.document_type not in ('edital', 'edital_concurso')
+      and coalesce(sd.title, '') !~* '\m(edital\s+verticalizado|edital\s+do\s+concurso|edital\s+de\s+abertura)\M'
+      and coalesce(sd.share_with_community, true) = true
+      and coalesce(sd.metadata->>'private_only', 'false') <> 'true'
     order by g.created_at desc
     limit 1000
   ) g;
@@ -193,3 +197,112 @@ update public.generated_study_content g
 set content = jsonb_set(g.content, '{mnemonic}', '""'::jsonb, true)
 where coalesce(g.content->>'mnemonic', '') ~* '^(n[aã]o h[aá]|nenhum|sem mnem[oô]nico|n/a|n[aã]o consta|n[aã]o informado|n[aã]o se aplica|inexistente|-|\.)$'
    or coalesce(g.content->>'mnemonic', '') ~* '(n[aã]o h[aá] mnem[oô]nico|sem mnem[oô]nico espec[ií]fico|o material n[aã]o traz mnem[oô]nico)';
+
+-- Limpa missões contaminadas por simulados/provas (enunciados de questões, cabeçalhos "Ano: 2022...", etc.) na tabela campaign_topics
+delete from public.campaign_topics
+where topic ~* '(assinale a alternativa|marque a alternativa|julgue os itens|alternativa\s+s$|ctconcursosonline|quest[oõ]es comentadas|gabarito preliminar|^ano:\s*\d{4}|banca:\s*|órgão:\s*)'
+   or subject ~* '(assinale a alternativa|marque a alternativa|alternativa\s+s$|ctconcursosonline|^ano:\s*\d{4})'
+   or length(coalesce(topic, '')) > 240;
+
+-- Corrige documentos de simulado/prova/apostila que haviam sido marcados erroneamente como 'edital' ou ficaram presos em 'processing'
+update public.study_documents
+set document_type = case
+  when title ~* '(simulado|caderno de quest|bateria de quest)' then 'simulado'
+  when title ~* '(prova|gabarito)' and title !~* 'edital' then 'prova'
+  else document_type
+end,
+processing_status = case
+  when processing_status in ('pending', 'processing') and coalesce(progress_percent, 0) >= 100 then 'ready'
+  else processing_status
+end
+where document_type in ('edital', 'edital_concurso', 'simulado', 'prova', 'material', 'apostila');
+
+-- =============================================================================
+-- 5. BLINDAGEM DE EDITAL INDIVIDUAL POR USUÁRIO E PERFIL (PM PE, BCM PE, CBM PE, ETC.)
+-- Garante que CADA usuário tenha seu próprio edital privado em seu perfil,
+-- sem nunca compartilhar o edital com outros usuários, mantendo apenas os
+-- materiais de estudo, leis, anotações, provas e simulados compartilhados.
+-- =============================================================================
+
+-- Reconhece tanto CBM PE quanto BCM PE na normalização de siglas
+create or replace function public.normalize_exam_slug(p_name text, p_org text default '')
+returns text
+language plpgsql
+immutable
+set search_path = public
+as $$
+declare
+  raw text := lower( coalesce(p_name, '') || ' ' || coalesce(p_org, '') );
+begin
+  raw := translate(raw, 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc');
+  if raw ~ '\m(pp\s*pe|policia\s+penal.*pernambuco|policial\s+penal.*pe)\M' then return 'pppe'; end if;
+  if raw ~ '\m(pm\s*pe|policia\s+militar.*pernambuco)\M' then return 'pmpe'; end if;
+  if raw ~ '\m(pc\s*pe|policia\s+civil.*pernambuco)\M' then return 'pcpe'; end if;
+  if raw ~ '\m(cbm\s*pe|bcm\s*pe|bombeiro.*pernambuco)\M' then return 'cbmpe'; end if;
+  if raw ~ '\m(prf|policia\s+rodoviaria\s+federal)\M' then return 'prf'; end if;
+  if raw ~ '\m(pf|policia\s+federal)\M' then return 'pf'; end if;
+  return coalesce(nullif(regexp_replace(raw, '[^a-z0-9]+', '-', 'g'), ''), 'geral');
+end;
+$$;
+
+-- Marca todos os editais existentes como 100% privados (share_with_community = false)
+update public.study_documents
+set document_type = 'edital',
+    share_with_community = false,
+    metadata = jsonb_set(
+      jsonb_set(coalesce(metadata, '{}'::jsonb), '{share_with_community}', 'false'::jsonb, true),
+      '{private_only}',
+      'true'::jsonb,
+      true
+    )
+where document_type in ('edital', 'edital_concurso')
+   or (
+     document_type not in ('prova', 'simulado')
+     and title ~* '\m(edital\s+verticalizado|edital\s+esquematizado|edital\s+sintetizado|edital\s+do\s+concurso|edital\s+de\s+abertura)\M'
+   );
+
+-- Remove qualquer conteúdo comunitário gerado a partir de documento de edital
+delete from public.generated_study_content g
+using public.study_documents sd
+where g.source_document_id = sd.id
+  and sd.document_type in ('edital', 'edital_concurso');
+
+-- Garante que nenhum tópico de edital em campaign_topics pertença a um user_id diferente do dono da campanha
+delete from public.campaign_topics ct
+using public.study_campaigns sc
+where ct.campaign_id = sc.id
+  and ct.user_id <> sc.user_id;
+
+-- Limpa de user_state quaisquer missões que tenham vazado da comunidade ('edital-comm-%')
+-- ou de usuários que ainda não enviaram seu próprio edital em study_documents / campaign_topics
+update public.user_state us
+set state = jsonb_set(us.state, '{customCampaign,missions}', '[]'::jsonb, true)
+where jsonb_typeof(us.state #> '{customCampaign,missions}') = 'array'
+  and jsonb_array_length(us.state #> '{customCampaign,missions}') > 0
+  and (
+    exists (
+      select 1
+      from jsonb_array_elements(us.state #> '{customCampaign,missions}') as m
+      where coalesce(m->>'id', '') like 'edital-comm-%'
+    )
+    or (
+      not exists (select 1 from public.campaign_topics ct where ct.user_id = us.user_id)
+      and not exists (
+        select 1 from public.study_documents sd
+        where sd.user_id = us.user_id
+          and sd.document_type in ('edital', 'edital_concurso')
+      )
+    )
+  );
+
+-- Reforça políticas RLS estritas (auth.uid() = user_id) nas tabelas individuais
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['study_campaigns', 'campaign_topics', 'study_documents', 'generated_study_content', 'essay_submissions', 'user_state'] loop
+    execute format('alter table if exists public.%I enable row level security', t);
+    execute format('drop policy if exists "own_rows_all" on public.%I', t);
+    execute format('create policy "own_rows_all" on public.%I for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id)', t);
+  end loop;
+end $$;
