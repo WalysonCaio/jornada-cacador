@@ -246,6 +246,7 @@
   function renderReverseSchedule(){
     ensureReverseSchedulePanel();
     ensureTopicPanelSearch();
+    if(typeof renderExamCountdown==='function')renderExamCountdown();
     renderStudyCycle();
     const panel=q('#reverseSchedulePanel');
     if(!panel)return;
@@ -257,6 +258,31 @@
     const date=campaign?.examDate||campaign?.exam_date||null;
     const studyDaysCount=Math.max(1,(state?.settings?.studyDays||[1,2,3,4,5,6]).length);
     const metricsEl=q('#reverseScheduleMetrics'),badgeEl=q('#reverseScheduleBadge'),adviceEl=q('#reverseScheduleAdvice'),titleEl=q('#reverseScheduleTitle');
+
+    if(typeof window.isUnifiedPortalActive==='function'&&window.isUnifiedPortalActive()){
+      const secCamp=typeof window.getSecondaryPortalForUnification==='function'?window.getSecondaryPortalForUnification():null;
+      const uStats=typeof window.buildUnifiedMissionPool==='function'?window.buildUnifiedMissionPool(campaign,secCamp).stats:null;
+      const pMissions=missions.filter(m=>m.originScope==='both'||m.originScope==='primary');
+      const sMissions=missions.filter(m=>m.originScope==='both'||m.originScope==='secondary');
+      const pRem=Math.max(0,pMissions.length-pMissions.filter(m=>state?.done?.[m.id]).length);
+      const sRem=Math.max(0,sMissions.length-sMissions.filter(m=>state?.done?.[m.id]).length);
+      const pDate=campaign?.examDate||campaign?.exam_date||null;
+      const sDate=secCamp?.examDate||secCamp?.exam_date||null;
+      const pDays=pDate?Math.ceil((new Date(`${pDate}T23:59:59`)-Date.now())/86400000):null;
+      const sDays=sDate?Math.ceil((new Date(`${sDate}T23:59:59`)-Date.now())/86400000):null;
+      const pPace=pDays&&pDays>0?`${Math.ceil(pRem/Math.max(1/7,pDays/7))}/sem`:`${Math.max(1,studyDaysCount)}/sem`;
+      const sPace=sDays&&sDays>0?`${Math.ceil(sRem/Math.max(1/7,sDays/7))}/sem`:`${Math.max(1,studyDaysCount)}/sem`;
+      badgeEl.textContent=`Conciliação (${uStats?.pBadge||"1º"} + ${uStats?.sBadge||"2º"})`;
+      titleEl.textContent=`Ritmo das 2 Provas: ${remaining} tópicos restantes no mapa unificado (${uStats?.fusedMissionsCount||0} comuns fundidos)`;
+      metricsEl.innerHTML=`
+        <div class="reverseMetric"><b>${pDays!==null?`${Math.max(0,pDays)}d`:"Sem data"}</b><span>🎯 Prova ${escText(uStats?.pBadge||"1")} (${pRem} pend. · ${pPace})</span></div>
+        <div class="reverseMetric"><b>${sDays!==null?`${Math.max(0,sDays)}d`:"Sem data"}</b><span>🔥 Prova ${escText(uStats?.sBadge||"2")} (${sRem} pend. · ${sPace})</span></div>
+        <div class="reverseMetric"><b>${uStats?.fusedMissionsCount||0}</b><span>⚡ tópicos 2-em-1 (ambos)</span></div>
+        <div class="reverseMetric"><b>${total?Math.round(done/total*100):0}%</b><span>progresso unificado</span></div>
+      `;
+      adviceEl.textContent=`Cada missão ⚡ AMBOS concluída abate simultaneamente o cronograma de ${uStats?.pBadge||"Prova 1"} e de ${uStats?.sBadge||"Prova 2"}. Você pode definir datas diferentes para cada prova ou desunificar quando quiser sem perder progresso.`;
+      return;
+    }
 
     if(!total){
       badgeEl.textContent='Aguardando edital';
@@ -1970,6 +1996,7 @@
           <span class="tag" id="cutoffTierBadge">Em aferição</span>
         <label class="small muted" style="display:flex;align-items:center;gap:6px;margin-top:6px">Minha meta (%)<input id="cutoffTargetInput" type="number" min="40" max="95" step="1" inputmode="numeric" style="width:68px" aria-label="Meta de acerto do meu concurso em porcentagem"></label>
         </div>
+        <div id="cutoffUnifiedExamSwitchBar" style="margin-bottom:8px"></div>
         <div class="cutoffTrackWrap">
           <div class="cutoffBar">
             <div class="cutoffFill" id="cutoffFillBar" style="width:0%"></div>
@@ -2003,16 +2030,49 @@
     ensureCutoffThermometer();
     const fillEl=q('#cutoffFillBar'),pinEl=q('#cutoffCurrentPin'),titleEl=q('#cutoffStatusTitle'),badgeEl=q('#cutoffTierBadge'),adviceEl=q('#cutoffAdviceText'),stagesEl=q('#cutoffStagesGrid'),actionBox=q('#cutoffActionableBox');
     if(!fillEl)return;
-    const scores=(state?.scores||[]).filter(s=>!s.campaignId||s.campaignId===state.activeCampaignId);
-    const tracked=state?.questionStatsByCampaign?.[state?.activeCampaignId]||{};
+    const missions=typeof missionPool==='function'?missionPool():[];
+    const isUnified=typeof window.isUnifiedPortalActive==='function'&&window.isUnifiedPortalActive();
+    const uStats=isUnified&&typeof window.buildUnifiedMissionPool==='function'?window.buildUnifiedMissionPool().stats:null;
+    const examScope=isUnified?(state?.cutoffExamScope||'primary'):'all';
+    const switchBar=q('#cutoffUnifiedExamSwitchBar');
+    if(switchBar){
+      if(isUnified&&uStats){
+        switchBar.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:10px;background:rgba(9,24,42,.8);border:1px solid #234769"><span class="small muted"><b>🎯 Simulador Independente por Prova:</b> evita que matérias exclusivas de um edital distorçam a nota do outro</span><div style="display:flex;gap:5px;flex-wrap:wrap"><button type="button" class="ghost small ${examScope==='primary'?'active':''}" data-cutoff-exam-scope="primary">🎯 Prova ${escText(uStats.pBadge)}</button><button type="button" class="ghost small ${examScope==='secondary'?'active':''}" data-cutoff-exam-scope="secondary">🔥 Prova ${escText(uStats.sBadge)}</button><button type="button" class="ghost small ${examScope==='all'?'active':''}" data-cutoff-exam-scope="all">📊 Visão Combinada</button></div></div>`;
+        switchBar.querySelectorAll('[data-cutoff-exam-scope]').forEach(btn=>btn.onclick=()=>{
+          state.cutoffExamScope=btn.dataset.cutoffExamScope;
+          save();
+          renderCutoffThermometer();
+        });
+      }else{
+        switchBar.innerHTML='';
+      }
+    }
+    const allowedSubjKeys=new Set();
+    if(isUnified&&examScope!=='all'){
+      for(const m of missions){
+        if(examScope==='primary'&&(m.originScope==='both'||m.originScope==='primary'||m.subjectScope==='both'||m.subjectScope==='primary')){
+          allowedSubjKeys.add(topicKey(canonicalSubjectName(m.subject)));
+        }else if(examScope==='secondary'&&(m.originScope==='both'||m.originScope==='secondary'||m.subjectScope==='both'||m.subjectScope==='secondary')){
+          allowedSubjKeys.add(topicKey(canonicalSubjectName(m.subject)));
+        }
+      }
+    }
+    const subjAllowed=subjName=>{
+      if(!isUnified||examScope==='all'||!allowedSubjKeys.size)return true;
+      return allowedSubjKeys.has(topicKey(canonicalSubjectName(subjName)));
+    };
+    const secId=typeof window.getSecondaryPortalForUnification==='function'?window.getSecondaryPortalForUnification()?.id:null;
+    const rawScores=(state?.scores||[]).filter(s=>!s.campaignId||s.campaignId===state.activeCampaignId||(isUnified&&secId&&s.campaignId===secId));
+    const scores=rawScores.filter(s=>{
+      const sName=s.subject||missions.find(m=>m.id===s.id)?.subject||'Conteúdo Geral';
+      return subjAllowed(sName);
+    });
+    const tracked=(!isUnified||examScope==='all')?(state?.questionStatsByCampaign?.[state?.activeCampaignId]||{}):{};
     const scoreTotal=scores.reduce((n,s)=>n+Number(s.total||0),0);
     const scoreCorrect=scores.reduce((n,s)=>n+Number(s.correct||0),0);
     const total=Math.max(scoreTotal,Number(tracked.total||0));
     const correct=Number(tracked.total||0)>scoreTotal?Number(tracked.correct||0):scoreCorrect;
-    const allErrors=activeCampaignErrors();
-
-    // Calcular métricas por disciplina para identificar gargalos reais
-    const missions=typeof missionPool==='function'?missionPool():[];
+    const allErrors=activeCampaignErrors().filter(([,e])=>subjAllowed(e?.subject||'Conteúdo Geral'));
     const bySubject={};
     for(const item of scores){
       const name=canonicalSubjectName(item.subject||missions.find(m=>m.id===item.id)?.subject||'Conteúdo Geral');

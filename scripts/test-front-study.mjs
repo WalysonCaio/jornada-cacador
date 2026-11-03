@@ -831,3 +831,89 @@ GABARITO DEFINITIVO
   assert.ok(v77Src.includes("Biblioteca Compartilhada Universal da Comunidade") && !v77Src.includes("id=\"createFlashcardFromQuestionBtn\""), "v77-experience.js deve exibir Biblioteca Universal e remover botão de virar questão em flashcard");
   console.log("OK: Flashcards restritos a Materiais/Anotações/Leis (sem textos externos) e Biblioteca Comunitária Universal (v118) validados.");
 }
+
+
+// ── Validação v118-B: Botão "🔗 Unificar editais" (escolha de até 2 provas dentre N), Contagem Regressiva Dupla e Desunificação sem Perda de Progresso ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const scriptSrc = htmlSrc.match(/<script>([\s\S]*?)<\/script>/)[1];
+
+  // Verifica presença dos botões "🔗 Unificar editais" no topo do Mapa, em Meus Portais e no Card do Edital + Modal #unifyEditaisDialog
+  assert.ok(htmlSrc.includes("id=\"openUnifyEditaisTopBtn\"") && htmlSrc.includes("🔗 Unificar editais"), "Botão 🔗 Unificar editais deve estar visível no topo da aba Mapa do Edital");
+  assert.ok(htmlSrc.includes("id=\"openUnifyFromCampaignsBtn\"") && htmlSrc.includes("id=\"unifyEditaisDialog\""), "Botão 🔗 Unificar editais deve existir em Meus Portais e abrir o modal #unifyEditaisDialog");
+  assert.ok(htmlSrc.includes("examCountdownSecondary") && v77Src.includes("Ritmo das 2 Provas"), "Deve exibir Contagem Regressiva Dupla para as 2 provas com datas independentes");
+
+  const fnSlice = [
+    scriptSrc.slice(scriptSrc.indexOf("function normalizeText("), scriptSrc.indexOf("function missionForQuestion(")),
+    scriptSrc.slice(scriptSrc.indexOf("function missionIdentity("), scriptSrc.indexOf("function reconcileMissionProgress(")),
+    scriptSrc.slice(scriptSrc.indexOf("function activeCampaign()"), scriptSrc.indexOf("function dedupeDailyHistory()")),
+    scriptSrc.slice(scriptSrc.indexOf("function formatSingleCountdownInfo("), scriptSrc.indexOf("function renderExamCountdown()")),
+    "function localDayKey(){return \"2026-11-03\"} function chooseDaily(){} function save(){} function render(){} const cloudSession=null; const navigator={onLine:false}; function $(s){return null} function toast(){}",
+  ].join("\n");
+
+  const pmpeMissions = [
+    { id: "pm-1", subject: "Língua Portuguesa", name: "1. Compreensão e interpretação de textos", subjectOrder: 0, learningOrder: 0 },
+    { id: "pm-2", subject: "Direito Constitucional", name: "1. Direitos e garantias individuais (Art. 5º)", subjectOrder: 1, learningOrder: 0 },
+    { id: "pm-3", subject: "História de Pernambuco", name: "1. Insurreição Pernambucana", subjectOrder: 2, learningOrder: 0 },
+    { id: "pm-4", subject: "Direitos Humanos", name: "1. Declaração Universal dos Direitos Humanos", subjectOrder: 3, learningOrder: 0 },
+    { id: "pm-5", subject: "Legislação Extravagante", name: "1. Lei de Tortura (Lei 9.455/97)", subjectOrder: 4, learningOrder: 0 },
+  ];
+  const cbmpeMissions = [
+    { id: "cbm-1", subject: "Língua Portuguesa", name: "Compreensão e interpretação de textos de gêneros variados", subjectOrder: 0, learningOrder: 0 },
+    { id: "cbm-2", subject: "Direito Constitucional", name: "Direitos e garantias individuais (Art. 5º da CF)", subjectOrder: 1, learningOrder: 0 },
+    { id: "cbm-3", subject: "História de Pernambuco", name: "Insurreição Pernambucana", subjectOrder: 2, learningOrder: 0 },
+    { id: "cbm-4", subject: "História de Pernambuco", name: "Revolução Praieira e movimentos liberais", subjectOrder: 2, learningOrder: 1 },
+    { id: "cbm-5", subject: "Física", name: "1. Termologia, calorimetria e propagação de calor", subjectOrder: 5, learningOrder: 0 },
+    { id: "cbm-6", subject: "Biologia", name: "1. Anatomia e fisiologia humana (primeiros socorros)", subjectOrder: 6, learningOrder: 0 },
+  ];
+  const pppeMissions = [
+    { id: "pp-1", subject: "Execução Penal", name: "1. Lei de Execução Penal (Lei 7.210/84)", subjectOrder: 0, learningOrder: 0 },
+  ];
+
+  // Cenário com 3 portais cadastrados (PMPE, CBM-PE e PPPE), mas unificando exatamente 2 escolhidos pelo usuário (PMPE + CBM-PE)
+  const ctx = {
+    window: {},
+    state: {
+      activeCampaignId: "camp-pmpe",
+      unifiedPortalEnabled: true,
+      unifiedSecondaryCampaignId: "camp-cbmpe",
+      unifiedFocusMode: "conciliacao",
+      done: { "cbm-2": "2026-11-02T10:00:00Z" },
+      daily: "pm-4",
+      dailyHistory: [],
+      campaigns: [
+        { id: "camp-pmpe", name: "EDITAL VERTICALIZADO PMPE", examDate: "2027-03-15", organization: "Polícia Militar de PE", customCampaign: { name: "PMPE", missions: pmpeMissions } },
+        { id: "camp-cbmpe", name: "CBM-PE", examDate: "2027-05-20", organization: "Corpo de Bombeiros Militar de PE", customCampaign: { name: "CBM-PE", missions: cbmpeMissions } },
+        { id: "camp-pppe", name: "PPPE — Polícia Penal", examDate: "2027-08-10", organization: "Polícia Penal de PE", customCampaign: { name: "PPPE", missions: pppeMissions } },
+      ],
+      customCampaign: { name: "PMPE", missions: pmpeMissions },
+    },
+  };
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(fnSlice, ctx);
+
+  const unified = ctx.buildUnifiedMissionPool();
+  assert.equal(unified.stats.unified, true, "Modo unificado deve estar ativo para os 2 portais selecionados");
+  assert.equal(unified.stats.pBadge, "PMPE", "Badge primário deve ser PMPE");
+  assert.equal(unified.stats.sBadge, "CBMPE", "Badge secundário deve ser CBMPE");
+  assert.equal(unified.stats.commonSubjectsCount, 3, "Português, Direito Constitucional e História de PE são as 3 disciplinas comuns");
+  assert.equal(unified.stats.fusedMissionsCount, 3, "Os 3 tópicos equivalentes devem ser fundidos em 1 missão cada");
+  assert.equal(unified.missions.length, 8, "Deve conter apenas as 8 missões dos 2 editais escolhidos (sem misturar o 3º portal PPPE)");
+
+  // Contagem regressiva dupla independente para datas diferentes
+  const c1 = ctx.formatSingleCountdownInfo(ctx.state.campaigns[0], true);
+  const c2 = ctx.formatSingleCountdownInfo(ctx.state.campaigns[1], true);
+  assert.ok(c1.days > 0 && c2.days > c1.days, `As duas provas devem ter contagens regressivas independentes (${c1.days}d vs ${c2.days}d)`);
+
+  // Usuário estuda "pm-1" (Português) durante a unificação e depois decide DESISTIR da PMPE e ficar apenas no CBM-PE!
+  ctx.state.done["pm-1"] = "2026-11-03T11:00:00Z";
+  await ctx.desunificarEditais("camp-cbmpe");
+  assert.equal(ctx.state.unifiedPortalEnabled, false, "Deve desativar a unificação");
+  assert.equal(ctx.state.activeCampaignId, "camp-cbmpe", "Deve mudar o foco para o edital que o usuário escolheu manter (CBM-PE)");
+  assert.ok(ctx.state.done["cbm-1"], "O progresso em Português estudado durante a unificação (pm-1) deve estar 100% salvo no edital que ficou (cbm-1)");
+  assert.ok(ctx.state.done["pm-2"] && ctx.state.done["cbm-2"], "O progresso em Direito Constitucional permanece salvo em ambos os editais");
+
+  console.log("OK: Botão 🔗 Unificar editais (limite máx. 2 provas), Contagem Regressiva Dupla e Desunificação sem Perda de Progresso (v118-B) validados.");
+}
