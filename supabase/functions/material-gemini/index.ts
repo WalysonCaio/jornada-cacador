@@ -817,8 +817,8 @@ const CHUNK_SUMMARY_SCHEMA = {
               type: "OBJECT",
               properties: {
                 statement: { type: "STRING" },
-                options: { type: "ARRAY", minItems: 4, maxItems: 4, items: { type: "STRING" } },
-                correct_index: { type: "INTEGER", minimum: 0, maximum: 3 },
+                options: { type: "ARRAY", minItems: 2, maxItems: 5, items: { type: "STRING" } },
+                correct_index: { type: "INTEGER", minimum: 0, maximum: 4 },
                 explanation: { type: "STRING" },
                 difficulty: { type: "STRING", enum: ["facil", "medio", "dificil"] },
                 topic: { type: "STRING" },
@@ -1091,10 +1091,10 @@ function sanitizeQuestions(value: unknown, fallbackTopic: string) {
     let correctIndex = letterIdx !== undefined ? letterIdx : (hasIdx && Number.isInteger(numIdx) ? numIdx : -1);
     // Gabarito ausente, inválido ou fora das alternativas: descarta a questão em vez de assumir a letra A.
     if (correctIndex < 0 || correctIndex >= options.length) continue;
-    if (options.length > 4) {
+    if (options.length > 5) {
       const correctText = options[correctIndex] ?? options[0];
-      const kept = options.filter((_, idx) => idx === correctIndex || idx < 4).slice(0, 4);
-      if (!kept.includes(correctText)) kept[3] = correctText;
+      const kept = options.filter((_, idx) => idx === correctIndex || idx < 5).slice(0, 5);
+      if (!kept.includes(correctText)) kept[4] = correctText;
       options = kept;
       correctIndex = options.indexOf(correctText);
     }
@@ -1102,11 +1102,11 @@ function sanitizeQuestions(value: unknown, fallbackTopic: string) {
     const explanation = cleanGeneratedText(raw?.explanation || "Confira a justificativa no resumo deste tópico.", 3000);
     const difficulty = ["facil", "medio", "dificil"].includes(raw?.difficulty) ? raw.difficulty : "medio";
     const key = statement.toLocaleLowerCase("pt-BR");
-    // Descarta questões sobre capas, nomes de professores, agradecimentos ou marcas d'água
+    // Descarta questões sobre capas, nomes de professores, agradecimentos, estrutura de páginas ou marcas d'água
     const noiseCheck = `${statement} ${options.join(" ")} ${explanation}`.toLocaleLowerCase("pt-BR");
-    if (/@prof|gratid[aã]o|pouca densidade conceitual|nome do professor|marca d['’]água|aparenta ser uma capa|bloco textual|nestas p[aá]ginas espec[ií]ficas|quais p[aá]ginas comp[oõ]em/i.test(noiseCheck)) continue;
-    if (statement.length < 10 || options.length !== 4 || options.some((option: string) => option.length < 1)) continue;
-    if (new Set(normalizedOptions).size !== 4 || !Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
+    if (/@prof|gratid[aã]o|pouca densidade conceitual|nome do professor|marca d['’]água|aparenta ser uma capa|bloco textual|nestas p[aá]ginas espec[ií]ficas|quais p[aá]ginas comp[oõ]em|com base exclusivamente nas p[aá]ginas|documento fornecido|material fornecido|o que se observa no conte[uú]do textual|dados de identifica[cç][aã]o pessoal/i.test(noiseCheck)) continue;
+    if (statement.length < 10 || options.length < 2 || options.length > 5 || options.some((option: string) => option.length < 1)) continue;
+    if (new Set(normalizedOptions).size !== options.length || !Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= options.length) continue;
     if (explanation.length < 8 || seen.has(key)) continue;
     seen.add(key);
     valid.push({ statement, options, correct_index: correctIndex, explanation, difficulty, topic: cleanGeneratedText(raw?.topic || fallbackTopic, 300), origin: raw?.origin === "adaptada_do_pdf" ? "adaptada_do_pdf" : "autoral" });
@@ -1320,8 +1320,11 @@ Deno.serve(async (request) => {
     const cached = cachedResponse.ok ? await cachedResponse.json() : [];
     if (Array.isArray(cached) && cached[0]?.document_id) {
       const contentResponse = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?source_document_id=eq.${cached[0].document_id}&select=content_type,title,content,source_refs,approved`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
-      const existing = contentResponse.ok ? await contentResponse.json() : [];
-      if (Array.isArray(existing) && existing.length) {
+      const rawExisting = contentResponse.ok ? await contentResponse.json() : [];
+      const existing = Array.isArray(rawExisting)
+        ? rawExisting.filter((row: any) => !isNonDidacticSummary(String(row?.title || ""), String(row?.content?.explanation || ""), Array.isArray(row?.content?.points) ? row.content.points : []))
+        : [];
+      if ( !Boolean(input?.force_reanalyze) && existing.length ) {
         const copies = existing.map((row: Record<string, unknown>) => ({ ...row, campaign_id: campaignId, user_id: user.id, source_document_id: documentId, source_refs: [{ document_id: documentId, title }] }));
         const copied = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify(copies) });
         if (copied.ok) {
@@ -1337,7 +1340,7 @@ Deno.serve(async (request) => {
         }
       }
     }
-    usage = await reserveUsage(user.id, campaignId, operation, personalGeminiKey ? 25 : 2);
+    usage = await reserveUsage(user.id, campaignId, operation, personalGeminiKey ? 30 : 12);
     if (!usage.allowed) {
       await updateJob(documentId, { status: usage.reason === "BUSY" ? "queued" : "retry", available_at: new Date(Date.now() + 15 * 60000).toISOString(), last_error: usage.reason });
       await setDocumentStatus(documentId, user.id, "pending");
@@ -1452,12 +1455,12 @@ Deno.serve(async (request) => {
           // adaptadas do PDF ou criadas pela IA, e o aluno precisa saber a diferença.
           origin: q.origin === "adaptada_do_pdf" ? "adaptada_do_pdf" : "autoral",
           statement: String(q.statement || ""),
-          options: Array.isArray(q.options) ? q.options.slice(0, 4) : [],
+          options: Array.isArray(q.options) ? q.options.slice(0, 5) : [],
           correct_index: Number(q.correct_index) || 0,
           explanation: String(q.explanation || ""),
           created_by: user.id,
         }))
-      ).filter((q: any) => q.statement && q.options.length === 4);
+      ).filter((q: any) => q.statement && q.options.length >= 2 && q.options.length <= 5);
       if (sharedQuestions.length) {
         await fetch(`${SUPABASE_URL}/rest/v1/shared_question_bank?on_conflict=fingerprint`, {
           method: "POST",

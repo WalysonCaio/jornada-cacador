@@ -1079,10 +1079,13 @@
   }
   window.subjectIconForName = subjectIconForName;
 
-  function highlightCommandsAndLaws(rawSegment) {
+  function highlightCommandsAndLaws(rawSegment, itemObj) {
     let safe = escText(String(rawSegment || '').trim());
     safe = safe.replace(/\b(INCORRETA|INCORRETO|CORRETA|CORRETO|EXCETO|SALVO|NÃO|ERRADA|ERRADO)\b/g, '<span class="qCmdHighlight">$1</span>');
     safe = safe.replace(/\b((?:Art(?:igo)?\.?\s*\d+[º°ª]?(?:-[A-Z])?(?:,\s*§\s*\d+[º°]?)?(?:,\s*inciso\s+[IVXLCDM]+)?)|(?:Lei\s+(?:Complementar\s+|Federal\s+|Estadual\s+)?n?[º°.]?\s*[\d.]+(?:\/\d{2,4})?)|(?:S[úu]mula(?:\s+Vinculante)?\s+n?[º°.]?\s*\d+)|(?:CF\/88|Constitui[cç][aã]o\s+Federal))\b/gi, '<span class="lawCiteBadge">⚖️ $1</span>');
+    if (/\b(express[aã]o em destaque|termo em destaque|termo destacado|locu[cç][aã]o em destaque|conjun[cç][aã]o em destaque|voc[áa]bulo em destaque|elemento destacado|segmento destacado)\b/i.test(safe) && !/<mark\b/i.test(safe)) {
+      safe = safe.replace(/\b([ÀA]\s+medida\s+que|Na\s+medida\s+em\s+que|[ÀA]\s+propor[cç][aã]o\s+que|Ao\s+passo\s+que|Conquanto|Porquanto|Contanto\s+que|Posto\s+que|Ainda\s+que|Mesmo\s+que|Visto\s+que|J[áa]\s+que|Uma\s+vez\s+que|Desde\s+que|A\s+menos\s+que|Sem\s+que|Para\s+que|A\s+fim\s+de\s+que|De\s+modo\s+que|Todavia|Entretanto|No\s+entanto|Portanto|Por\s+conseguinte|Dessarte|Outrossim|Destarte)\b/i, '<mark class="targetExprHighlight">$1</mark>');
+    }
     return safe;
   }
 
@@ -3329,10 +3332,11 @@
         <div class="cutoffTrackWrap">
           <div class="cutoffBar">
             <div class="cutoffFill" id="cutoffFillBar" style="width:0%"></div>
+            <div class="cutoffGapFill" id="cutoffGapFillBar" style="left:0%;width:0%" hidden></div>
             <span class="cutoffCurrentPin" id="cutoffCurrentPin" style="left:0%">0%</span>
             <span class="cutoffMarker m60" style="left:60%" title="60% — Habilitação mínima"></span>
-            <span class="cutoffMarker m72" style="left:72%" title="Sua meta de estudo (ajustável)"></span>
-            <span class="cutoffMarker m80" style="left:80%" title="80% — Faixa Elite / Primeiros Colocados"></span>
+            <span class="cutoffMarker m72" style="left:85%;background:#facc15;width:3px" title="Sua meta de estudo (ajustável)"></span>
+            <span class="cutoffMarker m80" style="left:93%;background:#59e6ff" title="Faixa Elite / Primeiros Colocados"></span>
           </div>
           <div class="cutoffScaleTicks">
             <span>0%</span>
@@ -3457,9 +3461,32 @@
     const targetMarker=q('#cutoffThermometerPanel .cutoffMarker.m72'),eliteMarker=q('#cutoffThermometerPanel .cutoffMarker.m80');
     if(targetMarker){targetMarker.style.left=`${target}%`;targetMarker.title=`Sua meta de estudo: ${target}%`}
     if(eliteMarker){eliteMarker.style.left=`${a.elite}%`;eliteMarker.title=`${a.elite}% — Faixa de segurança`}
-    const tickTarget=q('#cutoffThermometerPanel .cutoffScaleTicks .t72'),tickElite=q('#cutoffThermometerPanel .cutoffScaleTicks .t80');
-    if(tickTarget)tickTarget.textContent=`🎯 Meta ${target}%`;
-    if(tickElite)tickElite.textContent=`🏆 ${a.elite}%`;
+    const gapBar=q('#cutoffGapFillBar');
+    if(gapBar){
+      if(clamped<target){
+        gapBar.hidden=false;
+        gapBar.style.left=`${clamped}%`;
+        gapBar.style.width=`${Math.max(0,target-clamped)}%`;
+        gapBar.title=`Faltam +${target-clamped}% para alcançar sua meta de ${target}%`;
+      }else{
+        gapBar.hidden=true;
+      }
+    }
+    fillEl.style.background=rate>=target
+      ?'linear-gradient(90deg,#10b981 0%,#34d399 60%,#59e6ff 100%)'
+      :rate>=60
+        ?'linear-gradient(90deg,#ef4444 0%,#f59e0b 55%,#38bdf8 100%)'
+        :'linear-gradient(90deg,#dc2626 0%,#f97316 100%)';
+    const tick60=q('#cutoffThermometerPanel .cutoffScaleTicks .t60'),tickTarget=q('#cutoffThermometerPanel .cutoffScaleTicks .t72'),tickElite=q('#cutoffThermometerPanel .cutoffScaleTicks .t80');
+    if(tick60)tick60.style.left='60%';
+    if(tickTarget){
+      tickTarget.textContent=`🎯 Meta ${target}%`;
+      tickTarget.style.left=`${Math.min(88,Math.max(68,target))}%`;
+    }
+    if(tickElite){
+      tickElite.textContent=`🏆 ${a.elite}%`;
+      tickElite.style.left=`${Math.min(100,Math.max(92,a.elite))}%`;
+    }
     const inputEl=q('#cutoffTargetInput');
     if(inputEl&&document.activeElement!==inputEl)inputEl.value=target;
     const interval=`${a.lo}%–${a.hi}%`;
@@ -5281,7 +5308,7 @@
 
         for(const qObj of (row.content?.questions||[])){
           if(!Array.isArray(qObj.options)||qObj.options.length<2||qObj.options.length>5||!Number.isInteger(qObj.correct_index)||qObj.correct_index<0||qObj.correct_index>=qObj.options.length)continue;
-          const stText=sanitizePersonalWatermarks(qObj.statement||'');
+          const stText=sanitizePersonalWatermarks(qObj.statement||'');if(typeof window.isValidPedagogicalQuestion==='function'&&!window.isValidPedagogicalQuestion({...qObj,statement:stText}))continue;
           const qKey=`${topicKey(stText).slice(-90)}|${topicKey(qObj.options?.[0]||'')}`;
           if(stText&&!existingQKeys.has(qKey)){
             ALL_QUESTIONS.push({
@@ -7024,23 +7051,45 @@
           newlyChecked.push(label);
         }
       }else if(/corrigir.*erro|revisao final/.test(norm)){
-        if(tracker.errorsReviewed>=1){
+        const reqQ=steps.reduce((acc,s)=>/questoes|questao/.test(normalizeText(s))?requiredQuestionsForStepLabel(s):acc,10);
+        if(tracker.errorsReviewed>=1||tracker.questionsAnswered>=reqQ){
           state.dailySteps[idx]=true;
           newlyChecked.push(label);
         }
       }
     });
 
-    if(newlyChecked.length){
+    const doneCountNow=steps.filter((_,i)=>Boolean(state.dailySteps[i])).length;
+    const halfReq=Math.max(1,Math.ceil(steps.length*0.5));
+    const todayKey=typeof localDayKey==='function'?localDayKey():new Date().toISOString().slice(0,10);
+    let halfJustAwarded=false;
+    if(doneCountNow>=halfReq){
+      state.streakDaysByHalfMission=state.streakDaysByHalfMission||{};
+      if(!state.streakDaysByHalfMission[todayKey]){
+        state.streakDaysByHalfMission[todayKey]=new Date().toISOString();
+        const hEntry=(state.dailyHistory||[]).find(x=>x.id===state.currentDailyHistoryId);
+        if(hEntry)hEntry.halfCompletedAt=state.streakDaysByHalfMission[todayKey];
+        if(typeof markStudyActivity==='function')markStudyActivity('missão');
+        if(typeof refreshStreak==='function')refreshStreak();
+        halfJustAwarded=true;
+      }
+    }
+
+    if(newlyChecked.length||halfJustAwarded){
       save();
       if(typeof renderDaily==='function')renderDaily();
+      if(typeof renderStreak==='function')renderStreak();
+      if(typeof renderHero==='function')renderHero();
       updateTodayCommand();
       decorateDailyStepProgressLabels();renderInteractiveNotifications();
       const allDone=steps.every((_,i)=>Boolean(state.dailySteps[i]));
       if(allDone&&!state.done?.[state.daily]){
         complete(state.daily);
         toast('🏆 Todas as etapas da Missão Diária foram cumpridas! Missão concluída automaticamente (+100 XP)!');
-      }else{
+      }else if(halfJustAwarded){
+        toast(`🔥 50% da Missão Diária cumprida (${doneCountNow}/${steps.length})! Dia de ofensiva garantido automaticamente!`);
+        if(cloudSession&&navigator.onLine&&typeof pushCloudState==='function')pushCloudState();
+      }else if(newlyChecked.length){
         toast(`✓ Etapa da missão marcada automaticamente: "${newlyChecked[0]}"!`);
         if(cloudSession&&navigator.onLine&&typeof pushCloudState==='function')pushCloudState();
       }
@@ -8692,8 +8741,686 @@
       }
     }
   },25000);
-  const remembered=(()=>{try{return sessionStorage.getItem(viewKey)}catch{return null}})();
+  const remembered=(()=>{try{return sessionStorage.getItem(viewKey)}catch{return null}
+  // ── r129: Purge de questões inválidas antigas no Caderno de Erros e Tela de Resultado + Story do Instagram (9:16) ──
+  function purgeInvalidPedagogicalErrors(){
+    if(typeof state==='undefined'||!state?.errors||typeof window.isValidPedagogicalQuestion!=='function')return;
+    let removed=0;
+    for(const [k,err] of Object.entries(state.errors)){
+      const stmt=String(err?.question||'').trim();
+      if(!stmt)continue;
+      const fakeQ={statement:stmt,options:[err.correctAnswer||'Opção A',err.lastChosen||'Opção B','Opção C','Opção D'],topic:err.topic||''};
+      if(!window.isValidPedagogicalQuestion(fakeQ)){
+        delete state.errors[k];
+        removed++;
+      }
+    }
+    if(removed>0&&typeof save==='function')save();
+  }
+  setTimeout(purgeInvalidPedagogicalErrors,800);
+
+  const STORY_BANNERS=[
+    {id:'solo',name:'Caçador Solo Leveling',url:'./login-banner.jpg'},
+    {id:'boss',name:'Arena das Bancas',url:'./bancas-boss-banner.jpg'},
+    {id:'tactical',name:'Comando Tático',url:'./og-banner-1200x630.jpg'}
+  ];
+  window._selectedStoryBannerIdx=0;
+  window._lastBatterySnapshot=null;
+
+  function ensureBatteryResultStoryDialog(){
+    let dlg=q('#batteryResultStoryDialog');
+    if(dlg)return dlg;
+    document.body.insertAdjacentHTML('beforeend',`
+      <dialog id="batteryResultStoryDialog" aria-label="Resultado da Bateria e Story do Caçador">
+        <div class="sectionHead" style="margin-bottom:8px">
+          <div>
+            <div class="eyebrow" style="color:#63e7ff">RELATÓRIO DE COMBATE CONCLUÍDO</div>
+            <h2 id="storyModalTitle" style="margin:2px 0 0;font-size:1.22rem">Resultado da Bateria</h2>
+          </div>
+          <button type="button" class="ghost small" id="closeBatteryStoryDialogBtn" style="width:auto;padding:6px 12px">✕ Fechar</button>
+        </div>
+        <div id="batteryResultSummaryBadges" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
+
+        <div class="storyPreviewFrame" id="storyPreviewFrame">
+          <div class="storyPreviewOverlay"></div>
+          <div class="storyPreviewContent" id="storyPreviewInner"></div>
+        </div>
+
+        <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:10px 0">
+          <button type="button" class="ghost small" id="cycleStoryBannerBtn" style="width:auto;padding:6px 12px;font-size:.78rem">🎨 Trocar Fundo do Story</button>
+          <button type="button" class="action" id="shareHunterStoryBtn" style="width:auto;padding:10px 18px;font-weight:900">📲 Compartilhar / Baixar Story (Instagram 9:16)</button>
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid #1e3b56">
+          <button type="button" class="ghost" id="retryWrongBatteryBtn" hidden style="flex:1">🔁 Refazer as que errei</button>
+          <button type="button" class="action" id="finishBatteryStoryBtn" style="flex:1">✓ Concluir e Voltar</button>
+        </div>
+      </dialog>
+    `);
+    dlg=q('#batteryResultStoryDialog');
+    q('#closeBatteryStoryDialogBtn').onclick=()=>dlg.close();
+    q('#finishBatteryStoryBtn').onclick=()=>dlg.close();
+    q('#cycleStoryBannerBtn').onclick=()=>{
+      window._selectedStoryBannerIdx=((window._selectedStoryBannerIdx||0)+1)%STORY_BANNERS.length;
+      if(window._lastBatterySnapshot)renderStoryModalPreview(window._lastBatterySnapshot);
+    };
+    q('#shareHunterStoryBtn').onclick=()=>{
+      if(window._lastBatterySnapshot)window.shareOrDownloadHunterStoryCard(window._lastBatterySnapshot);
+    };
+    return dlg;
+  }
+
+  function renderStoryModalPreview(snap){
+    const banner=STORY_BANNERS[window._selectedStoryBannerIdx||0]||STORY_BANNERS[0];
+    const frame=q('#storyPreviewFrame');
+    const inner=q('#storyPreviewInner');
+    const badges=q('#batteryResultSummaryBadges');
+    if(!frame||!inner)return;
+    frame.style.backgroundImage=`url('${banner.url}')`;
+
+    const total=Math.max(1,Number(snap.total||snap.questions?.length||1));
+    const correct=Number(snap.correct||0);
+    const blankCnt=Number(snap.blankCnt||snap.blankCount||0);
+    const wrongCnt=Math.max(0,total-correct-blankCnt);
+    const score=Math.round((correct/total)*100);
+    const liqScore=Math.max(0,correct-wrongCnt);
+    const earnedXp=correct*25+Number(snap.bonusXp||0)+(snap.mode==='boss'&&score>=70?300:0);
+    const subj=String(snap.subject||'Treino Tático');
+    const campName=(typeof activeCampaign==='function'&&activeCampaign()?.name)||'Concurso Policial';
+    const rankLabel=q('#rank')?.textContent||'Caçador Rank E';
+    const streakDays=Number(state?.streak||0);
+    const hunterName=String(state?.profile?.displayName||cloudSession?.user?.email?.split('@')[0]||'Caçador').slice(0,24);
+
+    if(badges){
+      badges.innerHTML=`
+        <span class="qMetaPill board">🎯 Acertos: ${correct}/${total} (${score}%)</span>
+        <span class="qMetaPill">⚖️ Líquido Caveira: ${liqScore} pt(s)</span>
+        ${blankCnt?`<span class="qMetaPill">⚪ Em branco: ${blankCnt}</span>`:''}
+        <span class="qMetaPill facil">⚡ +${earnedXp} XP</span>
+      `;
+    }
+
+    const tierPhrase=score>=85
+      ?'🔥 DESEMPENHO DE ELITE! MIRA CALIBRADA PARA A APROVAÇÃO!'
+      :score>=70
+        ?'⚔️ MISSÃO CUMPRIDA COM CONSISTÊNCIA! AVANÇANDO NO EDITAL!'
+        :'🛡️ TREINO DURO, COMBATE FÁCIL! CADA ERRO CORRIGIDO É UM PASSO!';
+
+    inner.innerHTML=`
+      <div>
+        <div style="font-size:.62rem;font-weight:900;letter-spacing:.12em;color:#63e7ff;text-transform:uppercase">⚔️ JORNADA DO CAÇADOR · STORY 9:16</div>
+        <div style="font-size:.82rem;font-weight:800;margin-top:3px;color:#f8fafc">${escText(hunterName)} · <span style="color:#facc15">${escText(rankLabel)}</span></div>
+        <div style="font-size:.68rem;color:#cbd5e1;margin-top:2px">${escText(campName)}</div>
+      </div>
+
+      <div style="my:auto;padding:10px 6px;border-radius:16px;background:rgba(4,12,24,.72);border:1px solid rgba(99,231,255,.35);backdrop-filter:blur(4px)">
+        <div style="font-size:.7rem;color:#9cb6cc;text-transform:uppercase;font-weight:800">${escText(subj)}</div>
+        <div class="storyBigScore" style="margin-top:4px">${correct}/${total}</div>
+        <div style="font-size:.75rem;color:#e2e8f0;font-weight:700">QUESTÕES CERTAS</div>
+        <div class="storyAccuracyPill">${score}% de Precisão</div>
+      </div>
+
+      <div>
+        <div class="storyMetricsMiniGrid">
+          <div><b>${liqScore} pt</b><span>Líquido</span></div>
+          <div><b>+${earnedXp}</b><span>XP Ganho</span></div>
+          <div><b>🔥 ${streakDays}d</b><span>Ofensiva</span></div>
+        </div>
+        <div style="font-size:.66rem;font-weight:800;color:#fde047;margin-top:8px;line-height:1.35">${tierPhrase}</div>
+      </div>
+    `;
+
+    const retryBtn=q('#retryWrongBatteryBtn');
+    const wrongQuestions=(snap.questions||[]).filter(qItem=>qItem?._lastAttempt&&!qItem._lastAttempt.ok);
+    if(retryBtn){
+      if(wrongQuestions.length>0){
+        retryBtn.hidden=false;
+        retryBtn.textContent=`🔁 Refazer ${wrongQuestions.length} errada(s)`;
+        retryBtn.onclick=()=>{
+          q('#batteryResultStoryDialog')?.close();
+          activeQuestions={
+            mode:'retry_errors',
+            subject:subj,
+            questions:wrongQuestions.map(qItem=>({...qItem,_lastAttempt:null})),
+            current:0,
+            correct:0,
+            blankCount:0,
+            answered:false
+          };
+          if(q('#questionDialogTitle'))q('#questionDialogTitle').textContent=`Revisão Cirúrgica (${wrongQuestions.length} errada(s))`;
+          q('#questionDialog')?.showModal();
+          window.showQuestion();
+        };
+      }else{
+        retryBtn.hidden=true;
+      }
+    }
+  }
+
+  window.showBatteryResultStoryModal=function(snap){
+    if(!snap)return;
+    window._lastBatterySnapshot=snap;
+    const dlg=ensureBatteryResultStoryDialog();
+    renderStoryModalPreview(snap);
+    if(!dlg.open)dlg.showModal();
+  };
+
+  window.shareOrDownloadHunterStoryCard=async function(snap){
+    const data=snap||window._lastBatterySnapshot;
+    if(!data)return;
+    const banner=STORY_BANNERS[window._selectedStoryBannerIdx||0]||STORY_BANNERS[0];
+    const canvas=document.createElement('canvas');
+    canvas.width=1080;
+    canvas.height=1920;
+    const ctx=canvas.getContext('2d');
+
+    // Fundo padrão escuro tático
+    const bgGrad=ctx.createLinearGradient(0,0,0,1920);
+    bgGrad.addColorStop(0,'#061220');
+    bgGrad.addColorStop(0.5,'#0b2138');
+    bgGrad.addColorStop(1,'#040b14');
+    ctx.fillStyle=bgGrad;
+    ctx.fillRect(0,0,1080,1920);
+
+    // Carrega a imagem do banner escolhido com cover proporcional 9:16
+    try{
+      const img=await new Promise((resolve,reject)=>{
+        const im=new Image();
+        im.crossOrigin='anonymous';
+        im.onload=()=>resolve(im);
+        im.onerror=reject;
+        im.src=banner.url;
+      });
+      const scale=Math.max(1080/img.width,1920/img.height);
+      const dw=img.width*scale,dh=img.height*scale;
+      const dx=(1080-dw)/2,dy=(1920-dh)/2;
+      ctx.drawImage(img,dx,dy,dw,dh);
+    }catch{}
+
+    // Overlay tático para leitura perfeita
+    const ov=ctx.createLinearGradient(0,0,0,1920);
+    ov.addColorStop(0,'rgba(4,10,20,0.84)');
+    ov.addColorStop(0.45,'rgba(6,18,34,0.68)');
+    ov.addColorStop(1,'rgba(3,8,16,0.94)');
+    ctx.fillStyle=ov;
+    ctx.fillRect(0,0,1080,1920);
+
+    // Moldura neon
+    ctx.strokeStyle='rgba(99,231,255,0.55)';
+    ctx.lineWidth=6;
+    ctx.strokeRect(48,48,984,1824);
+
+    const total=Math.max(1,Number(data.total||data.questions?.length||1));
+    const correct=Number(data.correct||0);
+    const blankCnt=Number(data.blankCnt||data.blankCount||0);
+    const wrongCnt=Math.max(0,total-correct-blankCnt);
+    const score=Math.round((correct/total)*100);
+    const liqScore=Math.max(0,correct-wrongCnt);
+    const earnedXp=correct*25+Number(data.bonusXp||0)+(data.mode==='boss'&&score>=70?300:0);
+    const subj=String(data.subject||'Treino Tático').slice(0,38);
+    const campName=String((typeof activeCampaign==='function'&&activeCampaign()?.name)||'Concurso Policial').slice(0,44);
+    const rankLabel=String(q('#rank')?.textContent||'Caçador Rank E');
+    const streakDays=Number(state?.streak||0);
+    const hunterName=String(state?.profile?.displayName||cloudSession?.user?.email?.split('@')[0]||'Caçador').slice(0,26);
+
+    ctx.textAlign='center';
+    ctx.fillStyle='#63e7ff';
+    ctx.font='900 34px system-ui, -apple-system, sans-serif';
+    ctx.fillText('⚔️ JORNADA DO CAÇADOR · RELATÓRIO DE MISSÃO',540,150);
+
+    ctx.fillStyle='#ffffff';
+    ctx.font='800 54px system-ui, -apple-system, sans-serif';
+    ctx.fillText(hunterName.toUpperCase(),540,235);
+
+    ctx.fillStyle='#facc15';
+    ctx.font='800 40px system-ui, -apple-system, sans-serif';
+    ctx.fillText(`${rankLabel}  ·  ${campName}`,540,300);
+
+    // Card central do placar
+    ctx.fillStyle='rgba(6,18,32,0.84)';
+    ctx.strokeStyle='rgba(99,231,255,0.5)';
+    ctx.lineWidth=4;
+    ctx.beginPath();
+    if(typeof ctx.roundRect==='function')ctx.roundRect(110,430,860,760,36);
+    else ctx.rect(110,430,860,760);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle='#9cb6cc';
+    ctx.font='800 36px system-ui, -apple-system, sans-serif';
+    ctx.fillText(subj.toUpperCase(),540,520);
+
+    ctx.fillStyle='#63e7ff';
+    ctx.font='900 210px system-ui, -apple-system, sans-serif';
+    ctx.fillText(`${correct}/${total}`,540,760);
+
+    ctx.fillStyle='#f8fafc';
+    ctx.font='800 44px system-ui, -apple-system, sans-serif';
+    ctx.fillText('QUESTÕES ACERTADAS',540,840);
+
+    // Pílula de precisão
+    ctx.fillStyle=score>=75?'rgba(16,185,129,0.28)':'rgba(56,189,248,0.25)';
+    ctx.strokeStyle=score>=75?'#34d399':'#38bdf8';
+    ctx.lineWidth=4;
+    ctx.beginPath();
+    if(typeof ctx.roundRect==='function')ctx.roundRect(270,910,540,110,55);
+    else ctx.rect(270,910,540,110);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle=score>=75?'#6ee7b7':'#7dd3fc';
+    ctx.font='900 54px system-ui, -apple-system, sans-serif';
+    ctx.fillText(`🎯 ${score}% DE PRECISÃO`,540,982);
+
+    ctx.fillStyle='#cbd5e1';
+    ctx.font='700 34px system-ui, -apple-system, sans-serif';
+    ctx.fillText(`Placar Líquido Caveira: ${liqScore} pt(s)   ·   Em branco: ${blankCnt}`,540,1115);
+
+    // 3 blocos inferiores (Líquido, XP, Ofensiva)
+    const boxes=[
+      {label:'PLACAR LÍQUIDO',val:`${liqScore} pt`},
+      {label:'XP CONQUISTADO',val:`+${earnedXp} XP`},
+      {label:'OFENSIVA ATUAL',val:`🔥 ${streakDays} dias`}
+    ];
+    boxes.forEach((b,idx)=>{
+      const bx=110+idx*295;
+      ctx.fillStyle='rgba(8,24,42,0.88)';
+      ctx.strokeStyle='rgba(99,231,255,0.35)';
+      ctx.lineWidth=3;
+      ctx.beginPath();
+      if(typeof ctx.roundRect==='function')ctx.roundRect(bx,1270,270,210,24);
+      else ctx.rect(bx,1270,270,210);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle='#ffffff';
+      ctx.font='900 48px system-ui, -apple-system, sans-serif';
+      ctx.fillText(b.val,bx+135,1375);
+
+      ctx.fillStyle='#9cb6cc';
+      ctx.font='800 24px system-ui, -apple-system, sans-serif';
+      ctx.fillText(b.label,bx+135,1435);
+    });
+
+    ctx.fillStyle='#fde047';
+    ctx.font='800 36px system-ui, -apple-system, sans-serif';
+    const footerMsg=score>=80
+      ?'“A preparação silenciosa de hoje sustenta a vitória de amanhã.”'
+      :'“Constância e revisão cirúrgica até a posse!”';
+    ctx.fillText(footerMsg,540,1630);
+
+    ctx.fillStyle='#64748b';
+    ctx.font='700 28px system-ui, -apple-system, sans-serif';
+    ctx.fillText(`Gerado em ${new Date().toLocaleDateString('pt-BR')} · Plataforma Jornada do Caçador`,540,1785);
+
+    const blob=await new Promise(res=>canvas.toBlob(res,'image/png',0.95));
+    if(!blob)return toast('Não foi possível gerar a imagem do Story.');
+    const fileName=`story-cacador-${correct}-${total}-${score}pct.png`;
+    const file=new File([blob],fileName,{type:'image/png'});
+
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      try{
+        await navigator.share({
+          files:[file],
+          title:'Meu Resultado na Jornada do Caçador',
+          text:`Fiz ${correct}/${total} (${score}%) em ${subj} na Jornada do Caçador! 🔥`
+        });
+        toast('📲 Card Story enviado para compartilhamento!');
+        return;
+      }catch(err){
+        if(err?.name==='AbortError')return;
+      }
+    }
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=fileName;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),2500);
+    toast('📥 Imagem Story (9:16) baixada! Pronta para postar no Instagram/WhatsApp.');
+  };
+
+})();
   if(remembered&&q(`#${CSS.escape(remembered)}`)?.classList.contains('view'))openView(remembered);
   q('#aboutDialog .tag')&&(q('#aboutDialog .tag').textContent='Versão 78 · experiência orientada ao estudo');
   q('#diagnosticsDialog .small.muted')&&(q('#diagnosticsDialog .small.muted').textContent='Versão 78 · interface, questões, simulados, IA, PDFs e sincronização');
+
+  // ── r129: Purge de questões inválidas antigas no Caderno de Erros e Tela de Resultado + Story do Instagram (9:16) ──
+  function purgeInvalidPedagogicalErrors(){
+    if(typeof state==='undefined'||!state?.errors||typeof window.isValidPedagogicalQuestion!=='function')return;
+    let removed=0;
+    for(const [k,err] of Object.entries(state.errors)){
+      const stmt=String(err?.question||'').trim();
+      if(!stmt)continue;
+      const fakeQ={statement:stmt,options:[err.correctAnswer||'Opção A',err.lastChosen||'Opção B','Opção C','Opção D'],topic:err.topic||''};
+      if(!window.isValidPedagogicalQuestion(fakeQ)){
+        delete state.errors[k];
+        removed++;
+      }
+    }
+    if(removed>0&&typeof save==='function')save();
+  }
+  setTimeout(purgeInvalidPedagogicalErrors,800);
+
+  const STORY_BANNERS=[
+    {id:'solo',name:'Caçador Solo Leveling',url:'./login-banner.jpg'},
+    {id:'boss',name:'Arena das Bancas',url:'./bancas-boss-banner.jpg'},
+    {id:'tactical',name:'Comando Tático',url:'./og-banner-1200x630.jpg'}
+  ];
+  window._selectedStoryBannerIdx=0;
+  window._lastBatterySnapshot=null;
+
+  function ensureBatteryResultStoryDialog(){
+    let dlg=q('#batteryResultStoryDialog');
+    if(dlg)return dlg;
+    document.body.insertAdjacentHTML('beforeend',`
+      <dialog id="batteryResultStoryDialog" aria-label="Resultado da Bateria e Story do Caçador">
+        <div class="sectionHead" style="margin-bottom:8px">
+          <div>
+            <div class="eyebrow" style="color:#63e7ff">RELATÓRIO DE COMBATE CONCLUÍDO</div>
+            <h2 id="storyModalTitle" style="margin:2px 0 0;font-size:1.22rem">Resultado da Bateria</h2>
+          </div>
+          <button type="button" class="ghost small" id="closeBatteryStoryDialogBtn" style="width:auto;padding:6px 12px">✕ Fechar</button>
+        </div>
+        <div id="batteryResultSummaryBadges" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
+
+        <div class="storyPreviewFrame" id="storyPreviewFrame">
+          <div class="storyPreviewOverlay"></div>
+          <div class="storyPreviewContent" id="storyPreviewInner"></div>
+        </div>
+
+        <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:10px 0">
+          <button type="button" class="ghost small" id="cycleStoryBannerBtn" style="width:auto;padding:6px 12px;font-size:.78rem">🎨 Trocar Fundo do Story</button>
+          <button type="button" class="action" id="shareHunterStoryBtn" style="width:auto;padding:10px 18px;font-weight:900">📲 Compartilhar / Baixar Story (Instagram 9:16)</button>
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid #1e3b56">
+          <button type="button" class="ghost" id="retryWrongBatteryBtn" hidden style="flex:1">🔁 Refazer as que errei</button>
+          <button type="button" class="action" id="finishBatteryStoryBtn" style="flex:1">✓ Concluir e Voltar</button>
+        </div>
+      </dialog>
+    `);
+    dlg=q('#batteryResultStoryDialog');
+    q('#closeBatteryStoryDialogBtn').onclick=()=>dlg.close();
+    q('#finishBatteryStoryBtn').onclick=()=>dlg.close();
+    q('#cycleStoryBannerBtn').onclick=()=>{
+      window._selectedStoryBannerIdx=((window._selectedStoryBannerIdx||0)+1)%STORY_BANNERS.length;
+      if(window._lastBatterySnapshot)renderStoryModalPreview(window._lastBatterySnapshot);
+    };
+    q('#shareHunterStoryBtn').onclick=()=>{
+      if(window._lastBatterySnapshot)window.shareOrDownloadHunterStoryCard(window._lastBatterySnapshot);
+    };
+    return dlg;
+  }
+
+  function renderStoryModalPreview(snap){
+    const banner=STORY_BANNERS[window._selectedStoryBannerIdx||0]||STORY_BANNERS[0];
+    const frame=q('#storyPreviewFrame');
+    const inner=q('#storyPreviewInner');
+    const badges=q('#batteryResultSummaryBadges');
+    if(!frame||!inner)return;
+    frame.style.backgroundImage=`url('${banner.url}')`;
+
+    const total=Math.max(1,Number(snap.total||snap.questions?.length||1));
+    const correct=Number(snap.correct||0);
+    const blankCnt=Number(snap.blankCnt||snap.blankCount||0);
+    const wrongCnt=Math.max(0,total-correct-blankCnt);
+    const score=Math.round((correct/total)*100);
+    const liqScore=Math.max(0,correct-wrongCnt);
+    const earnedXp=correct*25+Number(snap.bonusXp||0)+(snap.mode==='boss'&&score>=70?300:0);
+    const subj=String(snap.subject||'Treino Tático');
+    const campName=(typeof activeCampaign==='function'&&activeCampaign()?.name)||'Concurso Policial';
+    const rankLabel=q('#rank')?.textContent||'Caçador Rank E';
+    const streakDays=Number(state?.streak||0);
+    const hunterName=String(state?.profile?.displayName||cloudSession?.user?.email?.split('@')[0]||'Caçador').slice(0,24);
+
+    if(badges){
+      badges.innerHTML=`
+        <span class="qMetaPill board">🎯 Acertos: ${correct}/${total} (${score}%)</span>
+        <span class="qMetaPill">⚖️ Líquido Caveira: ${liqScore} pt(s)</span>
+        ${blankCnt?`<span class="qMetaPill">⚪ Em branco: ${blankCnt}</span>`:''}
+        <span class="qMetaPill facil">⚡ +${earnedXp} XP</span>
+      `;
+    }
+
+    const tierPhrase=score>=85
+      ?'🔥 DESEMPENHO DE ELITE! MIRA CALIBRADA PARA A APROVAÇÃO!'
+      :score>=70
+        ?'⚔️ MISSÃO CUMPRIDA COM CONSISTÊNCIA! AVANÇANDO NO EDITAL!'
+        :'🛡️ TREINO DURO, COMBATE FÁCIL! CADA ERRO CORRIGIDO É UM PASSO!';
+
+    inner.innerHTML=`
+      <div>
+        <div style="font-size:.62rem;font-weight:900;letter-spacing:.12em;color:#63e7ff;text-transform:uppercase">⚔️ JORNADA DO CAÇADOR · STORY 9:16</div>
+        <div style="font-size:.82rem;font-weight:800;margin-top:3px;color:#f8fafc">${escText(hunterName)} · <span style="color:#facc15">${escText(rankLabel)}</span></div>
+        <div style="font-size:.68rem;color:#cbd5e1;margin-top:2px">${escText(campName)}</div>
+      </div>
+
+      <div style="my:auto;padding:10px 6px;border-radius:16px;background:rgba(4,12,24,.72);border:1px solid rgba(99,231,255,.35);backdrop-filter:blur(4px)">
+        <div style="font-size:.7rem;color:#9cb6cc;text-transform:uppercase;font-weight:800">${escText(subj)}</div>
+        <div class="storyBigScore" style="margin-top:4px">${correct}/${total}</div>
+        <div style="font-size:.75rem;color:#e2e8f0;font-weight:700">QUESTÕES CERTAS</div>
+        <div class="storyAccuracyPill">${score}% de Precisão</div>
+      </div>
+
+      <div>
+        <div class="storyMetricsMiniGrid">
+          <div><b>${liqScore} pt</b><span>Líquido</span></div>
+          <div><b>+${earnedXp}</b><span>XP Ganho</span></div>
+          <div><b>🔥 ${streakDays}d</b><span>Ofensiva</span></div>
+        </div>
+        <div style="font-size:.66rem;font-weight:800;color:#fde047;margin-top:8px;line-height:1.35">${tierPhrase}</div>
+      </div>
+    `;
+
+    const retryBtn=q('#retryWrongBatteryBtn');
+    const wrongQuestions=(snap.questions||[]).filter(qItem=>qItem?._lastAttempt&&!qItem._lastAttempt.ok);
+    if(retryBtn){
+      if(wrongQuestions.length>0){
+        retryBtn.hidden=false;
+        retryBtn.textContent=`🔁 Refazer ${wrongQuestions.length} errada(s)`;
+        retryBtn.onclick=()=>{
+          q('#batteryResultStoryDialog')?.close();
+          activeQuestions={
+            mode:'retry_errors',
+            subject:subj,
+            questions:wrongQuestions.map(qItem=>({...qItem,_lastAttempt:null})),
+            current:0,
+            correct:0,
+            blankCount:0,
+            answered:false
+          };
+          if(q('#questionDialogTitle'))q('#questionDialogTitle').textContent=`Revisão Cirúrgica (${wrongQuestions.length} errada(s))`;
+          q('#questionDialog')?.showModal();
+          window.showQuestion();
+        };
+      }else{
+        retryBtn.hidden=true;
+      }
+    }
+  }
+
+  window.showBatteryResultStoryModal=function(snap){
+    if(!snap)return;
+    window._lastBatterySnapshot=snap;
+    const dlg=ensureBatteryResultStoryDialog();
+    renderStoryModalPreview(snap);
+    if(!dlg.open)dlg.showModal();
+  };
+
+  window.shareOrDownloadHunterStoryCard=async function(snap){
+    const data=snap||window._lastBatterySnapshot;
+    if(!data)return;
+    const banner=STORY_BANNERS[window._selectedStoryBannerIdx||0]||STORY_BANNERS[0];
+    const canvas=document.createElement('canvas');
+    canvas.width=1080;
+    canvas.height=1920;
+    const ctx=canvas.getContext('2d');
+
+    // Fundo padrão escuro tático
+    const bgGrad=ctx.createLinearGradient(0,0,0,1920);
+    bgGrad.addColorStop(0,'#061220');
+    bgGrad.addColorStop(0.5,'#0b2138');
+    bgGrad.addColorStop(1,'#040b14');
+    ctx.fillStyle=bgGrad;
+    ctx.fillRect(0,0,1080,1920);
+
+    // Carrega a imagem do banner escolhido com cover proporcional 9:16
+    try{
+      const img=await new Promise((resolve,reject)=>{
+        const im=new Image();
+        im.crossOrigin='anonymous';
+        im.onload=()=>resolve(im);
+        im.onerror=reject;
+        im.src=banner.url;
+      });
+      const scale=Math.max(1080/img.width,1920/img.height);
+      const dw=img.width*scale,dh=img.height*scale;
+      const dx=(1080-dw)/2,dy=(1920-dh)/2;
+      ctx.drawImage(img,dx,dy,dw,dh);
+    }catch{}
+
+    // Overlay tático para leitura perfeita
+    const ov=ctx.createLinearGradient(0,0,0,1920);
+    ov.addColorStop(0,'rgba(4,10,20,0.84)');
+    ov.addColorStop(0.45,'rgba(6,18,34,0.68)');
+    ov.addColorStop(1,'rgba(3,8,16,0.94)');
+    ctx.fillStyle=ov;
+    ctx.fillRect(0,0,1080,1920);
+
+    // Moldura neon
+    ctx.strokeStyle='rgba(99,231,255,0.55)';
+    ctx.lineWidth=6;
+    ctx.strokeRect(48,48,984,1824);
+
+    const total=Math.max(1,Number(data.total||data.questions?.length||1));
+    const correct=Number(data.correct||0);
+    const blankCnt=Number(data.blankCnt||data.blankCount||0);
+    const wrongCnt=Math.max(0,total-correct-blankCnt);
+    const score=Math.round((correct/total)*100);
+    const liqScore=Math.max(0,correct-wrongCnt);
+    const earnedXp=correct*25+Number(data.bonusXp||0)+(data.mode==='boss'&&score>=70?300:0);
+    const subj=String(data.subject||'Treino Tático').slice(0,38);
+    const campName=String((typeof activeCampaign==='function'&&activeCampaign()?.name)||'Concurso Policial').slice(0,44);
+    const rankLabel=String(q('#rank')?.textContent||'Caçador Rank E');
+    const streakDays=Number(state?.streak||0);
+    const hunterName=String(state?.profile?.displayName||cloudSession?.user?.email?.split('@')[0]||'Caçador').slice(0,26);
+
+    ctx.textAlign='center';
+    ctx.fillStyle='#63e7ff';
+    ctx.font='900 34px system-ui, -apple-system, sans-serif';
+    ctx.fillText('⚔️ JORNADA DO CAÇADOR · RELATÓRIO DE MISSÃO',540,150);
+
+    ctx.fillStyle='#ffffff';
+    ctx.font='800 54px system-ui, -apple-system, sans-serif';
+    ctx.fillText(hunterName.toUpperCase(),540,235);
+
+    ctx.fillStyle='#facc15';
+    ctx.font='800 40px system-ui, -apple-system, sans-serif';
+    ctx.fillText(`${rankLabel}  ·  ${campName}`,540,300);
+
+    // Card central do placar
+    ctx.fillStyle='rgba(6,18,32,0.84)';
+    ctx.strokeStyle='rgba(99,231,255,0.5)';
+    ctx.lineWidth=4;
+    ctx.beginPath();
+    if(typeof ctx.roundRect==='function')ctx.roundRect(110,430,860,760,36);
+    else ctx.rect(110,430,860,760);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle='#9cb6cc';
+    ctx.font='800 36px system-ui, -apple-system, sans-serif';
+    ctx.fillText(subj.toUpperCase(),540,520);
+
+    ctx.fillStyle='#63e7ff';
+    ctx.font='900 210px system-ui, -apple-system, sans-serif';
+    ctx.fillText(`${correct}/${total}`,540,760);
+
+    ctx.fillStyle='#f8fafc';
+    ctx.font='800 44px system-ui, -apple-system, sans-serif';
+    ctx.fillText('QUESTÕES ACERTADAS',540,840);
+
+    // Pílula de precisão
+    ctx.fillStyle=score>=75?'rgba(16,185,129,0.28)':'rgba(56,189,248,0.25)';
+    ctx.strokeStyle=score>=75?'#34d399':'#38bdf8';
+    ctx.lineWidth=4;
+    ctx.beginPath();
+    if(typeof ctx.roundRect==='function')ctx.roundRect(270,910,540,110,55);
+    else ctx.rect(270,910,540,110);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle=score>=75?'#6ee7b7':'#7dd3fc';
+    ctx.font='900 54px system-ui, -apple-system, sans-serif';
+    ctx.fillText(`🎯 ${score}% DE PRECISÃO`,540,982);
+
+    ctx.fillStyle='#cbd5e1';
+    ctx.font='700 34px system-ui, -apple-system, sans-serif';
+    ctx.fillText(`Placar Líquido Caveira: ${liqScore} pt(s)   ·   Em branco: ${blankCnt}`,540,1115);
+
+    // 3 blocos inferiores (Líquido, XP, Ofensiva)
+    const boxes=[
+      {label:'PLACAR LÍQUIDO',val:`${liqScore} pt`},
+      {label:'XP CONQUISTADO',val:`+${earnedXp} XP`},
+      {label:'OFENSIVA ATUAL',val:`🔥 ${streakDays} dias`}
+    ];
+    boxes.forEach((b,idx)=>{
+      const bx=110+idx*295;
+      ctx.fillStyle='rgba(8,24,42,0.88)';
+      ctx.strokeStyle='rgba(99,231,255,0.35)';
+      ctx.lineWidth=3;
+      ctx.beginPath();
+      if(typeof ctx.roundRect==='function')ctx.roundRect(bx,1270,270,210,24);
+      else ctx.rect(bx,1270,270,210);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle='#ffffff';
+      ctx.font='900 48px system-ui, -apple-system, sans-serif';
+      ctx.fillText(b.val,bx+135,1375);
+
+      ctx.fillStyle='#9cb6cc';
+      ctx.font='800 24px system-ui, -apple-system, sans-serif';
+      ctx.fillText(b.label,bx+135,1435);
+    });
+
+    ctx.fillStyle='#fde047';
+    ctx.font='800 36px system-ui, -apple-system, sans-serif';
+    const footerMsg=score>=80
+      ?'“A preparação silenciosa de hoje sustenta a vitória de amanhã.”'
+      :'“Constância e revisão cirúrgica até a posse!”';
+    ctx.fillText(footerMsg,540,1630);
+
+    ctx.fillStyle='#64748b';
+    ctx.font='700 28px system-ui, -apple-system, sans-serif';
+    ctx.fillText(`Gerado em ${new Date().toLocaleDateString('pt-BR')} · Plataforma Jornada do Caçador`,540,1785);
+
+    const blob=await new Promise(res=>canvas.toBlob(res,'image/png',0.95));
+    if(!blob)return toast('Não foi possível gerar a imagem do Story.');
+    const fileName=`story-cacador-${correct}-${total}-${score}pct.png`;
+    const file=new File([blob],fileName,{type:'image/png'});
+
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      try{
+        await navigator.share({
+          files:[file],
+          title:'Meu Resultado na Jornada do Caçador',
+          text:`Fiz ${correct}/${total} (${score}%) em ${subj} na Jornada do Caçador! 🔥`
+        });
+        toast('📲 Card Story enviado para compartilhamento!');
+        return;
+      }catch(err){
+        if(err?.name==='AbortError')return;
+      }
+    }
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=fileName;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),2500);
+    toast('📥 Imagem Story (9:16) baixada! Pronta para postar no Instagram/WhatsApp.');
+  };
+
 })();

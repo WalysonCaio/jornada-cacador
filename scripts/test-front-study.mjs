@@ -1154,6 +1154,14 @@ GABARITO DEFINITIVO
   assert(v77Src.includes("toggleGranAssociatedText"), "Função de abrir/fechar texto associado presente");
   assert(v77Src.includes("toggleGranPinText"), "Botão 'Manter aberto' para baterias de Português presente");
   assert(v77Src.includes("lawCiteBadge"), "Grifo tático automático de artigos de lei presente");
+  assert(htmlSrc.includes("body.lightPaperMode .optionMainBtn .optBodyText"), "Modo Papel deve garantir contraste escuro no texto das alternativas");
+  assert(htmlSrc.includes("function isValidPedagogicalQuestion("), "Filtro anti-questão de ruído estrutural (isValidPedagogicalQuestion) presente");
+  assert(v77Src.includes("targetExprHighlight"), "Destacador automático de locução/expressão analisada presente");
+  assert(v77Src.includes("showBatteryResultStoryModal") && v77Src.includes("shareOrDownloadHunterStoryCard"), "Modal de Resultado da Bateria + Gerador de Card Story Instagram 9:16 (1080x1920) presentes");
+  assert(v77Src.includes("cutoffGapFillBar") && v77Src.includes("tickTarget.style.left"), "Simulador de Aprovação posiciona a meta proporcionalmente na barra e exibe a diferença real");
+  assert(htmlSrc.includes("streakDaysByHalfMission") && v77Src.includes("streakDaysByHalfMission"), "Ofensiva diária é confirmada automaticamente ao atingir 50% das etapas da missão");
+  assert(pdfSrc.includes("askUserScannedPdfPermission") && pdfSrc.includes("convertScannedPdfViaBrowserCanvasOcr"), "Detector de PDF escaneado vs. texto digital + conversor OCR com confirmação prévia de tokens presentes");
+
 
 }
 console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleção de Caderno, 2 colunas e Recursos Projeto Caveira (r126) validados.");

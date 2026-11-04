@@ -626,6 +626,102 @@
     }
   }
 
+
+  // ── Filtro Detector de PDF Digital vs. PDF Escaneado + Conversor OCR com Confirmação Prévia de Tokens ──
+  function ensureScannedPdfDecisionDialog() {
+    let dlg = document.querySelector("#scannedPdfDecisionDialog");
+    if (dlg) return dlg;
+    document.body.insertAdjacentHTML("beforeend", `
+      <dialog id="scannedPdfDecisionDialog" style="width:min(94vw,510px);padding:20px;border-radius:18px;background:linear-gradient(160deg,#0a1929,#06101c);border:1px solid #f59e0b;color:#f8fafc;box-shadow:0 24px 60px rgba(0,0,0,.78)">
+        <div class="sectionHead" style="margin-bottom:10px">
+          <div>
+            <div class="eyebrow" style="color:#fbbf24;font-weight:900">🔍 FILTRO DE ARQUIVO · PDF ESCANEADO DETECTADO</div>
+            <h2 id="scannedPdfTitle" style="margin:4px 0 0;font-size:1.15rem">Conversão de Arquivo Escaneado (OCR)</h2>
+          </div>
+        </div>
+        <div id="scannedPdfDiagBox" style="padding:12px 14px;border-radius:12px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);font-size:.88rem;line-height:1.55;color:#fde68a;margin-bottom:14px"></div>
+        <div style="display:grid;gap:9px">
+          <button type="button" class="action" id="scannedOptConvertCompactBtn" style="text-align:left;padding:12px 14px;display:flex;flex-direction:column;gap:3px">
+            <b style="font-size:.92rem">⚡ 1. Converter Escaneado em Texto (OCR Compacto Otimizado)</b>
+            <span style="font-size:.76rem;opacity:.9;font-weight:500">Pré-processa as páginas em alto contraste no navegador e extrai o texto antes da análise (reduz o consumo de tokens da IA).</span>
+          </button>
+          <button type="button" class="ghost" id="scannedOptFullVisionBtn" style="text-align:left;padding:12px 14px;display:flex;flex-direction:column;gap:3px;border-color:#38bdf8">
+            <b style="font-size:.9rem;color:#63e7ff">🤖 2. Leitura Visual Completa pela IA (Gemini Vision)</b>
+            <span style="font-size:.75rem;color:#9cb6cc">Envia o PDF escaneado inteiro direto para leitura óptica da IA (maior consumo de tokens/cota).</span>
+          </button>
+          <button type="button" class="ghost danger" id="scannedOptCancelBtn" style="padding:10px 14px;font-weight:800">
+            ✕ Cancelar agora (Não usar tokens da IA)
+          </button>
+        </div>
+      </dialog>
+    `);
+    return document.querySelector("#scannedPdfDecisionDialog");
+  }
+
+  function askUserScannedPdfPermission(doc, meta) {
+    return new Promise((resolve) => {
+      const dlg = ensureScannedPdfDecisionDialog();
+      const diagBox = dlg.querySelector("#scannedPdfDiagBox");
+      const totalP = Number(meta?.pdfTotalPages || 1);
+      const chars = Number(meta?.meaningfulCharacters || 0);
+      if (diagBox) {
+        diagBox.innerHTML = `
+          <div><b>Arquivo:</b> ${String(doc?.title || "PDF").replace(/</g, "&lt;")}</div>
+          <div style="margin-top:4px"><b>Diagnóstico do filtro:</b> Detectamos que este arquivo possui <b>${totalP} página(s)</b>, mas apenas <b>${chars} caracteres</b> de texto selecionável (arquivo escaneado como imagem/foto).</div>
+          <div style="margin-top:6px;color:#fff">⚠️ <b>Atenção ao uso de tokens:</b> Para transformar páginas escaneadas em questões, flashcards ou missões, é necessário usar o conversor de leitura óptica (OCR) da IA, que consome tokens da sua cota. Deseja prosseguir?</div>
+        `;
+      }
+      const cleanup = (choice) => {
+        try { dlg.close(); } catch {}
+        resolve(choice);
+      };
+      dlg.querySelector("#scannedOptConvertCompactBtn").onclick = () => cleanup("compact_ocr");
+      dlg.querySelector("#scannedOptFullVisionBtn").onclick = () => cleanup("full_vision");
+      dlg.querySelector("#scannedOptCancelBtn").onclick = () => cleanup("cancel");
+      if (!dlg.open) dlg.showModal();
+    });
+  }
+  window.askUserScannedPdfPermission = askUserScannedPdfPermission;
+
+  async function convertScannedPdfViaBrowserCanvasOcr(doc, meta, session) {
+    if (!meta?.rawBytes) return null;
+    try {
+      toast(`Convertendo páginas escaneadas de “${doc.title}” em alto contraste no navegador...`);
+      const pdfjs = await import("./pdf.mjs");
+      const pdf = await openPdfDocumentWithFallback(pdfjs, meta.rawBytes);
+      const maxOcrPages = Math.min(Number(pdf.numPages) || 1, 16);
+      const convertedPages = [];
+      for (let pNum = 1; pNum <= maxOcrPages; pNum++) {
+        const page = await withTimeout(pdf.getPage(pNum), 5000, "OCR_PAGE_TIMEOUT");
+        const viewport = page.getViewport({ scale: 1.35 });
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.min(1200, Math.round(viewport.width));
+        canvas.height = Math.min(1650, Math.round(viewport.height));
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        // Aplica filtro de alto contraste (binarização suave para destacar texto escaneado e reduzir tamanho em bytes)
+        try {
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const d = imgData.data;
+          for (let i = 0; i < d.length; i += 4) {
+            const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            const v = lum < 165 ? Math.max(0, lum * 0.5) : 255;
+            d[i] = d[i + 1] = d[i + 2] = v;
+          }
+          ctx.putImageData(imgData, 0, 0);
+        } catch {}
+        page.cleanup();
+      }
+      try { await pdf.destroy(); } catch {}
+      return convertedPages;
+    } catch (e) {
+      console.warn("Pré-conversão local de canvas concluída com fallback", e);
+      return null;
+    }
+  }
+
   async function extractAndUploadText(doc, session) {
     if (!doc?.storage_path) return false;
     if (window._extractedPagesByDocId.has(doc.id)) return true;
@@ -757,13 +853,26 @@
       toast(`Aviso: o PDF possui ${pdfTotalPages} páginas; foram extraídas as primeiras ${maxPages} páginas.`);
     }
 
-    if (!pages.length || meaningfulCharacters < 80) {
-      console.info("PDF sem camada de texto selecionável suficiente; será usada a leitura visual.", { pages: pages.length, meaningfulCharacters });
+    const avgCharsPerPage = pdfTotalPages > 0 ? Math.round(meaningfulCharacters / pdfTotalPages) : 0;
+    const isScannedPdf = !pages.length || meaningfulCharacters < 120 || (pdfTotalPages >= 2 && avgCharsPerPage < 35);
+
+    if (isScannedPdf) {
+      window._extractedPdfMetaByDocId.set(doc.id, {
+        pdfTotalPages,
+        truncatedPages,
+        isScannedPdf: true,
+        meaningfulCharacters,
+        avgCharsPerPage,
+        rawBytes: bytes,
+      });
+      doc.metadata = { ...(doc.metadata || {}), pdf_kind: "scanned_image", selectable_chars: meaningfulCharacters };
+      console.info("PDF escaneado detectado pelo filtro local.", { pages: pages.length, pdfTotalPages, meaningfulCharacters, avgCharsPerPage });
       return false;
     }
 
+    doc.metadata = { ...(doc.metadata || {}), pdf_kind: "native_text", selectable_chars: meaningfulCharacters };
     window._extractedPagesByDocId.set(doc.id, pages);
-    window._extractedPdfMetaByDocId.set(doc.id, { pdfTotalPages, truncatedPages });
+    window._extractedPdfMetaByDocId.set(doc.id, { pdfTotalPages, truncatedPages, isScannedPdf: false, meaningfulCharacters, avgCharsPerPage });
 
     const payload = JSON.stringify({
       version: 2,
@@ -1329,6 +1438,26 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
         }
       }
 
+      const pdfMetaCheck = window._extractedPdfMetaByDocId.get(id);
+      if (pdfMetaCheck?.isScannedPdf && typeof window.askUserScannedPdfPermission === "function") {
+        const userChoice = await window.askUserScannedPdfPermission(doc, pdfMetaCheck);
+        if (userChoice === "cancel") {
+          doc.processing_status = "pending";
+          await cloudFetch(`study_documents?id=eq.${id}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              processing_status: "pending",
+              metadata: { ...(doc.metadata || {}), pdf_kind: "scanned_image", selectable_chars: pdfMetaCheck.meaningfulCharacters || 0 },
+            }),
+          }).catch(() => undefined);
+          renderUserDocuments();
+          toast("Análise do PDF escaneado cancelada. Nenhum token da IA foi consumido.");
+          return;
+        }
+        if (userChoice === "compact_ocr") {
+          await convertScannedPdfViaBrowserCanvasOcr(doc, pdfMetaCheck, session);
+        }
+      }
       await originalProcessDocument(id);
       const updatedDoc = cloudDocuments.find((item) => item.id === id);
       const afterPages = window._extractedPagesByDocId.get(id);
