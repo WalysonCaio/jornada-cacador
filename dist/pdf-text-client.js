@@ -1392,8 +1392,9 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
 
           // Se o PDF tem questões mas o gabarito oficial não foi encontrado ou está incompleto,
           // oferece opções claras ao usuário em vez de falhar silenciosamente no backend!
+          let userChoice = null;
           if ((!Array.isArray(extractedQs) || extractedQs.length < 3 || Number(examReport.percent) < 60) && typeof window.askUserExamAnswerKeyOptions === "function") {
-            const userChoice = await window.askUserExamAnswerKeyOptions(doc, pages, examReport);
+            userChoice = await window.askUserExamAnswerKeyOptions(doc, pages, examReport);
             if (userChoice?.cancelled) {
               doc.processing_status = "pending";
               renderUserDocuments();
