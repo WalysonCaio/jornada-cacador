@@ -73,3 +73,19 @@ console.log("OK: contratos v97/v105 (user_state base, duelo sem gabarito exposto
   assert(!/onclick=importCampaign/.test(read("dist/index.html")), "referência morta a importCampaign");
 }
 console.log("OK: contratos v98 (chat, heartbeat, referência morta) validados.");
+
+// ── v100: a biblioteca comunitária não expõe o nome real do cadastro ──
+{
+  const files = readdirSync(new URL("supabase/migrations/", root)).filter((f) => f.endsWith(".sql")).sort();
+  const v100name = files.find((f) => f.includes("v100_community_author_privacy"));
+  assert(v100name, "falta a migração v100 de privacidade do autor");
+  const v100 = read("supabase/migrations/" + v100name);
+  assert(!/raw_user_meta_data/.test(v100.replace(/--[^\n]*/g, "")), "v100 não pode usar o nome do cadastro (auth.users)");
+  assert(/publicProfile'->>'hidden'/.test(v100), "v100 deve respeitar 'Ocultar meu perfil'");
+  assert((v100.match(/\$\$/g) || []).length % 2 === 0, "v100: $$ desbalanceado");
+  const c100 = v100.replace(/--[^\n]*/g, "").replace(/'(?:[^']|'')*'/g, "''"); let d100 = 0; for (const ch of c100) { if (ch === "(") d100++; if (ch === ")") d100--; assert(d100 >= 0, "v100: parêntese fechado sem abrir"); } assert.equal(d100, 0, "v100: parênteses desbalanceados");
+  // a última definição da função (por ordem de arquivo) é a que vale
+  const last = files.filter((f) => /create or replace function public\.get_community_exam_library/i.test(read("supabase/migrations/" + f))).pop();
+  assert.equal(last, v100name, "a v100 precisa ser a última a definir get_community_exam_library");
+}
+console.log("OK: contratos v100 (autor da biblioteca sem nome real) validados.");

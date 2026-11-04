@@ -752,10 +752,12 @@ GABARITO DEFINITIVO
   assert.equal(extracted[0].subject, "Direito Constitucional", "Questão 01 deve ser classificada em Direito Constitucional");
   assert.equal(extracted[0].correct_index, 1, "Questão 01 tem gabarito B (índice 1)");
   assert.equal(extracted[1].subject, "Direito Penal", "Questão 02 deve ser classificada em Direito Penal");
-  assert.equal(extracted[1].correct_index, 3, "Questão 02 de 5 alternativas (A–E) com gabarito E deve preservar a alternativa E correta no índice 3");
-  assert.ok(extracted[1].options[3].includes("Estado de necessidade, legítima defesa"), "Texto da alternativa E correta deve ser preservado");
+  assert.equal(extracted[1].options.length, 5, "Questão 02 tem 5 alternativas (A–E) e todas devem ser preservadas");
+  assert.equal(extracted[1].correct_index, 4, "Questão 02 com gabarito E deve apontar a alternativa E (índice 4)");
+  assert.ok(extracted[1].options[4].includes("Estado de necessidade, legítima defesa"), "Texto da alternativa E correta deve ser preservado");
   assert.equal(extracted[2].subject, "Direito Processual Penal", "Questão 04 deve ser classificada em Direito Processual Penal");
   assert.equal(extracted[2].correct_index, 1, "Questão 04 Certo/Errado com gabarito ERRADO deve ter correct_index = 1");
+  assert.equal(JSON.stringify(extracted[2].options), '["CERTO","ERRADO"]', "Certo/Errado deve manter só as 2 opções reais, sem alternativas inventadas");
 
   // Teste da Questão Gêmea Cognitiva quando o aluno erra marcando um distrator
   const moldWithError = {
@@ -1124,3 +1126,28 @@ GABARITO DEFINITIVO
 
   console.log("OK: Edital 100% Individual por Usuário e Perfil (PM PE / BCM PE / CBM PE), Cache Isolado por UserID e Bloqueio de Edital na Comunidade validados (v118-G).");
 }
+
+// ── v119 / r126: Duelo 60s, 2 a 5 alternativas no banco/duelo e Recursos Projeto Caveira ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v59Src = readFileSync(new URL("../dist/v59-enhancements.js", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const pdfSrc = readFileSync(new URL("../dist/pdf-text-client.js", import.meta.url), "utf8");
+
+  assert(/DUEL_SECONDS_PER_QUESTION\s*=\s*60/.test(v77Src), "DUEL_SECONDS_PER_QUESTION deve ser 60s");
+  assert(!/secondsLeft\s*:\s*25/.test(v77Src), "não deve restar timer fixo de 25s no duelo");
+  assert(/q\.options\.length\s*>=\s*2\s*&&\s*q\.options\.length\s*<=\s*5/.test(htmlSrc), "dist/index.html deve aceitar 2..5 opções em loadGeneratedContent");
+  assert(/q\.options\.length\s*>=\s*2\s*&&\s*q\.options\.length\s*<=\s*5/.test(v59Src), "dist/v59-enhancements.js deve aceitar 2..5 opções em loadGeneratedContent");
+  assert(!htmlSrc.includes("Array.isArray(q.options) && q.options.length === 4"), "dist/index.html não deve descartar 2 ou 5 opções");
+  assert(/options\.length\s*>=\s*2\s*&&\s*[a-zA-Z0-9_.]*options\.length\s*<=\s*5/.test(v77Src), "buildDuelQuestionPack deve aceitar 2..5 opções");
+  assert(v77Src.includes("TEMPO ESGOTADO"), "formatStepByStepResolution deve tratar timeout (-1)");
+  assert(v77Src.includes("skipQuestionBlank"), "Botão Deixar em Branco (Modo Líquido Caveira) presente");
+  assert(v77Src.includes("startCaveiraSprintSession"), "Sprint Reta Final Caveira presente");
+  assert(v77Src.includes("toggleSummaryTacticalMindMap"), "Mapa Mental Tático nos resumos presente");
+  assert(v77Src.includes("askQapInstructorBtn"), "Atalho QAP Instrutor IA presente");
+  assert(v77Src.includes("togglePaperReadingMode"), "Modo Papel / Leitura Clara presente");
+  assert(htmlSrc.includes("Placar Caveira:") && htmlSrc.includes("Líquido Cebraspe:"), "Cálculo de Placar Líquido Caveira presente");
+  assert(pdfSrc.includes("isTwoColumnPage"), "Detector de PDF em duas colunas presente");
+  assert(pdfSrc.includes("preferredCaderno"), "Seleção de caderno pelo usuário presente");
+}
+console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleção de Caderno, 2 colunas e Recursos Projeto Caveira (r126) validados.");

@@ -1072,7 +1072,7 @@
   window.getNativeQuestionsForSubject = getNativeQuestionsForSubject;
 
   // 2. Filtros Avançados (Tópico, Modo Progressivo, Inéditas/Favoritas estilo TEC/Qconcursos)
-  function normalizedOrigin(question){const origin=String(question?.origin||'autoral').toLocaleLowerCase('pt-BR');return /oficial|importad|prova|adaptada/.test(origin)?'oficial':'autoral'}
+  function normalizedOrigin(question){const origin=String(question?.origin||'autoral').toLocaleLowerCase('pt-BR');return /oficial|importad|prova/.test(origin)&&!/adaptada/.test(origin)?'oficial':'autoral'}
   function normalizedDifficulty(question){const value=String(question?.difficulty||'medio').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();return value.startsWith('fac')?'facil':value.startsWith('dif')?'dificil':'medio'}
   function topicKey(value){const s=String(value||'');if(!s)return'';const c=topicKey._c||(topicKey._c=new Map());if(s.length<=160){const hit=c.get(s);if(hit!==undefined)return hit}const out=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();if(s.length<=160){if(c.size>6000)c.clear();c.set(s,out)}return out}
 
@@ -1145,6 +1145,16 @@
       <div class="quickBoardPills" role="group" aria-label="Filtro rápido de banca examinadora">
         ${boards.map(b=>`<button type="button" class="quickBoardPill ${currentBoard===b.val?'active':''}" data-quick-board="${escText(b.val)}">${escText(b.label)}</button>`).join('')}
       </div>
+      <div class="caveiraSprintBanner">
+        <div>
+          <b style="color:#fca5a5;font-size:.86rem">💀 MODO CAVEIRA · SIMULADO LÍQUIDO & RETA FINAL</b>
+          <div class="small muted">Treine com opção de deixar em branco (Cebraspe +1/-1 ou Múltipla Escolha A–E) priorizando seus erros e tópicos de alta cobrança.</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" class="action small" id="startCaveiraSprintBtn" style="width:auto;padding:7px 12px;font-size:.78rem">💀 Sprint Reta Final Caveira</button>
+          <button type="button" class="ghost small" id="togglePaperModeQuickBtn" style="width:auto;padding:7px 11px;font-size:.78rem">☀️ Modo Papel / Leitura</button>
+        </div>
+      </div>
       <div class="quickSubjectChips">
         ${subjects.map(([subj,cnt])=>`<button type="button" class="quickSubjectChip" data-quick-subject-launch="${escText(subj)}"><div class="quickSubjectChipLeft"><span class="quickSubjIcon">${subjectIconForName(subj)}</span><div class="quickSubjText"><b>${escText(subj)}</b><small class="quickSubjSub">Treino progressivo · 1 clique</small></div></div><span class="quickSubjCount">${cnt} q. →</span></button>`).join('')}
       </div>
@@ -1175,7 +1185,54 @@
         startFilteredBattle();
       };
     });
+    const sprintBtn=q('#startCaveiraSprintBtn');
+    if(sprintBtn)sprintBtn.onclick=()=>startCaveiraSprintSession();
+    const paperBtn=q('#togglePaperModeQuickBtn');
+    if(paperBtn)paperBtn.onclick=()=>togglePaperReadingMode();
   }
+
+  function togglePaperReadingMode(){
+    const active=document.body.classList.toggle('lightPaperMode');
+    try{localStorage.setItem('jornada-paper-mode-v126',active?'1':'0')}catch{}
+    toast(active?'☀️ Modo Papel ativado para leitura confortável de resumos e questões!':'🌙 Modo Caçador Escuro restaurado!');
+  }
+  window.togglePaperReadingMode=togglePaperReadingMode;
+  try{if(localStorage.getItem('jornada-paper-mode-v126')==='1')document.body.classList.add('lightPaperMode')}catch{}
+
+  function startCaveiraSprintSession(){
+    ensureNativeQuestionBankLoaded();
+    const currentBoard=q('#questionBoardFilter')?.value||'all';
+    const allPool=(ALL_QUESTIONS||[]).filter(item=>!isInvalidTrailSubject(item?.subject)&&questionMatchesBoardFilter(item,currentBoard));
+    if(!allPool.length)return toast('Nenhuma questão disponível para o Sprint. Selecione "Todas as Bancas" acima.');
+    const errEntries=activeCampaignErrors();
+    const errMatched=errEntries.length?allPool.filter(item=>questionMatchesErrorPool(item,errEntries)):[];
+    const hardOrOfficial=allPool.filter(item=>normalizedOrigin(item)==='oficial'||normalizedDifficulty(item)==='dificil');
+    const combined=[...errMatched,...hardOrOfficial,...allPool];
+    const seen=new Set();
+    const unique=[];
+    for(const item of combined){
+      const fp=questionFingerprint(item);
+      if(seen.has(fp))continue;
+      seen.add(fp);
+      unique.push(item);
+      if(unique.length>=10)break;
+    }
+    activeQuestions={
+      mode:'caveira_sprint',
+      subject:'Sprint Reta Final Caveira',
+      questions:unique.map(prepareQuestion),
+      current:0,
+      correct:0,
+      blankCount:0,
+      streak:0,
+      level:2,
+      answered:false
+    };
+    if(q('#questionDialogTitle'))q('#questionDialogTitle').textContent=`💀 Sprint Reta Final Caveira (${unique.length} questões)`;
+    q('#questionDialog')?.showModal();
+    showQuestion();
+  }
+  window.startCaveiraSprintSession=startCaveiraSprintSession;
   window.renderQuickBoaRespostaBar=renderQuickBoaRespostaBar;
 
   function ensureTopicFilterSelect(){
@@ -1380,9 +1437,13 @@
   }
 
   function formatStepByStepResolution(item,chosenIndex,ok,interactive=true){
+    const optsList=Array.isArray(item.options)?item.options:[];
+    const isCE=optsList.length===2&&/^certo$/i.test(String(optsList[0]||'').trim());
     const correctIndex=Number(item.correct_index)||0;
-    const correctLetter=String.fromCharCode(65+correctIndex);
-    const chosenLetter=Number.isInteger(chosenIndex)?String.fromCharCode(65+chosenIndex):'—';
+    const correctLetter=isCE?(correctIndex===0?'CERTO':'ERRADO'):String.fromCharCode(65+correctIndex);
+    const chosenLetter=(Number.isInteger(chosenIndex)&&chosenIndex>=0)
+      ?(isCE?(chosenIndex===0?'CERTO':'ERRADO'):String.fromCharCode(65+chosenIndex))
+      :(chosenIndex===-2?'EM BRANCO (0 pt)':'TEMPO ESGOTADO');
     const rawExp=String(item.explanation||'').trim();
     const related=findRelatedSummary(item);
     const fp=questionFingerprint(item);
@@ -1432,11 +1493,12 @@
         <button type="button" class="ghost small" id="explainEasyAnalogyBtn">🧠 Explicar fácil (analogia)</button>
         <button type="button" class="ghost small" id="toggleFavoriteQuestionBtn">${isFav?'⭐ Favorita (salva)':'☆ Favoritar questão'}</button>
         <button type="button" class="ghost small" id="saveQuestionNoteBtn">📌 Salvar no Caderno</button>
+        <button type="button" class="ghost small" id="askQapInstructorBtn">🦅 QAP Instrutor IA</button>
         <button type="button" class="ghost small" id="reportQuestionIssueBtn">🚩 Corrigir / Reportar</button>
       </div>
       <div id="easyAnalogyOutput" hidden class="stepResolutionBlock concept" style="margin-top:6px"></div>
       <div class="personalQuestionBizuBox">
-        <label class="small muted" for="personalQuestionCommentInput">💬 Meu bizu / anotação nesta questão (estilo TEC/Qconcursos):</label>
+        <label class="small muted" for="personalQuestionCommentInput">💬 Meu bizu / anotação nesta questão (estilo TEC/Qconcursos/Caveira):</label>
         <div class="personalBizuRow">
           <input type="text" id="personalQuestionCommentInput" value="${escText(savedComment)}" placeholder="Escreva seu mnemônico ou observação rápida para lembrar desta questão...">
           <button type="button" class="ghost small" id="savePersonalQuestionCommentBtn">Salvar bizu</button>
@@ -1445,14 +1507,26 @@
 
     const chosenText=(Number.isInteger(chosenIndex)&&chosenIndex>=0&&item.options?.[chosenIndex])?item.options[chosenIndex]:'';
     const correctText=item.options?.[correctIndex]||'';
+    const optRangeLabel=isCE?'CERTO / ERRADO':`A–${String.fromCharCode(64+Math.max(4,optsList.length))}`;
     const directComparisonHtml=(!ok&&chosenText)?`
       <div class="directChoiceComparison">
         <div class="choiceCompareCard wrongPick">
-          <span class="choiceCompareLabel">✗ SUA ESCOLHA (ALTERNATIVA ${chosenLetter})</span>
+          <span class="choiceCompareLabel">✗ SUA ESCOLHA (${isCE?chosenLetter:`ALTERNATIVA ${chosenLetter}`})</span>
           <p>${escText(chosenText)}</p>
         </div>
         <div class="choiceCompareCard rightPick">
-          <span class="choiceCompareLabel">✓ GABARITO OFICIAL (ALTERNATIVA ${correctLetter})</span>
+          <span class="choiceCompareLabel">✓ GABARITO OFICIAL (${isCE?correctLetter:`ALTERNATIVA ${correctLetter}`})</span>
+          <p>${escText(correctText)}</p>
+        </div>
+      </div>
+    `:(!ok&&chosenIndex===-2)?`
+      <div class="directChoiceComparison">
+        <div class="choiceCompareCard wrongPick" style="border-color:#94a3b8;background:rgba(30,41,59,.65)">
+          <span class="choiceCompareLabel" style="color:#cbd5e1">⚪ DEIXADA EM BRANCO (ESTRATÉGIA LÍQUIDA CAVEIRA · 0 PT)</span>
+          <p>Você optou por não chutar esta questão para proteger sua pontuação líquida.</p>
+        </div>
+        <div class="choiceCompareCard rightPick">
+          <span class="choiceCompareLabel">✓ GABARITO OFICIAL (${isCE?correctLetter:`ALTERNATIVA ${correctLetter}`})</span>
           <p>${escText(correctText)}</p>
         </div>
       </div>
@@ -1461,15 +1535,15 @@
     return `<div class="boaRespostaResolution ${ok?'isGood':'isBad'}">
       <div class="resolutionHeader">
         <div>
-          <span class="eyebrow">${ok?'✓ RESPOSTA CORRETA · +25 XP':'✗ RESPOSTA INCORRETA · APRENDA COM O PASSO A PASSO'}</span>
-          <h4>Gabarito: Alternativa ${correctLetter}${!ok?` (você marcou ${chosenLetter})`:''}</h4>
+          <span class="eyebrow">${ok?'✓ RESPOSTA CORRETA · +25 XP':chosenIndex===-2?'⚪ QUESTÃO EM BRANCO · CONFIRA A RESOLUÇÃO':'✗ RESPOSTA INCORRETA · APRENDA COM O PASSO A PASSO'}</span>
+          <h4>Gabarito: ${isCE?correctLetter:`Alternativa ${correctLetter}`}${!ok?` (${chosenIndex===-2?'deixada em branco':chosenIndex===-1?'tempo esgotado':`você marcou ${chosenLetter}`})`:''}</h4>
         </div>
         <span class="tag">${escText(item.board||(normalizedOrigin(item)==='oficial'?'Prova Oficial':'Estilo Banca'))}</span>
       </div>
       ${directComparisonHtml}
       ${stepsHtml}
       <details class="resolutionOptionsDetails" ${!ok?'open':''}>
-        <summary>Ver conferência alternativa por alternativa (A–D)</summary>
+        <summary>Ver conferência alternativa por alternativa (${optRangeLabel})</summary>
         <div class="stepOptionsList">${optionsBreakdown}</div>
       </details>
       ${interactiveControls}
@@ -1478,16 +1552,17 @@
 
   async function saveQuestionsToCampaign(title,subject,questions,sourceLabel='Banco de Questões'){
     if(!Array.isArray(questions)||!questions.length)return 0;
-    const normalized=questions.filter(item=>item?.statement&&Array.isArray(item?.options)&&item.options.length===4).map(item=>({
+    const validQuestion=item=>item?.statement&&Array.isArray(item?.options)&&item.options.length>=2&&item.options.length<=5&&item.correct_index!==null&&item.correct_index!==undefined&&item.correct_index!==''&&Number.isInteger(Number(item.correct_index))&&Number(item.correct_index)>=0&&Number(item.correct_index)<item.options.length;
+    const normalized=questions.filter(validQuestion).map(item=>({
       subject:canonicalSubjectName(item.subject||subject||'Conteúdo Geral'),
       topic:String(item.topic||title||'Geral').trim(),
       board:String(item.board||sourceLabel).trim(),
       statement:String(item.statement).trim(),
-      options:item.options.slice(0,4).map(o=>String(o).trim()),
-      correct_index:Math.min(3,Math.max(0,Number(item.correct_index)||0)),
+      options:item.options.map(o=>String(o).trim()),
+      correct_index:Number(item.correct_index),
       explanation:String(item.explanation||'').trim(),
       difficulty:['facil','medio','dificil'].includes(normalizedDifficulty(item))?normalizedDifficulty(item):'medio',
-      origin:normalizedOrigin(item)==='oficial'?'oficial':'autoral'
+      origin:item.origin==='adaptada_do_pdf'?'adaptada_do_pdf':normalizedOrigin(item)==='oficial'?'oficial':'autoral'
     }));
     if(!normalized.length)return 0;
 
@@ -1551,15 +1626,22 @@
     const correctText=String(origOpts[origCorrectIdx]||'Aplicação correta da regra prevista no edital.').trim();
     const attempt=mold?._lastAttempt||null;
     const wrongDistractors=origOpts.filter((_,i)=>i!==origCorrectIdx).map(x=>String(x).trim()).filter(Boolean);
-    while(wrongDistractors.length<3){
-      wrongDistractors.push('Previsão incompatível com o texto normativo e entendimento dominante.');
-    }
+    const optionCount=Math.min(5,Math.max(2,origOpts.length||4));
+    const fillers=['Previsão incompatível com o texto normativo e entendimento dominante.','Regra diversa da prevista na norma, apoiada em exceção que não existe.','Interpretação restritiva não admitida pela doutrina e pela jurisprudência.','Aplicação automática da regra, sem observar os requisitos legais.'];
+    let fillerIndex=0;
+    while(wrongDistractors.length<optionCount-1)wrongDistractors.push(fillers[fillerIndex++%fillers.length]);
     const cleanExp=String(mold?.explanation||'').replace(/\s+/g,' ').trim();
     const angleNote=attempt&&!attempt.ok&&attempt.chosenText
       ?`Atenção: na questão anterior você marcou "${shortLabel(attempt.chosenText,65)}". Compare os elementos do caso e identifique a alternativa que aplica a regra exata:`
       :`Em uma variação de prova da banca ${board} sobre "${topic}", analise as assertivas e assinale a diretriz juridicamente/tecnicamente correta:`;
     const newStatement=`🧬 [Questão Gêmea de Fixação · ${topic}] ${angleNote}`;
-    const newOptions=[correctText,...wrongDistractors.slice(0,3)];
+    let newOptions,newCorrectIndex;
+    if(optionCount===2&&origOpts.length===2){newOptions=origOpts.map(x=>String(x).trim());newCorrectIndex=origCorrectIdx}
+    else{
+      const pool=[{text:correctText,ok:true},...wrongDistractors.slice(0,optionCount-1).map(text=>({text,ok:false}))];
+      for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]]}
+      newOptions=pool.map(x=>x.text);newCorrectIndex=pool.findIndex(x=>x.ok);
+    }
     const newExplanation=[
       `Conceito-chave: Fixação ativa do tema "${topic}" (${subj}).`,
       `✅ Alternativa correta: ${correctText}`,
@@ -1576,7 +1658,7 @@
       origin:'autoral',
       statement:newStatement,
       options:newOptions,
-      correct_index:0,
+      correct_index:newCorrectIndex,
       explanation:newExplanation
     };
   }
@@ -1591,7 +1673,7 @@
 • Ou escreva uma observação para reportar erro no enunciado/comentário:`,currentLetter);
     if(ans===null)return;
     const clean=ans.trim();
-    if(/^[A-Da-d]$/.test(clean)){
+    if(/^[A-Ea-e]$/.test(clean)){
       const newIdx=clean.toUpperCase().charCodeAt(0)-65;
       item.correct_index=newIdx;
       const fp=questionFingerprint(item);
@@ -1743,7 +1825,7 @@
     }
     q('#questionCounter').textContent=`Questão ${battle.current+1} de ${battle.questions.length}`;
     q('#questionText').innerHTML=formatStatementWithHighlights(item.statement);
-    q('#questionOptions').innerHTML=(item.options||[]).map((o,i)=>`<div class="optionWithScissors"><button type="button" class="optionMainBtn" data-question-index="${i}"><span class="optLetterBadge">${String.fromCharCode(65+i)}</span><span class="optBodyText">${escText(o)}</span></button><button type="button" class="scissorBtn" data-scissor-index="${i}" title="Riscar/eliminar alternativa (estilo TEC/Qconcursos)" aria-label="Riscar alternativa ${String.fromCharCode(65+i)}">✂</button></div>`).join('');
+    q('#questionOptions').innerHTML=(item.options||[]).map((o,i)=>`<div class="optionWithScissors"><button type="button" class="optionMainBtn" data-question-index="${i}"><span class="optLetterBadge">${String.fromCharCode(65+i)}</span><span class="optBodyText">${escText(o)}</span></button><button type="button" class="scissorBtn" data-scissor-index="${i}" title="Riscar/eliminar alternativa (estilo TEC/Qconcursos)" aria-label="Riscar alternativa ${String.fromCharCode(65+i)}">✂</button></div>`).join('')+`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px"><button type="button" class="ghost small" id="skipQuestionBlankBtn" style="width:auto;padding:6px 12px;font-size:.77rem" title="Pular sem marcar alternativa (Estratégia Líquida Cebraspe/Caveira: não perde ponto líquido)">⚪ Deixar em Branco (Modo Líquido Caveira)</button><button type="button" class="ghost small" id="toggleModalPaperModeBtn" style="width:auto;padding:6px 10px;font-size:.75rem">☀️ Modo Papel</button></div>`;
     q('#questionFeedback').innerHTML='';
     q('#nextQuestion').hidden=true;
     battle.answered=false;
@@ -1751,6 +1833,8 @@
       q('#closeQuestionsTopBtn').onclick=()=>{activeQuestions=null;q('#questionDialog')?.close()};
     }
     qa('[data-question-index]').forEach(b=>b.onclick=()=>window.answerQuestion(b,item));
+    if(q('#skipQuestionBlankBtn'))q('#skipQuestionBlankBtn').onclick=()=>window.skipQuestionBlank(item);
+    if(q('#toggleModalPaperModeBtn'))q('#toggleModalPaperModeBtn').onclick=()=>togglePaperReadingMode();
     qa('[data-scissor-index]').forEach(sBtn=>sBtn.onclick=e=>{
       e.stopPropagation();
       if(battle.answered)return;
@@ -1821,6 +1905,42 @@
       toast(val?'Seu bizu pessoal foi salvo nesta questão!':'Bizu removido.');
     };
 
+    const qapBtn=q('#askQapInstructorBtn');
+    if(qapBtn)qapBtn.onclick=()=>{
+      q('#questionDialog')?.close();
+      openView('assistant');
+      const aiInput=q('#aiQuestion');
+      if(aiInput){
+        aiInput.value=`[Modo QAP Policial] Explique detalhadamente os fundamentos, artigos de lei e pegadinhas de banca sobre esta questão de ${item.subject} (${item.topic}): "${item.statement}"`;
+        aiInput.focus();
+      }
+      toast('🦅 Questão enviada para o Instrutor Tático em QAP!');
+    };
+    if(q('#skipQuestionBlankBtn'))q('#skipQuestionBlankBtn').disabled=true;
+    q('#nextQuestion').hidden=false;
+    q('#nextQuestion').textContent=battle.current===battle.questions.length-1?'Concluir batalha':'Próxima questão →';
+    q('#nextQuestion').scrollIntoView({block:'nearest'});
+  };
+
+  window.skipQuestionBlank=function(item){
+    const battle=activeQuestions;
+    if(!battle||battle.answered)return;
+    battle.answered=true;
+    battle.blankCount=(battle.blankCount||0)+1;
+    battle.streak=0;
+    const correct=Number(item.correct_index)||0;
+    qa('[data-question-index]').find(b=>Number(b.dataset.questionIndex)===correct)?.classList.add('correct');
+    qa('[data-question-index],[data-scissor-index]').forEach(b=>b.disabled=true);
+    if(q('#skipQuestionBlankBtn'))q('#skipQuestionBlankBtn').disabled=true;
+    q('#questionFeedback').innerHTML=formatStepByStepResolution(item,-2,false,true);
+    const twinBtn=q('#spawnTwinQuestionBtn');
+    if(twinBtn)twinBtn.onclick=()=>spawnTwinQuestionForCurrent(item,twinBtn);
+    const reportBtn=q('#reportQuestionIssueBtn');
+    if(reportBtn)reportBtn.onclick=()=>reportOrFixCurrentQuestion(item,reportBtn);
+    const analogyBtn=q('#explainEasyAnalogyBtn');
+    if(analogyBtn)analogyBtn.onclick=()=>explainQuestionWithEasyAnalogy(item,analogyBtn);
+    const noteBtn=q('#saveQuestionNoteBtn');
+    if(noteBtn)noteBtn.onclick=()=>{saveCurrentQuestionToNotes(item);noteBtn.disabled=true;noteBtn.textContent='✓ Salva no Caderno'};
     q('#nextQuestion').hidden=false;
     q('#nextQuestion').textContent=battle.current===battle.questions.length-1?'Concluir batalha':'Próxima questão →';
     q('#nextQuestion').scrollIntoView({block:'nearest'});
@@ -2282,152 +2402,229 @@
     }
   }
 
-  function parseExamAnswerKeyTable(fullText){
-    const keyMap=new Map();
+  // ── Extrator determinístico de provas: nunca inventa gabarito ──────────────────────────────
+  // O gabarito só é aceito como uma TABELA de pares "número-resposta" (≥ 4 pares seguidos, letras maiúsculas).
+  // Se houver conflito (cadernos Tipo 1/2, numeração reiniciada por disciplina), o gabarito é marcado como
+  // ambíguo e nenhuma questão é importada, em vez de escolher um caderno ao acaso.
+  function parseExamAnswerKeyTable(fullText,preferredCaderno=''){
     const raw=String(fullText||'');
-    // Procura seção final de GABARITO (prioriza definitivo sobre preliminar)
-    const gabSections=[...raw.matchAll(/\b(?:gabarito(?:\s+oficial|\s+definitivo|\s+preliminar)?|respostas\s+do\s+simulado)\b[\s\S]{0,6000}/gi)];
-    const targetText=gabSections.length?gabSections[gabSections.length-1][0]:raw.slice(-6000);
-    // Casa pares como "01 - A", "1. C", "12) E", "15: ANULADA", "03 C"
-    const pairRe=/(?:^|[\s|;,])0*(\d{1,3})\s*(?:[-–—.:)]|\s)\s*(ANULADA|NULA|X|\*|[A-Ea-e]|CERTO|ERRADO)(?=$|[\s|;,.])/gi;
-    let m;
-    while((m=pairRe.exec(targetText))!==null){
-      const num=Number(m[1]);
-      const val=m[2].toUpperCase();
-      if(num>=1&&num<=250){
-        if(/ANULADA|NULA|X|\*/.test(val))keyMap.set(num,'ANULADA');
-        else if(val==='CERTO')keyMap.set(num,'C');
-        else if(val==='ERRADO')keyMap.set(num,'E');
-        else keyMap.set(num,val);
+    const keyMap=new Map();
+    keyMap.ambiguous=false;keyMap.reason='';keyMap.start=-1;keyMap.cadernos=[];
+    const heads=[...raw.matchAll(EXAM_KEY_HEADING_RE)].map(m=>m.index);
+    const regions=heads.length
+      ?heads.map((h,i)=>({from:h,text:raw.slice(h,Math.min(raw.length,h+8000,i+1<heads.length?heads[i+1]:raw.length))}))
+      :[{from:Math.max(0,raw.length-4000),text:raw.slice(-4000)}];
+    const blocks=[];
+    for(const region of regions){
+      EXAM_KEY_PAIR_RE.lastIndex=0;
+      let m,prevEnd=-1,run=[];
+      const flush=()=>{
+        if(run.length>=4){
+          const pre=region.text.slice(Math.max(0,run[0].index-120),run[0].index);
+          const cadMatches=[...pre.matchAll(/\b((?:caderno\s+)?(?:tipo|caderno|prova)\s*(?:[0-9]{1,2}|azul|amarel[ao]|branc[ao]|verde|rosa|cinza|[A-Z]\b))/gi)];const cadMatch=cadMatches.length?cadMatches[cadMatches.length-1]:null;
+          const caderno=cadMatch?cadMatch[1].replace(/\s+/g,' ').trim().toUpperCase():'';
+          blocks.push({start:region.from+run[0].index,label:region.text.slice(0,Math.min(run[0].index,120)),caderno,pairs:run.map(r=>[r.num,r.val])});
+        }
+        run=[];
+      };
+      while((m=EXAM_KEY_PAIR_RE.exec(region.text))!==null){
+        const num=Number(m[1]);
+        if(num<1||num>250)continue;
+        if(prevEnd>=0&&!/^[\s|;,]*$/.test(region.text.slice(prevEnd,m.index)))flush();
+        if(run.some(r=>r.num===num))flush();
+        run.push({num,val:m[2],index:m.index});
+        prevEnd=m.index+m[0].length;
+      }
+      flush();
+    }
+    const hasFinal=blocks.some(b=>/definitiv/i.test(b.label));
+    let chosen=hasFinal?blocks.filter(b=>!/preliminar/i.test(b.label)):blocks;
+    keyMap.cadernos=[...new Set(chosen.map(b=>b.caderno).filter(Boolean))];
+    if(preferredCaderno&&typeof preferredCaderno==='string'&&preferredCaderno.trim()){
+      const want=preferredCaderno.replace(/\s+/g,' ').trim().toUpperCase();
+      const filtered=chosen.filter(b=>b.caderno===want||b.caderno.includes(want)||want.includes(b.caderno));
+      if(filtered.length)chosen=filtered;
+    }
+    for(const block of chosen){
+      for(const[num,val]of block.pairs){
+        const norm=/^(ANULAD[AO]|NULA|X|\*)$/i.test(val)?'ANULADA':/^certo$/i.test(val)?'C':/^errado$/i.test(val)?'E':val.toUpperCase();
+        if(keyMap.has(num)&&keyMap.get(num)!==norm){
+          keyMap.ambiguous=true;
+          keyMap.reason='Há mais de um gabarito para o mesmo número (provas com cadernos/tipos diferentes ou numeração reiniciada por disciplina).';
+        }else keyMap.set(num,norm);
       }
     }
+    if(chosen.length){
+      keyMap.start=Math.min(...chosen.map(b=>b.start));
+      const near=heads.filter(h=>h<=keyMap.start&&keyMap.start-h<400);
+      if(near.length)keyMap.start=Math.min(keyMap.start,...near);
+    }
     return keyMap;
+  }
+
+  const EXAM_KEY_HEADING_RE=/\b(?:gabarito(?:\s+(?:oficial|definitivo|preliminar|comentado))?|respostas?\s+(?:oficiais?|do\s+simulado|corretas)|folha\s+de\s+respostas)\b/gi;
+  const EXAM_KEY_PAIR_RE=/(?:^|[\s|;,(])0*(\d{1,3})\s*(?:[-–—.:)]\s*|\s+)(ANULADA|ANULADO|Anulada|NULA|X|\*|CERTO|ERRADO|Certo|Errado|[A-E])(?=$|[\s|;,.)])/g;
+  const EXAM_OPTION_RE=/(?:^|\n)[ \t]*(?:\(([A-Ea-e])\)|([A-Ea-e])[ \t]*[.)\-–])[ \t]+/g;
+  const EXAM_BASE_TEXT_RE=/\n[ \t]*(?:TEXTO\s+(?:[IVX]+|\d+)\b|Leia\s+(?:o|os|a|as)\s+(?:texto|textos|charge|tirinha)|Texto\s+(?:[IVX]+|\d+)\b)/i;
+
+  function cleanExamPages(rawTextOrPages){
+    const pages=Array.isArray(rawTextOrPages)?rawTextOrPages.map(p=>String(p?.text||'')):[String(rawTextOrPages||'')];
+    const norm=l=>l.trim().replace(/\s+/g,' ').toLowerCase();
+    const pageNumberOnly=/^\s*(?:p[áa]g(?:ina)?\.?\s*\d+(?:\s*(?:de|\/)\s*\d+)?|\d+\s*\/\s*\d+)\s*$/i;
+    const trailingPageNumber=/\s+p[áa]g(?:ina)?\.?\s*\d+(?:\s*(?:de|\/)\s*\d+)?\s*$/i;
+    const cadernoHeader=/^[^\n]{0,50}\bcaderno\s+(?:[A-Z]|\d{1,2})\s*$/i;
+    let repeated=new Set();
+    if(pages.length>=6){
+      const counts=new Map();
+      for(const text of pages){
+        const seen=new Set();
+        for(const line of text.split('\n')){
+          const key=norm(line);
+          if(key.length<12||key.length>120||seen.has(key)||/quest[aã]o|julgue|assinale|gabarito|certo|errado|^\(?[a-e][).]/i.test(key))continue;
+          seen.add(key);counts.set(key,(counts.get(key)||0)+1);
+        }
+      }
+      const threshold=Math.max(4,Math.ceil(pages.length*0.4));
+      repeated=new Set([...counts].filter(([,n])=>n>=threshold).map(([key])=>key));
+    }
+    return pages.map(text=>text.split('\n')
+      .map(line=>line.replace(trailingPageNumber,''))
+      .filter(line=>!pageNumberOnly.test(line)&&!cadernoHeader.test(line)&&!repeated.has(norm(line)))
+      .join('\n')).join('\n\n');
   }
 
   function extractStructuredExamQuestions(rawTextOrPages,opts={}){
     const defaultSubject=opts.defaultSubject||'Conteúdo Geral';
     const defaultBoard=opts.defaultBoard||'Prova Oficial';
-    const fullText=Array.isArray(rawTextOrPages)
-      ?rawTextOrPages.map(p=>String(p?.text||'')).join('\n\n')
-      :String(rawTextOrPages||'');
-    const trimmed=fullText.trim();
-    if(!trimmed)return[];
+    const report={expected:0,extracted:0,annulled:0,skipped:0,missingKey:0,ambiguous:false,reason:'',percent:0};
+    const finish=list=>{Object.defineProperty(list,'report',{value:report,enumerable:false});return list};
+    const rawJoined=Array.isArray(rawTextOrPages)?rawTextOrPages.map(p=>String(p?.text||'')).join('\n\n'):String(rawTextOrPages||'');
+    const jsonCandidate=rawJoined.trim();
+    if(!jsonCandidate)return finish([]);
 
-    // 1) Se for JSON direto
-    if(trimmed.startsWith('[')||trimmed.startsWith('{')){
+    // 1) JSON direto: exige alternativas (2–5) e gabarito válido; nunca assume a letra A.
+    if(jsonCandidate.startsWith('[')||jsonCandidate.startsWith('{')){
       try{
-        const parsed=JSON.parse(trimmed);
+        const parsed=JSON.parse(jsonCandidate);
         const arr=Array.isArray(parsed)?parsed:(Array.isArray(parsed?.questions)?parsed.questions:[]);
-        return arr.filter(x=>x?.statement&&Array.isArray(x?.options)&&x.options.length>=4).map(x=>({
-          subject:canonicalSubjectName(x.subject||defaultSubject),
-          topic:x.topic||'Questão Oficial',
-          board:x.board||defaultBoard,
-          statement:String(x.statement).trim(),
-          options:x.options.slice(0,4).map(String),
-          correct_index:Math.min(3,Math.max(0,Number(x.correct_index)||0)),
-          explanation:String(x.explanation||'Questão oficial importada pelo usuário.'),
-          difficulty:x.difficulty||'medio',
-          origin:'oficial'
-        }));
+        const out=[];
+        for(const x of arr){
+          if(!x?.statement||!Array.isArray(x?.options))continue;
+          const options=x.options.map(o=>String(o).trim()).filter(Boolean);
+          const idx=x.correct_index;
+          if(options.length<2||options.length>5||idx===null||idx===undefined||idx===''||!Number.isInteger(Number(idx))||Number(idx)<0||Number(idx)>=options.length)continue;
+          out.push({
+            subject:canonicalSubjectName(x.subject||defaultSubject),
+            topic:x.topic||'Questão Importada',
+            board:x.board||defaultBoard,
+            statement:String(x.statement).trim(),
+            options,
+            correct_index:Number(idx),
+            explanation:String(x.explanation||'Questão importada pelo usuário.'),
+            difficulty:x.difficulty||'medio',
+            origin:['oficial','adaptada_do_pdf','autoral'].includes(x.origin)?x.origin:'adaptada_do_pdf'
+          });
+        }
+        report.expected=arr.length;report.extracted=out.length;report.skipped=arr.length-out.length;
+        report.percent=arr.length?Math.round(out.length/arr.length*100):0;
+        return finish(out);
       }catch{}
     }
 
-    // 2) Extração determinística de blocos de questões numeradas (QUESTÃO 01, Questão 1, 01., 1))
-    const answerKeyMap=parseExamAnswerKeyTable(trimmed);
-    const bodyWithoutFinalGabarito=trimmed.replace(/\n\s*Gabarito(?:\s+Definitivo|\s+Preliminar|\s+Oficial)?\s*[:\n][\s\S]{0,4000}$/i,'');
-    const blockRegex=/(?:^|\n)\s*(?:QUEST[AÃ]O\s*0*(\d{1,3})|0*(\d{1,3})\s*[.)-])\s+([\s\S]*?)(?=(?:\n\s*(?:QUEST[AÃ]O\s*0*\d{1,3}|0*\d{1,3}\s*[.)-]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ(\"\x27]))|$)/gi;
-    const results=[];
-    let match;
-    while((match=blockRegex.exec(bodyWithoutFinalGabarito))!==null){
-      const qNum=Number(match[1]||match[2]||0);
-      let block=String(match[3]||'').trim();
-      if(block.length<20)continue;
+    // 2) Extração determinística de blocos numerados, só com gabarito confiável do próprio documento.
+    const text=cleanExamPages(rawTextOrPages).trim();
+    const keyMap=parseExamAnswerKeyTable(text,opts.preferredCaderno||'');
+    report.ambiguous=keyMap.ambiguous;report.reason=keyMap.reason;report.cadernos=keyMap.cadernos||[];
+    const inlineKeys=(text.match(/(?:gabarito(?:\s+oficial|\s+definitivo)?|resposta(?:\s+correta)?)\s*[:\-–]\s*(?:letra\s+)?(?:ANULADA|CERTO|ERRADO|[A-Ea-e])\b/gi)||[]).length;
+    const inlineMode=keyMap.size===0&&inlineKeys>=3;
+    if(keyMap.ambiguous||(keyMap.size===0&&!inlineMode))return finish([]);
+    const body=!inlineMode&&keyMap.start>0?text.slice(0,keyMap.start):text;
+    const isCE=!inlineMode&&[...keyMap.values()].every(v=>v==='C'||v==='E'||v==='ANULADA');
+    const explicitMarks=(body.match(/(?:^|\n)[ \t]*QUEST[AÃ]O\s*0*\d{1,3}\b/gi)||[]).length;
+    const explicitMode=explicitMarks>=3;
+    const startRe=explicitMode
+      ?/(?:^|\n)[ \t]*QUEST[AÃ]O\s*0*(\d{1,3})\b[ \t]*[:.\-–)]?[ \t]*/gi
+      :/(?:^|\n)[ \t]*0*(\d{1,3})(?:[ \t]*[.)\-–][ \t]+|[ \t]+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ“"(]))/g;
+    const countOptions=t=>[...t.matchAll(EXAM_OPTION_RE)].length;
+    const cands=[];
+    let sm;
+    while((sm=startRe.exec(body))!==null){
+      const num=Number(sm[1]);
+      if(inlineMode||keyMap.has(num))cands.push({num,index:sm.index,bodyStart:sm.index+sm[0].length});
+    }
+    const blocks=[];
+    for(let i=0;i<cands.length;i++){
+      const c=cands[i],end=i+1<cands.length?cands[i+1].index:body.length;
+      const last=blocks[blocks.length-1];
+      // Numeração de afirmativas dentro do enunciado ("1. ... 2. ...") não abre questão nova.
+      if(last&&(c.num<=last.num||(!explicitMode&&!isCE&&countOptions(last.text)<2))){last.text+='\n'+body.slice(c.index,end).trim();continue}
+      blocks.push({num:c.num,text:body.slice(c.bodyStart,end).trim()});
+    }
 
-      // Verifica gabarito inline no final do bloco ("Gabarito: C", "Resposta: Letra E", "Gabarito: CERTO", "Comentário: ...")
-      let inlineAns=null;
+    const results=[];
+    let pendingBase='',baseAge=0;
+    for(const b of blocks){
+      let block=b.text;
+      if(block.length<12)continue;
       let inlineComment='';
       const commentMatch=block.match(/(?:^|\n)\s*(?:Coment[aá]rio|Resolu[cç][aã]o|Justificativa)\s*[:\-–]\s*([\s\S]+)$/i);
-      if(commentMatch){
-        inlineComment=commentMatch[1].trim();
-        block=block.slice(0,commentMatch.index).trim();
-      }
-      const inlineGabMatch=block.match(/(?:^|\n|\s)(?:Gabarito(?:\s+Oficial|\s+Definitivo)?|Resposta(?:\s+Correta)?)\s*[:\-–]?\s*(?:Letra\s+)?(ANULADA|CERTO|ERRADO|[A-Ea-e])\b/i);
-      if(inlineGabMatch){
-        const rawAns=inlineGabMatch[1].toUpperCase();
+      if(commentMatch){inlineComment=commentMatch[1].trim();block=block.slice(0,commentMatch.index).trim()}
+      let inlineAns=null;
+      const inlineGab=block.match(/(?:^|\n|\s)(?:Gabarito(?:\s+Oficial|\s+Definitivo)?|Resposta(?:\s+Correta)?)\s*[:\-–]?\s*(?:Letra\s+)?(ANULADA|CERTO|ERRADO|[A-Ea-e])\b/i);
+      if(inlineGab){
+        const rawAns=inlineGab[1].toUpperCase();
         inlineAns=rawAns==='CERTO'?'C':rawAns==='ERRADO'?'E':rawAns;
-        block=block.slice(0,inlineGabMatch.index).trim();
+        block=block.slice(0,inlineGab.index).trim();
       }
+      report.expected++;
+      const key=inlineAns||keyMap.get(b.num)||null;
+      if(key==='ANULADA'){report.annulled++;continue}
+      if(!key){report.missingKey++;continue}
 
-      const finalKey=inlineAns||(qNum?answerKeyMap.get(qNum):null)||null;
-      if(finalKey==='ANULADA')continue; // Descarta questões anuladas oficialmente
+      // Texto-base que aparece depois das alternativas pertence às questões seguintes.
+      const baseCut=block.search(EXAM_BASE_TEXT_RE);
+      let newBase='';
+      if(baseCut>0&&countOptions(block.slice(0,baseCut))>=2){newBase=block.slice(baseCut).trim().slice(0,1500);block=block.slice(0,baseCut).trim()}
 
-      // Tenta extrair alternativas A, B, C, D, (E)
-      const optSplitRegex=/(?:^|\n)\s*(?:\(([A-Ea-e])\)|([A-Ea-e])\s*[.)-])\s+/g;
-      const optMatches=[...block.matchAll(optSplitRegex)];
-      if(optMatches.length>=4){
-        const statement=block.slice(0,optMatches[0].index).replace(/\s+/g,' ').trim();
-        if(statement.length<10)continue;
-        const parsedOpts=[];
-        for(let i=0;i<optMatches.length;i++){
-          const letter=(optMatches[i][1]||optMatches[i][2]).toUpperCase();
-          const start=optMatches[i].index+optMatches[i][0].length;
-          const end=i+1<optMatches.length?optMatches[i+1].index:block.length;
-          const text=block.slice(start,end).replace(/\s+/g,' ').trim();
-          if(text)parsedOpts.push({letter,text});
+      const picked=[];
+      let expect=0;
+      for(const om of block.matchAll(EXAM_OPTION_RE)){
+        const letter=(om[1]||om[2]).toUpperCase();
+        if(letter==='ABCDE'[expect]){picked.push({letter,index:om.index,len:om[0].length});expect++}
+      }
+      let item=null;
+      if(picked.length>=4){
+        const statement=block.slice(0,picked[0].index).replace(/\s+/g,' ').trim();
+        const options=picked.map((o,i)=>block.slice(o.index+o.len,i+1<picked.length?picked[i+1].index:block.length).replace(/\s+/g,' ').trim());
+        const correctIdx=picked.findIndex(o=>o.letter===key);
+        if(statement.length>=10&&correctIdx>=0&&options.every(Boolean)){
+          item={statement,options,correct_index:correctIdx,topic:`Questão ${b.num} · ${defaultBoard}`,difficulty:'medio',
+            explanation:inlineComment||`Gabarito do documento: alternativa ${key} ("${options[correctIdx]}").`};
         }
-        if(parsedOpts.length>=4){
-          // Se só extraiu se tiver gabarito conhecido (no próprio bloco ou na tabela de gabarito)
-          if(!finalKey||!/^[A-E]$/.test(finalKey))continue;
-          let correctIdx=parsedOpts.findIndex(o=>o.letter===finalKey);
-          if(correctIdx<0)continue;
-          let finalFour=parsedOpts.slice(0,4);
-          // Se a questão tinha 5 alternativas (A-E) e a correta era E (índice 4), preserva a correta!
-          if(parsedOpts.length>=5){
-            if(correctIdx>=4){
-              finalFour=[parsedOpts[0],parsedOpts[1],parsedOpts[2],parsedOpts[correctIdx]];
-              correctIdx=3;
-            }
-          }
-          const inferredSubj=canonicalSubjectName(statement,defaultSubject);
-          const subj=inferredSubj&&inferredSubj!=='Conteúdo Geral'?inferredSubj:canonicalSubjectName(defaultSubject);
-          results.push({
-            subject:subj,
-            topic:`Questão ${qNum||results.length+1} · ${defaultBoard}`,
-            board:defaultBoard,
-            statement,
-            options:finalFour.map(o=>o.text),
-            correct_index:correctIdx,
-            explanation:inlineComment||`Gabarito Oficial do Documento: Alternativa ${finalKey} ("${finalFour[correctIdx].text}").`,
-            difficulty:'medio',
-            origin:'oficial'
-          });
-        }
-      }else if(/\b(certo|errado|julgue\s+o\s+item)\b/i.test(block)&&(finalKey==='C'||finalKey==='E')){
-        // Formato Certo / Errado (Cebraspe)
+      }else if((key==='C'||key==='E')&&picked.length===0&&(isCE||inlineMode||/\bcerto\b[\s\S]*\berrado\b|\bjulgue\b/i.test(block))){
         const statement=block.replace(/\(\s*\)\s*Certo[\s\S]*$/i,'').replace(/\s+/g,' ').trim();
-        if(statement.length<12)continue;
-        const isCerto=finalKey==='C';
-        const inferredSubj=canonicalSubjectName(statement,defaultSubject);
-        const subj=inferredSubj&&inferredSubj!=='Conteúdo Geral'?inferredSubj:canonicalSubjectName(defaultSubject);
-        results.push({
-          subject:subj,
-          topic:`Item ${qNum||results.length+1} (C/E) · ${defaultBoard}`,
-          board:defaultBoard||"Cebraspe",
-          statement:`[Julgue o item em CERTO ou ERRADO] ${statement}`,
-          options:[
-            'CERTO — O item está de acordo com a legislação/jurisprudência aplicável.',
-            'ERRADO — O item contém incorreção, generalização indevida ou inversão de regra.',
-            'Abster-se / Deixar em branco (Modo Líquido Cebraspe).',
-            'Item parcialmente incorreto por omissão de requisito essencial.'
-          ],
-          correct_index:isCerto?0:1,
-          explanation:inlineComment||`Gabarito Oficial Cebraspe: ${isCerto?'CERTO':'ERRADO'}.`,
-          difficulty:'dificil',
-          origin:'oficial'
-        });
+        if(statement.length>=12){
+          item={statement:`[Julgue o item em CERTO ou ERRADO] ${statement}`,options:['CERTO','ERRADO'],correct_index:key==='C'?0:1,
+            topic:`Item ${b.num} (C/E) · ${defaultBoard}`,difficulty:'dificil',
+            explanation:inlineComment||`Gabarito do documento: ${key==='C'?'CERTO':'ERRADO'}.`};
+        }
       }
+      if(item){
+        if(pendingBase&&baseAge<8&&/\b(texto|trecho|fragmento|charge|tirinha|poema|excerto)\b/i.test(item.statement))item.statement=`Texto-base: ${pendingBase}\n\n${item.statement}`;
+        const inferred=canonicalSubjectName(item.statement,defaultSubject);
+        item.subject=inferred&&inferred!=='Conteúdo Geral'?inferred:canonicalSubjectName(defaultSubject);
+        item.board=defaultBoard;
+        item.origin='oficial';
+        results.push(item);
+      }else report.skipped++;
+      if(newBase){pendingBase=newBase;baseAge=0}else baseAge++;
     }
-    return results;
+    report.extracted=results.length;
+    const lastNum=blocks.length?blocks[blocks.length-1].num:0;
+    if(!inlineMode)report.expected=Math.max(report.expected,keyMap.size,lastNum);
+    const valid=Math.max(0,report.expected-report.annulled);
+    report.percent=valid?Math.min(100,Math.round(results.length/valid*100)):0;
+    return finish(results);
   }
   window.extractStructuredExamQuestions=extractStructuredExamQuestions;
 
@@ -2459,11 +2656,30 @@
     if(btn){btn.disabled=true;btn.textContent='⏳ Estruturando questões e resoluções...'}
     try{
       const localParsed=tryParseLocalQuestionText(rawText,subject==='all'?'Conteúdo Geral':subject,board);
+      const report=localParsed.report||{};
       if(localParsed.length){
         const count=await saveQuestionsToCampaign(`Importação ${board}`,subject==='all'?'Conteúdo Geral':subject,localParsed,board);
         q('#pasteQuestionRawText').value='';
         switchExamHubTab('catalog');
-        toast(`✓ ${count} questão(ões) importada(s) e salva(s) no banco!`);
+        const left=(report.missingKey||0)+(report.skipped||0);
+        toast(left>0?`✓ ${count} de ${report.expected} questões importadas com o gabarito do documento. ${left} não puderam ser lidas (sem gabarito ou formato não reconhecido).`:`✓ ${count} questão(ões) importada(s) e salva(s) no banco!`);
+        return;
+      }
+      if(report.ambiguous){
+        if(Array.isArray(report.cadernos)&&report.cadernos.length>=2&&typeof prompt==='function'){
+          const chosenCad=prompt(`${report.reason}\n\nCadernos detectados: ${report.cadernos.join(', ')}.\nDigite qual caderno deseja importar agora:`,report.cadernos[0]);
+          if(chosenCad&&chosenCad.trim()){
+            const retried=extractStructuredExamQuestions(rawText,{defaultSubject:subject==='all'?'Conteúdo Geral':subject,defaultBoard:board,preferredCaderno:chosenCad.trim()});
+            if(retried.length){
+              const count=await saveQuestionsToCampaign(`Importação ${board} (${chosenCad.trim().toUpperCase()})`,subject==='all'?'Conteúdo Geral':subject,retried,board);
+              q('#pasteQuestionRawText').value='';
+              switchExamHubTab('catalog');
+              toast(`✓ ${count} questão(ões) do ${chosenCad.trim().toUpperCase()} importada(s) e salva(s) no banco!`);
+              return;
+            }
+          }
+        }
+        toast(`${report.reason} Importe um caderno por vez (cole só o gabarito do seu caderno) ou use o formato JSON.`);
         return;
       }
       if(!cloudSession)throw new Error('Entre na sua conta para converter questões em texto livre usando a IA.');
@@ -2483,10 +2699,10 @@
       });
       const data=await res.json().catch(()=>({}));
       if(!res.ok)throw new Error(data.error||'Não foi possível converter o texto em questões.');
-      const count=await saveQuestionsToCampaign(`Prova Importada · ${board}`,subject==='all'?'Conteúdo Geral':subject,data.questions||[],board);
+      const count=await saveQuestionsToCampaign(`Prova Importada · ${board}`,subject==='all'?'Conteúdo Geral':subject,(data.questions||[]).map(item=>({...item,origin:'adaptada_do_pdf'})),board);
       q('#pasteQuestionRawText').value='';
       switchExamHubTab('catalog');
-      toast(`✓ ${count} questão(ões) oficial(is) estruturada(s) com resolução passo a passo!`);
+      toast(`✓ ${count} questão(ões) estruturada(s) pela IA. Confira o gabarito no seu material antes de estudar: o texto colado não trazia um gabarito identificável.`);
     }catch(error){
       toast(error.message);
     }finally{
@@ -4809,7 +5025,7 @@
         }
 
         for(const qObj of (row.content?.questions||[])){
-          if(!Array.isArray(qObj.options)||qObj.options.length!==4||!Number.isInteger(qObj.correct_index))continue;
+          if(!Array.isArray(qObj.options)||qObj.options.length<2||qObj.options.length>5||!Number.isInteger(qObj.correct_index)||qObj.correct_index<0||qObj.correct_index>=qObj.options.length)continue;
           const stText=sanitizePersonalWatermarks(qObj.statement||'');
           const qKey=topicKey(stText).slice(0,80);
           if(stText&&!existingQKeys.has(qKey)){
@@ -5404,9 +5620,12 @@
   ];
   window.DUEL_EXAMINER_BOTS=DUEL_EXAMINER_BOTS;
 
+  const DUEL_SECONDS_PER_QUESTION=60;
+  window.DUEL_SECONDS_PER_QUESTION=DUEL_SECONDS_PER_QUESTION;
+
   function buildDuelQuestionPack(subjectFilter='all',mode='misto',count=5,boardFilter='all'){
     ensureNativeQuestionBankLoaded();
-    let pool=(ALL_QUESTIONS||[]).filter(qItem=>Array.isArray(qItem.options)&&qItem.options.length===4&&Number.isInteger(qItem.correct_index));
+    let pool=(ALL_QUESTIONS||[]).filter(qItem=>Array.isArray(qItem.options)&&qItem.options.length>=2&&qItem.options.length<=5&&Number.isInteger(Number(qItem.correct_index))&&Number(qItem.correct_index)>=0&&Number(qItem.correct_index)<qItem.options.length);
     if(subjectFilter&&subjectFilter!=='all'){
       const bySubj=pool.filter(qItem=>topicKey(learningCategory(qItem.subject))===topicKey(learningCategory(subjectFilter))||topicKey(qItem.subject)===topicKey(subjectFilter));
       if(bySubj.length>=3)pool=bySubj;
@@ -5439,8 +5658,8 @@
         board:item.board||(boardFilter!=='all'?boardFilter:'Estilo Banca'),
         difficulty:item.difficulty||'medio',
         statement:typeof window.formatQuestionStatementText==='function'?window.formatQuestionStatementText(item.statement):item.statement,
-        options:item.options.slice(0,4),
-        correct_index:Number(item.correct_index)||0,
+        options:item.options.slice(0,5),
+        correct_index:Math.min(item.options.length-1,Math.max(0,Number(item.correct_index)||0)),
         explanation:item.explanation||'Confira o fundamento teórico na Central de Estudo.'
       });
       if(picked.length>=count)break;
@@ -5615,7 +5834,7 @@
       <div class="slInviteAlertCard">
         <div class="slInviteHeader">
           <span class="slSystemBadge"><i class="slPulseDot"></i> [SISTEMA] CONVITE DE DUELO X1 EM TEMPO REAL</span>
-          <span class="tag">⏱️ 25s / questão</span>
+          <span class="tag">⏱️ 60s / questão</span>
         </div>
         <div class="slInviteHeroRow">
           <div class="slInviteAvatar">⚔️</div>
@@ -5803,7 +6022,7 @@
       score:0,
       totalTimeS:0,
       questionStartMs:Date.now(),
-      secondsLeft:25,
+      secondsLeft:DUEL_SECONDS_PER_QUESTION,
       answered:false,
       submittingAnswer:false,
       answers:[]
@@ -5874,20 +6093,56 @@
   }
   window.confirmExitActiveDuel=confirmExitActiveDuel;
 
+  // ── Mapas Mentais Táticos Esquematizados (Estilo Caveira Pass) ──
+  function toggleSummaryTacticalMindMap(summaryId){
+    const box=q(`#mindMapBox-${summaryId}`);
+    const item=(ALL_SUMMARIES||[]).find(s=>String(s.id)===String(summaryId));
+    if(!box||!item)return;
+    if(!box.hidden){box.hidden=true;return}
+    const pts=Array.isArray(item.points)&&item.points.length?item.points:[item.explanation||'Conceito central do tópico.'];
+    box.innerHTML=`
+      <div class="mindMapTree">
+        <div class="mindMapNode core">
+          <div class="eyebrow" style="color:#38bdf8">🗺️ MAPA MENTAL TÁTICO · NÚCLEO CENTRAL (${escText(item.category||'Disciplina')})</div>
+          <h4 style="margin:3px 0 6px;font-size:1rem">${escText(item.title)}</h4>
+          <p class="small" style="margin:0;line-height:1.5">${escText(item.explanation||'')}</p>
+        </div>
+        <div class="mindMapNode">
+          <b style="color:var(--cyan);display:block;margin-bottom:6px">📌 Ramificações & Requisitos de Prova</b>
+          <ul style="margin:0;padding-left:18px;display:grid;gap:4px">${pts.map(p=>`<li class="small">${escText(p)}</li>`).join('')}</ul>
+        </div>
+        ${item.bizu?`<div class="mindMapNode bizu"><b style="color:#4ade80;display:block;margin-bottom:4px">⚡ Bizu Direto de Aprovação</b><p class="small" style="margin:0">${escText(item.bizu)}</p></div>`:''}
+        ${item.mnemonic?`<div class="mindMapNode mnem"><b style="color:#fcd34d;display:block;margin-bottom:4px">🧠 Gatilho de Memorização (Mnemônico)</b><p class="small" style="margin:0">${escText(item.mnemonic)}</p></div>`:''}
+        ${item.trap?`<div class="mindMapNode trap"><b style="color:#fca5a5;display:block;margin-bottom:4px">⚠️ Alerta de Pegadinha da Banca</b><p class="small" style="margin:0">${escText(item.trap)}</p></div>`:''}
+      </div>
+    `;
+    box.hidden=false;
+    box.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+  window.toggleSummaryTacticalMindMap=toggleSummaryTacticalMindMap;
+  document.addEventListener('click',e=>{
+    const mmBtn=e.target.closest?.('[data-open-mindmap]');
+    if(mmBtn){
+      e.preventDefault();
+      toggleSummaryTacticalMindMap(mmBtn.dataset.openMindmap);
+    }
+  });
+
+
   function startDuelQuestionCountdown(){
     if(duelRoundTimer)clearInterval(duelRoundTimer);
     if(!activeDuelSession)return;
-    activeDuelSession.secondsLeft=25;
+    activeDuelSession.secondsLeft=DUEL_SECONDS_PER_QUESTION;
     activeDuelSession.questionStartMs=Date.now();
     activeDuelSession.isPaused=false;
     duelRoundTimer=setInterval(()=>{
       if(!activeDuelSession||activeDuelSession.answered||activeDuelSession.submittingAnswer||activeDuelSession.isPaused)return;
       const elapsed=Math.floor((Date.now()-activeDuelSession.questionStartMs)/1000);
-      const rem=Math.max(0,25-elapsed);
+      const rem=Math.max(0,DUEL_SECONDS_PER_QUESTION-elapsed);
       activeDuelSession.secondsLeft=rem;
       const clockEl=q('#duelLiveTimerText'),fillEl=q('#duelLiveTimerFill');
       if(clockEl)clockEl.textContent=`⏱️ ${rem}s`;
-      if(fillEl)fillEl.style.width=`${Math.round((rem/25)*100)}%`;
+      if(fillEl)fillEl.style.width=`${Math.round((rem/DUEL_SECONDS_PER_QUESTION)*100)}%`;
       if(rem<=0){
         answerDuelQuestion(-1);
       }
@@ -5899,7 +6154,7 @@
     activeDuelSession.submittingAnswer=true;
     activeDuelSession.answered=true;
     if(duelRoundTimer){clearInterval(duelRoundTimer);duelRoundTimer=null}
-    const spent=Math.min(25,Math.max(1,Math.round((Date.now()-activeDuelSession.questionStartMs)/1000)));
+    const spent=Math.min(DUEL_SECONDS_PER_QUESTION,Math.max(1,Math.round((Date.now()-activeDuelSession.questionStartMs)/1000)));
     activeDuelSession.totalTimeS+=spent;
     const curQ=activeDuelSession.duel.questions[activeDuelSession.index];
     qa('[data-duel-opt]').forEach(btn=>{btn.disabled=true});
@@ -5924,7 +6179,7 @@
     const isCorrect=chosenIdx===Number(correctIdx??0);
     if(isCorrect)activeDuelSession.score++;
     activeDuelSession.answers.push({index:activeDuelSession.index,chosen:chosenIdx,correct:isCorrect,time_s:spent});
-    if(typeof recordQuestionResult==='function')recordQuestionResult(curQ,isCorrect,chosenIdx);
+    activeDuelSession.lastChosenIdx=chosenIdx;activeDuelSession.lastIsCorrect=isCorrect;activeDuelSession.lastSpentS=spent;if(chosenIdx>=0&&typeof recordQuestionResult==='function')recordQuestionResult(curQ,isCorrect,chosenIdx);
 
     qa('[data-duel-opt]').forEach(btn=>{
       const idx=Number(btn.dataset.duelOpt);
@@ -6075,9 +6330,12 @@
       const {duel,index,score,totalTimeS,secondsLeft}=activeDuelSession;
       const curQ=duel.questions[index];
       const oppName=duel.challenger_id===myId?duel.opponent_name:duel.challenger_name;
-      const letters=['A','B','C','D'];
+      const letters=['A','B','C','D','E'];
       const qDiff=normalizedDifficulty(curQ);
       const diffBadge={facil:'🟢 Fácil',medio:'🟡 Média',dificil:'🔴 Difícil'}[qDiff]||'🟡 Média';
+      const wasAnswered=Boolean(activeDuelSession.answered);
+      const cIdx=Number(curQ.correct_index??0);
+      const uIdx=activeDuelSession.lastChosenIdx;
       root.innerHTML=`
         <div class="duelPlayStage">
           <div class="sectionHead" style="margin-bottom:8px;align-items:flex-start">
@@ -6095,23 +6353,43 @@
                 <span class="tag" id="duelLiveTimerText" style="font-size:.95rem;font-weight:900">⏱️ ${secondsLeft}s</span>
                 <button type="button" class="ghost danger small" id="exitActiveDuelBtn" style="width:auto;padding:5px 11px;min-height:34px;font-size:.78rem" title="Sair desta partida">🚪 Sair do Duelo</button>
               </div>
-              <div class="small muted">Placar parcial: <b>${score}/${index}</b> (${totalTimeS}s)</div>
+              <div class="small muted">Placar parcial: <b>${score}/${wasAnswered?index+1:index}</b> (${totalTimeS}s)</div>
             </div>
           </div>
-          <div class="duelTimerBar"><div class="duelTimerFill" id="duelLiveTimerFill" style="width:${Math.round((secondsLeft/25)*100)}%"></div></div>
+          <div class="duelTimerBar"><div class="duelTimerFill" id="duelLiveTimerFill" style="width:${Math.round((secondsLeft/DUEL_SECONDS_PER_QUESTION)*100)}%"></div></div>
           <div id="duelQuestionStatement">${formatStatementWithHighlights(curQ.statement)}</div>
           <div class="modernOptionsList">
             ${(curQ.options||[]).map((opt,i)=>`
-              <button type="button" class="duelOptBtn" data-duel-opt="${i}">
+              <button type="button" class="duelOptBtn ${wasAnswered?(i===cIdx?'correct':i===uIdx?'wrong':''):''}" data-duel-opt="${i}" ${wasAnswered?'disabled':''}>
                 <b>${letters[i]||i+1}</b>
                 <span>${escText(opt)}</span>
               </button>
             `).join('')}
           </div>
-          <div id="duelRoundFeedback" hidden></div>
+          <div id="duelRoundFeedback" ${wasAnswered?'':'hidden'}>
+            ${wasAnswered?`
+              <div style="margin-top:10px">${typeof formatStepByStepResolution==='function'?formatStepByStepResolution(curQ,uIdx,Boolean(activeDuelSession.lastIsCorrect),false):''}</div>
+              <button type="button" class="action" id="nextDuelQuestionBtn" style="margin-top:10px;width:100%">
+                ${index+1<duel.questions.length?'Próxima questão do duelo →':'Finalizar minha rodada e ver placar 🏆'}
+              </button>
+            `:''}
+          </div>
         </div>
       `;
       if(q('#exitActiveDuelBtn'))q('#exitActiveDuelBtn').onclick=()=>requestExitActiveDuel(null);
+      if(wasAnswered&&q('#nextDuelQuestionBtn')){
+        q('#nextDuelQuestionBtn').onclick=async()=>{
+          if(activeDuelSession.index+1<activeDuelSession.duel.questions.length){
+            activeDuelSession.index++;
+            activeDuelSession.answered=false;
+            activeDuelSession.submittingAnswer=false;
+            renderDuelArena();
+            startDuelQuestionCountdown();
+          }else{
+            await finishAndSubmitDuelRound();
+          }
+        };
+      }
       qa('[data-duel-opt]').forEach(btn=>{
         btn.onclick=()=>answerDuelQuestion(Number(btn.dataset.duelOpt));
       });
@@ -6180,7 +6458,7 @@
                 <div class="card" style="padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
                   <div>
                     <b>⚔️ Contra ${escText(rival)}</b> · <span class="tag">${escText(d.subject||'Roleta Mista')}</span>
-                    <div class="small muted">${(d.questions||[]).length} questões · Modo: ${escText(d.difficulty_mode||'misto')} · Desempate por tempo (25s/questão)</div>
+                    <div class="small muted">${(d.questions||[]).length} questões · Modo: ${escText(d.difficulty_mode||'misto')} · Desempate por tempo (60s/questão)</div>
                   </div>
                   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                     <button type="button" class="action small" data-play-duel="${escText(d.id)}" style="width:auto">⚔️ Aceitar e Jogar Agora</button>
@@ -6199,7 +6477,7 @@
             <div class="eyebrow">LANÇAR NOVO DESAFIO X1</div>
             <h3 style="margin:2px 0 0">Escolha o Oponente e a Modalidade</h3>
           </div>
-          <span class="tag">25s por questão</span>
+          <span class="tag">60s por questão</span>
         </div>
         <div class="essayGrid">
           <label class="field">Desafiar Caçador ou Bot da Banca
@@ -6247,7 +6525,7 @@
         <div class="duelQuickBotsBar">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
             <span class="eyebrow" style="color:var(--cyan)">⚡ DUELO RÁPIDO EM 1 CLIQUE CONTRA AS BANCAS (SIMULAÇÃO SOLO X1)</span>
-            <span class="small muted">Partida imediata · 25s por questão</span>
+            <span class="small muted">Partida imediata · 60s por questão</span>
           </div>
           <div class="duelQuickBotsGrid">
             <button type="button" class="duelQuickBotBtn" id="quickDuelBotAocpBtn" data-quick-bot-duel="bot:aocp|Instituto AOCP"><span>🎯 Examinador AOCP</span><small>Jogar →</small></button>

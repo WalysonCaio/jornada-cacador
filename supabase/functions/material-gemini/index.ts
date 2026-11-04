@@ -905,7 +905,8 @@ async function generateStudyPackageFromText(
   await Promise.all(Array.from({ length: Math.min(3, chunks.length) }, (_, idx) => worker(idx)));
   const summaries = results.flatMap((generated) => generated?.parsed?.summaries || []);
   if (!summaries.length && lastChunkError) throw lastChunkError;
-  const analyzed = chunks.map((_, index) => Boolean(results[index]?.parsed?.summaries?.length));
+  // Um trecho sem conteúdo didático (capa, propaganda) devolve summaries: [] e mesmo assim foi analisado.
+  const analyzed = chunks.map((_, index) => Array.isArray(results[index]?.parsed?.summaries));
   return {
     parsed: {
       summaries,

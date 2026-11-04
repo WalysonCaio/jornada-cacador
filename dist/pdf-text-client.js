@@ -687,29 +687,49 @@
           }
           return true;
         });
-        filteredItems.sort((a, b) => {
-          const ay = Array.isArray(a.transform) && Number.isFinite(a.transform[5]) ? a.transform[5] : 0;
-          const by = Array.isArray(b.transform) && Number.isFinite(b.transform[5]) ? b.transform[5] : 0;
-          if (Math.abs(by - ay) > 3.5) return by - ay;
-          const ax = Array.isArray(a.transform) && Number.isFinite(a.transform[4]) ? a.transform[4] : 0;
-          const bx = Array.isArray(b.transform) && Number.isFinite(b.transform[4]) ? b.transform[4] : 0;
-          return ax - bx;
-        });
-        const rowGroups = [];
-        let curRow = [];
-        let curY = null;
-        for (const it of filteredItems) {
-          const y = Array.isArray(it.transform) && Number.isFinite(it.transform[5]) ? it.transform[5] : 0;
+        const vp = typeof page.getViewport === "function" ? page.getViewport({ scale: 1 }) : { width: 595, height: 842 };
+        const midX = (Number(vp?.width) || 595) * 0.5;
+        const leftColCount = filteredItems.filter((it) => {
           const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
-          const str = it.str.trim();
-          if (curY !== null && Math.abs(y - curY) > 3.5) {
-            rowGroups.push(curRow);
-            curRow = [];
+          const w = Number(it.width) || (it.str.length * 4.5);
+          return x >= 18 && x < midX - 24 && (x + w) < midX + 12;
+        }).length;
+        const rightColCount = filteredItems.filter((it) => {
+          const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
+          return x >= midX - 6 && x <= midX + 90;
+        }).length;
+        const isTwoColumnPage = ["prova", "simulado"].includes(String(doc.document_type || "")) && leftColCount >= 10 && rightColCount >= 10;
+        const groupItemsIntoRows = (itemsSubset) => {
+          itemsSubset.sort((a, b) => {
+            const ay = Array.isArray(a.transform) && Number.isFinite(a.transform[5]) ? a.transform[5] : 0;
+            const by = Array.isArray(b.transform) && Number.isFinite(b.transform[5]) ? b.transform[5] : 0;
+            if (Math.abs(by - ay) > 3.5) return by - ay;
+            const ax = Array.isArray(a.transform) && Number.isFinite(a.transform[4]) ? a.transform[4] : 0;
+            const bx = Array.isArray(b.transform) && Number.isFinite(b.transform[4]) ? b.transform[4] : 0;
+            return ax - bx;
+          });
+          const groups = [];
+          let cRow = [], cY = null;
+          for (const it of itemsSubset) {
+            const y = Array.isArray(it.transform) && Number.isFinite(it.transform[5]) ? it.transform[5] : 0;
+            const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
+            const str = it.str.trim();
+            if (cY !== null && Math.abs(y - cY) > 3.5) {
+              groups.push(cRow);
+              cRow = [];
+            }
+            cRow.push({ x, y, str });
+            cY = y;
           }
-          curRow.push({ x, y, str });
-          curY = y;
-        }
-        if (curRow.length) rowGroups.push(curRow);
+          if (cRow.length) groups.push(cRow);
+          return groups;
+        };
+        const rowGroups = isTwoColumnPage
+          ? [
+              ...groupItemsIntoRows(filteredItems.filter((it) => (Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0) < midX - 6)),
+              ...groupItemsIntoRows(filteredItems.filter((it) => (Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0) >= midX - 6)),
+            ]
+          : groupItemsIntoRows(filteredItems);
         const pageLines = [];
         for (const r of rowGroups) {
           const minX = Math.min(...r.map((i) => i.x));
@@ -1214,8 +1234,17 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
         // Fast-path determinístico para Provas Oficiais e Simulados em PDF que já possuem questões numeradas + gabarito no documento
         if (["prova", "simulado"].includes(String(doc.document_type || "")) && typeof window.extractStructuredExamQuestions === "function") {
           const fallbackSubj = doc.detected_subject || doc.metadata?.primary_subject || "Conteúdo Geral";
-          const extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: doc.title });
-          if (Array.isArray(extractedQs) && extractedQs.length >= 3) {
+          let extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: doc.title });
+          let examReport = extractedQs?.report || {};
+          if (examReport.ambiguous && Array.isArray(examReport.cadernos) && examReport.cadernos.length >= 2 && typeof prompt === "function") {
+            const pickedCad = prompt(`Foram identificados múltiplos gabaritos/cadernos neste PDF (${examReport.cadernos.join(", ")}). Digite qual caderno deseja importar:`, examReport.cadernos[0]);
+            if (pickedCad && pickedCad.trim()) {
+              extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: doc.title, preferredCaderno: pickedCad.trim() });
+              examReport = extractedQs?.report || {};
+            }
+          }
+          if (examReport.ambiguous) toast(`${examReport.reason} O gabarito oficial não foi importado automaticamente.`);
+          if (Array.isArray(extractedQs) && extractedQs.length >= 3 && !examReport.ambiguous && Number(examReport.percent) >= 60) {
             const bySubj = {};
             for (const qItem of extractedQs) {
               const s = qItem.subject || fallbackSubj;
@@ -1233,33 +1262,47 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
                 source: doc.title,
                 page_start: 1,
                 page_end: pages.length,
-                explanation: `Pacote oficial de ${qs.length} questão(ões) extraída(s) deterministicamente de ${doc.title}.`,
+                explanation: `Pacote de ${qs.length} questão(ões) extraída(s) de ${doc.title} com o gabarito do próprio documento.`,
                 points: [],
                 flashcards: [],
                 questions: qs
               },
               source_refs: [{ document_id: doc.id, title: doc.title }]
             }));
-            await cloudFetch(`generated_study_content?source_document_id=eq.${encodeURIComponent(doc.id)}`, { method: "DELETE" }).catch(() => undefined);
+            // Grava primeiro e só apaga o conteúdo antigo depois (evita ficar sem nada se a gravação falhar).
+            let oldIds = [];
+            try {
+              const oldRes = await cloudFetch(`generated_study_content?source_document_id=eq.${encodeURIComponent(doc.id)}&select=id`);
+              if (oldRes.ok) oldIds = (await oldRes.json().catch(() => [])).map((row) => row.id).filter(Boolean);
+            } catch { /* sem backup de ids */ }
             const saveRes = await cloudFetch("generated_study_content", {
               method: "POST",
               headers: { "Content-Type": "application/json", Prefer: "return=representation" },
               body: JSON.stringify(dbRows)
             });
+            if (saveRes.ok && oldIds.length) {
+              await cloudFetch(`generated_study_content?id=in.(${oldIds.map(encodeURIComponent).join(",")})`, { method: "DELETE" }).catch(() => undefined);
+            }
             if (saveRes.ok) {
               const primarySubject = Object.keys(bySubj)[0] || fallbackSubj;
               const subjectsList = Object.keys(bySubj);
+              const validTotal = Math.max(0, (examReport.expected || extractedQs.length) - (examReport.annulled || 0));
+              const examPercent = Math.max(1, Math.min(100, Number(examReport.percent) || 100));
+              const omissions = [];
+              if (examReport.missingKey) omissions.push(`${examReport.missingKey} questão(ões) sem gabarito no documento.`);
+              if (examReport.skipped) omissions.push(`${examReport.skipped} questão(ões) em formato não reconhecido.`);
+              if (examReport.annulled) omissions.push(`${examReport.annulled} questão(ões) anulada(s) não foram importadas.`);
               const coverage = {
                 estimated_pages: pages.length,
                 sections_detected: subjectsList,
                 sections_covered: subjectsList,
-                omissions: [],
-                confidence: 0.96,
-                percent: 100,
+                omissions,
+                confidence: examPercent >= 95 ? 0.95 : 0.75,
+                percent: examPercent,
                 summary_count: extractedQs.length,
                 shallow_summaries: 0,
-                warnings: [],
-                needs_review: false
+                warnings: examPercent < 100 ? [`Foram importadas ${extractedQs.length} de ${validTotal} questões válidas da prova.`] : [],
+                needs_review: examPercent < 95
               };
               await cloudFetch(`study_documents?id=eq.${doc.id}`, {
                 method: "PATCH",

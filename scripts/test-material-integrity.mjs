@@ -85,7 +85,7 @@ const badSum = sanitizeSummary({ title: "GRATIDÃO!!", explanation: "Obrigado", 
 assert.equal(badSum.title, "", "resumo de gratidão deve ser sanitizado como vazio");
 
 // 6) a cobertura publicada vem dos trechos realmente analisados (e não de um valor fixo)
-assert(/const analyzed = chunks\.map\(\(_, index\) => Boolean\(results\[index\]\?\.parsed\?\.summaries\?\.length\)\)/.test(src), "cobertura deve depender do resultado de cada trecho");
+assert(/const analyzed = chunks\.map\(\(_, index\) => Array\.isArray\(results\[index\]\?\.parsed\?\.summaries\)\)/.test(src), "cobertura deve depender do resultado de cada trecho (trecho sem conteúdo didático conta como analisado)");
 assert(/coverage: buildTextCoverage\(chunks, analyzed, pages\.length\)/.test(src), "generateStudyPackageFromText deve usar buildTextCoverage(analyzed)");
 assert(!/origin: "oficial"/.test(src), "questões geradas/adaptadas não podem ser gravadas como origem oficial");
 
