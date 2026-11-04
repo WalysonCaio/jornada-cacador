@@ -339,6 +339,57 @@
   const NATIVE_POLICE_QUESTION_BANK = [
     {
       subject: 'Língua Portuguesa',
+      topic: 'Compreensão e Interpretação de Textos · Coesão e Inferência',
+      board: 'Instituto AOCP',
+      difficulty: 'medio',
+      origin: 'oficial',
+      associated_text: 'TEXTO I (Para as questões de Língua Portuguesa)\n\nA segurança pública contemporânea não se resume ao enfrentamento imediato da criminalidade nas ruas; ela exige, sobretudo, inteligência preventiva, integração institucional e respeito irrestrito às garantias fundamentais. Quando o agente público compreende que a autoridade da lei decorre de sua legitimidade constitucional, a atuação ostensiva deixa de ser percebida como mera coerção e passa a representar a própria proteção da cidadania.\n\nEntretanto, o imediatismo informacional das redes sociais frequentemente distorce episódios operacionais complexos, reduzindo procedimentos técnicos a julgamentos sumários. Diante desse cenário, o preparo técnico, emocional e linguístico do policial torna-se indispensável: redigir um boletim de ocorrência com precisão, interpretar normas com rigor e comunicar-se com clareza são ferramentas tão estratégicas quanto o domínio dos equipamentos táticos.\n\nAssim, investir na formação intelectual das corporações policiais e de bombeiros militares não constitui privilégio corporativo, mas condição essencial para a eficiência do Estado Democrático de Direito.',
+      statement: 'Texto-base: TEXTO I (Para as questões de Língua Portuguesa)\n\nA segurança pública contemporânea não se resume ao enfrentamento imediato da criminalidade nas ruas; ela exige, sobretudo, inteligência preventiva, integração institucional e respeito irrestrito às garantias fundamentais. Quando o agente público compreende que a autoridade da lei decorre de sua legitimidade constitucional, a atuação ostensiva deixa de ser percebida como mera coerção e passa a representar a própria proteção da cidadania.\n\nEntretanto, o imediatismo informacional das redes sociais frequentemente distorce episódios operacionais complexos, reduzindo procedimentos técnicos a julgamentos sumários. Diante desse cenário, o preparo técnico, emocional e linguístico do policial torna-se indispensável: redigir um boletim de ocorrência com precisão, interpretar normas com rigor e comunicar-se com clareza são ferramentas tão estreitamente estratégicas quanto o domínio dos equipamentos táticos.\n\nAssim, investir na formação intelectual das corporações policiais e de bombeiros militares não constitui privilégio corporativo, mas condição essencial para a eficiência do Estado Democrático de Direito.\n\n(Instituto AOCP — Padrão PMPE/CBMPE) De acordo com a leitura integral do Texto I e as relações lógico-discursivas nele estabelecidas, assinale a alternativa CORRETA:',
+      options: [
+        'No 2º parágrafo, o conectivo "Entretanto" introduz uma oposição entre a natureza técnica da atividade policial e a superficialidade dos julgamentos imediatistas nas redes sociais.',
+        'Segundo o 1º parágrafo, o policiamento ostensivo é incompatível com a inteligência preventiva e deve ser substituído por ações exclusivamente administrativas.',
+        'No 3º parágrafo, o termo "Assim" possui valor semântico de concessão, podendo ser substituído por "Conquanto" sem alteração de sentido.',
+        'Depreende-se do texto que o domínio linguístico dispensa o treinamento com equipamentos táticos nas ocorrências de rua.'
+      ],
+      correct_index: 0,
+      explanation: 'Conceito-chave: Compreensão textual e operadores argumentativos interparagrafais (adversidade vs. conclusão). | ✅ Alternativa correta: A) "Entretanto" é conjunção coordenativa adversativa que contrapõe a atuação legítima e técnica (1º parágrafo) à distorção promovida pelo imediatismo das redes sociais (2º parágrafo). | ❌ Análise das alternativas: B) Extrapolação/contradição: o 1º parágrafo soma o enfrentamento ostensivo à inteligência preventiva; C) "Assim" tem valor conclusivo (= Portanto, Dessa forma), enquanto "Conquanto" é concessivo (= Embora); D) O 2º parágrafo equipara a importância de ambos ("tão estratégicas quanto"), jamais dispensando o preparo tático. | ⚠️ Pegadinha da banca: O Instituto AOCP adora cobrar o valor do conectivo que abre o 2º e o 3º parágrafos ("Entretanto" = oposição; "Assim" = conclusão).'
+    },
+    {
+      subject: 'Língua Portuguesa',
+      topic: 'Reescrita, Semântica e Pontuação no Texto',
+      board: 'Cebraspe',
+      difficulty: 'dificil',
+      origin: 'oficial',
+      associated_text: 'TEXTO II\n\nA prontidão operacional requer disciplina silenciosa. Antes que a sirene anuncie a urgência do socorro ou da patrulha, há centenas de horas dedicadas ao estudo dos protocolos, à manutenção das viaturas e ao condicionamento físico. O êxito em situações críticas raramente resulta do acaso: ele decorre da repetição consciente da técnica até que o procedimento correto se torne reflexo natural.\n\nPor essa razão, as instituições de segurança pública que valorizam o aperfeiçoamento contínuo de seus quadros reduzem drasticamente a margem de erro em cenários de alta pressão.',
+      statement: 'Texto-base: TEXTO II\n\nA prontidão operacional requer disciplina silenciosa. Antes que a sirene anuncie a urgência do socorro ou da patrulha, há centenas de horas dedicadas ao estudo dos protocolos, à manutenção das viaturas e ao condicionamento físico. O êxito em situações críticas raramente resulta do acaso: ele decorre da repetição consciente da técnica até que o procedimento correto se torne reflexo natural.\n\nPor essa razão, as instituições de segurança pública que valorizam o aperfeiçoamento contínuo de seus quadros reduzem drasticamente a margem de erro em cenários de alta pressão.\n\n(Cebraspe — Carreiras Policiais) Com base nos aspectos gramaticais e semânticos do Texto II, assinale a opção CORRETA:',
+      options: [
+        'No 1º parágrafo, os dois-pontos após "acaso" introduzem um segmento de valor explicativo, podendo ser substituídos por travessão ou pela conjunção "pois" precedida de vírgula, mantendo-se a coerência.',
+        'A substituição de "há centenas de horas" (1º parágrafo) por "existem centenas de horas" exigiria a manutenção do verbo no singular.',
+        'No 2º parágrafo, a oração "que valorizam o aperfeiçoamento contínuo de seus quadros" deveria estar isolada por vírgulas por tratar-se de explicação referente à totalidade das instituições.',
+        'O sinal indicativo de crase em "à manutenção das viaturas" é facultativo, pois precede palavra feminina no singular.'
+      ],
+      correct_index: 0,
+      explanation: 'Conceito-chave: Pontuação expressiva (dois-pontos explicativos), concordância de verbos impessoais e orações adjetivas restritivas. | ✅ Alternativa correta: A) A oração "ele decorre da repetição..." explica por que o êxito raramente resulta do acaso; por isso os dois-pontos têm valor explicativo (= ", pois ele decorre..."). | ❌ Análise das alternativas: B) O verbo "existir" é pessoal e concordaria no plural com o sujeito "centenas de horas"; C) A oração adjetiva sem vírgulas é restritiva (restringe às instituições que valorizam o aperfeiçoamento); colocar vírgulas alteraria o sentido; D) A crase em "à manutenção" é obrigatória por paralelismo regencial ("dedicadas ao estudo..., à manutenção... e ao condicionamento"). | ⚠️ Pegadinha da banca: O Cebraspe cobra em quase toda prova a função explicativa dos dois-pontos e a diferença de sentido ao inserir vírgulas em oração subordinada adjetiva restritiva.'
+    },
+    {
+      subject: 'Língua Portuguesa',
+      topic: 'Tipologia Textual e Inferência Lógica',
+      board: 'FGV Conhecimento',
+      difficulty: 'dificil',
+      origin: 'oficial',
+      associated_text: 'TEXTO III\n\n"Quem observa apenas o desfecho bem-sucedido de uma operação de salvamento costuma atribuir à sorte aquilo que, na realidade, foi construído pelo método. A improvisação pode até resolver um imprevisto isolado, mas somente o planejamento sistemático sustenta a confiança coletiva diante do perigo."',
+      statement: 'Texto-base: TEXTO III\n\n"Quem observa apenas o desfecho bem-sucedido de uma operação de salvamento costuma atribuir à sorte aquilo que, na realidade, foi construído pelo método. A improvisação pode até resolver um imprevisto isolado, mas somente o planejamento sistemático sustenta a confiança coletiva diante do perigo."\n\n(FGV Conhecimento) A estrutura argumentativa do Texto III apoia-se fundamentalmente no contraste entre:',
+      options: [
+        'Aparência superficial de acaso e construção metódica da eficiência operacional.',
+        'Coragem individual do agente e covardia das decisões burocráticas.',
+        'Excesso de planejamento teórico e paralisia diante de situações de perigo real.',
+        'Sorte recorrente nas operações e inutilidade dos protocolos padronizados.'
+      ],
+      correct_index: 0,
+      explanation: 'Conceito-chave: Estrutura argumentativa por oposição semântica (sorte/improvisação aparente vs. método/planejamento sistemático). | ✅ Alternativa correta: A) O texto opõe a visão superficial de quem enxerga "sorte" ou "improvisação" à realidade do "método" e do "planejamento sistemático". | ❌ Análise das alternativas: B, C e D contradizem frontalmente a tese defendida pelo autor, que valoriza o método e o planejamento sistemático. | ⚠️ Pegadinha da banca: A FGV constrói questões de interpretação exigindo identificar o par antitético (oposição central) que estrutura o parágrafo.'
+    },
+    {
+      subject: 'Língua Portuguesa',
       topic: 'Crase e Regência Nominal/Verbal',
       board: 'Instituto AOCP',
       difficulty: 'facil',
@@ -1028,9 +1079,167 @@
   }
   window.subjectIconForName = subjectIconForName;
 
-  function formatStatementWithHighlights(rawText) {
-    const safe = escText(String(rawText || '').trim());
-    return safe.replace(/\b(INCORRETA|INCORRETO|CORRETA|CORRETO|EXCETO|SALVO|NÃO|ERRADA|ERRADO)\b/g, '<span class="qCmdHighlight">$1</span>');
+  function highlightCommandsAndLaws(rawSegment) {
+    let safe = escText(String(rawSegment || '').trim());
+    safe = safe.replace(/\b(INCORRETA|INCORRETO|CORRETA|CORRETO|EXCETO|SALVO|NÃO|ERRADA|ERRADO)\b/g, '<span class="qCmdHighlight">$1</span>');
+    safe = safe.replace(/\b((?:Art(?:igo)?\.?\s*\d+[º°ª]?(?:-[A-Z])?(?:,\s*§\s*\d+[º°]?)?(?:,\s*inciso\s+[IVXLCDM]+)?)|(?:Lei\s+(?:Complementar\s+|Federal\s+|Estadual\s+)?n?[º°.]?\s*[\d.]+(?:\/\d{2,4})?)|(?:S[úu]mula(?:\s+Vinculante)?\s+n?[º°.]?\s*\d+)|(?:CF\/88|Constitui[cç][aã]o\s+Federal))\b/gi, '<span class="lawCiteBadge">⚖️ $1</span>');
+    return safe;
+  }
+
+  function splitQuestionAssociatedText(rawText, itemObj) {
+    const full = String(rawText || '').trim();
+    const explicit = String(itemObj?.associated_text || '').trim();
+    let assoc = '';
+    let stem = full;
+
+    // 1. Padrão com quebra dupla (Texto-base: ... \n\n Enunciado)
+    const tbMatch = full.match(/^Texto-base:\s*([\s\S]+?)\n\n+([\s\S]+)$/i)
+      || full.match(/^Texto\s+(?:associado|de\s+apoio):\s*([\s\S]+?)\n\n+([\s\S]+)$/i);
+    if (tbMatch) {
+      assoc = tbMatch[1].trim();
+      stem = tbMatch[2].trim();
+    } else if (/^Texto-base:\s*/i.test(full)) {
+      // 2. Caso o \n\n tenha sido achatado em espaço simples em bancos antigos
+      const bodyNoPrefix = full.replace(/^Texto-base:\s*/i, '').trim();
+      const cmdMatch = bodyNoPrefix.match(/^([\s\S]{45,}?)\s+((?:\([A-Za-zÀ-ÿ0-9\s—\-/]+\)\s*)?(?:\[Julgue\s+o\s+item[^\]]*\]\s*|QUEST[AÃ]O\s*\d+[\s.:–-]*|Assinale\s+a\s+(?:alternativa|op[cç][aã]o)|Marque\s+a\s+(?:alternativa|op[cç][aã]o)|Julgue\s+o\s+item|De\s+acordo\s+com\s+(?:o\s+texto|a\s+leitura|o\s+autor)|Segundo\s+o\s+(?:texto|autor)|Conforme\s+o\s+(?:texto|autor)|Com\s+base\s+n[ao]\s+(?:texto|leitura)|A\s+respeito\s+d[eo]\s+texto|No\s+\d+[º°ª]?\s*par[áa]grafo|Infere-se\s+d[eo]\s+texto|Depreende-se\s+d[eo]\s+texto|A\s+estrutura\s+argumentativa)[\s\S]+)$/i);
+      if (cmdMatch) {
+        assoc = cmdMatch[1].trim();
+        stem = cmdMatch[2].trim();
+      }
+    } else if (explicit && full.startsWith(explicit)) {
+      assoc = explicit;
+      stem = full.slice(explicit.length).replace(/^[:\s\-–]+/, '').trim() || full;
+    } else if (explicit && !full.includes(explicit.slice(0, 40))) {
+      assoc = explicit;
+      stem = full;
+    } else {
+      // 3. Questão que já começa com TEXTO I / Leia o texto sem prefixo Texto-base:
+      const autoSplit = full.match(/^((?:TEXTO\s+(?:[IVX]+|\d+)\b|Leia\s+(?:atentamente\s+)?(?:o|os|a|as)\s+(?:texto|trecho|poema|cr[ôo]nica|fragmento))[\s\S]{90,}?)(?:\n\n+|\s{2,}|(?=(?:\([A-Za-zÀ-ÿ0-9\s—\-/]+\)\s*)?(?:Assinale\s+a|Marque\s+a|De\s+acordo\s+com|Segundo\s+o|Com\s+base\s+no|No\s+\d+[º°]\s*par[áa]grafo)))((?:\([A-Za-zÀ-ÿ0-9\s—\-/]+\)\s*)?(?:No\s+\d+[º°]|De\s+acordo\s+com|Segundo\s+o|Conforme\s+o|Assinale\s+a|Marque\s+a|Julgue\s+o|Com\s+base\s+no|A\s+respeito\s+do|Infere-se|Depreende-se|A\s+estrutura|Na\s+linha|No\s+trecho)[\s\S]+)$/i);
+      if (autoSplit) {
+        assoc = autoSplit[1].trim();
+        stem = autoSplit[2].trim();
+      }
+    }
+
+    // 4. Fallback inteligente: se a questão cita "De acordo com o texto / No 2º parágrafo" mas o texto ficou no resumo vinculado
+    if ((!assoc || assoc.length < 35) && itemObj && /\b(segundo o texto|de acordo com o texto|conforme o texto|no \d+[º°ª]?\s*par[áa]grafo|infere-se do texto|depreende-se do texto|leia o texto)\b/i.test(full)) {
+      const rel = typeof findRelatedSummary === 'function' ? findRelatedSummary(itemObj) : null;
+      const fallbackText = String(rel?.example || rel?.explanation || '').trim();
+      if (fallbackText.length >= 60) {
+        assoc = fallbackText;
+      }
+    }
+
+    if (!assoc || assoc.length < 35) {
+      return { associatedText: '', questionStem: full, paragraphs: [], readingTimeMin: 1 };
+    }
+    const rawParas = assoc.includes('\n\n')
+      ? assoc.split(/\n{2,}|(?=\bTEXTO\s+(?:[IVX]+|\d+)\b)/)
+      : assoc.split(/(?<=\.)\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ“"])/);
+    const paragraphs = rawParas.map(p => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const words = assoc.split(/\s+/).filter(Boolean).length;
+    const readingTimeMin = Math.max(1, Math.ceil(words / 180));
+    return { associatedText: assoc, questionStem: stem, paragraphs, readingTimeMin };
+  }
+  window.splitQuestionAssociatedText = splitQuestionAssociatedText;
+
+  window.granKeepTextOpen = false;
+  window.granTextFontScale = 100;
+
+  window.toggleGranAssociatedText = function(btn) {
+    const wrapper = btn?.closest('[data-assoc-wrapper]');
+    if (!wrapper) return;
+    const body = wrapper.querySelector('.granAssocBody');
+    const badge = wrapper.querySelector('.granAssocPlusBadge');
+    const linkTxt = wrapper.querySelector('.granAssocLinkText');
+    if (!body) return;
+    const willOpen = body.hasAttribute('hidden');
+    if (willOpen) {
+      body.removeAttribute('hidden');
+      wrapper.classList.add('open');
+      btn.setAttribute('aria-expanded', 'true');
+      if (badge) badge.textContent = '▴';
+      if (linkTxt) linkTxt.textContent = 'Ocultar texto de apoio da questão';
+    } else {
+      body.setAttribute('hidden', '');
+      wrapper.classList.remove('open');
+      btn.setAttribute('aria-expanded', 'false');
+      if (badge) badge.textContent = '▾';
+      if (linkTxt) linkTxt.textContent = 'Ler texto de apoio da questão';
+    }
+  };
+
+  window.toggleGranPinText = function(btn) {
+    window.granKeepTextOpen = !window.granKeepTextOpen;
+    if (btn) {
+      btn.classList.toggle('pinned', window.granKeepTextOpen);
+      btn.textContent = window.granKeepTextOpen ? '📌 Texto fixado' : '📌 Fixar aberto';
+    }
+    if (window.granKeepTextOpen) {
+      const wrapper = btn?.closest('[data-assoc-wrapper]');
+      const body = wrapper?.querySelector('.granAssocBody');
+      if (body && body.hasAttribute('hidden')) {
+        window.toggleGranAssociatedText(wrapper.querySelector('.granAssocToggleBtn'));
+      }
+    }
+    if (typeof toast === 'function') {
+      toast(window.granKeepTextOpen ? 'Texto de apoio ficará aberto nas próximas questões.' : 'Texto de apoio voltará a abrir recolhido.');
+    }
+  };
+
+  window.adjustGranTextFont = function(btn, delta) {
+    window.granTextFontScale = Math.max(85, Math.min(130, (window.granTextFontScale || 100) + delta * 8));
+    const wrapper = btn?.closest('[data-assoc-wrapper]');
+    const content = wrapper?.querySelector('.granAssocContent');
+    if (content) content.style.fontSize = `${window.granTextFontScale}%`;
+  };
+
+  function formatStatementWithHighlights(rawText, itemObj) {
+    const parsed = splitQuestionAssociatedText(rawText, itemObj);
+    const hasMissingFigureRef = !parsed.associatedText && /\b(observe a tirinha|analise a charge|observe a charge|na tirinha a seguir|no quadrinho acima|observe a figura abaixo|de acordo com o gr[áa]fico a seguir)\b/i.test(parsed.questionStem);
+    const figureWarningHtml = hasMissingFigureRef
+      ? `<div class="visualFigureAlert"><span>🖼️ <b>Atenção:</b> Esta questão faz referência a uma imagem/tirinha/gráfico do PDF original.</span><button type="button" class="ghost small" onclick="if(typeof window.skipQuestionBlank==='function')window.skipQuestionBlank()" style="width:auto;padding:4px 10px;font-size:.74rem">⚪ Deixar em Branco (0 pt)</button></div>`
+      : '';
+
+    if (!parsed.associatedText) {
+      return figureWarningHtml + highlightCommandsAndLaws(parsed.questionStem);
+    }
+
+    const isOpen = Boolean(window.granKeepTextOpen);
+    const paraHtml = parsed.paragraphs.map((p, idx) => {
+      const isHeader = /^(?:TEXTO\s+(?:[IVX]+|\d+)|Leia\s+o\s+texto)/i.test(p) && p.length < 95;
+      if (isHeader) {
+        return `<div class="granAssocParagraph" style="font-weight:800;color:#63e7ff;margin-bottom:8px">${escText(p)}</div>`;
+      }
+      return `<p class="granAssocParagraph"><span class="granAssocParaBadge">§ ${idx + 1}º</span>${highlightCommandsAndLaws(p)}</p>`;
+    }).join('');
+
+    return `
+      <div class="granAssocWrapper ${isOpen ? 'open' : ''}" data-assoc-wrapper>
+        <div class="granAssocHeader">
+          <button type="button" class="granAssocToggleBtn" onclick="window.toggleGranAssociatedText(this)" aria-expanded="${isOpen ? 'true' : 'false'}" title="Ler texto referente à questão">
+            <span class="granAssocPlusBadge">${isOpen ? '▴' : '▾'}</span>
+            <span>📖 <span class="granAssocLinkText">${isOpen ? 'Ocultar texto de apoio da questão' : 'Ler texto de apoio da questão'}</span></span>
+            <span class="granAssocMeta">${parsed.paragraphs.length} parágrafo(s) · ~${parsed.readingTimeMin} min</span>
+          </button>
+          <button type="button" class="granAssocPinBtn ${isOpen ? 'pinned' : ''}" onclick="window.toggleGranPinText(this)" title="Manter o texto de apoio aberto automaticamente nas próximas questões">${isOpen ? '📌 Texto fixado' : '📌 Fixar aberto'}</button>
+        </div>
+        <div class="granAssocBody" ${isOpen ? '' : 'hidden'}>
+          <div class="granAssocToolbar">
+            <span>📄 Texto da Questão (Parágrafos numerados)</span>
+            <div style="display:flex;gap:6px">
+              <button type="button" class="ghost small" onclick="window.adjustGranTextFont(this,-1)" style="width:auto;min-height:26px;padding:2px 8px;font-size:.72rem">A-</button>
+              <button type="button" class="ghost small" onclick="window.adjustGranTextFont(this,1)" style="width:auto;min-height:26px;padding:2px 8px;font-size:.72rem">A+</button>
+            </div>
+          </div>
+          <div class="granAssocContent" style="font-size:${window.granTextFontScale || 100}%">${paraHtml}</div>
+        </div>
+      </div>
+      <div class="qCmdStemBlock">
+        <div class="qCmdStemLabel">🎯 Comando da Questão</div>
+        <div>${highlightCommandsAndLaws(parsed.questionStem)}</div>
+      </div>
+    `.trim();
   }
   window.formatStatementWithHighlights = formatStatementWithHighlights;
   window.questionMatchesBoardFilter = questionMatchesBoardFilter;
@@ -1824,7 +2033,7 @@
       `;
     }
     q('#questionCounter').textContent=`Questão ${battle.current+1} de ${battle.questions.length}`;
-    q('#questionText').innerHTML=formatStatementWithHighlights(item.statement);
+    q('#questionText').innerHTML=formatStatementWithHighlights(item.statement,item);
     q('#questionOptions').innerHTML=(item.options||[]).map((o,i)=>`<div class="optionWithScissors"><button type="button" class="optionMainBtn" data-question-index="${i}"><span class="optLetterBadge">${String.fromCharCode(65+i)}</span><span class="optBodyText">${escText(o)}</span></button><button type="button" class="scissorBtn" data-scissor-index="${i}" title="Riscar/eliminar alternativa (estilo TEC/Qconcursos)" aria-label="Riscar alternativa ${String.fromCharCode(65+i)}">✂</button></div>`).join('')+`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px"><button type="button" class="ghost small" id="skipQuestionBlankBtn" style="width:auto;padding:6px 12px;font-size:.77rem" title="Pular sem marcar alternativa (Estratégia Líquida Cebraspe/Caveira: não perde ponto líquido)">⚪ Deixar em Branco (Modo Líquido Caveira)</button><button type="button" class="ghost small" id="toggleModalPaperModeBtn" style="width:auto;padding:6px 10px;font-size:.75rem">☀️ Modo Papel</button></div>`;
     q('#questionFeedback').innerHTML='';
     q('#nextQuestion').hidden=true;
@@ -2465,7 +2674,27 @@
   const EXAM_KEY_HEADING_RE=/\b(?:gabarito(?:\s+(?:oficial|definitivo|preliminar|comentado))?|respostas?\s+(?:oficiais?|do\s+simulado|corretas)|folha\s+de\s+respostas)\b/gi;
   const EXAM_KEY_PAIR_RE=/(?:^|[\s|;,(])0*(\d{1,3})\s*(?:[-–—.:)]\s*|\s+)(ANULADA|ANULADO|Anulada|NULA|X|\*|CERTO|ERRADO|Certo|Errado|[A-E])(?=$|[\s|;,.)])/g;
   const EXAM_OPTION_RE=/(?:^|\n)[ \t]*(?:\(([A-Ea-e])\)|([A-Ea-e])[ \t]*[.)\-–])[ \t]+/g;
-  const EXAM_BASE_TEXT_RE=/\n[ \t]*(?:TEXTO\s+(?:[IVX]+|\d+)\b|Leia\s+(?:o|os|a|as)\s+(?:texto|textos|charge|tirinha)|Texto\s+(?:[IVX]+|\d+)\b)/i;
+  const EXAM_BASE_TEXT_RE=/(?:^|\n)[ \t]*(?:TEXTO\s+(?:[IVX]+|\d+|ASSOCIADO|DE\s+APOIO)\b|Leia\s+(?:atentamente\s+)?(?:o|os|a|as)\s+(?:texto|textos|trecho|fragmento|cr[ôo]nica|poema|artigo|charge|tirinha)|O\s+texto\s+(?:a\s+seguir|abaixo)\s+(?:serve\s+de\s+base|refere-se)|As\s+quest[õo]es\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*\d{1,3}\s*(?:a|at[ée]|e|-|–)\s*0*\d{1,3}\s+referem-se\s+ao\s+texto|Texto\s+para\s+(?:responder\s+)?(?:[àa]s\s+)?(?:quest[õo]es|os\s+itens)\s+(?:de\s+)?0*\d{1,3})/i;
+
+  function parseBaseTextMeta(rawBaseChunk){
+    const raw=String(rawBaseChunk||'').replace(/\r\n/g,'\n').trim();
+    const paragraphs=raw.split(/\n{2,}/).map(p=>p.replace(/[ \t]+/g,' ').trim()).filter(Boolean);
+    const cleaned=paragraphs.join('\n\n').slice(0,6000);
+    let rangeStart=0,rangeEnd=0;
+    const headSlice=cleaned.slice(0,550);
+    const rangeMatch=headSlice.match(/(?:quest[õo]es|itens)\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*(\d{1,3})\s*(?:a|at[ée]|-|–)\s*0*(\d{1,3})\b/i);
+    if(rangeMatch){
+      rangeStart=Number(rangeMatch[1])||0;
+      rangeEnd=Number(rangeMatch[2])||0;
+    }else{
+      const listMatch=headSlice.match(/(?:quest[õo]es|itens)\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*(\d{1,3})(?:\s*,\s*0*\d{1,3})*\s+e\s+0*(\d{1,3})\b/i);
+      if(listMatch){
+        rangeStart=Number(listMatch[1])||0;
+        rangeEnd=Number(listMatch[2])||0;
+      }
+    }
+    return {text:cleaned,rangeStart,rangeEnd};
+  }
 
   function cleanExamPages(rawTextOrPages){
     const pages=Array.isArray(rawTextOrPages)?rawTextOrPages.map(p=>String(p?.text||'')):[String(rawTextOrPages||'')];
@@ -2562,7 +2791,20 @@
     }
 
     const results=[];
-    let pendingBase='',baseAge=0;
+    let pendingBase='',baseAge=0,baseRangeStart=0,baseRangeEnd=0;
+    if(cands.length>0&&cands[0].index>0){
+      const preQ1=body.slice(0,cands[0].index);
+      const preCut=preQ1.search(EXAM_BASE_TEXT_RE);
+      if(preCut>=0&&!/\bDAS\s+INSCRI[CÇ][ÕO]ES\b/i.test(preQ1.slice(preCut))){
+        const meta=parseBaseTextMeta(preQ1.slice(preCut));
+        if(meta.text.length>=35){
+          pendingBase=meta.text;
+          baseAge=0;
+          baseRangeStart=meta.rangeStart;
+          baseRangeEnd=meta.rangeEnd;
+        }
+      }
+    }
     for(const b of blocks){
       let block=b.text;
       if(block.length<12)continue;
@@ -2583,8 +2825,14 @@
 
       // Texto-base que aparece depois das alternativas pertence às questões seguintes.
       const baseCut=block.search(EXAM_BASE_TEXT_RE);
-      let newBase='';
-      if(baseCut>0&&countOptions(block.slice(0,baseCut))>=2){newBase=block.slice(baseCut).trim().slice(0,1500);block=block.slice(0,baseCut).trim()}
+      let newBase='',newRangeStart=0,newRangeEnd=0;
+      if(baseCut>0&&(countOptions(block.slice(0,baseCut))>=2||(isCE&&baseCut>25))){
+        const meta=parseBaseTextMeta(block.slice(baseCut));
+        newBase=meta.text;
+        newRangeStart=meta.rangeStart;
+        newRangeEnd=meta.rangeEnd;
+        block=block.slice(0,baseCut).trim();
+      }
 
       const picked=[];
       let expect=0;
@@ -2610,14 +2858,21 @@
         }
       }
       if(item){
-        if(pendingBase&&baseAge<8&&/\b(texto|trecho|fragmento|charge|tirinha|poema|excerto)\b/i.test(item.statement))item.statement=`Texto-base: ${pendingBase}\n\n${item.statement}`;
+        const inExplicitRange=baseRangeStart>0&&baseRangeEnd>=baseRangeStart&&b.num>=baseRangeStart&&b.num<=baseRangeEnd;
+        const mentionsTextRef=/\b(texto|trecho|fragmento|charge|tirinha|poema|excerto|cr[ôo]nica|artigo|par[áa]grafo|linha\s*\d|linhas\s*\d|verso\s*\d|estrofe|autor|autora|narrador|eu\s+l[íi]rico|leitura|infere-se|depreende-se|conclui-se|segundo\s+o|de\s+acordo\s+com|conforme\s+o|no\s+contexto|sentido\s+original|reescrita|substitui[cç][aã]o\s+do\s+voc[áa]bulo|termo\s+destacado|express[aã]o\s+destacada|express[aã]o\s+sublinhada|passagem|voc[áa]bulo)\b/i.test(item.statement);
+        if(pendingBase&&(inExplicitRange||(baseAge<10&&mentionsTextRef))){
+          item.associated_text=pendingBase;
+          if(!/^Texto-base:/i.test(item.statement)){
+            item.statement=`Texto-base: ${pendingBase}\n\n${item.statement}`;
+          }
+        }
         const inferred=canonicalSubjectName(item.statement,defaultSubject);
         item.subject=inferred&&inferred!=='Conteúdo Geral'?inferred:canonicalSubjectName(defaultSubject);
         item.board=defaultBoard;
         item.origin='oficial';
         results.push(item);
       }else report.skipped++;
-      if(newBase){pendingBase=newBase;baseAge=0}else baseAge++;
+      if(newBase){pendingBase=newBase;baseAge=0;baseRangeStart=newRangeStart;baseRangeEnd=newRangeEnd}else baseAge++;
     }
     report.extracted=results.length;
     const lastNum=blocks.length?blocks[blocks.length-1].num:0;
@@ -2907,7 +3162,7 @@
     const diffLabel={facil:'FÁCIL',medio:'MÉDIA',dificil:'DIFÍCIL'}[normalizedDifficulty(item)]||'MÉDIA';
     const originLabel=normalizedOrigin(item)==='oficial'?'OFICIAL/PROVA':'AUTORAL IA';
     q('#simuladoQuestionMeta').textContent=`Questão ${current+1} de ${questions.length} · ${learningCategory(item.subject)} · ${item.topic||'Geral'} · ${diffLabel} · ${originLabel}`;
-    q('#simuladoQuestionText').textContent=item.statement;
+    q('#simuladoQuestionText').innerHTML=formatStatementWithHighlights(item.statement,item);
     q('#simuladoOptions').innerHTML=(item.options||[]).map((opt,i)=>{
       const selected=answers[current]===i;
       const isElim=elimSet.has(i);
@@ -4975,7 +5230,7 @@
       const prevSumLen=(ALL_SUMMARIES||[]).length,prevCardLen=(ALL_FLASHCARDS||[]).length,prevQLen=(ALL_QUESTIONS||[]).length;
       const existingSumKeys=new Set((ALL_SUMMARIES||[]).map(s=>`${topicKey(s.category)}|${topicKey(s.title)}`));
       const existingCardKeys=new Set((ALL_FLASHCARDS||[]).map(c=>`${topicKey(c[0])}|${topicKey(c[1])}`));
-      const existingQKeys=new Set((ALL_QUESTIONS||[]).map(qItem=>topicKey(qItem.statement).slice(0,80)));
+      const existingQKeys=new Set((ALL_QUESTIONS||[]).map(qItem=>`${topicKey(qItem.statement).slice(-90)}|${topicKey(qItem.options?.[0]||'')}`));
 
       for(const row of commSums){
         const parentDoc=(cloudDocuments||[]).find(d=>String(d.id)===String(row.source_document_id))||commDocs.find(d=>String(d.id)===String(row.source_document_id))||null;
@@ -5027,12 +5282,14 @@
         for(const qObj of (row.content?.questions||[])){
           if(!Array.isArray(qObj.options)||qObj.options.length<2||qObj.options.length>5||!Number.isInteger(qObj.correct_index)||qObj.correct_index<0||qObj.correct_index>=qObj.options.length)continue;
           const stText=sanitizePersonalWatermarks(qObj.statement||'');
-          const qKey=topicKey(stText).slice(0,80);
+          const qKey=`${topicKey(stText).slice(-90)}|${topicKey(qObj.options?.[0]||'')}`;
           if(stText&&!existingQKeys.has(qKey)){
             ALL_QUESTIONS.push({
               subject:cat,
               topic:sanitizePersonalWatermarks(qObj.topic||cleanTitle),
               statement:stText,
+              associated_text:sanitizePersonalWatermarks(qObj.associated_text||''),
+              board:qObj.board||'',
               options:qObj.options.map(sanitizePersonalWatermarks),
               correct_index:qObj.correct_index,
               explanation:sanitizePersonalWatermarks(qObj.explanation||''),
@@ -5649,7 +5906,7 @@
     const picked=[];
     const usedStatements=new Set();
     for(const item of shuffled){
-      const key=topicKey(item.statement).slice(0,70);
+      const key=`${topicKey(item.statement).slice(-85)}|${topicKey(item.options?.[0]||'')}`;
       if(usedStatements.has(key))continue;
       usedStatements.add(key);
       picked.push({
@@ -6357,7 +6614,7 @@
             </div>
           </div>
           <div class="duelTimerBar"><div class="duelTimerFill" id="duelLiveTimerFill" style="width:${Math.round((secondsLeft/DUEL_SECONDS_PER_QUESTION)*100)}%"></div></div>
-          <div id="duelQuestionStatement">${formatStatementWithHighlights(curQ.statement)}</div>
+          <div id="duelQuestionStatement">${formatStatementWithHighlights(curQ.statement,curQ)}</div>
           <div class="modernOptionsList">
             ${(curQ.options||[]).map((opt,i)=>`
               <button type="button" class="duelOptBtn ${wasAnswered?(i===cIdx?'correct':i===uIdx?'wrong':''):''}" data-duel-opt="${i}" ${wasAnswered?'disabled':''}>

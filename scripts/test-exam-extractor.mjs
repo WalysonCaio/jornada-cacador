@@ -138,4 +138,59 @@ const truthOf = (qs) => Object.fromEntries(qs.map((q) => [q.n, q.correct]));
   assert.equal(rTipo1[3].correct_index, 0);
 }
 
-console.log("OK: extrator de provas (18 cenários: nunca inventa gabarito, seleciona caderno Tipo 1/Tipo 2, preserva 5 alternativas e Certo/Errado).");
+
+// ───────────────────────────────────────────────────────────────────────────
+// 19. Língua Portuguesa: Texto I ANTES da Questão 01 + faixa "questões de 01 a 03"
+//     + texto longo (>2.000 caracteres) + questão que cita apenas "No 2º parágrafo"
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const longP1 = "A formação das instituições policiais contemporâneas exige o equilíbrio permanente entre a pronta resposta operacional e a preservação das garantias constitucionais do cidadão. ".repeat(8).trim();
+  const longP2 = "Todavia, a velocidade das comunicações digitais impõe desafios inéditos à rotina de patrulhamento, exigindo que cada agente público domine tanto a técnica jurídica quanto a clareza na expressão escrita. ".repeat(8).trim();
+  const txt = `
+    PROVA DE LÍNGUA PORTUGUESA
+    Leia atentamente o texto a seguir para responder às questões de 01 a 04.
+    TEXTO I
+    ${longP1}
+
+    ${longP2}
+
+    QUESTÃO 01
+    De acordo com a ideia central defendida pelo autor, assinale a correta:
+    (A) A pronta resposta operacional deve caminhar junto com as garantias constitucionais
+    (B) As comunicações digitais dispensam a expressão escrita nas corporações
+    (C) O patrulhamento ostensivo independe da técnica jurídica
+    (D) As garantias constitucionais opõem-se à formação policial
+
+    QUESTÃO 02
+    No 2º parágrafo, o vocábulo "Todavia" introduz relação lógico-semântica de:
+    (A) Causa eficiente
+    (B) Adversidade / oposição
+    (C) Conclusão lógica
+    (D) Finalidade restritiva
+
+    QUESTÃO 03
+    Assinale a opção em que a palavra "exigindo" (2º parágrafo) mantém o sentido original se reescrita como:
+    (A) dispensando que
+    (B) conquanto exija
+    (C) de modo a exigir
+    (D) embora exigisse
+
+    QUESTÃO 04
+    O termo "cidadão" (1º parágrafo) recebe acento gráfico ou sinal nasal em razão de:
+    (A) Ser oxítona terminada em ditongo nasal
+    (B) Ser paroxítona terminada em ditongo crescente
+    (C) Ser proparoxítona aparente
+    (D) Possuir hiato tônico isolado
+
+    GABARITO DEFINITIVO
+    1 A 2 B 3 C 4 A
+  `;
+  const rPt = extract(txt, { defaultSubject: "Língua Portuguesa", defaultBoard: "AOCP" });
+  assert.equal(rPt.length, 4, "deve extrair as 4 questões de Português");
+  assert.ok(rPt.every((q) => q.associated_text && q.associated_text.length > 1800), "deve preservar 100% do Texto I (>1800 chars, sem cortar em 1500) nas 3 questões");
+  assert.ok(rPt.every((q) => q.associated_text.includes("\n\n")), "deve preservar a separação entre 1º e 2º parágrafos");
+  assert.ok(/^Texto-base:/i.test(rPt[1].statement), "Q2 ('No 2º parágrafo...') deve receber o Texto-base mesmo sem repetir a palavra 'texto'");
+  assert.ok(/^Texto-base:/i.test(rPt[2].statement), "Q3 (dentro da faixa 01 a 03) deve receber o Texto-base");
+}
+
+console.log("OK: extrator de provas (19 cenários: Texto I pré-Q01 de Português até 6.000 chars, faixa 01-03, multi-caderno, 5 alternativas e Certo/Errado).");

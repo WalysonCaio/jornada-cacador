@@ -1149,5 +1149,11 @@ GABARITO DEFINITIVO
   assert(htmlSrc.includes("Placar Caveira:") && htmlSrc.includes("Líquido Cebraspe:"), "Cálculo de Placar Líquido Caveira presente");
   assert(pdfSrc.includes("isTwoColumnPage"), "Detector de PDF em duas colunas presente");
   assert(pdfSrc.includes("preferredCaderno"), "Seleção de caderno pelo usuário presente");
+  assert(v77Src.includes("splitQuestionAssociatedText"), "Parser de Texto Associado (estilo Gran Questões) presente");
+  assert(v77Src.includes("Ler texto de apoio da questão") && v77Src.includes("Ocultar texto de apoio da questão"), "Botão '📖 Ler texto de apoio da questão' presente");
+  assert(v77Src.includes("toggleGranAssociatedText"), "Função de abrir/fechar texto associado presente");
+  assert(v77Src.includes("toggleGranPinText"), "Botão 'Manter aberto' para baterias de Português presente");
+  assert(v77Src.includes("lawCiteBadge"), "Grifo tático automático de artigos de lei presente");
+
 }
 console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleção de Caderno, 2 colunas e Recursos Projeto Caveira (r126) validados.");

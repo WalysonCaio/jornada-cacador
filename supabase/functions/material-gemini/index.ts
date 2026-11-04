@@ -728,7 +728,7 @@ Seu objetivo é EXCLUSIVAMENTE EXTRAIR TODAS AS QUESTÕES DE CONCURSO PRESENTES 
   - explanation: "Questões extraídas diretamente da prova/simulado oficial.";
   - points: ["Treino prático focado em questões oficiais/simuladas."];
   - flashcards: [];
-  - questions: todas as questões encontradas neste trecho (fielmente adaptadas com enunciado completo, 4 opções plausíveis A-D, correct_index 0 a 3 conforme o gabarito ou fundamentação jurídica, explanation detalhada, difficulty "facil"|"medio"|"dificil", topic e origin "adaptada_do_pdf").
+  - questions: todas as questões encontradas neste trecho (fielmente adaptadas com enunciado completo, 4 opções plausíveis A-D, correct_index 0 a 3 conforme o gabarito ou fundamentação jurídica, explanation detalhada, difficulty "facil"|"medio"|"dificil", topic e origin "adaptada_do_pdf"). ATENÇÃO PARA LÍNGUA PORTUGUESA E INTERPRETAÇÃO DE TEXTO: sempre que uma questão depender de um texto de apoio (Texto I, Texto II, crônica, poema, fragmento), inclua OBRIGATORIAMENTE o texto de apoio integral no início do campo statement no formato exato "Texto-base: [texto de apoio completo preservando os parágrafos com \n\n]\n\n[Enunciado da questão]", para que o sistema exiba o botão recolhível "📖 Ler texto referente à questão".
 - Se não houver questões neste trecho (ex.: folhas de instrução, capa ou texto institucional), devolva {"summaries": []}.
 - Responda apenas JSON no formato {"summaries":[...]}.
 
@@ -1078,7 +1078,11 @@ function sanitizeQuestions(value: unknown, fallbackTopic: string) {
   const seen = new Set<string>();
   const valid = [];
   for (const raw of value) {
-    const statement = cleanGeneratedText(raw?.statement, 1200);
+    const rawStmtStr = String(raw?.statement ?? "").normalize("NFC").replace(/\r\n/g, "\n").trim();
+    const hasBaseText = /^Texto-base:/i.test(rawStmtStr) || rawStmtStr.includes("\n\n");
+    const statement = hasBaseText
+      ? rawStmtStr.split(/\n{2,}/).map((p) => p.replace(/[ \t]+/g, " ").trim()).filter(Boolean).join("\n\n").slice(0, 7000)
+      : cleanGeneratedText(raw?.statement, 2400);
     let options = Array.isArray(raw?.options) ? raw.options.map((option: unknown) => cleanGeneratedText(option, 600)).filter(Boolean) : [];
     const rawIdx = raw?.correct_index;
     const letterIdx = typeof rawIdx === "string" ? ({ A: 0, B: 1, C: 2, D: 3, E: 4 } as Record<string, number>)[rawIdx.trim().toUpperCase()] : undefined;
@@ -1439,7 +1443,7 @@ Deno.serve(async (request) => {
     if (["prova", "simulado"].includes(documentType)) {
       const sharedQuestions = summaries.flatMap((s: any) =>
         (Array.isArray(s.questions) ? s.questions : []).map((q: any) => ({
-          fingerprint: `${fingerprint.slice(0, 12)}-${String(q.statement || "").slice(0, 48).replace(/\s+/g, "_").toLowerCase()}`,
+          fingerprint: `${fingerprint.slice(0, 12)}-${String(q.statement || "").slice(-64).replace(/\s+/g, "_").toLowerCase()}`,
           subject: String(s.subject || detectedSubject || "Conteúdo Geral"),
           topic: String(q.topic || s.title || "Prova Oficial"),
           board: String(title || "Prova Oficial").slice(0, 80),
