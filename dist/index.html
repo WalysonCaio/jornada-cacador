@@ -1056,7 +1056,49 @@ body:before{display:none!important;content:none!important;mask-image:none!import
 
   <section class="view" id="review"><div class="sectionHead"><h2>Sala de revisão</h2><span class="tag" id="reviewBadge">0 pendentes</span></div><div class="card"><p class="small muted">Reúne revisões programadas em 1, 7 e 30 dias e os erros identificados na Trilha e nos treinos.</p><div class="list" id="reviewList"></div></div></section>
 
-  <section class="view" id="library"><div class="sectionHead"><div><h2>Biblioteca da campanha</h2><p class="small muted" style="margin:3px 0 0">O edital define as missões. Somente os arquivos enviados por você aparecem aqui.</p></div><span class="tag" id="libraryCampaign">Campanha ativa</span></div><div class="uploadZone"><div class="sectionHead"><div><h3 style="margin:0">Adicionar PDF</h3><p class="small muted" style="margin:3px 0 0">Envie o edital, material ou prova oficial. Máximo de 50 MB.</p></div><span class="docStatus">Privado</span></div><input id="documentFile" type="file" accept="application/pdf,.pdf"><div class="uploadGrid"><input id="documentTitle" placeholder="Ex.: DIREITOS INDIVIDUAIS E COLETIVOS-ART.5"><select id="documentType"><option value="edital">Edital do concurso</option><option value="lei">Lei ou norma</option><option value="material">Material de estudo</option><option value="anotacao">Anotações em PDF</option><option value="prova">Prova oficial</option><option value="simulado">Simulado em PDF</option></select></div><div class="small muted" id="docTitleHintBox" style="margin:6px 0 10px;padding:8px 11px;border-radius:10px;background:#071422;border:1px solid #1f3b54;line-height:1.45"><b style="color:var(--cyan)">📌 Padrão de organização da Biblioteca:</b> coloque <code>ASSUNTO PRINCIPAL-REFERÊNCIA</code> em maiúsculas. Exemplo: <code style="color:#f8fafc;cursor:pointer" data-title-example="DIREITOS INDIVIDUAIS E COLETIVOS-ART.5">DIREITOS INDIVIDUAIS E COLETIVOS-ART.5</code> · <code style="color:#f8fafc;cursor:pointer" data-title-example="MORFOLOGIA-CLASSES DE PALAVRAS">MORFOLOGIA-CLASSES DE PALAVRAS</code> · <code style="color:#f8fafc;cursor:pointer" data-title-example="INQUÉRITO POLICIAL-ART.4 AO 23">INQUÉRITO POLICIAL-ART.4 AO 23</code></div><label class="small muted" id="shareWithCommunityLabel" style="display:flex;align-items:center;gap:8px;margin:0 0 10px;cursor:pointer"><input type="checkbox" id="shareWithCommunityToggle" checked> <span>🤝 Compartilhar resumos/questões gerados deste material com a comunidade do concurso (seu PDF original e CPF nunca são expostos; editais nunca são compartilhados)</span></label><button class="action" id="uploadDocument">Enviar para esta campanha</button><div class="small muted" id="uploadMessage" style="margin-top:8px">Entre na sua conta para manter os arquivos sincronizados e privados.</div></div><div class="sectionHead"><h2>Meus arquivos</h2><span class="tag" id="documentCount">0 arquivos</span></div><div id="userDocumentList"></div><input id="materialSearch" hidden><div id="materialList" hidden></div></section>
+  <section class="view" id="library"><div class="sectionHead"><div><h2>Biblioteca da campanha</h2><p class="small muted" style="margin:3px 0 0">O edital define as missões. Somente os arquivos enviados por você aparecem aqui.</p></div><span class="tag" id="libraryCampaign">Campanha ativa</span></div><div class="uploadZone">
+  <div class="sectionHead" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+    <div>
+      <h3 style="margin:0">Adicionar Conteúdo de Estudo</h3>
+      <p class="small muted" style="margin:3px 0 0">Envie o edital, apostila, prova ou crie estudo direto por texto/tema. Máximo de 50 MB.</p>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <button type="button" class="action small" id="openTextStudyModalBtn" style="width:auto;padding:6px 13px;font-size:.78rem;font-weight:800;background:linear-gradient(135deg,#0284c7,#0369a1)">📝 Criar por Texto / Assunto (Sem PDF)</button>
+      <span class="docStatus">Privado</span>
+    </div>
+  </div>
+
+  <input id="documentFile" type="file" accept="application/pdf,.pdf">
+
+  <!-- Raio-X Pré-Análise Instantâneo (Calculado no navegador antes do envio) -->
+  <div id="pdfPreScanBox" hidden style="margin:10px 0;padding:11px 14px;border-radius:12px;background:rgba(8,26,42,.88);border:1px solid #275678;line-height:1.55;font-size:.85rem;color:#e2eef8">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-weight:900;color:#63e7ff" id="pdfPreScanTitle">🔍 Raio-X Pré-Análise</span>
+      <span class="tag" id="pdfPreScanBadge" style="font-size:.7rem">Analisando...</span>
+    </div>
+    <div id="pdfPreScanDetails" style="margin-top:6px;color:#cbd5e1;font-size:.8rem"></div>
+  </div>
+
+  <div class="uploadGrid">
+    <input id="documentTitle" placeholder="Ex.: DIREITOS INDIVIDUAIS E COLETIVOS-ART.5">
+    <select id="documentType">
+      <option value="edital">Edital do concurso</option>
+      <option value="lei">Lei ou norma</option>
+      <option value="material">Material de estudo</option>
+      <option value="anotacao">Anotações em PDF</option>
+      <option value="prova">Prova oficial</option>
+      <option value="simulado">Simulado em PDF</option>
+    </select>
+  </div>
+
+  <!-- Campo opcional de Anexar PDF do Gabarito Separado (apenas para Provas e Simulados) -->
+  <div id="documentAnswerKeyRow" hidden style="margin:0 0 12px;padding:10px 12px;border-radius:12px;background:rgba(14,35,56,.75);border:1px dashed #38bdf8">
+    <label class="small muted" style="display:block;margin-bottom:5px;color:#7dd3fc;font-weight:700">
+      📄 <b>Anexar PDF do Gabarito Separado (opcional):</b>
+      <span style="font-weight:normal;color:#94a3b8">se a prova e o gabarito oficial vieram em arquivos diferentes, anexe o gabarito aqui para cruzamento 100% automático no navegador:</span>
+    </label>
+    <input id="documentAnswerKeyFile" type="file" accept="application/pdf,.pdf" style="font-size:.82rem;padding:7px;background:#061320;border:1px solid #234868;border-radius:8px;width:100%">
+  </div><div class="small muted" id="docTitleHintBox" style="margin:6px 0 10px;padding:8px 11px;border-radius:10px;background:#071422;border:1px solid #1f3b54;line-height:1.45"><b style="color:var(--cyan)">📌 Padrão de organização da Biblioteca:</b> coloque <code>ASSUNTO PRINCIPAL-REFERÊNCIA</code> em maiúsculas. Exemplo: <code style="color:#f8fafc;cursor:pointer" data-title-example="DIREITOS INDIVIDUAIS E COLETIVOS-ART.5">DIREITOS INDIVIDUAIS E COLETIVOS-ART.5</code> · <code style="color:#f8fafc;cursor:pointer" data-title-example="MORFOLOGIA-CLASSES DE PALAVRAS">MORFOLOGIA-CLASSES DE PALAVRAS</code> · <code style="color:#f8fafc;cursor:pointer" data-title-example="INQUÉRITO POLICIAL-ART.4 AO 23">INQUÉRITO POLICIAL-ART.4 AO 23</code></div><label class="small muted" id="shareWithCommunityLabel" style="display:flex;align-items:center;gap:8px;margin:0 0 10px;cursor:pointer"><input type="checkbox" id="shareWithCommunityToggle" checked> <span>🤝 Compartilhar resumos/questões gerados deste material com a comunidade do concurso (seu PDF original e CPF nunca são expostos; editais nunca são compartilhados)</span></label><button class="action" id="uploadDocument">Enviar para esta campanha</button><div class="small muted" id="uploadMessage" style="margin-top:8px">Entre na sua conta para manter os arquivos sincronizados e privados.</div></div><div class="sectionHead"><h2>Meus arquivos</h2><span class="tag" id="documentCount">0 arquivos</span></div><div id="userDocumentList"></div><input id="materialSearch" hidden><div id="materialList" hidden></div></section>
 
   <section class="view" id="essay"><div class="sectionHead"><div><h2>Central de Redação</h2><p class="small muted" style="margin:3px 0 0">Envie sua redação em PDF, JPG ou PNG para receber uma correção pedagógica detalhada.</p></div><span class="tag">Gemini multimodal</span></div><div class="card"><div class="essayGrid"><label class="field">Título<input id="essayTitle" maxlength="120" placeholder="Ex.: Redação 01"></label><label class="field">Tema<input id="essayTheme" maxlength="300" placeholder="Tema proposto pela banca" required></label><label class="field">Tipo de redação<select id="essayType"><option value="dissertativo-argumentativa">Dissertativo-argumentativa</option><option value="dissertativa-expositiva">Dissertativa-expositiva</option><option value="argumentativa">Argumentativa</option><option value="outro">Outro tipo</option></select></label><label class="field">Banca / padrão<select id="essayBoard"><option value="geral">Critérios gerais</option><option value="AOCP">Instituto AOCP</option><option value="Cebraspe">Cebraspe</option><option value="FGV">FGV Conhecimento</option></select></label><label class="field">Quantidade exigida de linhas<input id="essayLines" type="number" min="1" max="100" inputmode="numeric" placeholder="Ex.: 30"></label></div><label class="field">Instruções ou critérios da banca<textarea id="essayInstructions" maxlength="3000" placeholder="Cole o enunciado, critérios, textos motivadores ou observações relevantes."></textarea></label><label class="field">Redação em PDF, JPG ou PNG<input id="essayFile" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"></label><button class="action" id="submitEssay">Enviar e corrigir redação</button><p class="small muted" id="essayMessage">A IA não substitui a correção oficial da banca. Trechos ilegíveis serão sinalizados.</p></div><div class="sectionHead"><h2>Minhas correções</h2><span class="tag" id="essayCount">0 redações</span></div><div id="essayList"></div></section>
 
@@ -2139,7 +2181,56 @@ function gradeCard(level){const card=$('#flashcard'),id=card?.dataset.card;if(!i
 function belongsToActiveCampaign(item){return item.campaignId?item.campaignId===state.activeCampaignId:state.campaigns.length===1}
 function renderNotes(){const list=(state.userNotes||[]).filter(belongsToActiveCampaign);$('#userNotes').innerHTML=list.length?[...list].reverse().map(n=>`<article class="noteCard"><div class="eyebrow">${esc(n.subject)}</div><h3>${esc(n.title)}</h3><div class="small muted">${new Date(n.updated).toLocaleDateString('pt-BR')}</div><p>${esc(n.content).replace(/\n/g,'<br>')}</p><div class="noteActions"><button class="ghost" data-edit-note="${n.id}">Editar</button><button class="ghost danger" data-delete-note="${n.id}">Excluir</button></div></article>`).join(''):'<div class="empty">Você ainda não criou anotações neste portal.</div>';$$('[data-edit-note]').forEach(b=>b.onclick=()=>{const n=state.userNotes.find(x=>x.id===b.dataset.editNote);if(!n)return;editingNote=n.id;$('#noteTitle').value=n.title;$('#noteSubject').value=n.subject;$('#noteContent').value=n.content;$('#saveNote').textContent='Atualizar anotação';scrollTo({top:$('#notebook').offsetTop,behavior:'smooth'})});$$('[data-delete-note]').forEach(b=>b.onclick=()=>{if(confirm('Excluir esta anotação?')){state.userNotes=state.userNotes.filter(n=>n.id!==b.dataset.deleteNote);save();renderNotes()}})}
 function saveUserNote(){const title=$('#noteTitle').value.trim(),content=$('#noteContent').value.trim(),subject=$('#noteSubject').value;if(!title||!content)return toast('Preencha o título e a anotação');if(editingNote){const n=state.userNotes.find(x=>x.id===editingNote);if(n)Object.assign(n,{title,content,subject,campaignId:state.activeCampaignId,updated:new Date().toISOString()})}else state.userNotes.push({id:String(Date.now()),title,content,subject,campaignId:state.activeCampaignId,updated:new Date().toISOString()});editingNote=null;$('#noteTitle').value='';$('#noteContent').value='';$('#saveNote').textContent='Salvar anotação';if(typeof extractFlashcardsFromUserNotes==='function'){const noteCards=extractFlashcardsFromUserNotes(),existingKeys=new Set((ALL_FLASHCARDS||[]).map(c=>`${c[0]}|${c[1]}`));for(const nc of noteCards){if(!existingKeys.has(`${nc[0]}|${nc[1]}`))ALL_FLASHCARDS.push(nc)}}save();renderNotes();renderCard();toast('Anotação salva e integrada aos seus Flashcards de estudo!')}
-function printNotes(){if(!state.userNotes?.length)return toast('Crie uma anotação primeiro');const body=state.userNotes.map(n=>`<section><small>${esc(n.subject)}</small><h2>${esc(n.title)}</h2><p>${esc(n.content).replace(/\n/g,'<br>')}</p></section>`).join(''),w=window.open('','_blank');if(!w)return toast('Permita a abertura da folha');w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Anotações — Jornada do Caçador</title><style>body{font:16px Arial;max-width:800px;margin:40px auto;color:#172033}h1{border-bottom:3px solid #278dcc;padding-bottom:12px}section{page-break-inside:avoid;border-bottom:1px solid #ccd5df;padding:15px 0}small{color:#247aa8;text-transform:uppercase;font-weight:bold}p{line-height:1.6}@media print{body{margin:16mm}}</style></head><body><h1>Jornada do Caçador — Minhas anotações</h1>${body}</body></html>`);w.document.close();setTimeout(()=>w.print(),300)}
+function printNotes(){if(!state.userNotes?.length)return toast('Crie uma anotação primeiro');const body=state.userNotes.map(n=>`<section><small>${esc(n.subject)}</small><h2>${esc(n.title)}</h2><p>${esc(n.content).replace(/\n/g,'<br>')}</p></section>`).join(''),w=window.open('','_blank');if(!w)return toast('Permita a abertura da folha');w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Anotações — Jornada do Caçador</title><style>body{font:16px Arial;max-width:800px;margin:40px auto;color:#172033}h1{border-bottom:3px solid #278dcc;padding-bottom:12px}section{page-break-inside:avoid;border-bottom:1px solid #ccd5df;padding:15px 0}small{color:#247aa8;text-transform:uppercase;font-weight:bold}p{line-height:1.6}@media print{body{margin:16mm}}</style></head><body><h1>Jornada do Caçador — Minhas anotações</h1>${body}
+  <!-- Modal 📝 Criar Estudo por Texto / Assunto / Lei Seca (Sem PDF) -->
+  <dialog id="textStudyModalDialog" style="width:min(95vw,620px);max-height:94dvh;overflow-y:auto;padding:20px;border-radius:20px;background:linear-gradient(160deg,#091a2c,#05101a);border:1px solid #2d6289;color:#f8fafc;box-shadow:0 24px 60px rgba(0,0,0,.8)">
+    <div class="sectionHead" style="margin-bottom:12px">
+      <div>
+        <div class="eyebrow" style="color:#63e7ff;font-weight:900">BIBLIOTECA DIRETA · SEM NECESSIDADE DE PDF</div>
+        <h2 style="margin:3px 0 0;font-size:1.24rem">📝 Criar Estudo por Texto ou Assunto</h2>
+      </div>
+      <button type="button" class="ghost small" id="closeTextStudyModalBtn" style="width:auto;padding:6px 12px">✕ Fechar</button>
+    </div>
+
+    <p class="small muted" style="margin:0 0 14px;line-height:1.55">
+      Não tem um arquivo PDF da matéria? Cole um artigo de lei, uma anotação de aula ou apenas informe o tópico do seu edital. O sistema criará o <b>Resumo Tático</b>, os <b>Flashcards de Fixação</b> e <b>5 Questões de Concurso</b> diretamente na sua Biblioteca!
+    </p>
+
+    <div style="display:grid;gap:10px">
+      <label class="field">
+        <span style="font-weight:700;color:#e2e8f0;font-size:.84rem">Disciplina:</span>
+        <select id="textStudySubjectSelect" style="width:100%;padding:10px;background:#071422;border:1px solid #234868;color:#fff;border-radius:10px"></select>
+      </label>
+
+      <label class="field">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <span style="font-weight:700;color:#e2e8f0;font-size:.84rem">Título do Assunto:</span>
+          <span class="small muted" style="font-size:.72rem">Padrão: ASSUNTO-REFERÊNCIA</span>
+        </div>
+        <input id="textStudyTitleInput" maxlength="120" placeholder="Ex.: INQUÉRITO POLICIAL-ART.4 AO 23 DO CPP" style="width:100%;padding:10px;background:#071422;border:1px solid #234868;color:#fff;border-radius:10px">
+      </label>
+
+      <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px" id="textStudyQuickTopicPills"></div>
+
+      <label class="field">
+        <span style="font-weight:700;color:#e2e8f0;font-size:.84rem">Texto, Lei Seca ou Tópicos de Aula (opcional se o título for explicativo):</span>
+        <textarea id="textStudyContentTextarea" rows="6" maxlength="25000" placeholder="Cole aqui a letra da lei, súmulas, anotações de aula ou o texto teórico. Se deixar em branco, o Professor IA desenvolverá a aula completa com base no título informado." style="width:100%;padding:10px;background:#071422;border:1px solid #234868;color:#fff;border-radius:10px;line-height:1.5"></textarea>
+      </label>
+
+      <label class="small muted" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="textStudyShareToggle" checked>
+        <span>🤝 Compartilhar resumo/questões deste assunto na Biblioteca Comunitária</span>
+      </label>
+
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button type="button" class="ghost" id="cancelTextStudyBtn" style="flex:1">Cancelar</button>
+        <button type="button" class="action" id="submitTextStudyBtn" style="flex:2;font-weight:900">⚡ Gerar Resumo, Flashcards e Questões</button>
+      </div>
+      <div id="textStudyStatusMsg" class="small muted" style="text-align:center;min-height:18px"></div>
+    </div>
+  </dialog>
+
+</body></html>`);w.document.close();setTimeout(()=>w.print(),300)}
 function backupNotes(){const blob=new Blob([JSON.stringify({exported:new Date().toISOString(),notes:state.userNotes},null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='anotacoes-missao-pmpe.json';a.click();URL.revokeObjectURL(a.href)}
 let drawDB,drawCanvas,drawCtx,drawBackgroundCanvas,drawBackgroundCtx,drawPage=1,drawPages=JSON.parse(localStorage.getItem('pmpe-draw-pages')||'[1]'),drawTool='pen',drawColor='#10233b',drawSize=5,drawEraserSize=45,drawActive=false,drawPoint=null,drawSaveTimer,drawUndoStack=[],drawRedoStack=[];
 function openDrawDB(){if(drawDB)return Promise.resolve(drawDB);return new Promise((resolve,reject)=>{const req=indexedDB.open('missao-pmpe-caderno',1);req.onupgradeneeded=()=>req.result.createObjectStore('pages');req.onsuccess=()=>{drawDB=req.result;resolve(drawDB)};req.onerror=()=>reject(req.error)})}
@@ -2166,7 +2257,56 @@ function endDraw(){if(!drawActive)return;drawActive=false;drawCtx.globalAlpha=1;
 function selectDrawTool(tool){drawTool=tool;$$('[data-draw-tool]').forEach(b=>b.classList.toggle('active',b.dataset.drawTool===tool))}
 function composedDrawPage(){const output=document.createElement('canvas');output.width=drawCanvas.width;output.height=drawCanvas.height;const ctx=output.getContext('2d');ctx.drawImage(drawBackgroundCanvas,0,0);ctx.drawImage(drawCanvas,0,0);return output}
 function exportDrawImage(){composedDrawPage().toBlob(blob=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`jornada-cacador-anotacao-pagina-${drawPage}.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)},'image/png')}
-function exportDrawPDF(){const image=composedDrawPage().toDataURL('image/png'),w=window.open('','_blank');if(!w)return toast('Permita a abertura da janela para exportar o PDF');w.document.write(`<!doctype html><html><head><title>Caderno — página ${drawPage}</title><style>@page{size:A4;margin:0}body{margin:0;display:grid;place-items:center}img{width:100%;height:100vh;object-fit:contain}</style></head><body><img src="${image}" alt="Página exportada do caderno manuscrito"></body></html>`);w.document.close();setTimeout(()=>w.print(),500)}
+function exportDrawPDF(){const image=composedDrawPage().toDataURL('image/png'),w=window.open('','_blank');if(!w)return toast('Permita a abertura da janela para exportar o PDF');w.document.write(`<!doctype html><html><head><title>Caderno — página ${drawPage}</title><style>@page{size:A4;margin:0}body{margin:0;display:grid;place-items:center}img{width:100%;height:100vh;object-fit:contain}</style></head><body><img src="${image}" alt="Página exportada do caderno manuscrito">
+  <!-- Modal 📝 Criar Estudo por Texto / Assunto / Lei Seca (Sem PDF) -->
+  <dialog id="textStudyModalDialog" style="width:min(95vw,620px);max-height:94dvh;overflow-y:auto;padding:20px;border-radius:20px;background:linear-gradient(160deg,#091a2c,#05101a);border:1px solid #2d6289;color:#f8fafc;box-shadow:0 24px 60px rgba(0,0,0,.8)">
+    <div class="sectionHead" style="margin-bottom:12px">
+      <div>
+        <div class="eyebrow" style="color:#63e7ff;font-weight:900">BIBLIOTECA DIRETA · SEM NECESSIDADE DE PDF</div>
+        <h2 style="margin:3px 0 0;font-size:1.24rem">📝 Criar Estudo por Texto ou Assunto</h2>
+      </div>
+      <button type="button" class="ghost small" id="closeTextStudyModalBtn" style="width:auto;padding:6px 12px">✕ Fechar</button>
+    </div>
+
+    <p class="small muted" style="margin:0 0 14px;line-height:1.55">
+      Não tem um arquivo PDF da matéria? Cole um artigo de lei, uma anotação de aula ou apenas informe o tópico do seu edital. O sistema criará o <b>Resumo Tático</b>, os <b>Flashcards de Fixação</b> e <b>5 Questões de Concurso</b> diretamente na sua Biblioteca!
+    </p>
+
+    <div style="display:grid;gap:10px">
+      <label class="field">
+        <span style="font-weight:700;color:#e2e8f0;font-size:.84rem">Disciplina:</span>
+        <select id="textStudySubjectSelect" style="width:100%;padding:10px;background:#071422;border:1px solid #234868;color:#fff;border-radius:10px"></select>
+      </label>
+
+      <label class="field">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <span style="font-weight:700;color:#e2e8f0;font-size:.84rem">Título do Assunto:</span>
+          <span class="small muted" style="font-size:.72rem">Padrão: ASSUNTO-REFERÊNCIA</span>
+        </div>
+        <input id="textStudyTitleInput" maxlength="120" placeholder="Ex.: INQUÉRITO POLICIAL-ART.4 AO 23 DO CPP" style="width:100%;padding:10px;background:#071422;border:1px solid #234868;color:#fff;border-radius:10px">
+      </label>
+
+      <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px" id="textStudyQuickTopicPills"></div>
+
+      <label class="field">
+        <span style="font-weight:700;color:#e2e8f0;font-size:.84rem">Texto, Lei Seca ou Tópicos de Aula (opcional se o título for explicativo):</span>
+        <textarea id="textStudyContentTextarea" rows="6" maxlength="25000" placeholder="Cole aqui a letra da lei, súmulas, anotações de aula ou o texto teórico. Se deixar em branco, o Professor IA desenvolverá a aula completa com base no título informado." style="width:100%;padding:10px;background:#071422;border:1px solid #234868;color:#fff;border-radius:10px;line-height:1.5"></textarea>
+      </label>
+
+      <label class="small muted" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="textStudyShareToggle" checked>
+        <span>🤝 Compartilhar resumo/questões deste assunto na Biblioteca Comunitária</span>
+      </label>
+
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button type="button" class="ghost" id="cancelTextStudyBtn" style="flex:1">Cancelar</button>
+        <button type="button" class="action" id="submitTextStudyBtn" style="flex:2;font-weight:900">⚡ Gerar Resumo, Flashcards e Questões</button>
+      </div>
+      <div id="textStudyStatusMsg" class="small muted" style="text-align:center;min-height:18px"></div>
+    </div>
+  </dialog>
+
+</body></html>`);w.document.close();setTimeout(()=>w.print(),500)}
 function setupCanvasNotebook(){if($('#drawingNotebook'))return;$('#notebook .card').insertAdjacentHTML('afterend',`<section class="drawBook" id="drawingNotebook"><div class="sectionHead"><div><h3>Caderno manuscrito</h3><p class="small muted" style="margin:3px 0 0">Independente das anotações de texto. Cada traço é salvo automaticamente.</p></div><span class="tag" id="drawSaveStatus">Página salva</span></div><div class="drawToolbar"><button class="drawTool active" data-draw-tool="pen">Caneta</button><button class="drawTool" data-draw-tool="highlighter">Marca-texto</button><button class="drawTool" data-draw-tool="eraser">Borracha</button><button class="drawTool" data-eraser-size="25">Borracha P</button><button class="drawTool active" data-eraser-size="45">Borracha M</button><button class="drawTool" data-eraser-size="85">Borracha G</button><button class="drawColor active" data-draw-color="#10233b" aria-label="Azul escuro"><span style="background:#10233b"></span></button><button class="drawColor" data-draw-color="#e63246" aria-label="Vermelho"><span style="background:#e63246"></span></button><button class="drawColor" data-draw-color="#157c4b" aria-label="Verde"><span style="background:#157c4b"></span></button><button class="drawColor" data-draw-color="#8c3fd1" aria-label="Roxo"><span style="background:#8c3fd1"></span></button><label class="drawRange">Traço <input id="drawSize" type="range" min="2" max="18" value="5"></label><label class="pencilOnly"><input id="pencilOnly" type="checkbox"> Somente Apple Pencil</label></div><div class="drawToolbar"><button class="ghost" id="drawUndo">Desfazer</button><button class="ghost" id="drawRedo">Refazer</button><button class="ghost" id="drawLast">Apagar último traço</button></div><div class="paperWrap"><div class="paperStage"><canvas class="paperBackground" id="paperBackground" width="1600" height="2200" aria-hidden="true"></canvas><canvas class="paperCanvas" id="paperCanvas" width="1600" height="2200" aria-label="Página para escrever"></canvas></div></div><div class="pageControls"><button class="ghost" id="drawPrev">← Anterior</button><strong id="drawPageLabel">Página 1</strong><button class="ghost" id="drawNext">Próxima →</button></div><div class="drawActions"><button class="ghost" id="drawNew">Nova página</button><button class="ghost danger" id="drawDelete">Excluir página</button><button class="ghost danger" id="drawClear">Limpar página</button><button class="ghost" id="drawExportImage">Exportar imagem</button><button class="ghost" id="drawExportPDF">Exportar PDF</button></div></section>`);drawBackgroundCanvas=$('#paperBackground');drawBackgroundCtx=drawBackgroundCanvas.getContext('2d');drawCanvas=$('#paperCanvas');drawCtx=drawCanvas.getContext('2d');drawPaperBackground();drawCanvas.onpointerdown=beginDraw;drawCanvas.onpointermove=moveDraw;drawCanvas.onpointerup=endDraw;drawCanvas.onpointercancel=endDraw;$$('[data-draw-tool]').forEach(b=>b.onclick=()=>selectDrawTool(b.dataset.drawTool));$$('[data-eraser-size]').forEach(b=>b.onclick=()=>{drawEraserSize=+b.dataset.eraserSize;$$('[data-eraser-size]').forEach(x=>x.classList.toggle('active',x===b));selectDrawTool('eraser')});$$('[data-draw-color]').forEach(b=>b.onclick=()=>{drawColor=b.dataset.drawColor;$$('[data-draw-color]').forEach(x=>x.classList.toggle('active',x===b));selectDrawTool('pen')});$('#drawSize').oninput=e=>drawSize=+e.target.value;$('#drawUndo').onclick=undoDraw;$('#drawRedo').onclick=redoDraw;$('#drawLast').onclick=undoDraw;$('#drawPrev').onclick=()=>loadDrawPage(Math.max(1,drawPage-1));$('#drawNext').onclick=()=>loadDrawPage(Math.min(Math.max(...drawPages),drawPage+1));$('#drawNew').onclick=()=>{const page=Math.max(...drawPages)+1;drawPages.push(page);localStorage.setItem('pmpe-draw-pages',JSON.stringify(drawPages));loadDrawPage(page)};$('#drawDelete').onclick=async()=>{if(!confirm(`Excluir permanentemente a página ${drawPage}?`))return;if(drawPages.length===1){blankPaper();captureDrawHistory();saveDrawPage();return}const old=drawPage;await deleteDrawPageRecord(old);drawPages=drawPages.filter(x=>x!==old);localStorage.setItem('pmpe-draw-pages',JSON.stringify(drawPages));loadDrawPage(drawPages.find(x=>x>old)||drawPages.at(-1))};$('#drawClear').onclick=()=>{if(confirm('Limpar somente a escrita desta página? As linhas da folha serão preservadas.')){blankPaper();captureDrawHistory();saveDrawPage()}};$('#drawExportImage').onclick=exportDrawImage;$('#drawExportPDF').onclick=exportDrawPDF;loadDrawPage(drawPage)}
 function renderStudy(){if($('#notebook')?.classList.contains('active'))setupCanvasNotebook();const sf=$('#summaryFilter'),curSf=sf?.value||'all',sumCats=[...new Set(ALL_SUMMARIES.map(s=>s.category))].sort((a,b)=>a.localeCompare(b,'pt-BR'));if(sf){sf.innerHTML='<option value="all">Todas as disciplinas</option>'+sumCats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');sf.value=sumCats.includes(curSf)?curSf:'all'}renderSummaries($('#summarySearch')?.value||'');const cats=[...new Set(ALL_FLASHCARDS.map(c=>c[0]))].sort((a,b)=>a.localeCompare(b,'pt-BR')),sel=$('#cardFilter'),curCf=sel?.value||'all';if(sel){sel.innerHTML='<option value="all">Todas as disciplinas</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');sel.value=cats.includes(curCf)?curCf:'all'}const subjects=['Geral',...DATA.map(d=>d.n),...ALL_SUMMARIES.map(s=>s.title)],ns=$('#noteSubject');if(ns&&ns.options.length===1)[...new Set(subjects.slice(1))].forEach(c=>ns.add(new Option(c,c)));renderCard();renderNotes()}
 function renderReport(){const missions=missionPool(),missionIds=new Set(missions.map(m=>m.id)),groups=missions.filter(m=>!m.id.startsWith('setup-')).reduce((out,m)=>{(out[m.subject]||=[]).push(m);return out},{}),h=Object.entries(groups).map(([name,items])=>`<div class="score"><span>${esc(name)}</span><b>${items.filter(m=>state.done[m.id]).length}/${items.length}</b></div>`).join('');$('#subjectStats').innerHTML=h||'<div class="empty">Insira um edital para acompanhar o desempenho por disciplina.</div>';const campaignScores=(state.scores||[]).filter(s=>s.campaignId?s.campaignId===state.activeCampaignId:missionIds.has(s.id)),total=campaignScores.reduce((n,s)=>n+s.total,0),correct=campaignScores.reduce((n,s)=>n+s.correct,0),done=missions.filter(m=>state.done[m.id]).length,boss=Object.keys(state.bosses||{}).length,key=localDayKey(),today=Math.floor((state.studyByDay?.[key]||0)/60),start=weekStart(),week=Math.floor(Object.entries(state.studyByDay||{}).filter(([d])=>new Date(d+'T12:00:00')>=start).reduce((n,[,s])=>n+s,0)/60);$('#performanceSummary').innerHTML=`<div class="performanceMetric"><b>${today}m</b><span>hoje</span></div><div class="performanceMetric"><b>${week}m</b><span>esta semana</span></div><div class="performanceMetric"><b>${total}</b><span>questões</span></div><div class="performanceMetric"><b>${total?Math.round(correct/total*100):0}%</b><span>precisão</span></div>`;$('#scoreTotal').textContent=`${total} questões`;$('#scoreList').innerHTML=campaignScores.length?[...campaignScores].reverse().slice(0,8).map(s=>{const m=missions.find(x=>x.id===s.id);return `<div class="score"><span><b>${esc(m?.name||s.subject||'Tópico')}</b><br><span class="small muted">${new Date(s.date).toLocaleDateString('pt-BR')}</span></span><b>${s.correct}/${s.total}</b></div>`}).join(''):'<div class="empty">Nenhum resultado registrado neste portal.</div>';const ach=[['Primeiro despertar','Conclua 1 missão',done>=1],['Caçador persistente','Mantenha 3 dias seguidos',state.streak>=3],['Domador de questões','Resolva 100 questões',total>=100],['Mira precisa','Alcance 80% geral',total>=20&&correct/total>=.8],['Caçador de chefes','Derrote 1 chefe',boss>=1],['Edital zerado',`Conclua as ${missions.length} missões`,missions.length>0&&done>=missions.length]];$('#achievementCount').textContent=`${ach.filter(a=>a[2]).length}/${ach.length}`;$('#achievements').innerHTML=ach.map(a=>`<div class="achievement ${a[2]?'unlocked':''}"><b>${a[2]?'✓ ':'◈ '}${a[0]}</b><span class="small muted">${a[1]}</span></div>`).join('');const errors=Object.entries(state.errors||{}).filter(([id,e])=>missionIds.has(id)||missionIds.has(e?.missionId)||e?.campaignId===state.activeCampaignId);$('#errorCount').textContent=`${errors.length} tópicos`;$('#errorList').innerHTML=errors.length?errors.map(([id,e])=>{const m=missions.find(x=>x.id===id||x.id===e?.missionId);return `<div class="notebookItem"><b>${esc(e?.topic||m?.name||'Tópico')}</b><div class="small muted">${e.misses} erro${e.misses>1?'s':''} acumulado${e.misses>1?'s':''}</div><button class="ghost" data-mastered="${id}">Marcar como dominado</button></div>`}).join(''):'<div class="empty">Seus erros aparecerão aqui para revisão.</div>';$$('[data-mastered]').forEach(b=>b.onclick=()=>{delete state.errors[b.dataset.mastered];save();renderReport()})}
@@ -2669,7 +2809,56 @@ $('#openManualStudy').onclick=openManualStudy;$('#closeManualStudy').onclick=()=
 $('#reset').textContent='Redefinir perfil e apagar conteúdos';$('#reset').onclick=resetAllProgress;const resetProfileButton=document.createElement('button');resetProfileButton.className='ghost danger';resetProfileButton.style='margin-top:8px;width:100%';resetProfileButton.textContent='Redefinir perfil e apagar conteúdos';resetProfileButton.onclick=resetAllProgress;$('#deleteAccountBtn').before(resetProfileButton);
 $('#timerReset').onclick=async()=>{if(timerRun){clearInterval(timerRun);timerRun=null}await closeCloudFocusSession('abandoned');timerLastTick=null;timerLeft=focusBlockSeconds();persistFocusTimer(false);$('#timerToggle').textContent='Iniciar foco';save();tickClock()};
 function renderEssays(){const root=$('#essayList');if(!root)return;$('#essayCount').textContent=`${cloudEssays.length} redaç${cloudEssays.length===1?'ão':'ões'}`;if(!cloudSession){root.innerHTML='<div class="empty">Entre na sua conta para enviar e sincronizar redações.</div>';return}if(!cloudEssays.length){root.innerHTML='<div class="empty">Nenhuma redação enviada neste portal.</div>';return}root.innerHTML=cloudEssays.map((item,index)=>{const result=item.result||{},previous=cloudEssays.slice(index+1).find(old=>old.processing_status==='ready'),delta=previous?Number(result.score||0)-Number(previous.result?.score||0):null,status={pending:'Aguardando correção',processing:'Gemini corrigindo',ready:'Correção concluída',error:'Falha na correção'}[item.processing_status]||item.processing_status;return`<article class="card"><div class="sectionHead"><div><div class="eyebrow">${esc(item.board||'Critérios gerais')} · ${esc(item.essay_type)}</div><h3>${esc(item.title)}</h3><div class="small muted">${esc(item.theme)} · ${item.required_lines?`${item.required_lines} linhas`:'linhas não informadas'}</div>${delta!==null?`<span class="tag">Evolução: ${delta>=0?'+':''}${delta} ponto${Math.abs(delta)===1?'':'s'}</span>`:''}</div>${item.processing_status==='ready'?`<div class="essayScore">${Number(result.score)||0}<span class="small muted">/100</span></div>`:`<span class="docStatus ${item.processing_status}">${esc(status)}</span>`}</div>${item.processing_status==='ready'?`<div class="essayResult"><p>${esc(result.diagnosis||'')}</p>${Array.isArray(result.criteria)&&result.criteria.length?`<div class="lessonBox"><b>Espelho da Banca (Critérios Avaliados)</b><div style="display:grid;gap:8px;margin-top:8px">${result.criteria.map(c=>`<div style="background:#091624;border:1px solid #233e54;border-radius:10px;padding:9px 12px"><div style="display:flex;justify-content:space-between;align-items:center"><strong style="color:var(--cyan);font-size:.9rem">${esc(c.name)}</strong><span class="tag" style="font-weight:bold">${Number(c.score)||0}/${Number(c.max_score)||25} pts</span></div><p class="small muted" style="margin:4px 0 0">${esc(c.commentary||'')}</p></div>`).join('')}</div></div>`:''}${Array.isArray(result.deviations)&&result.deviations.length?`<div class="lessonBox trap"><b>Apontamentos Linha a Linha (Desvios e Correções)</b><div style="display:grid;gap:7px;margin-top:8px">${result.deviations.map(d=>`<div class="essayImprovement" style="border-left-color:var(--red)"><div style="display:flex;gap:6px;align-items:center"><span class="tag" style="background:#3b1720;color:#ff9baa">${esc(d.line||'Linha')}</span><span style="font-weight:700">${esc(d.issue||'Desvio identificado')}</span></div><div style="margin:4px 0;font-style:italic;color:#ffd1d9">“${esc(d.snippet||'')}”</div><div class="small muted" style="color:var(--green)">✓ Correção: ${esc(d.suggestion||'')}</div></div>`).join('')}</div></div>`:''}${result.line_observation?`<div class="lessonBox"><b>Linhas e legibilidade</b><p>${esc(result.line_observation)}</p></div>`:''}<div class="lessonBox bizu"><b>Pontos fortes</b><ul>${(result.strengths||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div><div class="lessonBox trap"><b>O que melhorar</b>${(result.improvements||[]).map(x=>`<div class="essayImprovement"><b>${esc(x.category)}</b><div>${esc(x.problem)}</div><div class="small muted">Como melhorar: ${esc(x.recommendation)}</div></div>`).join('')}</div><div class="lessonBox"><b>Plano prioritário</b><ol>${(result.priority_plan||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div><details><summary>Ver sugestões e texto-modelo</summary><ul>${(result.rewrite_suggestions||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul><p>${esc(result.model_text||'')}</p></details></div>`:''}<div class="docManage"><button class="ghost" data-open-essay="${item.id}">Abrir original</button>${item.processing_status==='ready'?`<button class="ghost" data-export-essay="${item.id}">Exportar relatório</button>`:''}${item.processing_status!=='processing'?`<button class="ghost" data-review-essay="${item.id}">${item.processing_status==='ready'?'Corrigir novamente':'Tentar correção'}</button>`:''}<button class="ghost danger" data-delete-essay="${item.id}">Excluir</button></div></article>`}).join('');$$('[data-open-essay]').forEach(b=>b.onclick=()=>openEssayPdf(b.dataset.openEssay));$$('[data-export-essay]').forEach(b=>b.onclick=()=>exportEssayReport(b.dataset.exportEssay));$$('[data-review-essay]').forEach(b=>b.onclick=()=>reviewEssay(b.dataset.reviewEssay));$$('[data-delete-essay]').forEach(b=>b.onclick=()=>deleteEssay(b.dataset.deleteEssay))}
-function exportEssayReport(id){const item=cloudEssays.find(x=>x.id===id),result=item?.result||{};if(!item)return;const win=open('','_blank');if(!win)return toast('Permita pop-ups para exportar o relatório');win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(item.title)}</title><style>body{font:16px Arial;line-height:1.55;max-width:850px;margin:40px auto;padding:0 24px}h1,h2{color:#12324a}.score{font-size:38px;font-weight:bold}li{margin:7px 0}@media print{button{display:none}}</style></head><body><h1>${esc(item.title)}</h1><p><b>Tema:</b> ${esc(item.theme)}<br><b>Banca/padrão:</b> ${esc(item.board||'Critérios gerais')}</p><div class="score">${Number(result.score)||0}/100</div><h2>Diagnóstico</h2><p>${esc(result.diagnosis||'')}</p>${Array.isArray(result.criteria)&&result.criteria.length?`<h2>Espelho de Avaliação</h2><table style="width:100%;border-collapse:collapse;margin:12px 0"><thead><tr style="background:#f0f4f8;text-align:left"><th style="padding:8px;border:1px solid #ccc">Critério</th><th style="padding:8px;border:1px solid #ccc">Nota</th><th style="padding:8px;border:1px solid #ccc">Comentário</th></tr></thead><tbody>${result.criteria.map(c=>`<tr><td style="padding:8px;border:1px solid #ccc"><b>${esc(c.name)}</b></td><td style="padding:8px;border:1px solid #ccc">${Number(c.score)||0}/${Number(c.max_score)||25}</td><td style="padding:8px;border:1px solid #ccc">${esc(c.commentary||'')}</td></tr>`).join('')}</tbody></table>`:''}${Array.isArray(result.deviations)&&result.deviations.length?`<h2>Apontamentos Linha a Linha</h2><ul>${result.deviations.map(d=>`<li><b>${esc(d.line||'Linha')}:</b> “${esc(d.snippet||'')}” — <i>${esc(d.issue||'')}</i> (<b>Sugestão:</b> ${esc(d.suggestion||'')})</li>`).join('')}</ul>`:''}<h2>Pontos fortes</h2><ul>${(result.strengths||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul><h2>O que melhorar</h2>${(result.improvements||[]).map(x=>`<p><b>${esc(x.category)}:</b> ${esc(x.problem)}<br><i>${esc(x.recommendation)}</i></p>`).join('')}<h2>Plano prioritário</h2><ol>${(result.priority_plan||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ol><h2>Texto-modelo</h2><p>${esc(result.model_text||'')}</p><button onclick="print()">Salvar como PDF / Imprimir</button></body></html>`);win.document.close()}
+function exportEssayReport(id){const item=cloudEssays.find(x=>x.id===id),result=item?.result||{};if(!item)return;const win=open('','_blank');if(!win)return toast('Permita pop-ups para exportar o relatório');win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(item.title)}</title><style>body{font:16px Arial;line-height:1.55;max-width:850px;margin:40px auto;padding:0 24px}h1,h2{color:#12324a}.score{font-size:38px;font-weight:bold}li{margin:7px 0}@media print{button{display:none}}</style></head><body><h1>${esc(item.title)}</h1><p><b>Tema:</b> ${esc(item.theme)}<br><b>Banca/padrão:</b> ${esc(item.board||'Critérios gerais')}</p><div class="score">${Number(result.score)||0}/100</div><h2>Diagnóstico</h2><p>${esc(result.diagnosis||'')}</p>${Array.isArray(result.criteria)&&result.criteria.length?`<h2>Espelho de Avaliação</h2><table style="width:100%;border-collapse:collapse;margin:12px 0"><thead><tr style="background:#f0f4f8;text-align:left"><th style="padding:8px;border:1px solid #ccc">Critério</th><th style="padding:8px;border:1px solid #ccc">Nota</th><th style="padding:8px;border:1px solid #ccc">Comentário</th></tr></thead><tbody>${result.criteria.map(c=>`<tr><td style="padding:8px;border:1px solid #ccc"><b>${esc(c.name)}</b></td><td style="padding:8px;border:1px solid #ccc">${Number(c.score)||0}/${Number(c.max_score)||25}</td><td style="padding:8px;border:1px solid #ccc">${esc(c.commentary||'')}</td></tr>`).join('')}</tbody></table>`:''}${Array.isArray(result.deviations)&&result.deviations.length?`<h2>Apontamentos Linha a Linha</h2><ul>${result.deviations.map(d=>`<li><b>${esc(d.line||'Linha')}:</b> “${esc(d.snippet||'')}” — <i>${esc(d.issue||'')}</i> (<b>Sugestão:</b> ${esc(d.suggestion||'')})</li>`).join('')}</ul>`:''}<h2>Pontos fortes</h2><ul>${(result.strengths||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul><h2>O que melhorar</h2>${(result.improvements||[]).map(x=>`<p><b>${esc(x.category)}:</b> ${esc(x.problem)}<br><i>${esc(x.recommendation)}</i></p>`).join('')}<h2>Plano prioritário</h2><ol>${(result.priority_plan||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ol><h2>Texto-modelo</h2><p>${esc(result.model_text||'')}</p><button onclick="print()">Salvar como PDF / Imprimir</button>
+  <!-- Modal 📝 Criar Estudo por Texto / Assunto / Lei Seca (Sem PDF) -->
+  <dialog id="textStudyModalDialog" style="width:min(95vw,620px);max-height:94dvh;overflow-y:auto;padding:20px;border-radius:20px;background:linear-gradient(160deg,#091a2c,#05101a);border:1px solid #2d6289;color:#f8fafc;box-shadow:0 24px 60px rgba(0,0,0,.8)">
+    <div class="sectionHead" style="margin-bottom:12px">
+      <div>
+        <div class="eyebrow" style="color:#63e7ff;font-weight:900">BIBLIOTECA DIRETA · SEM NECESSIDADE DE PDF</div>
+        <h2 style="margin:3px 0 0;font-size:1.24rem">📝 Criar Estudo por Texto ou Assunto</h2>
+      </div>
+      <button type="button" class="ghost small" id="closeTextStudyModalBtn" style="width:auto;padding:6px 12px">✕ Fechar</button>
+    </div>
+
+    <p class="small muted" style="margin:0 0 14px;line-height:1.55">
+      Não tem um arquivo PDF da matéria? Cole um artigo de lei, uma anotação de aula ou apenas informe o tópico do seu edital. O sistema criará o <b>Resumo Tático</b>, os <b>Flashcards de Fixação</b> e <b>5 Questões de Concurso</b> diretamente na sua Biblioteca!
+    </p>
+
+    <div style="display:grid;gap:10px">
+      <label class="field">
+        <span style="font-weight:700;color:#e2e8f0;font-size:.84rem">Disciplina:</span>
+        <select id="textStudySubjectSelect" style="width:100%;padding:10px;background:#071422;border:1px solid #234868;color:#fff;border-radius:10px"></select>
+      </label>
+
+      <label class="field">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <span style="font-weight:700;color:#e2e8f0;font-size:.84rem">Título do Assunto:</span>
+          <span class="small muted" style="font-size:.72rem">Padrão: ASSUNTO-REFERÊNCIA</span>
+        </div>
+        <input id="textStudyTitleInput" maxlength="120" placeholder="Ex.: INQUÉRITO POLICIAL-ART.4 AO 23 DO CPP" style="width:100%;padding:10px;background:#071422;border:1px solid #234868;color:#fff;border-radius:10px">
+      </label>
+
+      <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px" id="textStudyQuickTopicPills"></div>
+
+      <label class="field">
+        <span style="font-weight:700;color:#e2e8f0;font-size:.84rem">Texto, Lei Seca ou Tópicos de Aula (opcional se o título for explicativo):</span>
+        <textarea id="textStudyContentTextarea" rows="6" maxlength="25000" placeholder="Cole aqui a letra da lei, súmulas, anotações de aula ou o texto teórico. Se deixar em branco, o Professor IA desenvolverá a aula completa com base no título informado." style="width:100%;padding:10px;background:#071422;border:1px solid #234868;color:#fff;border-radius:10px;line-height:1.5"></textarea>
+      </label>
+
+      <label class="small muted" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="textStudyShareToggle" checked>
+        <span>🤝 Compartilhar resumo/questões deste assunto na Biblioteca Comunitária</span>
+      </label>
+
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button type="button" class="ghost" id="cancelTextStudyBtn" style="flex:1">Cancelar</button>
+        <button type="button" class="action" id="submitTextStudyBtn" style="flex:2;font-weight:900">⚡ Gerar Resumo, Flashcards e Questões</button>
+      </div>
+      <div id="textStudyStatusMsg" class="small muted" style="text-align:center;min-height:18px"></div>
+    </div>
+  </dialog>
+
+</body></html>`);win.document.close()}
 async function submitEssay(){const file=$('#essayFile').files[0],theme=$('#essayTheme').value.trim(),title=$('#essayTitle').value.trim()||file?.name?.replace(/\.(pdf|jpe?g|png)$/i,'')||'Minha redação',essayType=$('#essayType').value,board=$('#essayBoard').value,lines=Number($('#essayLines').value)||null,instructions=$('#essayInstructions').value.trim(),button=$('#submitEssay'),message=$('#essayMessage'),allowed=['application/pdf','image/jpeg','image/png'];if(!cloudSession)return toast('Entre na sua conta para usar a Central de Redação');if(!file)return toast('Escolha o PDF ou a imagem da redação');if(!theme)return toast('Informe o tema da redação');if(!allowed.includes(file.type)&&!/\.(pdf|jpe?g|png)$/i.test(file.name))return toast('Envie a redação em PDF, JPG ou PNG');if(file.size>20*1024*1024)return toast('A redação deve ter no máximo 20 MB');button.disabled=true;message.textContent='Enviando sua redação com segurança...';let path='';try{const session=await validSession(),campaign=await ensureActiveCampaignRecord(),safe=file.name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'')||'redacao.pdf',mime=file.type||(/\.pdf$/i.test(file.name)?'application/pdf':/\.png$/i.test(file.name)?'image/png':'image/jpeg');path=`${session.user.id}/${campaign.dbId}/redacoes/${crypto.randomUUID()}-${safe}`;const upload=await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${path}`,{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${session.access_token}`,'Content-Type':mime,'x-upsert':'false'},body:file});if(!upload.ok)throw new Error('Falha ao enviar o arquivo da redação.');const response=await cloudFetch('essay_submissions',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({campaign_id:campaign.dbId,user_id:session.user.id,title,theme,essay_type:essayType,board,required_lines:lines,instructions:instructions||null,storage_path:path,source_name:file.name,processing_status:'pending'})}),rows=await response.json(),item=rows[0];cloudEssays.unshift(item);path='';renderEssays();$('#essayFile').value='';message.textContent='Redação enviada. A correção foi iniciada.';await reviewEssay(item.id)}catch(error){if(path){const session=await validSession().catch(()=>null);if(session)await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${path}`,{method:'DELETE',headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${session.access_token}`}}).catch(()=>undefined)}message.textContent=databaseSetupMessage(error);toast(message.textContent)}finally{button.disabled=false}}
 function learningCategory(cat){return canonicalSubjectName(cat)}
 function migrateLearningSubjectKeys(rawSubjects){const completed=state.learning.completed||{},campaign=state.activeCampaignId;for(const raw of rawSubjects){const canonical=canonicalSubjectName(raw);if(raw===canonical)continue;for(const [key,value] of Object.entries(completed)){const prefix=`${campaign}-${raw}-`;if(!key.startsWith(prefix))continue;const target=`${campaign}-${canonical}-${key.slice(prefix.length)}`,old=completed[target];if(!old||Number(value?.score||0)>Number(old?.score||0))completed[target]=value;delete completed[key]}}state.learning.completed=completed}
@@ -2870,5 +3059,54 @@ setTimeout(()=>window.dismissAppBootSplash?.(),420);if(cloudSession&&!recovering
 <script src="pdf-text-client.js"></script>
 <script src="v77-experience.js"></script>
 <script src="v78-smart-notebook.js"></script>
+
+  <!-- Modal 📝 Criar Estudo por Texto / Assunto / Lei Seca (Sem PDF) -->
+  <dialog id="textStudyModalDialog" style="width:min(95vw,620px);max-height:94dvh;overflow-y:auto;padding:20px;border-radius:20px;background:linear-gradient(160deg,#091a2c,#05101a);border:1px solid #2d6289;color:#f8fafc;box-shadow:0 24px 60px rgba(0,0,0,.8)">
+    <div class="sectionHead" style="margin-bottom:12px">
+      <div>
+        <div class="eyebrow" style="color:#63e7ff;font-weight:900">BIBLIOTECA DIRETA · SEM NECESSIDADE DE PDF</div>
+        <h2 style="margin:3px 0 0;font-size:1.24rem">📝 Criar Estudo por Texto ou Assunto</h2>
+      </div>
+      <button type="button" class="ghost small" id="closeTextStudyModalBtn" style="width:auto;padding:6px 12px">✕ Fechar</button>
+    </div>
+
+    <p class="small muted" style="margin:0 0 14px;line-height:1.55">
+      Não tem um arquivo PDF da matéria? Cole um artigo de lei, uma anotação de aula ou apenas informe o tópico do seu edital. O sistema criará o <b>Resumo Tático</b>, os <b>Flashcards de Fixação</b> e <b>5 Questões de Concurso</b> diretamente na sua Biblioteca!
+    </p>
+
+    <div style="display:grid;gap:10px">
+      <label class="field">
+        <span style="font-weight:700;color:#e2e8f0;font-size:.84rem">Disciplina:</span>
+        <select id="textStudySubjectSelect" style="width:100%;padding:10px;background:#071422;border:1px solid #234868;color:#fff;border-radius:10px"></select>
+      </label>
+
+      <label class="field">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <span style="font-weight:700;color:#e2e8f0;font-size:.84rem">Título do Assunto:</span>
+          <span class="small muted" style="font-size:.72rem">Padrão: ASSUNTO-REFERÊNCIA</span>
+        </div>
+        <input id="textStudyTitleInput" maxlength="120" placeholder="Ex.: INQUÉRITO POLICIAL-ART.4 AO 23 DO CPP" style="width:100%;padding:10px;background:#071422;border:1px solid #234868;color:#fff;border-radius:10px">
+      </label>
+
+      <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px" id="textStudyQuickTopicPills"></div>
+
+      <label class="field">
+        <span style="font-weight:700;color:#e2e8f0;font-size:.84rem">Texto, Lei Seca ou Tópicos de Aula (opcional se o título for explicativo):</span>
+        <textarea id="textStudyContentTextarea" rows="6" maxlength="25000" placeholder="Cole aqui a letra da lei, súmulas, anotações de aula ou o texto teórico. Se deixar em branco, o Professor IA desenvolverá a aula completa com base no título informado." style="width:100%;padding:10px;background:#071422;border:1px solid #234868;color:#fff;border-radius:10px;line-height:1.5"></textarea>
+      </label>
+
+      <label class="small muted" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="textStudyShareToggle" checked>
+        <span>🤝 Compartilhar resumo/questões deste assunto na Biblioteca Comunitária</span>
+      </label>
+
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button type="button" class="ghost" id="cancelTextStudyBtn" style="flex:1">Cancelar</button>
+        <button type="button" class="action" id="submitTextStudyBtn" style="flex:2;font-weight:900">⚡ Gerar Resumo, Flashcards e Questões</button>
+      </div>
+      <div id="textStudyStatusMsg" class="small muted" style="text-align:center;min-height:18px"></div>
+    </div>
+  </dialog>
+
 </body>
 </html>

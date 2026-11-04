@@ -1342,6 +1342,30 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
 
         // Fast-path determinístico para Provas Oficiais e Simulados em PDF que já possuem questões numeradas + gabarito no documento
         if (["prova", "simulado"].includes(String(doc.document_type || "")) && typeof window.extractStructuredExamQuestions === "function") {
+          // Se o usuário anexou um PDF de Gabarito Separado (#documentAnswerKeyFile), junta o texto do gabarito ao final das páginas da prova
+          const ansKeyFile = document.querySelector("#documentAnswerKeyFile")?.files?.[0];
+          if (ansKeyFile) {
+            try {
+              toast(`Extraindo gabarito oficial de “${ansKeyFile.name}” no navegador...`);
+              const akBytes = new Uint8Array(await ansKeyFile.arrayBuffer());
+              const pdfjs = await import("./pdf.mjs");
+              const akPdf = await openPdfDocumentWithFallback(pdfjs, akBytes);
+              let akText = "";
+              for (let akP = 1; akP <= akPdf.numPages; akP++) {
+                const akPage = await akPdf.getPage(akP);
+                const akContent = await akPage.getTextContent();
+                akText += "\n" + (akContent.items || []).map((it) => it.str || "").join(" ");
+                akPage.cleanup();
+              }
+              try { await akPdf.destroy(); } catch {}
+              if (akText.trim()) {
+                pages.push({ page: pages.length + 1, text: `\nGABARITO OFICIAL DEFINITIVO\n${akText}` });
+                toast("✓ Gabarito oficial anexado e cruzado com sucesso com as questões da prova!");
+              }
+            } catch (akErr) {
+              console.warn("Falha ao ler PDF de gabarito anexado", akErr);
+            }
+          }
           const fallbackSubj = doc.detected_subject || doc.metadata?.primary_subject || "Conteúdo Geral";
           let extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: doc.title });
           let examReport = extractedQs?.report || {};
@@ -1543,5 +1567,305 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
     } catch {}
   }, 2600);
 
-  window.JornadaPdfText = { prepareDocumentText, recoverPdfViaAssistant, extractStructuredEditalTopics };
+
+  // ── r131: Raio-X Pré-Análise Instantâneo, Gabarito Separado e Criação por Texto/Assunto (Sem PDF) ──
+  window._recentAnswerKeyBytes = new Map();
+
+  function initRaioXAndGabaritoHooks() {
+    const fileInput = document.querySelector("#documentFile");
+    const preScanBox = document.querySelector("#pdfPreScanBox");
+    const preScanBadge = document.querySelector("#pdfPreScanBadge");
+    const preScanDetails = document.querySelector("#pdfPreScanDetails");
+    const typeSelect = document.querySelector("#documentType");
+    const answerKeyRow = document.querySelector("#documentAnswerKeyRow");
+    const answerKeyInput = document.querySelector("#documentAnswerKeyFile");
+    const titleInput = document.querySelector("#documentTitle");
+
+    if (typeSelect && answerKeyRow) {
+      const updateAnswerKeyVisibility = () => {
+        const val = String(typeSelect.value || "");
+        answerKeyRow.hidden = !["prova", "simulado"].includes(val);
+      };
+      typeSelect.addEventListener("change", updateAnswerKeyVisibility);
+      updateAnswerKeyVisibility();
+    }
+
+    if (fileInput && preScanBox) {
+      fileInput.addEventListener("change", async () => {
+        const file = fileInput.files?.[0];
+        if (!file) {
+          preScanBox.hidden = true;
+          return;
+        }
+        preScanBox.hidden = false;
+        preScanBadge.textContent = "Examinando arquivo...";
+        preScanBadge.className = "tag";
+        preScanDetails.innerHTML = `<span>Lendo estrutura de <b>${esc(file.name)}</b> (${(file.size / (1024 * 1024)).toFixed(1)} MB)...</span>`;
+
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const pdfjs = await import("./pdf.mjs");
+          const pdf = await openPdfDocumentWithFallback(pdfjs, bytes);
+          const numPages = Number(pdf.numPages) || 1;
+          const samplePages = Math.min(numPages, 4);
+          let sampledChars = 0;
+          let fullSampleText = "";
+
+          for (let pNum = 1; pNum <= samplePages; pNum++) {
+            const page = await pdf.getPage(pNum);
+            const content = await page.getTextContent();
+            const pageTxt = (content.items || []).map((it) => it.str || "").join(" ");
+            sampledChars += pageTxt.replace(/\s/g, "").length;
+            fullSampleText += " " + pageTxt;
+            page.cleanup();
+          }
+          try { await pdf.destroy(); } catch {}
+
+          const avgChars = Math.round(sampledChars / samplePages);
+          const isScanned = sampledChars < 60 || avgChars < 30;
+
+          // Inferência inteligente de disciplina pelo texto de amostra
+          const inferredSubject = typeof canonicalSubjectName === "function"
+            ? canonicalSubjectName(inferDisciplineFromTopicsBlock(fullSampleText) || "Conteúdo Geral")
+            : "Conteúdo Geral";
+
+          // Sugestão automática de título se o campo estiver vazio
+          if (titleInput && !titleInput.value.trim()) {
+            const baseName = file.name.replace(/\.pdf$/i, "").toUpperCase().replace(/[_-]+/g, " ");
+            titleInput.value = baseName.slice(0, 80);
+          }
+
+          if (isScanned) {
+            preScanBadge.textContent = "🔍 Arquivo Escaneado";
+            preScanBadge.style.background = "rgba(245,158,11,.22)";
+            preScanBadge.style.color = "#fde68a";
+            preScanDetails.innerHTML = `
+              <div style="display:flex;gap:12px;flex-wrap:wrap">
+                <span>📄 <b>${numPages} página(s)</b></span>
+                <span>📦 <b>${(file.size / (1024 * 1024)).toFixed(1)} MB</b></span>
+                <span>⚠️ <b>Camada de imagem/foto</b> (~${avgChars} letras/pág)</span>
+              </div>
+              <div style="margin-top:4px;color:#fde047">
+                💡 Este PDF não possui texto selecionável. Ao enviar, o filtro abrirá o <b>Conversor OCR Compacto</b> para você autorizar o uso de tokens da IA.
+              </div>
+            `;
+          } else {
+            preScanBadge.textContent = "📄 Texto Digital (Econômico)";
+            preScanBadge.style.background = "rgba(16,185,129,.2)";
+            preScanBadge.style.color = "#6ee7b7";
+            preScanDetails.innerHTML = `
+              <div style="display:flex;gap:12px;flex-wrap:wrap">
+                <span>📄 <b>${numPages} página(s)</b></span>
+                <span>📦 <b>${(file.size / (1024 * 1024)).toFixed(1)} MB</b></span>
+                <span>🎯 Matéria detectada: <b>${esc(inferredSubject)}</b></span>
+                <span>⚡ <b>0 tokens de OCR</b> (Leitura direta no navegador)</span>
+              </div>
+            `;
+          }
+        } catch (scanErr) {
+          preScanBadge.textContent = "PDF Carregado";
+          preScanDetails.innerHTML = `<span>Tamanho: ${(file.size / (1024 * 1024)).toFixed(1)} MB. A extração completa será realizada ao clicar em Enviar.</span>`;
+        }
+      });
+    }
+
+    // Modal de Estudo por Texto / Assunto / Lei Seca (Sem PDF)
+    const openTextModalBtn = document.querySelector("#openTextStudyModalBtn");
+    const textModal = document.querySelector("#textStudyModalDialog");
+    const closeTextModalBtn = document.querySelector("#closeTextStudyModalBtn");
+    const cancelTextModalBtn = document.querySelector("#cancelTextStudyBtn");
+    const submitTextModalBtn = document.querySelector("#submitTextStudyBtn");
+    const textSubjectSelect = document.querySelector("#textStudySubjectSelect");
+    const textTitleInput = document.querySelector("#textStudyTitleInput");
+    const textContentArea = document.querySelector("#textStudyContentTextarea");
+    const textShareToggle = document.querySelector("#textStudyShareToggle");
+    const textQuickPills = document.querySelector("#textStudyQuickTopicPills");
+    const textStatusMsg = document.querySelector("#textStudyStatusMsg");
+
+    if (openTextModalBtn && textModal) {
+      openTextModalBtn.onclick = () => {
+        const subjs = typeof LEARNING_SUBJECTS !== "undefined" && Array.isArray(LEARNING_SUBJECTS) && LEARNING_SUBJECTS.length
+          ? LEARNING_SUBJECTS
+          : ["Direito Constitucional", "Direito Administrativo", "Direito Penal", "Direito Processual Penal", "Língua Portuguesa", "Raciocínio Lógico-Matemático", "Informática", "Legislação Especial"];
+
+        if (textSubjectSelect) {
+          textSubjectSelect.innerHTML = subjs.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join("");
+        }
+        if (textQuickPills) {
+          const missions = typeof missionPool === "function" ? missionPool().filter((m) => !state.done[m.id]).slice(0, 6) : [];
+          textQuickPills.innerHTML = missions.map((m) => `
+            <button type="button" class="ghost small" data-pick-mission="${esc(m.name)}" data-pick-subj="${esc(m.subject)}" style="white-space:nowrap;padding:3px 9px;font-size:.73rem">
+              📌 ${esc(m.name.slice(0, 34))}
+            </button>
+          `).join("");
+          textQuickPills.querySelectorAll("[data-pick-mission]").forEach((btn) => {
+            btn.onclick = () => {
+              if (textTitleInput) textTitleInput.value = btn.dataset.pickMission.toUpperCase().slice(0, 90);
+              if (textSubjectSelect && btn.dataset.pickSubj) textSubjectSelect.value = btn.dataset.pickSubj;
+            };
+          });
+        }
+        if (textStatusMsg) textStatusMsg.textContent = "";
+        textModal.showModal();
+      };
+      if (closeTextModalBtn) closeTextModalBtn.onclick = () => textModal.close();
+      if (cancelTextModalBtn) cancelTextModalBtn.onclick = () => textModal.close();
+
+      if (submitTextModalBtn) {
+        submitTextModalBtn.onclick = async () => {
+          const rawTitle = (textTitleInput?.value || "").trim();
+          const subj = (textSubjectSelect?.value || "Conteúdo Geral").trim();
+          const bodyText = (textContentArea?.value || "").trim();
+          const isShared = textShareToggle ? Boolean(textShareToggle.checked) : true;
+
+          if (!rawTitle) return toast("Informe o título ou assunto principal do estudo.");
+          if (!cloudSession) return toast("Entre na sua conta para criar estudos.");
+
+          submitTextModalBtn.disabled = true;
+          if (textStatusMsg) textStatusMsg.textContent = "Professor IA estruturando aula, flashcards e 5 questões...";
+
+          try {
+            const session = await validSession();
+            const campaign = await ensureActiveCampaignRecord();
+            const stdTitle = typeof standardizeDocumentTitle === "function" ? standardizeDocumentTitle(rawTitle) : rawTitle.toUpperCase();
+
+            // 1. Cria o registro do documento em study_documents
+            const docRes = await cloudFetch("study_documents", {
+              method: "POST",
+              headers: { Prefer: "return=representation" },
+              body: JSON.stringify({
+                campaign_id: campaign.dbId,
+                title: stdTitle,
+                document_type: "material",
+                processing_status: "processing",
+                is_shared: isShared,
+                detected_subject: subj,
+                metadata: {
+                  primary_subject: subj,
+                  source_format: "direct_text",
+                  direct_input: true,
+                  created_at: new Date().toISOString(),
+                },
+              }),
+            });
+            const newDocs = await docRes.json();
+            const newDoc = Array.isArray(newDocs) ? newDocs[0] : newDocs;
+            if (!newDoc?.id) throw new Error("Não foi possível criar o registro na sua Biblioteca.");
+
+            // 2. Chama a IA para gerar a aula completa, mnemônico honesto, flashcards e 5 questões
+            const prompt = `Atue como um PROFESSOR COORDENADOR ESPECIALISTA EM CONCURSOS PÚBLICOS.
+Estruture um pacote de estudo completo sobre o seguinte tema:
+DISCIPLINA: ${subj}
+TÍTULO: ${stdTitle}
+CONTEÚDO/LEI FORNECIDA:
+${bodyText || "Desenvolva todo o conteúdo teórico essencial cobrado pelas bancas para este título."}
+
+Gere EXCLUSIVAMENTE um objeto JSON puro (sem markdown) no formato:
+{
+  "summaries": [
+    {
+      "subject": "${subj}",
+      "title": "${stdTitle}",
+      "page_start": 1,
+      "page_end": 1,
+      "explanation": "Aula escrita completa, didática, aprofundada e autossuficiente para concurso, explicando regras, artigos de lei e exceções.",
+      "points": ["Regra 1 essencial", "Regra 2 essencial", "Regra 3 essencial", "Regra 4 essencial", "Regra 5 essencial"],
+      "example": "Exemplo prático de aplicação ou caso concreto policial.",
+      "bizu": "Alta incidência em concurso. Dica direta para acertar na prova.",
+      "mnemonic": "Mnemônico consagrado ou vazio se não houver.",
+      "trap": "Pegadinha clássica que as bancas usam para derrubar o candidato.",
+      "flashcards": [
+        {"question": "Pergunta objetiva de memorização?", "answer": "Resposta direta e concisa."},
+        {"question": "Pergunta conceitual 2?", "answer": "Resposta 2."},
+        {"question": "Pergunta conceitual 3?", "answer": "Resposta 3."},
+        {"question": "Pergunta conceitual 4?", "answer": "Resposta 4."},
+        {"question": "Pergunta conceitual 5?", "answer": "Resposta 5."}
+      ],
+      "questions": [
+        {"statement": "Enunciado da questão 1", "options": ["Opção A", "Opção B", "Opção C", "Opção D"], "correct_index": 0, "explanation": "Conceito-chave: ... | ✅ Correta: ... | ❌ Demais alternativas: ... | ⚠️ Pegadinha: ...", "difficulty": "facil", "topic": "${stdTitle}", "origin": "autoral"},
+        {"statement": "Enunciado da questão 2", "options": ["Opção A", "Opção B", "Opção C", "Opção D"], "correct_index": 1, "explanation": "Conceito-chave: ... | ✅ Correta: ... | ❌ Demais alternativas: ... | ⚠️ Pegadinha: ...", "difficulty": "medio", "topic": "${stdTitle}", "origin": "autoral"},
+        {"statement": "Enunciado da questão 3", "options": ["Opção A", "Opção B", "Opção C", "Opção D"], "correct_index": 2, "explanation": "Conceito-chave: ... | ✅ Correta: ... | ❌ Demais alternativas: ... | ⚠️ Pegadinha: ...", "difficulty": "medio", "topic": "${stdTitle}", "origin": "autoral"},
+        {"statement": "Enunciado da questão 4", "options": ["Opção A", "Opção B", "Opção C", "Opção D"], "correct_index": 3, "explanation": "Conceito-chave: ... | ✅ Correta: ... | ❌ Demais alternativas: ... | ⚠️ Pegadinha: ...", "difficulty": "dificil", "topic": "${stdTitle}", "origin": "autoral"},
+        {"statement": "Enunciado da questão 5", "options": ["Opção A", "Opção B", "Opção C", "Opção D"], "correct_index": 0, "explanation": "Conceito-chave: ... | ✅ Correta: ... | ❌ Demais alternativas: ... | ⚠️ Pegadinha: ...", "difficulty": "dificil", "topic": "${stdTitle}", "origin": "autoral"}
+      ]
+    }
+  ]
+}`;
+
+            const aiRes = await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`, {
+              method: "POST",
+              headers: { ...authHeaders(session.access_token) },
+              body: JSON.stringify({
+                question: prompt,
+                context: bodyText || stdTitle,
+                mode: "aula completa",
+                campaign_id: campaign.dbId,
+              }),
+            });
+            const aiData = await aiRes.json().catch(() => ({}));
+            const parsed = parseJsonBlock(aiData.answer);
+            const sumObj = parsed?.summaries?.[0];
+            if (!sumObj?.explanation) throw new Error("A IA não concluiu a estruturação da aula. Tente novamente.");
+
+            // 3. Salva em generated_study_content
+            const contentRow = {
+              campaign_id: campaign.dbId,
+              user_id: session.user.id,
+              source_document_id: newDoc.id,
+              content_type: "summary",
+              title: stdTitle,
+              content: {
+                ...sumObj,
+                subject: subj,
+                source: stdTitle,
+                is_question_pack: false,
+              },
+              source_refs: [{ document_id: newDoc.id, title: stdTitle }],
+            };
+
+            await cloudFetch("generated_study_content", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify([contentRow]),
+            });
+
+            // 4. Marca study_documents como pronto
+            await cloudFetch(`study_documents?id=eq.${newDoc.id}`, {
+              method: "PATCH",
+              body: JSON.stringify({
+                processing_status: "ready",
+                metadata: {
+                  primary_subject: subj,
+                  source_format: "direct_text",
+                  coverage: { percent: 100, summary_count: 1, estimated_pages: 1, needs_review: false, warnings: [] },
+                },
+              }),
+            });
+
+            newDoc.processing_status = "ready";
+            cloudDocuments.unshift(newDoc);
+            await Promise.all([loadGeneratedContent(), loadCloudDocuments()]);
+            render();
+            textModal.close();
+            toast(`🎉 Estudo “${stdTitle}” criado com sucesso! Resumo, flashcards e 5 questões disponíveis na aba Estudar.`);
+          } catch (err) {
+            toast(err?.message || "Não foi possível criar o estudo.");
+            if (textStatusMsg) textStatusMsg.textContent = "Erro na criação. Tente novamente.";
+          } finally {
+            submitTextModalBtn.disabled = false;
+          }
+        };
+      }
+    }
+  }
+
+  if (typeof document !== "undefined") {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initRaioXAndGabaritoHooks);
+    } else {
+      setTimeout(initRaioXAndGabaritoHooks, 300);
+    }
+  }
+
+  window.JornadaPdfText = { prepareDocumentText, recoverPdfViaAssistant, extractStructuredEditalTopics, initRaioXAndGabaritoHooks };
 })();
