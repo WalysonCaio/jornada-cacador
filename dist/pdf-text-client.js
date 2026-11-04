@@ -772,11 +772,12 @@
             });
           }
         }
+        const isWatermarkItem = (s) => /@|\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|Leonardo\s+Thom[eé]/i.test(s);
         const filteredItems = rawItems.filter((it) => {
           const s = it.str.trim();
           const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
           const y = Array.isArray(it.transform) && Number.isFinite(it.transform[5]) ? it.transform[5] : 0;
-          if (EMAIL_LINE_RE.test(s) || CPF_LINE_RE.test(s)) return false;
+          if (EMAIL_LINE_RE.test(s) || CPF_LINE_RE.test(s) || isWatermarkItem(s)) return false;
           if (INCIDENCE_ONLY_LINE_RE.test(s) || TABLE_CHROME_LINE_RE.test(s)) return false;
           if (watermarkZones.some((w) => Math.abs(x - w.x) < 65 && y >= w.y && y - w.y <= 36) && !/\d/.test(s) && s.length <= 55) {
             return false;
@@ -827,10 +828,14 @@
             ]
           : groupItemsIntoRows(filteredItems);
         const pageLines = [];
+        const stripChrome = (l) => l.replace(/\b(?:COMENT[AÁ]RIO|DIREITO\s+(?:PENAL|CONSTITUCIONAL)|WWW\.CTCONCURSOS(?:\s+ONLINE\.COM\.BR)?|PROF\.ABIBREBIUCAS|PROJETO\s+105\s+QUEST\s*Õ?ES(?:\s+PMCE)?)\b/gi, "").trim();
         for (const r of rowGroups) {
           const minX = Math.min(...r.map((i) => i.x));
-          const rowTxt = r.map((i) => i.str).join(" ").replace(/\s+/g, " ").trim();
+          let rowTxt = r.map((i) => i.str).join(" ").replace(/\s+/g, " ").trim();
           if (!rowTxt) continue;
+          rowTxt = rowTxt.replace(/(?:^|\n|\s)(\d)\s+(\d)\s*\)/g, " $1$2)").replace(/(?:^|\n|\s)(\d)\s+(\d)\s+(\d)\s*\)/g, " $1$2$3)");
+          rowTxt = stripChrome(rowTxt);
+          if (!rowTxt || /^\d{1,3}$/.test(rowTxt) || isWatermarkItem(rowTxt)) continue;
           const prevLine = pageLines.length ? pageLines[pageLines.length - 1] : "";
           if (minX >= 47 && minX <= 59 && /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]/.test(rowTxt) && /[.:;]$/.test(prevLine)) {
             pageLines.push(`• ${rowTxt}`);
@@ -1341,7 +1346,9 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
         }
 
         // Fast-path determinístico para Provas Oficiais e Simulados em PDF que já possuem questões numeradas + gabarito no documento
-        if (["prova", "simulado"].includes(String(doc.document_type || "")) && typeof window.extractStructuredExamQuestions === "function") {
+        const isExamCaderno = ["prova", "simulado"].includes(String(doc.document_type || "").toLowerCase()) ||
+          /\b(?:\d+\s*quest[õo]es|caderno\s+de\s+quest[õo]es|banco\s+de\s+quest[õo]es|bateria\s+de\s+quest[õo]es|simulado|prova\s+oficial)\b/i.test(`${doc.title || ""} ${doc.source_name || ""}`);
+        if (isExamCaderno && typeof window.extractStructuredExamQuestions === "function") {
           // Se o usuário anexou um PDF de Gabarito Separado (#documentAnswerKeyFile), junta o texto do gabarito ao final das páginas da prova
           const ansKeyFile = document.querySelector("#documentAnswerKeyFile")?.files?.[0];
           if (ansKeyFile) {
@@ -1366,7 +1373,12 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
               console.warn("Falha ao ler PDF de gabarito anexado", akErr);
             }
           }
-          const fallbackSubj = doc.detected_subject || doc.metadata?.primary_subject || "Conteúdo Geral";
+          const inferredFromTitle = typeof canonicalSubjectName === "function"
+            ? canonicalSubjectName(doc.title || "", doc.title || "")
+            : "";
+          const fallbackSubj = (inferredFromTitle && inferredFromTitle !== "Conteúdo Geral")
+            ? inferredFromTitle
+            : (doc.detected_subject || doc.metadata?.primary_subject || "Direito Constitucional");
           let extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: doc.title });
           let examReport = extractedQs?.report || {};
           if (examReport.ambiguous && Array.isArray(examReport.cadernos) && examReport.cadernos.length >= 2 && typeof prompt === "function") {
@@ -1377,7 +1389,28 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
             }
           }
           if (examReport.ambiguous) toast(`${examReport.reason} O gabarito oficial não foi importado automaticamente.`);
-          if (Array.isArray(extractedQs) && extractedQs.length >= 3 && !examReport.ambiguous && Number(examReport.percent) >= 60) {
+
+          // Se o PDF tem questões mas o gabarito oficial não foi encontrado ou está incompleto,
+          // oferece opções claras ao usuário em vez de falhar silenciosamente no backend!
+          if ((!Array.isArray(extractedQs) || extractedQs.length < 3 || Number(examReport.percent) < 60) && typeof window.askUserExamAnswerKeyOptions === "function") {
+            const userChoice = await window.askUserExamAnswerKeyOptions(doc, pages, examReport);
+            if (userChoice?.cancelled) {
+              doc.processing_status = "pending";
+              renderUserDocuments();
+              if (typeof renderExamBankHub === "function") renderExamBankHub();
+              return;
+            }
+            if (userChoice?.appendedText) {
+              pages.push({ page: pages.length + 1, text: `\nGABARITO OFICIAL DEFINITIVO\n${userChoice.appendedText}` });
+              extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: doc.title, preferredCaderno: userChoice.preferredCaderno || "" });
+              examReport = extractedQs?.report || {};
+            } else if (userChoice?.allowWithoutKey) {
+              extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: doc.title, allowWithoutKey: true });
+              examReport = extractedQs?.report || {};
+            }
+          }
+
+          if (Array.isArray(extractedQs) && extractedQs.length >= 3 && !examReport.ambiguous && (Number(examReport.percent) >= 50 || examReport.noKey || userChoice?.allowWithoutKey)) {
             const bySubj = {};
             for (const qItem of extractedQs) {
               const s = qItem.subject || fallbackSubj;
@@ -1521,6 +1554,11 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
       window._activeProcessingDocs.delete(id);
       const btn = document.querySelector(`[data-process-doc="${id}"]`);
       if (btn) btn.disabled = false;
+      const btnExam = document.querySelector(`[data-exam-doc-process="${id}"]`);
+      if (btnExam) {
+        btnExam.disabled = false;
+        btnExam.textContent = "⚡ Extrair Questões";
+      }
       const finalDoc = cloudDocuments.find((item) => item.id === id);
       if (finalDoc && finalDoc.processing_status === "processing") {
         finalDoc.processing_status = "pending";
@@ -1529,6 +1567,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
           body: JSON.stringify({ processing_status: "pending" }),
         }).catch(() => undefined);
         renderUserDocuments();
+        if (typeof renderExamBankHub === "function") renderExamBankHub();
       }
     }
   };
@@ -1623,6 +1662,12 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
 
           const avgChars = Math.round(sampledChars / samplePages);
           const isScanned = sampledChars < 60 || avgChars < 30;
+
+          // Se o nome do arquivo indicar questões, simulado ou caderno, seleciona automaticamente o tipo
+          if (typeSelect && /\b(?:\d+\s*quest[õo]es|quest[õo]es|caderno|simulado|prova)\b/i.test(file.name)) {
+            typeSelect.value = "simulado";
+            typeSelect.dispatchEvent(new Event("change"));
+          }
 
           // Inferência inteligente de disciplina pelo texto de amostra
           const inferredSubject = typeof canonicalSubjectName === "function"
@@ -1866,6 +1911,164 @@ Gere EXCLUSIVAMENTE um objeto JSON puro (sem markdown) no formato:
       setTimeout(initRaioXAndGabaritoHooks, 300);
     }
   }
+
+
+  // ── Modal Interativo para Provas sem Gabarito Embutido (Anexar Gabarito, Colar Gabarito ou Resolver com IA) ──
+  function ensureExamAnswerKeyDialog() {
+    let dlg = document.querySelector("#examAnswerKeyDialog");
+    if (dlg) return dlg;
+    document.body.insertAdjacentHTML("beforeend", `
+      <dialog id="examAnswerKeyDialog" style="width:min(94vw,520px);padding:20px;border-radius:18px;background:linear-gradient(160deg,#0a1a2c,#050e18);border:1px solid #38bdf8;color:#f8fafc;box-shadow:0 24px 60px rgba(0,0,0,.8)">
+        <div class="sectionHead" style="margin-bottom:10px">
+          <div>
+            <div class="eyebrow" style="color:#63e7ff;font-weight:900">📋 GABARITO DA PROVA OFICIAL</div>
+            <h2 id="examAnswerKeyTitle" style="margin:4px 0 0;font-size:1.15rem">Gabarito não localizado no arquivo</h2>
+          </div>
+        </div>
+        <p class="small muted" style="margin:0 0 12px;line-height:1.55" id="examAnswerKeyDesc">
+          Detectamos questões numeradas neste PDF, mas a tabela de gabarito oficial não foi encontrada nas últimas páginas. Como deseja importar?
+        </p>
+
+        <div style="display:grid;gap:10px">
+          <!-- Opção 1: Anexar PDF do Gabarito -->
+          <div style="padding:12px;border-radius:12px;background:rgba(8,26,42,.85);border:1px solid #234d70">
+            <b style="display:block;font-size:.88rem;color:#7dd3fc;margin-bottom:4px">📎 1. Anexar PDF do Gabarito Oficial (Recomendado)</b>
+            <span class="small muted" style="display:block;margin-bottom:8px">Se o gabarito oficial veio em um PDF separado de 1 página:</span>
+            <input type="file" id="examModalAnswerKeyFileInput" accept="application/pdf,.pdf" style="font-size:.8rem;padding:7px;background:#06121e;border:1px solid #204260;border-radius:8px;width:100%">
+            <button type="button" class="action small" id="examModalApplyFileKeyBtn" style="width:100%;margin-top:8px" disabled>⚡ Cruzar com o PDF do Gabarito</button>
+          </div>
+
+          <!-- Opção 2: Colar Gabarito em Texto -->
+          <div style="padding:12px;border-radius:12px;background:rgba(8,26,42,.85);border:1px solid #234d70">
+            <b style="display:block;font-size:.88rem;color:#facc15;margin-bottom:4px">📝 2. Colar Gabarito das Questões</b>
+            <span class="small muted" style="display:block;margin-bottom:6px">Cole os números e respostas (ex.: <code>1-A 2-B 3-C 4-D 5-E...</code> ou <code>1 A 2 B...</code>):</span>
+            <textarea id="examModalPasteKeyText" rows="3" placeholder="Ex.: 1 A 2 B 3 C 4 D 5 A 6 B..." style="width:100%;padding:8px;background:#06121e;border:1px solid #204260;color:#fff;border-radius:8px;font-size:.84rem"></textarea>
+            <button type="button" class="action small" id="examModalApplyPastedKeyBtn" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#0284c7,#0369a1)">⚡ Aplicar Gabarito Colado</button>
+          </div>
+
+          <!-- Opção 3: Importar Caderno para Treino / Simulado -->
+          <div style="padding:12px;border-radius:12px;background:rgba(8,26,42,.85);border:1px solid #059669">
+            <b style="display:block;font-size:.88rem;color:#34d399;margin-bottom:4px">🎯 3. Importar Caderno para Treino / Simulado</b>
+            <span class="small muted" style="display:block;margin-bottom:8px">Extrai 100% das questões deste caderno para você resolver no simulado agora mesmo:</span>
+            <button type="button" class="action small" id="examModalImportStudyBtn" style="width:100%;background:linear-gradient(135deg,#059669,#10b981);color:#fff">⚡ Importar Todas as Questões no Banco</button>
+          </div>
+
+          <!-- Opção 4: Resolver com IA -->
+          <button type="button" class="ghost" id="examModalResolveAiBtn" style="text-align:left;padding:10px 14px;border-color:#38bdf8;font-size:.82rem">
+            🤖 <b>4. Não tenho gabarito: Resolver e comentar com a IA</b>
+          </button>
+
+          <button type="button" class="ghost danger" id="examModalCancelBtn" style="padding:8px;font-size:.82rem">
+            ✕ Cancelar extração
+          </button>
+        </div>
+      </dialog>
+    `);
+    return document.querySelector("#examAnswerKeyDialog");
+  }
+
+  function askUserExamAnswerKeyOptions(doc, pages, examReport) {
+    return new Promise((resolve) => {
+      const dlg = ensureExamAnswerKeyDialog();
+      const titleEl = dlg.querySelector("#examAnswerKeyTitle");
+      const descEl = dlg.querySelector("#examAnswerKeyDesc");
+      const fileIn = dlg.querySelector("#examModalAnswerKeyFileInput");
+      const applyFileBtn = dlg.querySelector("#examModalApplyFileKeyBtn");
+      const pasteIn = dlg.querySelector("#examModalPasteKeyText");
+      const applyPasteBtn = dlg.querySelector("#examModalApplyPastedKeyBtn");
+      const resolveAiBtn = dlg.querySelector("#examModalResolveAiBtn");
+      const cancelBtn = dlg.querySelector("#examModalCancelBtn");
+
+      if (titleEl) titleEl.textContent = `Gabarito de “${String(doc?.title || "Prova").slice(0, 36)}”`;
+      if (descEl && examReport?.reason) {
+        descEl.textContent = `${examReport.reason} Escolha abaixo como deseja importar as questões:`;
+      }
+      if (fileIn) {
+        fileIn.value = "";
+        applyFileBtn.disabled = true;
+        fileIn.onchange = () => {
+          applyFileBtn.disabled = !fileIn.files?.[0];
+        };
+      }
+      if (pasteIn) pasteIn.value = "";
+
+      applyFileBtn.onclick = async () => {
+        const f = fileIn?.files?.[0];
+        if (!f) return;
+        applyFileBtn.disabled = true;
+        applyFileBtn.textContent = "Lendo gabarito...";
+        try {
+          const bytes = new Uint8Array(await f.arrayBuffer());
+          const pdfjs = await import("./pdf.mjs");
+          const pdf = await openPdfDocumentWithFallback(pdfjs, bytes);
+          let fullAk = "";
+          for (let p = 1; p <= pdf.numPages; p++) {
+            const page = await pdf.getPage(p);
+            const content = await page.getTextContent();
+            fullAk += " " + (content.items || []).map((it) => it.str || "").join(" ");
+            page.cleanup();
+          }
+          try { await pdf.destroy(); } catch {}
+          dlg.close();
+          resolve({ appendedText: fullAk.trim() });
+        } catch (e) {
+          toast("Não foi possível ler o PDF do gabarito.");
+          applyFileBtn.disabled = false;
+          applyFileBtn.textContent = "⚡ Cruzar com o PDF do Gabarito";
+        }
+      };
+
+      applyPasteBtn.onclick = () => {
+        const val = (pasteIn?.value || "").trim();
+        if (val.length < 3) return toast("Cole o gabarito das questões (ex.: 1 A 2 B 3 C...).");
+        dlg.close();
+        resolve({ appendedText: val });
+      };
+
+      const importStudyBtn = dlg.querySelector("#examModalImportStudyBtn");
+      if (importStudyBtn) {
+        importStudyBtn.onclick = () => {
+          dlg.close();
+          resolve({ allowWithoutKey: true });
+        };
+      }
+
+      resolveAiBtn.onclick = () => {
+        dlg.close();
+        resolve({ allowWithoutKey: true, resolveWithAi: true });
+      };
+
+      cancelBtn.onclick = () => {
+        dlg.close();
+        resolve({ cancelled: true });
+      };
+
+      if (!dlg.open) dlg.showModal();
+    });
+  }
+  window.askUserExamAnswerKeyOptions = askUserExamAnswerKeyOptions;
+
+
+  // Auto-recuperação de provas ou materiais que ficaram travados em 'processing' por queda de rede ou timeout
+  if (typeof setTimeout === "function") setTimeout(async () => {
+    try {
+      if (typeof cloudSession === "undefined" || !cloudSession || !navigator.onLine) return;
+      if (typeof cloudDocuments !== "undefined" && Array.isArray(cloudDocuments)) {
+        const stuckDocs = cloudDocuments.filter((d) => !d.is_community && d.processing_status === "processing");
+        for (const sd of stuckDocs) {
+          sd.processing_status = "pending";
+          await cloudFetch(`study_documents?id=eq.${encodeURIComponent(sd.id)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ processing_status: "pending" }),
+          }).catch(() => undefined);
+        }
+        if (stuckDocs.length > 0) {
+          if (typeof renderUserDocuments === "function") renderUserDocuments();
+          if (typeof renderExamBankHub === "function") renderExamBankHub();
+        }
+      }
+    } catch {}
+  }, 1800);
 
   window.JornadaPdfText = { prepareDocumentText, recoverPdfViaAssistant, extractStructuredEditalTopics, initRaioXAndGabaritoHooks };
 })();

@@ -2526,9 +2526,20 @@
     if(q('#emptyGoImportTabBtn'))q('#emptyGoImportTabBtn').onclick=()=>switchExamHubTab('import');
     if(q('#emptyGoGeneratorTabBtn'))q('#emptyGoGeneratorTabBtn').onclick=()=>switchExamHubTab('generator');
 
-    qa('[data-exam-doc-process]').forEach(btn=>btn.onclick=()=>{
+    qa('[data-exam-doc-process]').forEach(btn=>btn.onclick=async()=>{
       const id=btn.dataset.examDocProcess;
-      if(typeof processEditalDocument==='function')processEditalDocument(id);
+      const doc=examDocs.find(d=>d.id===id);
+      btn.disabled=true;
+      btn.textContent='⏳ Extraindo questões...';
+      try{
+        if(typeof processEditalDocument==='function')await processEditalDocument(id);
+      }catch(err){
+        toast(err?.message||'Não foi possível extrair as questões.');
+      }finally{
+        btn.disabled=false;
+        btn.textContent='⚡ Extrair Questões';
+        if(typeof renderExamBankHub==='function')renderExamBankHub();
+      }
     });
     qa('[data-exam-doc-battle]').forEach(btn=>btn.onclick=()=>{
       const doc=examDocs.find(d=>d.id===btn.dataset.examDocBattle);
@@ -2674,9 +2685,9 @@
     return keyMap;
   }
 
-  const EXAM_KEY_HEADING_RE=/\b(?:gabarito(?:\s+(?:oficial|definitivo|preliminar|comentado))?|respostas?\s+(?:oficiais?|do\s+simulado|corretas)|folha\s+de\s+respostas)\b/gi;
+  const EXAM_KEY_HEADING_RE=/\b(?:gabaritos?(?:\s+(?:oficia(?:l|is)|definitivos?|preliminares?|comentados?|geral|das\s+quest[õo]es|da\s+prova|do\s+caderno|do\s+simulado))?|respostas?(?:\s+(?:oficia(?:l|is)|do\s+simulado|corretas?|das\s+quest[õo]es|da\s+prova))|folha\s+de\s+respostas|chave\s+de\s+respostas|tabela\s+de\s+respostas|quadro\s+de\s+respostas)\b/gi;
   const EXAM_KEY_PAIR_RE=/(?:^|[\s|;,(])0*(\d{1,3})\s*(?:[-–—.:)]\s*|\s+)(ANULADA|ANULADO|Anulada|NULA|X|\*|CERTO|ERRADO|Certo|Errado|[A-E])(?=$|[\s|;,.)])/g;
-  const EXAM_OPTION_RE=/(?:^|\n)[ \t]*(?:\(([A-Ea-e])\)|([A-Ea-e])[ \t]*[.)\-–])[ \t]+/g;
+  const EXAM_OPTION_RE=/(?:^|\n|\s)(?:\(([A-Ea-e])\)|([A-Ea-e])[ \t]*[0\)\.\-–])\s*/g;
   const EXAM_BASE_TEXT_RE=/(?:^|\n)[ \t]*(?:TEXTO\s+(?:[IVX]+|\d+|ASSOCIADO|DE\s+APOIO)\b|Leia\s+(?:atentamente\s+)?(?:o|os|a|as)\s+(?:texto|textos|trecho|fragmento|cr[ôo]nica|poema|artigo|charge|tirinha)|O\s+texto\s+(?:a\s+seguir|abaixo)\s+(?:serve\s+de\s+base|refere-se)|As\s+quest[õo]es\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*\d{1,3}\s*(?:a|at[ée]|e|-|–)\s*0*\d{1,3}\s+referem-se\s+ao\s+texto|Texto\s+para\s+(?:responder\s+)?(?:[àa]s\s+)?(?:quest[õo]es|os\s+itens)\s+(?:de\s+)?0*\d{1,3})/i;
 
   function parseBaseTextMeta(rawBaseChunk){
@@ -2702,9 +2713,11 @@
   function cleanExamPages(rawTextOrPages){
     const pages=Array.isArray(rawTextOrPages)?rawTextOrPages.map(p=>String(p?.text||'')):[String(rawTextOrPages||'')];
     const norm=l=>l.trim().replace(/\s+/g,' ').toLowerCase();
-    const pageNumberOnly=/^\s*(?:p[áa]g(?:ina)?\.?\s*\d+(?:\s*(?:de|\/)\s*\d+)?|\d+\s*\/\s*\d+)\s*$/i;
+    const pageNumberOnly=/^\s*(?:p[áa]g(?:ina)?\.?\s*\d+(?:\s*(?:de|\/)\s*\d+)?|\d+\s*\/\s*\d+|\d{1,3})\s*$/i;
     const trailingPageNumber=/\s+p[áa]g(?:ina)?\.?\s*\d+(?:\s*(?:de|\/)\s*\d+)?\s*$/i;
     const cadernoHeader=/^[^\n]{0,50}\bcaderno\s+(?:[A-Z]|\d{1,2})\s*$/i;
+    const isWatermarkLine=l=>/@|\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|Leonardo\s+Thom[eé]/i.test(l);
+    const stripChrome=l=>l.replace(/\b(?:COMENT[AÁ]RIO|DIREITO\s+(?:PENAL|CONSTITUCIONAL)|WWW\.CTCONCURSOS(?:\s+ONLINE\.COM\.BR)?|PROF\.ABIBREBIUCAS|PROJETO\s+105\s+QUEST\s*Õ?ES(?:\s+PMCE)?)\b/gi,'').trim();
     let repeated=new Set();
     if(pages.length>=6){
       const counts=new Map();
@@ -2721,7 +2734,9 @@
     }
     return pages.map(text=>text.split('\n')
       .map(line=>line.replace(trailingPageNumber,''))
-      .filter(line=>!pageNumberOnly.test(line)&&!cadernoHeader.test(line)&&!repeated.has(norm(line)))
+      .map(line=>line.replace(/(?:^|\n|\s)(\d)\s+(\d)\s*\)/g,' $1$2)').replace(/(?:^|\n|\s)(\d)\s+(\d)\s+(\d)\s*\)/g,' $1$2$3)'))
+      .map(stripChrome)
+      .filter(line=>!pageNumberOnly.test(line)&&!cadernoHeader.test(line)&&!isWatermarkLine(line)&&!repeated.has(norm(line)))
       .join('\n')).join('\n\n');
   }
 
@@ -2767,22 +2782,27 @@
     const text=cleanExamPages(rawTextOrPages).trim();
     const keyMap=parseExamAnswerKeyTable(text,opts.preferredCaderno||'');
     report.ambiguous=keyMap.ambiguous;report.reason=keyMap.reason;report.cadernos=keyMap.cadernos||[];
-    const inlineKeys=(text.match(/(?:gabarito(?:\s+oficial|\s+definitivo)?|resposta(?:\s+correta)?)\s*[:\-–]\s*(?:letra\s+)?(?:ANULADA|CERTO|ERRADO|[A-Ea-e])\b/gi)||[]).length;
+    const inlineKeys=(text.match(/(?:gabarito(?:\s+(?:oficial|definitivo|preliminar|comentado|da\s+quest[aã]o))?|respostas?(?:\s+(?:oficiais?|do\s+simulado|corretas?|comentadas?))?|alternativa\s+correta|item\s+correto)\s*[:\-–=—]?\s*(?:(?:letra|alternativa|op[cç][aã]o|correta)\s+)?[\(\[]?\s*(ANULADA|ANULADO|CERTO|ERRADO|[A-Ea-e])\s*[\)\]]?/gi)||[]).length;
     const inlineMode=keyMap.size===0&&inlineKeys>=3;
-    if(keyMap.ambiguous||(keyMap.size===0&&!inlineMode))return finish([]);
+    if(keyMap.ambiguous)return finish([]);
+    if(keyMap.size===0&&!inlineMode&&!opts.allowWithoutKey){
+      report.noKey=true;
+      report.reason='Detectamos questões numeradas neste PDF, mas a tabela de gabarito oficial não foi encontrada nas últimas páginas.';
+      return finish([]);
+    }
     const body=!inlineMode&&keyMap.start>0?text.slice(0,keyMap.start):text;
     const isCE=!inlineMode&&[...keyMap.values()].every(v=>v==='C'||v==='E'||v==='ANULADA');
     const explicitMarks=(body.match(/(?:^|\n)[ \t]*QUEST[AÃ]O\s*0*\d{1,3}\b/gi)||[]).length;
     const explicitMode=explicitMarks>=3;
     const startRe=explicitMode
       ?/(?:^|\n)[ \t]*QUEST[AÃ]O\s*0*(\d{1,3})\b[ \t]*[:.\-–)]?[ \t]*/gi
-      :/(?:^|\n)[ \t]*0*(\d{1,3})(?:[ \t]*[.)\-–][ \t]+|[ \t]+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ“"(]))/g;
+      :/(?:^|\n)[ \t]*(?:QUEST[AÃ]O\s*)?0*(\d{1,3})\s*(?:[.)\-–]\s*|\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ“"(]))/gi;
     const countOptions=t=>[...t.matchAll(EXAM_OPTION_RE)].length;
     const cands=[];
     let sm;
     while((sm=startRe.exec(body))!==null){
       const num=Number(sm[1]);
-      if(inlineMode||keyMap.has(num))cands.push({num,index:sm.index,bodyStart:sm.index+sm[0].length});
+      if(inlineMode||opts.allowWithoutKey||keyMap.has(num))cands.push({num,index:sm.index,bodyStart:sm.index+sm[0].length});
     }
     const blocks=[];
     for(let i=0;i<cands.length;i++){
@@ -2815,14 +2835,20 @@
       const commentMatch=block.match(/(?:^|\n)\s*(?:Coment[aá]rio|Resolu[cç][aã]o|Justificativa)\s*[:\-–]\s*([\s\S]+)$/i);
       if(commentMatch){inlineComment=commentMatch[1].trim();block=block.slice(0,commentMatch.index).trim()}
       let inlineAns=null;
-      const inlineGab=block.match(/(?:^|\n|\s)(?:Gabarito(?:\s+Oficial|\s+Definitivo)?|Resposta(?:\s+Correta)?)\s*[:\-–]?\s*(?:Letra\s+)?(ANULADA|CERTO|ERRADO|[A-Ea-e])\b/i);
-      if(inlineGab){
-        const rawAns=inlineGab[1].toUpperCase();
-        inlineAns=rawAns==='CERTO'?'C':rawAns==='ERRADO'?'E':rawAns;
-        block=block.slice(0,inlineGab.index).trim();
+      if(inlineMode||!keyMap.has(b.num)){
+        const inlineGab=block.match(/(?:^|\n|\s)(?:Gabarito(?:\s+(?:Oficial|Definitivo|Preliminar|Comentado|da\s+Quest[aã]o))?|Respostas?(?:\s+(?:Oficiais?|do\s+Simulado|Corretas?|Comentadas?))?|Alternativa\s+Correta|Item\s+Correto)\s*[:\-–=—]?\s*(?:(?:Letra|Alternativa|Op[cç][aã]o|Correta)\s+)?[([]?\s*(ANULADA|ANULADO|CERTO|ERRADO|[A-Ea-e])\s*[)\]]?(?=$|[\s,.;\n])/i);
+        if(inlineGab){
+          const prefix=block.slice(Math.max(0,inlineGab.index-40),inlineGab.index);
+          const isCommand=/\b(?:assinale|marque|indique|aponte|identifique|escolha)\b/i.test(prefix);
+          if(!isCommand){
+            const rawAns=inlineGab[1].toUpperCase();
+            inlineAns=rawAns==='CERTO'?'C':rawAns==='ERRADO'?'E':rawAns;
+            block=block.slice(0,inlineGab.index).trim();
+          }
+        }
       }
       report.expected++;
-      const key=inlineAns||keyMap.get(b.num)||null;
+      const key=keyMap.get(b.num)||inlineAns||(opts.allowWithoutKey?(isCE?'C':'A'):null);
       if(key==='ANULADA'){report.annulled++;continue}
       if(!key){report.missingKey++;continue}
 
@@ -2845,19 +2871,20 @@
       }
       let item=null;
       if(picked.length>=4){
-        const statement=block.slice(0,picked[0].index).replace(/\s+/g,' ').trim();
+        let statement=block.slice(0,picked[0].index).replace(/\s+/g,' ').trim();
+        statement=statement.replace(/\bAlternativas\s*$/i,'').trim();
         const options=picked.map((o,i)=>block.slice(o.index+o.len,i+1<picked.length?picked[i+1].index:block.length).replace(/\s+/g,' ').trim());
-        const correctIdx=picked.findIndex(o=>o.letter===key);
+        const correctIdx=(opts.allowWithoutKey&&!keyMap.has(b.num)&&!inlineAns)?0:picked.findIndex(o=>o.letter===key);
         if(statement.length>=10&&correctIdx>=0&&options.every(Boolean)){
           item={statement,options,correct_index:correctIdx,topic:`Questão ${b.num} · ${defaultBoard}`,difficulty:'medio',
-            explanation:inlineComment||`Gabarito do documento: alternativa ${key} ("${options[correctIdx]}").`};
+            explanation:inlineComment||(opts.allowWithoutKey&&!keyMap.has(b.num)?'Questão extraída do caderno de questões do PDF.':`Gabarito do documento: alternativa ${key} ("${options[correctIdx]}").`)};
         }
-      }else if((key==='C'||key==='E')&&picked.length===0&&(isCE||inlineMode||/\bcerto\b[\s\S]*\berrado\b|\bjulgue\b/i.test(block))){
-        const statement=block.replace(/\(\s*\)\s*Certo[\s\S]*$/i,'').replace(/\s+/g,' ').trim();
+      }else if((key==='C'||key==='E'||opts.allowWithoutKey)&&picked.length===0&&(isCE||inlineMode||opts.allowWithoutKey||/\bcerto\b[\s\S]*\berrado\b|\bjulgue\b/i.test(block))){
+        let statement=block.replace(/Alternativas\s+Certo\s+Errado[\s\S]*$/i,'').replace(/\(\s*\)\s*Certo[\s\S]*$/i,'').replace(/\s+/g,' ').trim();
         if(statement.length>=12){
-          item={statement:`[Julgue o item em CERTO ou ERRADO] ${statement}`,options:['CERTO','ERRADO'],correct_index:key==='C'?0:1,
+          item={statement:`[Julgue o item em CERTO ou ERRADO] ${statement}`,options:['CERTO','ERRADO'],correct_index:key==='E'?1:0,
             topic:`Item ${b.num} (C/E) · ${defaultBoard}`,difficulty:'dificil',
-            explanation:inlineComment||`Gabarito do documento: ${key==='C'?'CERTO':'ERRADO'}.`};
+            explanation:inlineComment||(opts.allowWithoutKey&&!keyMap.has(b.num)?'Item C/E extraído do caderno de questões do PDF.':`Gabarito do documento: ${key==='C'?'CERTO':'ERRADO'}.`)};
         }
       }
       if(item){

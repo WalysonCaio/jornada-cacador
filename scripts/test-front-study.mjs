@@ -1161,6 +1161,14 @@ GABARITO DEFINITIVO
   assert(v77Src.includes("cutoffGapFillBar") && v77Src.includes("tickTarget.style.left"), "Simulador de Aprovação posiciona a meta proporcionalmente na barra e exibe a diferença real");
   assert(htmlSrc.includes("streakDaysByHalfMission") && v77Src.includes("streakDaysByHalfMission"), "Ofensiva diária é confirmada automaticamente ao atingir 50% das etapas da missão");
   assert(pdfSrc.includes("askUserScannedPdfPermission") && pdfSrc.includes("convertScannedPdfViaBrowserCanvasOcr"), "Detector de PDF escaneado vs. texto digital + conversor OCR com confirmação prévia de tokens presentes");
+  assert(htmlSrc.includes("pdfPreScanBox") && pdfSrc.includes("pdfPreScanBox"), "Raio-X Pré-Análise Instantâneo presente");
+  assert(htmlSrc.includes("documentAnswerKeyFile") && pdfSrc.includes("documentAnswerKeyFile"), "Importador de Gabarito Separado em PDF presente");
+  assert(htmlSrc.includes("textStudyModalDialog") && pdfSrc.includes("openTextStudyModalBtn"), "Criação de estudo direto por Texto/Assunto/Lei Seca (sem PDF) presente");
+  assert(pdfSrc.includes("askUserExamAnswerKeyOptions"), "Modal interativo de gabarito para provas (Anexar Gabarito / Colar Gabarito / Resolver com IA) presente");
+  assert(v77Src.includes("btn.textContent='⏳ Extraindo questões...'"), "Feedback visual de extração imediato e bloqueio de cliques concorrentes no catálogo de provas presente");
+  assert(pdfSrc.includes("stuckDocs"), "Auto-recuperação de provas travadas em 'processing' presente");
+
+
 
 
 }
