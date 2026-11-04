@@ -1373,13 +1373,21 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
               console.warn("Falha ao ler PDF de gabarito anexado", akErr);
             }
           }
+          const activeCampBoard = (typeof activeCampaign === "function" ? activeCampaign()?.board : "") || "Instituto AOCP";
+          const detectedBoard = /\b(?:cebraspe|cespe)\b/i.test(`${doc.title} ${doc.source_name}`) ? "Cebraspe"
+            : /\b(?:fgv)\b/i.test(`${doc.title} ${doc.source_name}`) ? "FGV Conhecimento"
+            : /\b(?:upenet|iaupe)\b/i.test(`${doc.title} ${doc.source_name}`) ? "UPENET/IAUPE"
+            : /\b(?:idecan)\b/i.test(`${doc.title} ${doc.source_name}`) ? "IDECAN"
+            : /\b(?:ibfc)\b/i.test(`${doc.title} ${doc.source_name}`) ? "IBFC"
+            : /\b(?:aocp)\b/i.test(`${doc.title} ${doc.source_name}`) ? "Instituto AOCP"
+            : activeCampBoard;
           const inferredFromTitle = typeof canonicalSubjectName === "function"
             ? canonicalSubjectName(doc.title || "", doc.title || "")
             : "";
           const fallbackSubj = (inferredFromTitle && inferredFromTitle !== "Conteúdo Geral")
             ? inferredFromTitle
             : (doc.detected_subject || doc.metadata?.primary_subject || "Direito Constitucional");
-          let extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: doc.title });
+          let extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard });
           let examReport = extractedQs?.report || {};
           if (examReport.ambiguous && Array.isArray(examReport.cadernos) && examReport.cadernos.length >= 2 && typeof prompt === "function") {
             const pickedCad = prompt(`Foram identificados múltiplos gabaritos/cadernos neste PDF (${examReport.cadernos.join(", ")}). Digite qual caderno deseja importar:`, examReport.cadernos[0]);

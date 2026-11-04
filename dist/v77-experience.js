@@ -1051,7 +1051,7 @@
     if (!boardFilter || boardFilter === 'all') return true;
     const target = String(boardFilter).toLocaleLowerCase('pt-BR').trim();
     const hay = `${item?.board || ''} ${item?.statement || ''} ${item?.explanation || ''} ${item?.topic || ''}`.toLocaleLowerCase('pt-BR');
-    if (target.includes('aocp')) return /aocp/.test(hay);
+    if (target.includes('aocp')) return /aocp/.test(hay) || item?.origin === 'oficial' || !item?.board || item?.board === 'Prova Oficial' || /\b105\s*quest/i.test(String(item?.board||''));
     if (target.includes('cebraspe') || target.includes('cespe')) return /cebraspe|cespe/.test(hay);
     if (target.includes('fgv')) return /\bfgv\b|fundacao getulio vargas/.test(hay);
     if (target.includes('upenet') || target.includes('iaupe')) return /upenet|iaupe/.test(hay);
@@ -2740,6 +2740,91 @@
       .join('\n')).join('\n\n');
   }
 
+  function inferQuestionPedagogicalTopic(statement, subject, num = 0) {
+    const s = String(statement || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const sub = String(subject || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+    if (/constitucional/.test(sub) || /constituicao|crfb/.test(s)) {
+      if (/\b(?:habeas corpus|habeas data|mandado de seguranca|mandado de injuncao|acao popular|remedios? constitucionais?)\b/i.test(s)) {
+        return "Remédios Constitucionais";
+      }
+      if (/\b(?:seguranca publica|art\.?\s*144|policia (?:federal|civil|militar|penal|rodoviaria|ferroviaria)|guarda municipal|bombeiros?|forcas armadas)\b/i.test(s)) {
+        return "Da Segurança Pública (Art. 144) e Forças Armadas";
+      }
+      if (/\b(?:poder legislativo|congresso nacional|camara dos deputados|senado federal|processo legislativo|deputado|senador|cpi|art\.?\s*(?:4[4-9]|[5-7]\d))\b/i.test(s)) {
+        return "Do Poder Legislativo (Art. 44 ao 73)";
+      }
+      if (/\b(?:funcoes essenciais|ministerio publico|procurador|defensoria publica|advocacia publica|advogado|oab|art\.?\s*1(?:2[7-9]|3[0-5]))\b/i.test(s)) {
+        return "Das Funções Essenciais à Justiça (Art. 127 ao 135)";
+      }
+      if (/\b(?:poder judiciario|juiz|juizes|magistratura|stf|stj|tribunal|tribunais|vitaliciedade|inamovibilidade|art\.?\s*(?:9[2-9]|1[0-2]\d))\b/i.test(s)) {
+        return "Do Poder Judiciário (Art. 92 ao 126)";
+      }
+      if (/\b(?:poder executivo|presidente da republica|vice-presidente|ministros? de estado|art\.?\s*(?:7[6-9]|8\d|9[01]))\b/i.test(s)) {
+        return "Do Poder Executivo (Art. 76 ao 91)";
+      }
+      if (/\b(?:municipios?|competencia dos municipios|autonomia municipal|camara municipal|organizacao do estado|bens da uniao|competencia privativa|competencia concorrente)\b/i.test(s)) {
+        return "Organização Político-Administrativa e Municípios";
+      }
+      if (/\b(?:direitos? sociais|trabalhador(?:es)?|salario|ferias|greve|sindicato|art\.?\s*[6-9]\b|art\.?\s*1[01]\b)\b/i.test(s)) {
+        return "Dos Direitos Sociais (Art. 6º ao 11)";
+      }
+      if (/\b(?:nacionalidade|brasileiro nato|naturalizado|extradicao|art\.?\s*1[23]\b)\b/i.test(s)) {
+        return "Da Nacionalidade e Cidadania (Art. 12 e 13)";
+      }
+      if (/\b(?:direitos? politicos?|partidos? politicos?|elegibilidade|voto|plebiscito|referendo|art\.?\s*1[4-7]\b)\b/i.test(s)) {
+        return "Dos Direitos Políticos e Partidos (Art. 14 ao 17)";
+      }
+      if (/\b(?:preambulo|principios? fundamentais|objetivos? fundamentais|republica federativa|soberania|dignidade da pessoa|art\.?\s*[1-4]\b)\b/i.test(s)) {
+        return "Princípios Fundamentais (Art. 1º ao 4º)";
+      }
+      if (/\b(?:art\.?\s*5|direitos? individuais|direitos? e garantias|inviolabilidade|liberdade|igualdade|propriedade)\b/i.test(s) || (num > 0 && num <= 40)) {
+        return "Direitos e Deveres Individuais e Coletivos (Art. 5º)";
+      }
+      return "Direito Constitucional Geral";
+    }
+
+    if (/logico|rlm|matematica/.test(sub)) {
+      if (/tabela verdade|conjuncao|disjuncao|bicondicional|condicional|conectiv/.test(s)) return "Tabela Verdade e Conectivos";
+      if (/tautologia|contradicao|contingencia/.test(s)) return "Tautologia, Contradição e Contingência";
+      if (/equivalencia logica|leis de de morgan|negacao/.test(s)) return "Equivalências e Negações Lógicas";
+      if (/combinatoria|arranjo|permutacao|combinacao/.test(s)) return "Análise Combinatória";
+      if (/probabilidade/.test(s)) return "Probabilidade";
+      if (/conjuntos|diagrama de venn/.test(s)) return "Conjuntos e Diagramas Lógicos";
+      return "Raciocínio Lógico";
+    }
+
+    if (/penal/.test(sub) && !/processual/.test(sub)) {
+      if (/excludente|ilicitude|legitima defesa|estado de necessidade|estrito cumprimento/.test(s)) return "Ilicitude e Excludentes (Art. 23 do CP)";
+      if (/culpabilidade|imputabilidade|potencial consciencia|coacao moral irresistivel/.test(s)) return "Culpabilidade e Imputabilidade";
+      if (/tentativa|consumacao|desistencia voluntaria|arrependimento eficaz/.test(s)) return "Iter Criminis e Tentativa";
+      if (/crimes contra a pessoa|homicidio|lesao corporal/.test(s)) return "Crimes contra a Pessoa";
+      if (/crimes contra o patrimonio|furto|roubo|estelionato/.test(s)) return "Crimes contra o Patrimônio";
+      if (/administracao publica|peculato|concussao|corrupcao|prevaricacao/.test(s)) return "Crimes contra a Administração Pública";
+      return "Direito Penal Geral";
+    }
+
+    if (/processual penal|processo penal/.test(sub)) {
+      if (/inquerito policial|notitia criminis|arquivamento/.test(s)) return "Inquérito Policial (CPP)";
+      if (/prisao em flagrante|preventiva|temporaria|liberdade provisoria/.test(s)) return "Prisão e Medidas Cautelares";
+      if (/provas|cadeia de custodia|exame de corpo de delito/.test(s)) return "Das Provas no Processo Penal";
+      return "Direito Processual Penal";
+    }
+
+    if (/portugues/.test(sub)) {
+      if (/crase/.test(s)) return "Emprego da Crase";
+      if (/concordancia/.test(s)) return "Concordância Verbal e Nominal";
+      if (/regencia/.test(s)) return "Regência Verbal e Nominal";
+      if (/pontuacao|virgula/.test(s)) return "Pontuação";
+      if (/interpretacao|compreensao|depreende-se|infere-se|texto/.test(s)) return "Compreensão e Interpretação de Texto";
+      if (/pronome|colocacao pronominal|proclise|enclise|mesoclise/.test(s)) return "Morfologia e Pronomes";
+      return "Língua Portuguesa";
+    }
+
+    return num ? `Questão ${num} · ${subject || 'Geral'}` : (subject || 'Geral');
+  }
+  window.inferQuestionPedagogicalTopic = inferQuestionPedagogicalTopic;
+
   function extractStructuredExamQuestions(rawTextOrPages,opts={}){
     const defaultSubject=opts.defaultSubject||'Conteúdo Geral';
     const defaultBoard=opts.defaultBoard||'Prova Oficial';
@@ -2876,14 +2961,16 @@
         const options=picked.map((o,i)=>block.slice(o.index+o.len,i+1<picked.length?picked[i+1].index:block.length).replace(/\s+/g,' ').trim());
         const correctIdx=(opts.allowWithoutKey&&!keyMap.has(b.num)&&!inlineAns)?0:picked.findIndex(o=>o.letter===key);
         if(statement.length>=10&&correctIdx>=0&&options.every(Boolean)){
-          item={statement,options,correct_index:correctIdx,topic:`Questão ${b.num} · ${defaultBoard}`,difficulty:'medio',
+          const pTopic=inferQuestionPedagogicalTopic(statement,defaultSubject,b.num);
+          item={statement,options,correct_index:correctIdx,topic:pTopic,difficulty:'medio',
             explanation:inlineComment||(opts.allowWithoutKey&&!keyMap.has(b.num)?'Questão extraída do caderno de questões do PDF.':`Gabarito do documento: alternativa ${key} ("${options[correctIdx]}").`)};
         }
       }else if((key==='C'||key==='E'||opts.allowWithoutKey)&&picked.length===0&&(isCE||inlineMode||opts.allowWithoutKey||/\bcerto\b[\s\S]*\berrado\b|\bjulgue\b/i.test(block))){
         let statement=block.replace(/Alternativas\s+Certo\s+Errado[\s\S]*$/i,'').replace(/\(\s*\)\s*Certo[\s\S]*$/i,'').replace(/\s+/g,' ').trim();
         if(statement.length>=12){
+          const pTopic=inferQuestionPedagogicalTopic(statement,defaultSubject,b.num);
           item={statement:`[Julgue o item em CERTO ou ERRADO] ${statement}`,options:['CERTO','ERRADO'],correct_index:key==='E'?1:0,
-            topic:`Item ${b.num} (C/E) · ${defaultBoard}`,difficulty:'dificil',
+            topic:pTopic,difficulty:'dificil',
             explanation:inlineComment||(opts.allowWithoutKey&&!keyMap.has(b.num)?'Item C/E extraído do caderno de questões do PDF.':`Gabarito do documento: ${key==='C'?'CERTO':'ERRADO'}.`)};
         }
       }
@@ -8069,6 +8156,10 @@
           ?window.resolveDocumentDiscipline(doc,qItem.subject,`${doc?.title||''} ${qItem.topic||''} ${qItem.statement||''}`)
           :canonicalSubjectName(qItem.subject,`${qItem.topic||''} ${qItem.statement||''}`);
         if(nextCat&&!window.isInvalidTrailSubject?.(nextCat,qItem.topic,'',doc)&&nextCat!==qItem.subject){qItem.subject=nextCat;changed=true}
+        if(typeof window.inferQuestionPedagogicalTopic==='function'&&(qItem.topic?.startsWith('Questão ')||qItem.topic?.startsWith('Item ')||!qItem.topic)){
+          const pTopic=window.inferQuestionPedagogicalTopic(qItem.statement,qItem.subject);
+          if(pTopic&&pTopic!==qItem.topic){qItem.topic=pTopic;changed=true}
+        }
       }
     }
     for(const card of (ALL_FLASHCARDS||[])){
