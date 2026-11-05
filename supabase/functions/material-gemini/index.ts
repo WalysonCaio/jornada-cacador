@@ -250,7 +250,7 @@ async function setDocumentStatus(documentId: string, userId: string, processingS
   await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(userId)}`, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({ processing_status: processingStatus }),
+    body: JSON.stringify(processingStatus === "ready" ? { processing_status: processingStatus, server_verified: true } : { processing_status: processingStatus }),
   }).catch(() => undefined);
 }
 
@@ -1325,7 +1325,7 @@ Deno.serve(async (request) => {
         ? rawExisting.filter((row: any) => !isNonDidacticSummary(String(row?.title || ""), String(row?.content?.explanation || ""), Array.isArray(row?.content?.points) ? row.content.points : []))
         : [];
       if ( !Boolean(input?.force_reanalyze) && existing.length ) {
-        const copies = existing.map((row: Record<string, unknown>) => ({ ...row, campaign_id: campaignId, user_id: user.id, source_document_id: documentId, source_refs: [{ document_id: documentId, title }] }));
+        const copies = existing.map((row: Record<string, unknown>) => ({ ...row, campaign_id: campaignId, user_id: user.id, source_document_id: documentId, source_refs: [{ document_id: documentId, title }], server_verified: true }));
         const copied = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify(copies) });
         if (copied.ok) {
           await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ user_id: user.id, document_id: documentId, sha256: fingerprint, byte_size: byteLength }) });
@@ -1423,7 +1423,8 @@ Deno.serve(async (request) => {
       content_type: isExam ? "question_pack" : "summary",
       title: String(content.title ?? (isExam ? `Caderno de Questões — ${title}` : "Resumo")),
       content: { ...content, source: title, is_question_pack: isExam },
-      source_refs: [{ document_id: documentId, title }]
+      source_refs: [{ document_id: documentId, title }],
+      server_verified: true
     }));
     const saved = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(rows) });
     if (!saved.ok) { console.error("Database", saved.status, await saved.text());await setDocumentStatus(documentId, user.id, "pending");await finishUsage(usage.event_id,"error",undefined,undefined,"CONTENT_SAVE_FAILED");await updateJob(documentId,{status:"retry",last_error:"CONTENT_SAVE_FAILED"});return response({ error: "O conteúdo foi criado, mas não pôde ser salvo.", retryable: true }, 502); }

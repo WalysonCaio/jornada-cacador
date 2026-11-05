@@ -1411,10 +1411,10 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
             }
             if (userChoice?.appendedText) {
               pages.push({ page: pages.length + 1, text: `\nGABARITO OFICIAL DEFINITIVO\n${userChoice.appendedText}` });
-              extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: doc.title, preferredCaderno: userChoice.preferredCaderno || "" });
+              extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard, preferredCaderno: userChoice.preferredCaderno || "" });
               examReport = extractedQs?.report || {};
             } else if (userChoice?.allowWithoutKey) {
-              extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: doc.title, allowWithoutKey: true });
+              extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard, allowWithoutKey: true });
               examReport = extractedQs?.report || {};
             }
           }

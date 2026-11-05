@@ -86,6 +86,47 @@ console.log("OK: contratos v98 (chat, heartbeat, referência morta) validados.")
   const c100 = v100.replace(/--[^\n]*/g, "").replace(/'(?:[^']|'')*'/g, "''"); let d100 = 0; for (const ch of c100) { if (ch === "(") d100++; if (ch === ")") d100--; assert(d100 >= 0, "v100: parêntese fechado sem abrir"); } assert.equal(d100, 0, "v100: parênteses desbalanceados");
   // a última definição da função (por ordem de arquivo) é a que vale
   const last = files.filter((f) => /create or replace function public\.get_community_exam_library/i.test(read("supabase/migrations/" + f))).pop();
-  assert.equal(last, v100name, "a v100 precisa ser a última a definir get_community_exam_library");
+  assert(last === v100name || /v101_server_verified_integrity/.test(last), "a última definição de get_community_exam_library deve ser a v100 ou a v101 (que mantém a privacidade do autor)");
+  assert(!/raw_user_meta_data/.test(read("supabase/migrations/" + last).replace(/--[^\n]*/g, "")), "a definição final não pode usar o nome do cadastro");
 }
 console.log("OK: contratos v100 (autor da biblioteca sem nome real) validados.");
+
+// ── v101: conteúdo comunitário só se verificado pelo servidor + integridade das migrações ──
+{
+  const files = readdirSync(new URL("supabase/migrations/", root)).filter((f) => f.endsWith(".sql")).sort();
+  const sqlOf = (f) => read("supabase/migrations/" + f).replace(/--[^\n]*/g, "");
+  const allSql = files.map(sqlOf).join("\n");
+
+  // (a) toda função public.xxx(...) chamada precisa existir em alguma migração (pegou assert_rate_limit/grant_server_xp inexistentes)
+  const defined = new Set([...allSql.matchAll(/create (?:or replace )?function public\.(\w+)/gi)].map((m) => m[1]));
+  const tables = new Set([...allSql.matchAll(/create table (?:if not exists )?public\.(\w+)/gi)].map((m) => m[1]));
+  const stripped = allSql
+    .replace(/(?:create (?:or replace )?function|drop function if exists|alter function|comment on function)\s+public\.\w+/gi, "")
+    .replace(/(?:grant|revoke)\s+[^;]*?on function\s+public\.\w+/gi, "")
+    .replace(/(?:create|drop)\s+trigger[^;]*?execute function\s+public\.\w+/gi, "");
+  const called = new Set([...stripped.matchAll(/\bpublic\.(\w+)\(/g)].map((m) => m[1]).filter((n) => !tables.has(n)));
+  const missing = [...called].filter((n) => !defined.has(n));
+  assert.deepEqual(missing, [], `migrações chamam funções que nenhuma migração define: ${missing.join(", ")}`);
+
+  // (b) v101 presente e correta
+  const v101 = files.find((f) => f.includes("v101_server_verified_integrity")); assert(v101, "falta a migração v101");
+  const t = sqlOf(v101);
+  assert(/drop function if exists public\.submit_hunter_duel_round\(uuid, jsonb, text\)/.test(t), "v101 deve remover a função de duelo quebrada da v100");
+  assert(/drop trigger if exists trg_enforce_generated_content_integrity/.test(t), "v101 deve remover o gatilho ineficaz da v100");
+  assert(/alter column server_verified set default false/.test(t), "novos registros devem nascer não verificados");
+  assert(/service_role/.test(t) && /new\.server_verified := old\.server_verified/.test(t), "só o servidor pode alterar server_verified");
+  assert((t.match(/coalesce\(d\.server_verified, false\) = true/g) || []).length === 1 && /coalesce\(g\.server_verified, false\) = true/.test(t) && /coalesce\(sd\.server_verified, false\) = true/.test(t), "a biblioteca deve exigir documento e conteúdo verificados");
+  assert((t.match(/\$\$/g) || []).length % 2 === 0, "v101: $$ desbalanceado");
+  const code = t.replace(/'(?:[^']|'')*'/g, "''"); let d = 0; for (const ch of code) { if (ch === "(") d++; if (ch === ")") d--; assert(d >= 0, "v101: parêntese fechado sem abrir"); } assert.equal(d, 0, "v101: parênteses desbalanceados");
+  const last = files.filter((f) => /create or replace function public\.get_community_exam_library/i.test(read("supabase/migrations/" + f))).pop();
+  assert.equal(last, v101, "a v101 deve ser a última a definir get_community_exam_library");
+
+  assert(/safe_int\(a->>'time_s', 1, 60\)/.test(t) && /60 \* \(v_n - v_answered\)/.test(t), "o servidor deve aceitar até 60 s por pergunta (duelo de 60 s)");
+  assert(/create or replace function public\.submit_hunter_duel_round\(\s*p_duel_id uuid,\s*p_score integer/i.test(t), "v101 deve redefinir a função de duelo ativa (4 parâmetros)");
+  // (c) o servidor marca o que processou e a v100 não carrega mais o complemento quebrado
+  const mat = read("supabase/functions/material-gemini/index.ts");
+  assert((mat.match(/server_verified: true/g) || []).length >= 3, "material-gemini deve gravar server_verified: true (status ready, conteúdo e cópia em cache)");
+  const v100 = sqlOf(files.find((f) => f.includes("v100_community_author_privacy")));
+  assert(!/questions_json|content_json|assert_rate_limit|grant_server_xp|challenger_finished_at/.test(v100), "a v100 não pode referenciar colunas/funções inexistentes");
+}
+console.log("OK: contratos v101 (server_verified real, sem referências quebradas nas migrações) validados.");
