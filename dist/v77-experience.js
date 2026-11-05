@@ -1043,6 +1043,1174 @@
       ],
       correct_index: 1,
       explanation: 'Conceito-chave: A Súmula Vinculante 13 do STF veda a nomeação de cônjuge, companheiro ou parente em linha reta, colateral ou por afinidade, até o 3º GRAU, inclusive, para cargos em comissão ou funções de confiança, bem como o nepotismo cruzado, diretamente por força do art. 37, caput (moralidade e impessoalidade). | ✅ Alternativa correta: B) Parentesco até o 3º grau, inclusive (pais, filhos, avós, netos, irmãos, tios, sobrinhos, sogros, cunhados etc.), sem depender de lei específica. | ❌ Análise das alternativas: A) Vai até o 3º grau e independe de lei formal; C) Não alcança o 4º grau (primos são 4º grau!) e, em regra, não se aplica a cargos de natureza política (salvo fraude/ausência de qualificação); D) Vai até o 3º grau. | ⚠️ Pegadinha da banca: PRIMO é parente colateral de 4º GRAU, portanto a nomeação de primo NÃO é vedada pela Súmula Vinculante 13!'
+    },
+    {
+      subject: "Direito Constitucional",
+      topic: "Art. 5º — Direitos e Deveres Individuais e Coletivos",
+      board: "IDECAN",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(IDECAN) Acerca das garantias fundamentais previstas no art. 5º da Constituição Federal de 1988, assinale a alternativa CORRETA sobre a entrada em domicílio sem consentimento do morador:",
+      options: [
+        "É permitida a qualquer hora do dia ou da noite para cumprimento de determinação judicial.",
+        "É permitida durante a noite exclusivamente em caso de flagrante delito, desastre ou para prestar socorro.",
+        "Depende sempre de prévia autorização do Ministério Público estadual ou federal.",
+        "Pode ocorrer por ordem direta de autoridade policial delegada durante o período diurno."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: A casa é asilo inviolável do indivíduo (art. 5º, XI, CF/88). Sem consentimento do morador, só se pode ingressar: (a) a qualquer hora (dia ou noite) em caso de flagrante delito, desastre ou para prestar socorro; ou (b) exclusivamente durante o DIA, por determinação judicial. | ✅ Alternativa correta: B) Durante a noite, somente flagrante delito, desastre ou socorro autorizam o ingresso forçado. | ❌ Análise das alternativas: A) Mandado judicial só pode ser cumprido durante o DIA; C) O MP não expede mandado de busca domiciliar (reserva de jurisdição); D) Delegado não pode expedir mandado de busca domiciliar. | ⚠️ Pegadinha da banca: O IDECAN frequentemente troca 'determinação judicial durante o dia' por 'qualquer hora do dia ou da noite'."
+    },
+    {
+      subject: "Direito Constitucional",
+      topic: "Art. 144 — Segurança Pública",
+      board: "IDECAN",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(IDECAN) Nos termos do art. 144, § 5º e § 6º, da Constituição Federal, às Polícias Militares cabem a polícia ostensiva e a preservação da ordem pública, subordinando-se, juntamente com os Corpos de Bombeiros Militares e as Polícias Civis, aos:",
+      options: [
+        "Comandantes do Exército de cada Região Militar.",
+        "Governadores dos Estados, do Distrito Federal e dos Territórios.",
+        "Ministros da Justiça e da Defesa, de forma conjunta.",
+        "Presidentes dos Tribunais de Justiça estaduais."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Conforme o art. 144, § 6º, da CF/88, as polícias militares e os corpos de bombeiros militares, forças auxiliares e reserva do Exército, subordinam-se, juntamente com as polícias civis e as polícias penais estaduais e distrital, aos Governadores dos Estados, do Distrito Federal e dos Territórios. | ✅ Alternativa correta: B) Governadores dos Estados, do Distrito Federal e dos Territórios. | ❌ Análise das alternativas: A) São forças auxiliares e reserva do Exército, mas subordinam-se administrativamente e operacionalmente aos Governadores; C) e D) Não há subordinação ao Judiciário nem ao Ministério da Justiça. | ⚠️ Pegadinha da banca: Confundir a condição de 'força auxiliar e reserva do Exército' com subordinação hierárquica permanente ao Comando do Exército."
+    },
+    {
+      subject: "Direito Penal",
+      topic: "Teoria do Crime — Excludentes de Ilicitude (Art. 23 do CP)",
+      board: "IDECAN",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(IDECAN) O agente policial que, usando moderadamente dos meios necessários, repele injusta agressão, atual ou iminente, a direito seu ou de outrem, inclusive para proteção de refém durante ocorrência crítica, atua amparado por:",
+      options: [
+        "Excludente de culpabilidade por inexigibilidade de conduta diversa.",
+        "Excludente de ilicitude por legítima defesa (art. 25 do Código Penal).",
+        "Excludente de tipicidade por estado de necessidade exculpante.",
+        "Escusa absolutória funcional."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: O art. 25 do Código Penal (com a redação dada pelo Pacote Anticrime — Lei 13.964/2019) define a legítima defesa, causa de exclusão da ilicitude (antijuridicidade), abrangendo expressamente no parágrafo único o agente de segurança pública que repele agressão ou risco de agressão a vítima mantida refém durante a prática de crimes. | ✅ Alternativa correta: B) Excludente de ilicitude por legítima defesa (art. 25 do CP). | ❌ Análise das alternativas: A) Legítima defesa exclui a ilicitude (não a culpabilidade); C) Não exclui a tipicidade nem se confunde com estado de necessidade (na legítima defesa há agressão humana injusta); D) Escusa absolutória afasta apenas a punibilidade em crimes patrimoniais sem violência. | ⚠️ Pegadinha da banca: Trocar a natureza jurídica da legítima defesa (excludente de ilicitude) por excludente de culpabilidade."
+    },
+    {
+      subject: "Direito Processual Penal",
+      topic: "Prisão em Flagrante (Arts. 301 a 303 do CPP)",
+      board: "IDECAN",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(IDECAN) De acordo com o Código de Processo Penal, quando o agente é perseguido, logo após o crime, pela autoridade, pelo ofendido ou por qualquer pessoa, em situação que faça presumir ser autor da infração, configura-se o chamado:",
+      options: [
+        "Flagrante próprio ou perfeito (art. 302, I e II, do CPP).",
+        "Flagrante impróprio, irreal ou quase-flagrante (art. 302, III, do CPP).",
+        "Flagrante presumido ou ficto (art. 302, IV, do CPP).",
+        "Flagrante preparado ou provocado (Súmula 145 do STF)."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: O art. 302 do CPP prevê três espécies lícitas de flagrante: (1) Próprio/perfeito (incisos I e II: está cometendo ou acaba de cometer); (2) Impróprio/quase-flagrante (inciso III: é perseguido logo após); (3) Presumido/ficto (inciso IV: é encontrado logo depois com instrumentos, armas ou objetos). | ✅ Alternativa correta: B) Flagrante impróprio, irreal ou quase-flagrante (perseguição 'logo após'). | ❌ Análise das alternativas: A) No próprio, o agente é surpreendido cometendo ou acabando de cometer; C) No presumido ('logo depois'), não exige perseguição ininterrupta, mas ser encontrado com objetos/instrumentos; D) Flagrante preparado é crime impossível (Súmula 145 do STF). | ⚠️ Pegadinha da banca: Memorize o binômio: 'perseguido LOGO APÓS' = Impróprio/Quase-flagrante; 'encontrado LOGO DEPOIS com objetos' = Presumido/Ficto."
+    },
+    {
+      subject: "Direito Administrativo",
+      topic: "Poderes da Administração Pública (Poder de Polícia)",
+      board: "IDECAN",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(IDECAN) São atributos clássicos do poder de polícia administrativo a discricionariedade, a autoexecutoriedade e a coercibilidade. Contudo, a doutrina e a jurisprudência apontam um ato típico de polícia administrativa que NÃO goza de autoexecutoriedade, exigindo via judicial caso não cumprido espontaneamente pelo particular:",
+      options: [
+        "Apreensão de mercadorias deterioradas em fiscalização sanitária.",
+        "Interdição cautelar de estabelecimento com risco iminente de incêndio.",
+        "Cobrança coativa de multa administrativa não paga pelo infrator.",
+        "Dissolução de reunião tumultuosa com emprego de armas em praça pública."
+      ],
+      correct_index: 2,
+      explanation: "Conceito-chave: A autoexecutoriedade permite à Administração executar diretamente suas decisões sem prévia autorização do Judiciário. Porém, na cobrança de MULTA administrativa (embora a aplicação da multa seja ato de polícia), a execução forçada no patrimônio do devedor NÃO é autoexecutória, exigindo inscrição em dívida ativa e execução fiscal judicial. | ✅ Alternativa correta: C) Cobrança coativa de multa administrativa. | ❌ Análise das alternativas: A), B) e D) São medidas de urgência/polícia dotadas de plena autoexecutoriedade. | ⚠️ Pegadinha da banca: A APLICAÇÃO (lançamento) da multa é feita pela Administração, mas a COBRANÇA FORÇADA (penhora de bens) não tem autoexecutoriedade."
+    },
+    {
+      subject: "Legislação Extravagante",
+      topic: "Lei nº 11.343/2006 — Lei de Drogas",
+      board: "IDECAN",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(IDECAN) Nos termos do art. 28 da Lei nº 11.343/2006 (Lei de Drogas), quem adquirir, guardar, tiver em depósito, transportar ou trouxer consigo, para consumo pessoal, drogas sem autorização ou em desacordo com determinação legal ou regulamentar será submetido às seguintes medidas, EXCETO:",
+      options: [
+        "Advertência sobre os efeitos das drogas.",
+        "Prestação de serviços à comunidade.",
+        "Medida educativa de comparecimento a programa ou curso educativo.",
+        "Pena privativa de liberdade de detenção de 6 (seis) meses a 2 (dois) anos."
+      ],
+      correct_index: 3,
+      explanation: "Conceito-chave: O art. 28 da Lei 11.343/2006 veda qualquer pena privativa de liberdade (prisão) para o porte de drogas destinado exclusivamente ao consumo pessoal, prevendo apenas advertência (inciso I), prestação de serviços à comunidade (inciso II) e medida educativa (inciso III). Além disso, no Tema 506 o STF fixou parâmetros objetivos para distinguir usuário de traficante na Cannabis. | ✅ Alternativa correta: D) Não há pena de detenção/prisão no art. 28. | ❌ Análise das alternativas: A), B) e C) Estão expressamente previstas nos incisos I, II e III do art. 28. | ⚠️ Pegadinha da banca: Mesmo em caso de reincidência ou descumprimento injustificado das medidas do art. 28, o juiz só pode aplicar admoestação verbal e multa (§ 6º) — nunca prisão!"
+    },
+    {
+      subject: "Língua Portuguesa",
+      topic: "Concordância Verbal e Nominal",
+      board: "IDECAN",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(IDECAN) Assinale a alternativa em que a concordância verbal está em plena conformidade com a norma-padrão da língua portuguesa:",
+      options: [
+        "Fazem dez anos que o novo batalhão especializado foi inaugurado no sertão.",
+        "Houveram diversas ocorrências complexas durante o plantão de sábado.",
+        "Existiam indícios suficientes de autoria e materialidade no inquérito policial.",
+        "Deve haverem novas convocações de aprovados ainda neste semestre."
+      ],
+      correct_index: 2,
+      explanation: "Conceito-chave: Os verbos 'fazer' (indicando tempo decorrido) e 'haver' (no sentido de existir ou acontecer) são impessoais: não possuem sujeito e permanecem obrigatoriamente na 3ª pessoa do singular, transmitindo sua impessoalidade ao verbo auxiliar nas locuções verbais. Já o verbo 'existir' é pessoal e concorda normalmente com o seu sujeito ('indícios suficientes'). | ✅ Alternativa correta: C) 'Existiam indícios suficientes' (sujeito plural = verbo no plural). | ❌ Análise das alternativas: A) O correto é 'Faz dez anos'; B) O correto é 'Houve diversas ocorrências'; D) O correto é 'Deve haver novas convocações'. | ⚠️ Pegadinha da banca: Substituir 'haver' (impessoal -> singular) por 'existir' ou 'ocorrer' (pessoais -> plural)."
+    },
+    {
+      subject: "Raciocínio Lógico-Matemático",
+      topic: "Lógica Proposicional — Equivalências e Negação",
+      board: "IDECAN",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(IDECAN) A negação lógica da proposição condicional 'Se a viatura está revisada, então o patrulhamento ocorre sem atraso' é logicamente equivalente a:",
+      options: [
+        "Se a viatura não está revisada, então o patrulhamento não ocorre sem atraso.",
+        "A viatura está revisada e o patrulhamento não ocorre sem atraso.",
+        "A viatura não está revisada ou o patrulhamento ocorre sem atraso.",
+        "Se o patrulhamento não ocorre sem atraso, então a viatura não está revisada."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Pela regra da NEGAÇÃO da condicional ~(P -> Q), aplica-se o mnemônico 'MANÉ' (Mantém a primeira E Nega a segunda), trocando o conectivo 'Se... então' pelo conectivo 'E' (^): P ^ ~Q. | ✅ Alternativa correta: B) 'A viatura está revisada E o patrulhamento não ocorre sem atraso'. | ❌ Análise das alternativas: A) Não se nega condicional com outra condicional; C) Esta (~P v Q) é a EQUIVALÊNCIA da condicional (regra 'Neymar'), e não a sua negação; D) Esta (~Q -> ~P) é a contrapositiva (equivalência), não a negação. | ⚠️ Pegadinha da banca: Colocar a equivalência contrapositiva (~Q -> ~P) ou a disjunção equivalente (~P v Q) quando o comando pede a NEGAÇÃO da condicional!"
+    },
+    {
+      subject: "Informática",
+      topic: "Segurança da Informação — Malwares e Engenharia Social",
+      board: "IDECAN",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(IDECAN) O tipo de código malicioso (malware) que torna inacessíveis os dados armazenados em um equipamento, geralmente usando criptografia forte, e que exige pagamento de resgate (normalmente em criptomoedas) para restabelecer o acesso às informações denomina-se:",
+      options: [
+        "Spyware Keylogger.",
+        "Ransomware.",
+        "Rootkit.",
+        "Adware."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Ransomware (de 'ransom' = resgate) sequestra dados do sistema (Ransomware Crypto) ou bloqueia o acesso à tela do dispositivo (Ransomware Locker), exigindo pagamento de resgate. | ✅ Alternativa correta: B) Ransomware. | ❌ Análise das alternativas: A) Keylogger captura teclas digitadas pelo usuário; C) Rootkit oculta a presença de invasores ou de outros códigos maliciosos no sistema; D) Adware exibe anúncios publicitários não solicitados. | ⚠️ Pegadinha da banca: Não confundir Ransomware (criptografa arquivos e cobra resgate) com Phishing (página/mensagem falsa para induzir a vítima a fornecer senhas)."
+    },
+    {
+      subject: "Direitos Humanos",
+      topic: "Teoria Geral e Declaração Universal dos Direitos Humanos (DUDH)",
+      board: "IDECAN",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(IDECAN) A característica dos Direitos Humanos segundo a qual esses direitos pertencem a todos os seres humanos pelo simples fato de sua condição humana, independentemente de nacionalidade, sexo, raça, credo ou convicção político-filosófica, denomina-se:",
+      options: [
+        "Universalidade.",
+        "Relatividade absoluta.",
+        "Prescritibilidade.",
+        "Disponibilidade patrimonial."
+      ],
+      correct_index: 0,
+      explanation: "Conceito-chave: Os direitos humanos possuem como características clássicas: Historicidade, Universalidade (abrangem todos os indivíduos sem discriminação), Inalienabilidade, Imprescritibilidade, Irrenunciabilidade e Indivisibilidade/Interdependência. | ✅ Alternativa correta: A) Universalidade. | ❌ Análise das alternativas: B) Os direitos humanos não são absolutos (são limitáveis/relativos no caso concreto), mas o enunciado descreve a titularidade universal; C) São imprescritíveis; D) São inalienáveis e indisponíveis. | ⚠️ Pegadinha da banca: Confundir Universalidade (titularidade de toda pessoa humana) com Indivisibilidade (direitos civis, políticos e sociais formam um todo indissociável)."
+    },
+    {
+      subject: "Física",
+      topic: "Termologia e Transferência de Calor (Aplicada ao Combate a Incêndio)",
+      board: "IDECAN",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(IDECAN — CBM) Durante um incêndio estrutural em ambiente fechado, a fumaça e os gases superaquecidos sobem para o teto e deslocam as massas de ar mais frias para baixo, formando correntes circulatórias que propagam o calor pelo compartimento. Esse processo físico de transmissão de calor denomina-se:",
+      options: [
+        "Condução térmica corpuscular.",
+        "Convecção térmica.",
+        "Irradiação eletromagnética no vácuo.",
+        "Sublimação endotérmica."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Existem três formas de propagação do calor: (1) Condução (meios sólidos, partícula a partícula, sem transporte de matéria); (2) Convecção (fluidos — líquidos e gases — com transporte de matéria por diferença de densidade); (3) Irradiação (ondas eletromagnéticas, podendo ocorrer até no vácuo). | ✅ Alternativa correta: B) Convecção térmica. | ❌ Análise das alternativas: A) Condução predomina em sólidos (ex.: viga metálica aquecida); C) Irradiação não depende de correntes de fluido; D) Sublimação é mudança de estado físico (sólido -> gasoso). | ⚠️ Pegadinha da banca: Em provas de Bombeiro Militar (CBMPE/IDECAN/AOCP), lembre-se: gases quentes subindo e formando 'cogumelo térmico' = CONVECÇÃO; calor atravessando parede/viga metálica = CONDUÇÃO; calor atingindo prédio vizinho através da rua sem contato = IRRADIAÇÃO."
+    },
+    {
+      subject: "Biologia",
+      topic: "Fisiologia Humana e Primeiros Socorros (APH)",
+      board: "IDECAN",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(IDECAN — CBM) Na pequena circulação (circulação pulmonar) do corpo humano, o sangue venoso (rico em gás carbônico) sai do coração rumo aos pulmões para sofrer hematose, partindo especificamente do:",
+      options: [
+        "Ventrículo direito, através do tronco da artéria pulmonar.",
+        "Ventrículo esquerdo, através da artéria aorta.",
+        "Átrio esquerdo, através das veias pulmonares.",
+        "Átrio direito, através das veias cavas superior e inferior."
+      ],
+      correct_index: 0,
+      explanation: "Conceito-chave: Pequena circulação (pulmonar): Ventrículo Direito (sangue venoso) -> Artéria Pulmonar -> Pulmões (hematose) -> Veias Pulmonares (sangue arterial) -> Átrio Esquerdo. Grande circulação (sistêmica): Ventrículo Esquerdo (sangue arterial) -> Artéria Aorta -> Corpo -> Veias Cavas -> Átrio Direito. | ✅ Alternativa correta: A) Ventrículo direito, através da artéria pulmonar. | ❌ Análise das alternativas: B) Inicia a grande circulação; C) As veias pulmonares chegam ao átrio esquerdo trazendo sangue arterial; D) As veias cavas chegam ao átrio direito. | ⚠️ Pegadinha da banca: A artéria pulmonar é a exceção clássica: é uma ARTÉRIA (porque sai do coração), mas carrega sangue VENOSO (rico em CO2)!"
+    },
+    {
+      subject: "História de Pernambuco",
+      topic: "Revolução Pernambucana de 1817",
+      board: "UPENET/IAUPE",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(UPENET/IAUPE — PMPE) A Revolução Pernambucana de 1817, também conhecida como 'Revolução dos Padres', diferenciou-se de outros movimentos emancipacionistas do período colonial (como a Inconfidência Mineira e a Conjuração Baiana) porque:",
+      options: [
+        "Manteve-se apenas no plano conspiratório, sendo abortada antes da tomada do poder no Recife.",
+        "Ultrapassou a fase conspiratória, destituiu o governador colonial Caetano Pinto de Miranda Montenegro e instalou um Governo Provisório republicano por mais de 70 dias.",
+        "Defendia a manutenção do absolutismo monárquico português sob a liderança direta de Dom Pedro I.",
+        "Ficou restrita exclusivamente ao bairro do Recife, sem qualquer adesão das províncias vizinhas como Paraíba, Rio Grande do Norte e Ceará."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: A Revolução Pernambucana de 1817 (cujo marco é celebrado na Data Magna de Pernambuco — 6 de março) foi o único movimento emancipacionista do período colonial/joanino que efetivamente tomou o poder, instalando uma República provisória inspirada no Iluminismo, com liberdade de imprensa e tolerância religiosa, e irradiando-se para Paraíba, RN e Ceará. | ✅ Alternativa correta: B) Tomou o poder e instalou um Governo Provisório republicano. | ❌ Análise das alternativas: A) Inconfidência Mineira e Conjuração Baiana não chegaram a tomar o poder, mas 1817 tomou; C) Era um movimento republicano e anticolonial contra a Corte joanina; D) Expandiu-se pelo Nordeste (PB, RN, CE). | ⚠️ Pegadinha da banca: A UPENET e o AOCP adoram cobrar que 1817 NÃO aboliu de imediato a escravidão (por pressão dos proprietários de terras/senhores de engenho que compunham o governo provisório)."
+    },
+    {
+      subject: "História de Pernambuco",
+      topic: "Confederação do Equador (1824) e Revolução Praieira (1848)",
+      board: "UPENET/IAUPE",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(UPENET/IAUPE — PMPE) Deflagrada em Pernambuco em 1824, sob a liderança de figuras como Cipriano Barata, Manoel de Carvalho Paes de Andrade e Frei Caneca, a Confederação do Equador teve como estopim político imediato:",
+      options: [
+        "A dissolução da Assembleia Constituinte de 1823 e a outorga autoritária da Constituição Imperial de 1824 (com a criação do Poder Moderador) por Dom Pedro I.",
+        "A assinatura da Lei Áurea pela Princesa Isabel sem indenização aos senhores de engenho da Zona da Mata.",
+        "A transferência da capital do Brasil de Salvador para o Rio de Janeiro pelo Marquês de Pombal.",
+        "A invasão holandesa liderada por Maurício de Nassau ao porto do Recife."
+      ],
+      correct_index: 0,
+      explanation: "Conceito-chave: A Confederação do Equador (1824) ocorreu no Primeiro Reinado como reação republicana e federalista ao centralismo autoritário de D. Pedro I, que fechou a Constituinte ('Noite da Agonia') e impôs (outorgou) a Constituição de 1824 com o Poder Moderador. | ✅ Alternativa correta: A) Outorga da Constituição de 1824 e centralismo de D. Pedro I. | ❌ Análise das alternativas: B) A Lei Áurea é de 1888; C) A transferência da capital ocorreu em 1763; D) O período nassoviano foi de 1637 a 1644. | ⚠️ Pegadinha da banca: Não confundir Confederação do Equador (1824, Primeiro Reinado, Frei Caneca) com Revolução Praieira (1848, Segundo Reinado, Manifesto ao Mundo, Borges da Fonseca e Nunes Machado)."
+    },
+    {
+      subject: "Geografia de Pernambuco",
+      topic: "Mesorregiões, Clima e Hidrografia de Pernambuco",
+      board: "UPENET/IAUPE",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(UPENET/IAUPE — PMPE) O território de Pernambuco apresenta forte diversidade morfoclimática no sentido Leste–Oeste. A faixa de transição localizada entre a Zona da Mata (úmida) e o Sertão (semiárido), caracterizada pela presença do Planalto da Borborema e de áreas de exceção úmidas conhecidas como 'brejos de altitude', corresponde à mesorregião do:",
+      options: [
+        "Agreste Pernambucano.",
+        "São Francisco Pernambucano.",
+        "Região Metropolitana do Recife.",
+        "Meio-Norte Equatorial."
+      ],
+      correct_index: 0,
+      explanation: "Conceito-chave: Pernambuco divide-se tradicionalmente em 5 mesorregiões: Região Metropolitana do Recife (RMR), Zona da Mata, Agreste, Sertão Pernambucano e Sertão do São Francisco. O Agreste funciona como zona de transição climática e fitogeográfica entre a Mata Atlântica litorânea e a Caatinga sertaneja, abrigando o Planalto da Borborema e os brejos de altitude (ex.: Garanhuns, Triunfo, Brejo da Madre de Deus). | ✅ Alternativa correta: A) Agreste Pernambucano. | ❌ Análise das alternativas: B) Fica no extremo oeste/sul acompanhando o rio São Francisco (Petrolina, Cabrobó); C) Fica no litoral; D) Meio-Norte fica entre o Nordeste semiárido e a Amazônia (MA/PI). | ⚠️ Pegadinha da banca: O Planalto da Borborema provoca chuvas orográficas (de relevo) na encosta oriental e barra a umidade que iria para o Sertão (sotavento)."
+    },
+    {
+      subject: "Direito Militar",
+      topic: "Lei Estadual nº 6.783/1974 — Estatuto dos Policiais Militares de Pernambuco",
+      board: "UPENET/IAUPE",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(UPENET/IAUPE — PMPE) Nos termos da Lei Estadual nº 6.783/1974 (Estatuto dos Policiais Militares do Estado de Pernambuco), a hierarquia e a disciplina são a base institucional da Polícia Militar. A respeito desses pilares, é CORRETO afirmar que:",
+      options: [
+        "A antiguidade em cada posto ou graduação é contada a partir da data de nascimento do militar estadual, prevalecendo sempre o mais idoso.",
+        "O respeito à hierarquia é consubstanciado no espírito de acatamento à sequência de autoridade, crescendo a autoridade e a responsabilidade com o grau hierárquico.",
+        "Círculos hierárquicos são âmbitos de convivência exclusivos para oficiais, sendo vedada a existência de círculos entre praças.",
+        "A disciplina e o respeito à hierarquia devem ser mantidos apenas pelos militares da ativa, cessando para os da reserva remunerada e reformados."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Segundo o art. 12 da Lei Estadual nº 6.783/1974 (Estatuto da PMPE), a hierarquia policial-militar é a ordenação da autoridade em níveis diferentes dentro da estrutura da corporação; a autoridade e a responsabilidade crescem com o grau hierárquico, e a disciplina e o respeito à hierarquia devem ser mantidos permanentemente pelos policiais militares na ativa e na inatividade (art. 12, § 3º). | ✅ Alternativa correta: B) A autoridade e a responsabilidade crescem com o grau hierárquico. | ❌ Análise das alternativas: A) A antiguidade é contada da data da promoção/assinatura do ato (a idade é apenas último critério de desempate); C) Existem círculos de oficiais e círculos de praças; D) Devem ser mantidos permanentemente na ativa e na inatividade. | ⚠️ Pegadinha da banca: Dizer que militares da reserva remunerada ou reformados estão desobrigados da disciplina e do respeito à hierarquia."
+    },
+    {
+      subject: "Direito Militar",
+      topic: "Lei nº 11.817/2000 — Código Disciplinar dos Militares de Pernambuco (CDMEPE)",
+      board: "UPENET/IAUPE",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(UPENET/IAUPE — PMPE) De acordo com a Lei Estadual nº 11.817/2000 (Código Disciplinar dos Militares do Estado de Pernambuco — CDMEPE), constituem penas disciplinares aplicáveis aos militares estaduais, observada a hierarquia das sanções, EXCETO:",
+      options: [
+        "Repreensão.",
+        "Detenção.",
+        "Licenciamento a bem da disciplina.",
+        "Pena de trabalhos forçados em obras públicas."
+      ],
+      correct_index: 3,
+      explanation: "Conceito-chave: A Constituição Federal (art. 5º, XLVII, 'c') veda expressamente as penas de trabalhos forçados, banimento, cruéis e de caráter perpétuo. No CDMEPE (Lei Estadual nº 11.817/2000), as sanções disciplinares abrangem repreensão, detenção, prisão disciplinar (observada a Lei Federal 13.967/2019 que extinguiu a prisão disciplinar para PM/BM), licenciamento e exclusão a bem da disciplina. | ✅ Alternativa correta: D) Pena de trabalhos forçados é inconstitucional e inexistente no CDMEPE. | ❌ Análise das alternativas: A), B) e C) Constam do rol legal do CDMEPE. | ⚠️ Pegadinha da banca: Atenção também à Lei Federal nº 13.967/2019, que alterou o Decreto-Lei 667/69 para vedar a medida privativa e restritiva de liberdade em âmbito disciplinar nas PMs e CBMs."
+    },
+    {
+      subject: "Direito Constitucional",
+      topic: "Direitos Sociais e Nacionalidade (Arts. 6º a 12 da CF/88)",
+      board: "UPENET/IAUPE",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(UPENET/IAUPE) Segundo o art. 12, § 3º, da Constituição Federal de 1988, são cargos privativos de brasileiro NATO, EXCETO:",
+      options: [
+        "Ministro do Supremo Tribunal Federal.",
+        "Oficial das Forças Armadas.",
+        "Ministro de Estado da Defesa.",
+        "Governador de Estado e Comandante-Geral da Polícia Militar."
+      ],
+      correct_index: 3,
+      explanation: "Conceito-chave: O mnemônico clássico 'MP3.COM' resume os cargos privativos de brasileiro NATO (art. 12, § 3º, CF/88): Ministro do STF, Presidente e Vice-Presidente da República, Presidente da Câmara dos Deputados, Presidente do Senado Federal, Carreira Diplomática, Oficial das Forças Armadas e Ministro de Estado da Defesa. | ✅ Alternativa correta: D) Governador de Estado e Comandante da PM não constam do rol taxativo do art. 12, § 3º (podem ser ocupados por brasileiros naturalizados). | ❌ Análise das alternativas: A), B) e C) São cargos privativos de brasileiro nato. | ⚠️ Pegadinha da banca: 'Oficial das Forças Armadas' (Exército, Marinha e Aeronáutica) é privativo de nato; já Oficial da Polícia Militar ou Bombeiro Militar NÃO é privativo de brasileiro nato!"
+    },
+    {
+      subject: "Língua Portuguesa",
+      topic: "Emprego do Sinal Indicativo de Crase",
+      board: "UPENET/IAUPE",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(UPENET/IAUPE) Assinale a alternativa em que o sinal indicativo de crase foi empregado CORRETAMENTE de acordo com a norma-padrão:",
+      options: [
+        "A guarnição retornou à base operacional às 22h, após atender à ocorrências no centro.",
+        "O comandante dirigiu-se àquela unidade especializada para entregar os elogios à tropa.",
+        "Os candidatos passaram à responder as questões da prova objetiva passo à passo.",
+        "A portaria faz referência à Vossa Senhoria e à todas as autoridades presentes."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Ocorre crase na fusão da preposição 'a' com o artigo feminino 'a' (como em 'entregar os elogios à tropa') ou com a vogal inicial dos pronomes demonstrativos 'aquele(s)', 'aquela(s)', 'aquilo' ('dirigiu-se àquela unidade'). | ✅ Alternativa correta: B) Crase correta em 'àquela' e em 'à tropa'. | ❌ Análise das alternativas: A) Antes de plural sem artigo ('a ocorrências') não há crase ('a' no singular + plural = crase nem a pau); C) Não há crase antes de verbo ('a responder') nem entre palavras repetidas ('passo a passo'); D) Não há crase antes de pronomes de tratamento ('Vossa Senhoria') nem antes de pronome indefinido ('todas'). | ⚠️ Pegadinha da banca: Palavras repetidas ('cara a cara', 'frente a frente', 'dia a dia', 'passo a passo') NUNCA levam crase."
+    },
+    {
+      subject: "Legislação Extravagante",
+      topic: "Lei nº 9.455/1997 — Crime de Tortura",
+      board: "UPENET/IAUPE",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(UPENET/IAUPE) Com base na Lei nº 9.455/1997 (Lei de Tortura), assinale a alternativa CORRETA sobre as características e efeitos da condenação pelo crime de tortura:",
+      options: [
+        "O crime de tortura é próprio de funcionário público, não podendo ser praticado por particular.",
+        "A condenação acarreta a perda do cargo, função ou emprego público e a interdição para seu exercício pelo dobro do prazo da pena aplicada, sendo efeito automático da sentença condenatória.",
+        "Aquele que se omite em face dessas condutas, quando tinha o dever de evitá-las ou apurá-las, incorre na mesma pena de reclusão de 2 a 8 anos prevista para o torturador direto.",
+        "A Lei de Tortura aplica-se exclusivamente aos crimes cometidos dentro do território nacional."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Na Lei nº 9.455/1997 (art. 1º, § 5º), a perda do cargo, função ou emprego público e a interdição pelo DOBRO do prazo da pena aplicada são efeitos AUTOMÁTICOS da condenação (diferente do CP e da Lei de Abuso de Autoridade!). | ✅ Alternativa correta: B) Perda do cargo como efeito automático e interdição pelo dobro do prazo da pena. | ❌ Análise das alternativas: A) Em regra, a tortura no Brasil é crime COMUM (qualquer pessoa pode praticar), salvo na modalidade tortura-castigo/custódia; C) A tortura-omissão (art. 1º, § 2º) tem pena menor: DETENÇÃO de 1 a 4 anos; D) O art. 2º prevê extraterritorialidade incondicionada se a vítima for brasileira ou o agente estiver em local sob jurisdição brasileira. | ⚠️ Pegadinha da banca: Compare sempre: na Tortura (Lei 9.455/97), a perda do cargo é AUTOMÁTICA; no Abuso de Autoridade (Lei 13.869/19), exige REINCIDÊNCIA ESPECÍFICA e motivação na sentença!"
+    },
+    {
+      subject: "Legislação Extravagante",
+      topic: "Lei nº 11.340/2006 — Lei Maria da Penha",
+      board: "UPENET/IAUPE",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(UPENET/IAUPE) Nos termos do art. 12-C da Lei nº 11.340/2006 (Lei Maria da Penha), verificada a existência de risco atual ou iminente à vida ou à integridade física ou psicológica da mulher em situação de violência doméstica e familiar, o agressor será imediatamente afastado do lar, domicílio ou local de convivência com a ofendida:",
+      options: [
+        "Exclusivamente pela autoridade judicial, sendo vedada qualquer atuação cautelar de delegado ou policial militar.",
+        "Pela autoridade judicial; pelo delegado de polícia, quando o Município não for sede de comarca; ou pelo policial, quando o Município não for sede de comarca e não houver delegado disponível no momento da denúncia.",
+        "Apenas após o trânsito em julgado da sentença penal condenatória.",
+        "Somente se a vítima estiver assistida por defensor público no ato do registro do boletim de ocorrência."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: O art. 12-C da Lei Maria da Penha estabelece uma ordem escalonada para decretar o afastamento imediato do agressor do lar: (I) pela autoridade judicial; (II) pelo delegado de polícia, quando o Município não for sede de comarca; ou (III) pelo policial, quando o Município não for sede de comarca e não houver delegado disponível no momento da denúncia — devendo o juiz ser comunicado no prazo máximo de 24 horas para decidir em igual prazo sobre a manutenção ou revogação. | ✅ Alternativa correta: B) Ordem escalonada do art. 12-C (Juiz -> Delegado fora de sede de comarca -> Policial na ausência de delegado fora de sede de comarca). | ❌ Análise das alternativas: A), C) e D) Contrariam o texto expresso do art. 12-C. | ⚠️ Pegadinha da banca: O prazo de comunicação ao juiz e de decisão judicial no art. 12-C, § 1º, é de 24 HORAS (e não 48h)!"
+    },
+    {
+      subject: "Direito Penal",
+      topic: "Crimes contra a Administração Pública (Arts. 312 a 333 do CP)",
+      board: "UPENET/IAUPE",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(UPENET/IAUPE) O funcionário público que exige, para si ou para outrem, direta ou indiretamente, ainda que fora da função ou antes de assumi-la, mas em razão dela, vantagem indevida comete o crime de:",
+      options: [
+        "Corrupção passiva (art. 317 do CP).",
+        "Concussão (art. 316 do CP).",
+        "Peculato-desvio (art. 312 do CP).",
+        "Prevaricação (art. 319 do CP)."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: O verbo nuclear define o tipo penal: EXIGIR vantagem indevida = CONCUSSÃO (art. 316 do CP, crime formal); SOLICITAR ou RECEBER vantagem indevida, ou aceitar promessa = CORRUPÇÃO PASSIVA (art. 317 do CP). | ✅ Alternativa correta: B) Concussão (verbo 'exigir'). | ❌ Análise das alternativas: A) Corrupção passiva tem como verbos 'solicitar', 'receber' ou 'aceitar promessa'; C) Peculato tem os verbos 'apropriar-se', 'desviar' ou 'subtrair'; D) Prevaricação consiste em 'retardar ou deixar de praticar, indevidamente, ato de ofício, ou praticá-lo contra disposição expressa de lei, para satisfazer interesse ou sentimento pessoal'. | ⚠️ Pegadinha da banca: Se a exigência for de tributo ou contribuição social indevida, configura Excesso de Exação (art. 316, § 1º)."
+    },
+    {
+      subject: "Informática",
+      topic: "Redes de Computadores, Protocolos e Navegadores",
+      board: "UPENET/IAUPE",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(UPENET/IAUPE) Na arquitetura de redes TCP/IP, o protocolo responsável por converter nomes de domínio amigáveis (como www.portais.pe.gov.br) em seus respectivos endereços numéricos IP para localização dos servidores na Internet é o:",
+      options: [
+        "DHCP (Dynamic Host Configuration Protocol).",
+        "DNS (Domain Name System).",
+        "SMTP (Simple Mail Transfer Protocol).",
+        "IMAP (Internet Message Access Protocol)."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: O DNS (Domain Name System — porta padrão 53) atua como a 'lista telefônica' da Internet, traduzindo nomes de domínio legíveis por humanos em endereços IP numéricos e vice-versa. | ✅ Alternativa correta: B) DNS. | ❌ Análise das alternativas: A) DHCP atribui dinamicamente endereços IP e configurações de rede aos dispositivos conectados; C) SMTP envia mensagens de correio eletrônico; D) IMAP acessa e sincroniza e-mails diretamente no servidor. | ⚠️ Pegadinha da banca: Não confundir DNS (traduz nome de domínio <-> IP) com DHCP (distribui IP automaticamente na rede)."
+    },
+    {
+      subject: "Raciocínio Lógico-Matemático",
+      topic: "Análise Combinatória e Probabilidade",
+      board: "UPENET/IAUPE",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(UPENET/IAUPE) Um pelotão conta com 6 cabos e 4 sargentos. Deseja-se formar uma comissão de vistoria composta por exatamente 3 cabos e 2 sargentos. O número total de comissões distintas que podem ser formadas é igual a:",
+      options: [
+        "26.",
+        "60.",
+        "120.",
+        "240."
+      ],
+      correct_index: 2,
+      explanation: "Conceito-chave: Como a ordem de escolha dentro do grupo de cabos e dentro do grupo de sargentos NÃO altera a comissão formada, utiliza-se COMBINAÇÃO SIMPLES: C(n, p) = n! / [p!(n - p)!]. Escolha dos cabos: C(6, 3) = (6 × 5 × 4) / (3 × 2 × 1) = 20. Escolha dos sargentos: C(4, 2) = (4 × 3) / (2 × 1) = 6. Pelo Princípio Multiplicativo ('3 cabos E 2 sargentos'): 20 × 6 = 120 comissões. | ✅ Alternativa correta: C) 120. | ❌ Análise das alternativas: A) Soma (20 + 6 = 26) em vez de multiplicar; B) e D) Erros de cálculo fatorial. | ⚠️ Pegadinha da banca: Em problemas de 'comissão / equipe / grupo sem cargos distintos', a ordem não importa -> usa-se Combinação (e não Arranjo!)."
+    },
+    {
+      subject: "Direito Administrativo",
+      topic: "Atos Administrativos — Requisitos e Atributos",
+      board: "IBFC",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(IBFC) Considerando a teoria dos atos administrativos, os cinco elementos ou requisitos de validade do ato administrativo (frequentemente sintetizados pela doutrina sob o mnemônico CO-FI-FO-MO-OB) são:",
+      options: [
+        "Competência, Finalidade, Forma, Motivo e Objeto.",
+        "Coercibilidade, Eficiência, Forma, Moralidade e Oportunidade.",
+        "Competência, Presunção de Legitimidade, Autoexecutoriedade, Tipicidade e Imperatividade.",
+        "Conveniência, Oportunidade, Discricionariedade, Vinculação e Publicidade."
+      ],
+      correct_index: 0,
+      explanation: "Conceito-chave: Os 5 elementos/requisitos de validade do ato administrativo (Lei nº 4.717/1965, art. 2º) são: Competência (sujeito), Finalidade, Forma, Motivo e Objeto. Desses cinco, Competência, Finalidade e Forma são sempre vinculados, enquanto Motivo e Objeto podem ser vinculados ou discricionários (formando o mérito administrativo). | ✅ Alternativa correta: A) Competência, Finalidade, Forma, Motivo e Objeto. | ❌ Análise das alternativas: B) Mistura princípios e atributos; C) Descreve os atributos do ato (PATI: Presunção de legitimidade, Autoexecutoriedade, Tipicidade e Imperatividade); D) Conveniência e oportunidade compõem o mérito. | ⚠️ Pegadinha da banca: Não confundir REQUISITOS/ELEMENTOS (CO-FI-FO-MO-OB) com ATRIBUTOS (PATI)!"
+    },
+    {
+      subject: "Direito Administrativo",
+      topic: "Extinção dos Atos Administrativos — Anulação e Revogação (Súmula 473 do STF)",
+      board: "IBFC",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(IBFC) De acordo com a Súmula 473 do Supremo Tribunal Federal e o art. 53 da Lei nº 9.784/1999, quando a Administração Pública retira do mundo jurídico um ato administrativo VÁLIDO e legal, exclusivamente por razões de conveniência e oportunidade, operando efeitos prospectivos ('ex nunc'), ocorre a:",
+      options: [
+        "Anulação ou invalidação.",
+        "Revogação.",
+        "Cassação sancionatória.",
+        "Convalidação retroativa."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: A REVOGAÇÃO incide sobre ato VÁLIDO (discricionário) que se tornou inconveniente ou inoportuno, sendo privativa da Administração e produzindo efeitos 'ex nunc' (não retroage, respeitando os direitos adquiridos). Já a ANULAÇÃO incide sobre ato ILEGAL/inválido, podendo ser feita pela Administração ou pelo Judiciário, com efeitos 'ex tunc' (retroativos). | ✅ Alternativa correta: B) Revogação. | ❌ Análise das alternativas: A) Anulação decorre de ilegalidade e tem efeito ex tunc; C) Cassação ocorre quando o beneficiário descumpre requisitos de manutenção do ato; D) Convalidação corrige vícios sanáveis (competência não exclusiva e forma não essencial). | ⚠️ Pegadinha da banca: O Poder Judiciário NUNCA pode revogar ato administrativo típico de outro Poder (só pode anular por ilegalidade)!"
+    },
+    {
+      subject: "Direito Penal",
+      topic: "Aplicação da Lei Penal no Tempo e no Espaço (Arts. 1º a 6º do CP)",
+      board: "IBFC",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(IBFC) Para definir o TEMPO e o LUGAR do crime, os arts. 4º e 6º do Código Penal Brasileiro adotam, respectivamente, as teorias (mnemônico 'LUTA'):",
+      options: [
+        "Teoria da Atividade (para o tempo) e Teoria da Ubiquidade ou Mista (para o lugar).",
+        "Teoria do Resultado (para o tempo) e Teoria da Atividade (para o lugar).",
+        "Teoria da Ubiquidade (para o tempo) e Teoria do Resultado (para o lugar).",
+        "Teoria da Intenção (para o tempo) e Teoria da Extraterritorialidade (para o lugar)."
+      ],
+      correct_index: 0,
+      explanation: "Conceito-chave: Pelo mnemônico clássico 'LUTA': LUgar do crime = Ubiquidade (art. 6º do CP: tanto onde ocorreu a ação/omissão quanto onde se produziu ou deveria produzir-se o resultado); Tempo do crime = Atividade (art. 4º do CP: considera-se praticado o crime no momento da ação ou omissão, ainda que outro seja o momento do resultado). | ✅ Alternativa correta: A) Tempo = Atividade; Lugar = Ubiquidade. | ❌ Análise das alternativas: B), C) e D) Invertem as teorias adotadas pelos arts. 4º e 6º do CP. | ⚠️ Pegadinha da banca: Atenção à ordem das palavras na pergunta! Aqui pediu primeiro TEMPO (Atividade) e depois LUGAR (Ubiquidade)."
+    },
+    {
+      subject: "Direito Processual Penal",
+      topic: "Inquérito Policial — Características e Prazo (Arts. 4º a 23 do CPP)",
+      board: "IBFC",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(IBFC) O inquérito policial é procedimento administrativo informativo, destinado a apurar a materialidade e os indícios de autoria de infrações penais. Constituem características clássicas do inquérito policial, EXCETO:",
+      options: [
+        "Ser escrito, sigiloso e inquisitivo.",
+        "Ser indisponível para a autoridade policial (o delegado não pode mandar arquivar autos de inquérito).",
+        "Ser indispensável e obrigatório para o oferecimento de qualquer denúncia pelo Ministério Público.",
+        "Ser oficial e oficioso nos crimes de ação penal pública incondicionada."
+      ],
+      correct_index: 2,
+      explanation: "Conceito-chave: O inquérito policial é DISPENSÁVEL (art. 39, § 5º, do CPP): se o Ministério Público já dispuser de elementos informativos suficientes de autoria e materialidade (como peças de informação, CPI, sindicância), pode oferecer a denúncia diretamente sem inquérito policial. | ✅ Alternativa correta: C) O inquérito é DISPENSÁVEL (e não indispensável). | ❌ Análise das alternativas: A) É escrito (art. 9º), sigiloso (art. 20, respeitada a Súmula Vinculante 14 para o defensor) e inquisitivo; B) É indisponível (art. 17 do CPP: a autoridade policial não poderá mandar arquivar autos de inquérito); D) É oficial e oficioso. | ⚠️ Pegadinha da banca: Não confundir INDISPONÍVEL (delegado não pode arquivar) com DISPENSÁVEL (MP pode denunciar sem ele)."
+    },
+    {
+      subject: "Legislação Extravagante",
+      topic: "Lei nº 13.869/2019 — Nova Lei de Abuso de Autoridade",
+      board: "IBFC",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(IBFC) Nos termos do art. 1º, § 1º e § 2º, da Lei nº 13.869/2019 (Lei de Abuso de Autoridade), as condutas descritas na lei constituem crime de abuso de autoridade quando praticadas pelo agente com a finalidade específica de:",
+      options: [
+        "Prejudicar outrem ou beneficiar a si mesmo ou a terceiro, ou, ainda, por mero capricho ou satisfação pessoal, não configurando crime a divergência na interpretação de lei ou na avaliação de fatos e provas.",
+        "Cumprir estritamente ordem legal de superior hierárquico, respondendo o agente inclusive na modalidade culposa por imprudência.",
+        "Interpretar dispositivo legal de forma minoritária, ainda que sem dolo específico.",
+        "Aplicar sanção administrativa prevista em regulamento disciplinar militar."
+      ],
+      correct_index: 0,
+      explanation: "Conceito-chave: Todos os crimes da Lei nº 13.869/2019 são DOLOSOS e exigem um elemento subjetivo especial do tipo (dolo específico, art. 1º, § 1º): finalidade específica de prejudicar outrem, beneficiar a si mesmo ou a terceiro, ou por mero capricho ou satisfação pessoal. Não existe abuso de autoridade culposo nem crime de hermenêutica (art. 1º, § 2º). | ✅ Alternativa correta: A) Exige dolo específico e veda o chamado 'crime de hermenêutica'. | ❌ Análise das alternativas: B) Não há modalidade culposa na Lei de Abuso de Autoridade; C) Divergência na interpretação de lei não configura abuso; D) O exercício regular do poder disciplinar não é crime. | ⚠️ Pegadinha da banca: Na Lei 13.869/2019 todos os crimes são de ação penal PÚBLICA INCONDICIONADA (admite ação privada subsidiária da pública se o MP for inerte no prazo legal)."
+    },
+    {
+      subject: "Legislação Extravagante",
+      topic: "Lei nº 10.826/2003 — Estatuto do Desarmamento",
+      board: "IBFC",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(IBFC) De acordo com a Lei nº 10.826/2003 (Estatuto do Desarmamento) e a jurisprudência consolidada dos Tribunais Superiores, o cidadão que mantém sob sua guarda, exclusivamente no interior de sua residência ou no seu local de trabalho (desde que seja o titular ou responsável legal do estabelecimento), arma de fogo de uso permitido com registro vencido pratica:",
+      options: [
+        "Crime hediondo de posse ou porte ilegal de arma de fogo de uso restrito (art. 16).",
+        "Crime de porte ilegal de arma de fogo de uso permitido (art. 14).",
+        "Conduta formalmente atípica na esfera penal (mera infração administrativa), segundo jurisprudência consolidada do STJ, tratando-se de arma de uso permitido mantida em residência com registro apenas vencido.",
+        "Crime inafiançável de comércio ilegal de arma de fogo (art. 17)."
+      ],
+      correct_index: 2,
+      explanation: "Conceito-chave: Segundo o STJ (APn 686/AP e jurisprudência pacificada), o simples vencimento do certificado de registro de arma de fogo de uso permitido mantida no interior da residência (posse intramuros) não basta para caracterizar o crime do art. 12 da Lei 10.826/2003, configurando mera irregularidade administrativa sujeita a apreensão e multa, salvo se comprovado dolo de ocultação ou porte externo (art. 14). | ✅ Alternativa correta: C) Irregularidade administrativa (atipicidade penal na posse residencial de arma de uso permitido com registro vencido). | ❌ Análise das alternativas: A) Arma é de uso permitido; B) Porte (art. 14) exige circulação fora da residência/local de trabalho; D) Não há comércio. | ⚠️ Pegadinha da banca: Diferencie POSSE (art. 12 — interior da residência ou dependência desta, ou no local de trabalho sendo o titular/responsável legal) de PORTE (art. 14 — fora da residência/trabalho ou por empregado que não é o responsável legal)."
+    },
+    {
+      subject: "Língua Portuguesa",
+      topic: "Morfossintaxe e Funções da Palavra 'SE'",
+      board: "IBFC",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(IBFC) Compare as duas construções: I. 'Alugam-se viaturas blindadas para escolta.' / II. 'Precisa-se de novos peritos criminais.' Nas frases I e II, o vocábulo 'se' classifica-se, respectivamente, como:",
+      options: [
+        "Partícula apassivadora e índice de indeterminação do sujeito.",
+        "Índice de indeterminação do sujeito e partícula apassivadora.",
+        "Pronome reflexivo recíproco e conjunção subordinativa condicional.",
+        "Conjunção integrante e parte integrante do verbo."
+      ],
+      correct_index: 0,
+      explanation: "Conceito-chave: (I) 'Alugar' é Verbo Transitivo Direto (VTD: quem aluga, aluga algo -> sem preposição); logo, o 'se' é Partícula Apassivadora (PA), 'viaturas blindadas' é o sujeito paciente plural, e o verbo vai para o plural ('Alugam-se' = Viaturas blindadas são alugadas). (II) 'Precisar' é Verbo Transitivo Indireto (VTI: quem precisa, precisa DE algo -> com preposição 'de'); logo, o 'se' é Índice de Indeterminação do Sujeito (IIS) e o verbo fica obrigatoriamente na 3ª pessoa do singular ('Precisa-se'). | ✅ Alternativa correta: A) Partícula apassivadora (VTD + SE) e índice de indeterminação do sujeito (VTI/VI + SE). | ❌ Análise das alternativas: B) Inverte as classificações; C) e D) Não há reflexividade nem oração subordinada. | ⚠️ Pegadinha da banca: Se você consegue passar a frase para a voz passiva analítica ('Viaturas são alugadas'), o 'se' é SEMPRE Partícula Apassivadora e o verbo concorda com o sujeito!"
+    },
+    {
+      subject: "Raciocínio Lógico-Matemático",
+      topic: "Conjuntos e Diagramas de Venn",
+      board: "IBFC",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(IBFC) Em uma companhia com 100 policiais militares, 65 realizaram o curso de Patrulhamento Tático, 45 realizaram o curso de Operações de Choque e 15 não realizaram nenhum desses dois cursos. O número de policiais que realizaram AMBOS os cursos é igual a:",
+      options: [
+        "15.",
+        "20.",
+        "25.",
+        "30."
+      ],
+      correct_index: 2,
+      explanation: "Conceito-chave: Pelo Princípio da Inclusão-Exclusão para dois conjuntos: n(A U B) = Total - Nenhum = 100 - 15 = 85 policiais fizeram pelo menos um curso. Como n(A U B) = n(A) + n(B) - n(A ∩ B), temos: 85 = 65 + 45 - x => 85 = 110 - x => x = 110 - 85 = 25 policiais fizeram ambos os cursos. | ✅ Alternativa correta: C) 25. | ❌ Análise das alternativas: A) 15 é o grupo que não fez nenhum; B) e D) Erros aritméticos. | ⚠️ Pegadinha da banca: Caso a questão pergunte quantos fizeram APENAS Patrulhamento Tático, lembre-se de subtrair a interseção: 65 - 25 = 40!"
+    },
+    {
+      subject: "Informática",
+      topic: "Planilhas Eletrônicas (Microsoft Excel e LibreOffice Calc)",
+      board: "IBFC",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(IBFC) Em uma planilha do Microsoft Excel (em português), as células A1, A2, A3 e A4 contêm, respectivamente, os valores 10, 20, 30 e 40. Se na célula A5 for inserida a fórmula =SOMA(A1:A3;A4)/MÉDIA(A1:A4), o resultado exibido será:",
+      options: [
+        "2,5.",
+        "4.",
+        "10.",
+        "25."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Na sintaxe do Excel/Calc, os dois-pontos (:) significam 'ATÉ' (intervalo contínuo) e o ponto e vírgula (;) significa 'E' (argumentos separados). Portanto: SOMA(A1:A3;A4) soma (10 + 20 + 30) + 40 = 100. Já MÉDIA(A1:A4) calcula a média aritmética de A1 até A4: (10 + 20 + 30 + 40) / 4 = 100 / 4 = 25. Dividindo um pelo outro: 100 / 25 = 4. | ✅ Alternativa correta: B) 4. | ❌ Análise das alternativas: A), C) e D) Decorrem de confundir ':' com ';'. | ⚠️ Pegadinha da banca: Memorize sempre: ':' (dois-pontos) = ATÉ; ';' (ponto e vírgula) = E!"
+    },
+    {
+      subject: "Ética no Serviço Público",
+      topic: "Princípios Éticos, Decoro e Deveres do Agente Público",
+      board: "IBFC",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(IBFC) No âmbito da Ética na Administração Pública, a conduta do servidor público não se limita à mera observância formal da legalidade estrita, exigindo-se que ele distinga o que é honesto do que é desonesto, pautando seus atos pela boa-fé, probidade e lealdade às instituições. Tal dever vincula-se diretamente ao princípio constitucional da:",
+      options: [
+        "Moralidade administrativa.",
+        "Pessoalidade subjetiva.",
+        "Sigilosidade absoluta dos atos administrativos.",
+        "Inamovibilidade geral dos servidores."
+      ],
+      correct_index: 0,
+      explanation: "Conceito-chave: A moralidade administrativa (art. 37, caput, CF/88) exige que o agente público atue segundo padrões éticos de probidade, decoro, boa-fé e honestidade, de modo que o equilíbrio entre a legalidade e a finalidade, na conduta do servidor, é que consolida a moralidade do ato administrativo. | ✅ Alternativa correta: A) Moralidade administrativa. | ❌ Análise das alternativas: B) Vigora a impessoalidade; C) Vigora a publicidade como regra geral; D) Inamovibilidade é garantia da magistratura e do Ministério Público. | ⚠️ Pegadinha da banca: Um ato pode ser formalmente legal na aparência, mas imoral (por desvio de finalidade ou falta de probidade), sendo passível de anulação!"
+    },
+    {
+      subject: "Direitos Humanos",
+      topic: "Pacto de São José da Costa Rica (Convenção Americana sobre Direitos Humanos)",
+      board: "IBFC",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(IBFC) A Convenção Americana sobre Direitos Humanos (Pacto de São José da Costa Rica, promulgada no Brasil pelo Decreto nº 678/1992) e a Súmula Vinculante nº 25 do STF estabeleceram entendimento pacífico no sentido de que a prisão civil por dívida no ordenamento jurídico brasileiro é:",
+      options: [
+        "Permitida tanto para o devedor inescusável de pensão alimentícia quanto para o depositário infiel em contratos de alienação fiduciária.",
+        "Restrita exclusivamente à hipótese de inadimplemento voluntário e inescusável de obrigação alimentícia, sendo ilícita a prisão civil de depositário infiel, qualquer que seja a modalidade do depósito.",
+        "Totalmente abolida em todas as hipóteses, inclusive na dívida de alimentos.",
+        "Aplicável a qualquer inadimplente de crédito tributário inscrito em dívida ativa."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: O Pacto de São José da Costa Rica (art. 7º, item 7) possui status SUPRALEGAL no Brasil (abaixo da Constituição, mas acima das leis ordinárias) e só admite a prisão civil do devedor de alimentos. Por isso, o STF editou a Súmula Vinculante 25: 'É ilícita a prisão civil de depositário infiel, qualquer que seja a modalidade do depósito'. | ✅ Alternativa correta: B) Apenas o devedor de alimentos pode sofrer prisão civil. | ❌ Análise das alternativas: A) A prisão do depositário infiel está paralisada pela supralegalidade do Pacto de São José; C) A prisão por alimentos continua válida; D) Não existe prisão por dívida tributária. | ⚠️ Pegadinha da banca: Tratados de direitos humanos aprovados pelo rito comum têm status SUPRALEGAL; já os aprovados em 2 turnos nas 2 Casas por 3/5 dos votos (art. 5º, § 3º, CF/88) têm status de EMENDA CONSTITUCIONAL!"
+    },
+    {
+      subject: "Biologia",
+      topic: "Primeiros Socorros — Hemorragias, Queimaduras e RCP",
+      board: "IBFC",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(IBFC — CBM) No atendimento pré-hospitalar (APH) a uma vítima adulta em parada cardiorrespiratória (PCR) não traumática, realizada por socorristas leigos ou em suporte básico de vida sem via aérea avançada instalada, a relação padrão entre compressões torácicas externas e ventilações de resgate é de:",
+      options: [
+        "15 compressões para 2 ventilações, na frequência de 60 por minuto.",
+        "30 compressões para 2 ventilações, na frequência de 100 a 120 compressões por minuto.",
+        "5 compressões para 1 ventilação, na frequência de 80 por minuto.",
+        "50 compressões para 5 ventilações, sem retorno do tórax."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Pelas diretrizes internacionais de Ressuscitação Cardiopulmonar (AHA — Suporte Básico de Vida / BLS), em adultos a relação compressão-ventilação sem via aérea avançada é de 30:2, com frequência de 100 a 120 compressões/minuto e profundidade de 5 a 6 cm, permitindo o retorno total do tórax a cada compressão. | ✅ Alternativa correta: B) 30 compressões para 2 ventilações (100 a 120/min). | ❌ Análise das alternativas: A) 15:2 aplica-se apenas a crianças/bebês quando há 2 socorristas profissionais; C) e D) Protocolos inexistentes. | ⚠️ Pegadinha da banca: Adulto = SEMPRE 30:2 (independentemente de haver 1 ou 2 socorristas); Criança/Lactente = 30:2 com 1 socorrista e 15:2 com 2 socorristas!"
+    },
+    {
+      subject: "Direito Constitucional",
+      topic: "Remédios Constitucionais (Habeas Corpus, Mandado de Segurança e Ação Popular)",
+      board: "FGV Conhecimento",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(FGV) João, cidadão em pleno gozo de seus direitos políticos, tomou conhecimento de que determinado contrato administrativo celebrado pela Secretaria Estadual de Segurança causou grave lesão ao patrimônio público e à moralidade administrativa. Para pleitear a anulação judicial desse ato lesivo, sendo isento de custas judiciais e do ônus da sucumbência (salvo comprovada má-fé), o remédio constitucional adequado a ser ajuizado por João é:",
+      options: [
+        "Mandado de Segurança Coletivo.",
+        "Ação Popular (art. 5º, LXXIII, da CF/88).",
+        "Habeas Data.",
+        "Mandado de Injunção."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Nos termos do art. 5º, LXXIII, da CF/88, QUALQUER CIDADÃO (pessoa física no gozo dos direitos políticos, comprovado pelo título de eleitor) é parte legítima para propor AÇÃO POPULAR que vise a anular ato lesivo ao patrimônio público, à moralidade administrativa, ao meio ambiente e ao patrimônio histórico e cultural, ficando o autor, salvo comprovada má-fé, isento de custas judiciais e do ônus da sucumbência. | ✅ Alternativa correta: B) Ação Popular. | ❌ Análise das alternativas: A) MS Coletivo não pode ser impetrado por cidadão isolado (apenas partido político, sindicato, entidade de classe ou associação); C) Habeas Data tutela acesso/retificação de dados pessoais; D) Mandado de Injunção combate omissão normativa que inviabilize direito fundamental. | ⚠️ Pegadinha da banca: Pessoa jurídica NÃO pode propor Ação Popular (Súmula 365 do STF)!"
+    },
+    {
+      subject: "Direito Administrativo",
+      topic: "Responsabilidade Civil do Estado (Art. 37, § 6º, da CF/88)",
+      board: "FGV Conhecimento",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(FGV) Durante perseguição policial em via pública, uma viatura da Polícia Militar colidiu com o veículo de um particular que aguardava regularmente no semáforo fechado, causando danos materiais. Acerca da responsabilidade civil do Estado e da ação regressiva, segundo o art. 37, § 6º, da CF/88 e a tese de repercussão geral do STF (Tema 940), é CORRETO afirmar que:",
+      options: [
+        "O Estado responde de forma subjetiva perante o particular, cabendo à vítima provar a culpa ou o dolo do motorista da viatura.",
+        "O Estado responde objetivamente perante o terceiro lesado (Teoria do Risco Administrativo), assegurado o direito de regresso contra o agente público causador do dano nos casos de dolo ou culpa, sendo vedado à vítima ajuizar a ação diretamente contra o agente público.",
+        "O Estado responde pela Teoria do Risco Integral, não admitindo nenhuma excludente de nexo causal, nem mesmo culpa exclusiva da vítima.",
+        "A vítima deve processar obrigatoriamente o policial militar pessoa física em litisconsórcio com o Estado."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: O art. 37, § 6º, da CF/88 consagra a responsabilidade civil OBJETIVA do Estado (Teoria do Risco Administrativo, que admite excludentes como culpa exclusiva da vítima, caso fortuito e força maior) e a responsabilidade SUBJETIVA (dolo ou culpa) do agente público em ação regressiva. Pelo Tema 940 do STF (dupla garantia), a vítima deve acionar exclusivamente o Estado, não podendo processar diretamente o servidor público por ato praticado no exercício da função. | ✅ Alternativa correta: B) Responsabilidade objetiva do Estado + regresso subjetivo contra o agente + tese da dupla garantia (Tema 940 STF). | ❌ Análise das alternativas: A) A responsabilidade do Estado por conduta comissiva é objetiva; C) A regra geral no Brasil é o Risco Administrativo (e não o Risco Integral); D) Pelo Tema 940 do STF, o agente é parte ilegítima para figurar diretamente no polo passivo da ação indenizatória movida pela vítima. | ⚠️ Pegadinha da banca: A FGV cobra muito o Tema 940 do STF ('dupla garantia'): a vítima processa o Estado (objetivamente) e o Estado, se condenado, cobra do servidor em regresso (subjetivamente: dolo ou culpa)."
+    },
+    {
+      subject: "Direito Penal",
+      topic: "Concurso de Pessoas (Arts. 29 a 31 do CP)",
+      board: "FGV Conhecimento",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(FGV) Caio, servidor público estadual, convida seu amigo Tício, particular que conhece perfeitamente a condição funcional de Caio, para juntos subtraírem computadores da repartição pública onde Caio trabalha, valendo-se da facilidade que o cargo lhe proporciona. À luz do art. 30 do Código Penal, Caio e Tício responderão:",
+      options: [
+        "Caio por peculato-furto (art. 312, § 1º) e Tício apenas por furto simples (art. 155), pois a condição de funcionário público nunca se comunica ao particular.",
+        "Ambos pelo crime de peculato-furto (art. 312, § 1º, c/c art. 30 do CP), pois a condição de funcionário público é elementar do crime de peculato e comunica-se ao coautor ou partícipe particular que dela tinha ciência.",
+        "Ambos por furto qualificado, aplicando-se a Teoria Pluralista.",
+        "Caio por prevaricação e Tício será isento de pena."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Segundo o art. 30 do Código Penal, 'não se comunicam as circunstâncias e as condições de caráter pessoal, SALVO quando elementares do crime'. Como a qualidade de 'funcionário público' é ELEMENTAR do crime de peculato (art. 312), ela se comunica ao particular coautor ou partícipe, desde que ele tenha ciência dessa condição funcional. | ✅ Alternativa correta: B) Ambos respondem por peculato-furto (art. 312, § 1º, c/c art. 30 do CP). | ❌ Análise das alternativas: A) Ser funcionário público é elementar do peculato, logo se comunica; C) O CP adota como regra a Teoria Monista ou Unitária (art. 29); D) Há subtração patrimonial dolosa. | ⚠️ Pegadinha da banca: Se o particular NÃO SOUBESSE que o comparsa era funcionário público (erro de tipo sobre a elementar), aí sim responderia apenas por furto (evitando a responsabilidade penal objetiva)."
+    },
+    {
+      subject: "Direito Processual Penal",
+      topic: "Provas no Processo Penal — Cadeia de Custódia (Arts. 158-A a 158-F do CPP)",
+      board: "FGV Conhecimento",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(FGV) Inserida no Código de Processo Penal pela Lei nº 13.964/2019 (Pacote Anticrime), a cadeia de custódia compreende o conjunto de todos os procedimentos utilizados para manter e documentar a história cronológica do vestígio coletado em locais ou em vítimas de crimes. Nos termos do art. 158-A, § 1º, o início da cadeia de custódia dá-se com a:",
+      options: [
+        "Lavratura do laudo pericial definitivo pelo Instituto de Criminalística.",
+        "Preservação do local de crime ou com procedimentos policiais ou periciais nos quais seja detectada a existência de vestígio.",
+        "Remessa do inquérito policial relatado ao Ministério Público.",
+        "Designação de audiência de instrução e julgamento pelo juiz das garantias."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Nos termos do art. 158-A, § 1º, do CPP, o início da cadeia de custódia dá-se com a preservação do local de crime ou com procedimentos policiais ou periciais nos quais seja detectada a existência de vestígio. E o agente público que reconhecer um elemento como de potencial interesse para a produção da prova pericial fica responsável por sua preservação (§ 2º). | ✅ Alternativa correta: B) Preservação do local de crime ou detecção da existência de vestígio. | ❌ Análise das alternativas: A), C) e D) São fases posteriores da persecução penal. | ⚠️ Pegadinha da banca: As etapas externas da cadeia de custódia começam com: Reconhecimento -> Isolamento -> Fixação -> Coleta -> Acondicionamento -> Transporte (art. 158-B do CPP)."
+    },
+    {
+      subject: "Língua Portuguesa",
+      topic: "Coesão, Coerência e Reescritura de Frases",
+      board: "FGV Conhecimento",
+      difficulty: "dificil",
+      origin: "oficial",
+      statement: "(FGV) No período 'Embora o efetivo estivesse reduzido naquela madrugada, a guarnição conteve o tumulto com rapidez', a conjunção destacada introduz uma oração subordinada adverbial concessiva. Assinale a alternativa em que a substituição de 'Embora' mantém o sentido concessivo e a correção gramatical:",
+      options: [
+        "Porquanto o efetivo estivesse reduzido naquela madrugada...",
+        "Conquanto o efetivo estivesse reduzido naquela madrugada...",
+        "Contanto que o efetivo estivesse reduzido naquela madrugada...",
+        "Por conseguinte o efetivo estivesse reduzido naquela madrugada..."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: A FGV cobra sistematicamente o trio de conjunções parônimas: CONQUANTO = concessiva (= embora, ainda que, posto que); PORQUANTO = causal/explicativa (= porque, visto que, já que); CONTANTO QUE = condicional (= desde que). | ✅ Alternativa correta: B) 'Conquanto' é conjunção concessiva e exige verbo no subjuntivo, exatamente como 'Embora'. | ❌ Análise das alternativas: A) 'Porquanto' é causal/explicativa (e exige indicativo); C) 'Contanto que' é condicional; D) 'Por conseguinte' é conclusiva. | ⚠️ Pegadinha da banca: Grave na memória: CONQUANTO = Embora (concessão); PORQUANTO = Porque (causa/explicação); CONTANTO QUE = Desde que (condição)!"
+    },
+    {
+      subject: "Raciocínio Lógico-Matemático",
+      topic: "Princípio da Casa dos Pombos (Princípio das Gavetas de Dirichlet)",
+      board: "FGV Conhecimento",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(FGV) Em um alojamento militar há 40 policiais. Considerando os 12 meses do ano, é possível garantir, com absoluta certeza (pelo Princípio das Gavetas de Dirichlet), que nesse alojamento existem pelo menos:",
+      options: [
+        "3 policiais que fazem aniversário no mesmo dia do ano.",
+        "4 policiais que fazem aniversário no mesmo mês do ano.",
+        "5 policiais que fazem aniversário no mês de janeiro.",
+        "12 policiais que fazem aniversário em meses diferentes."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Pelo Princípio da Casa dos Pombos (Dirichlet), ao distribuirmos 40 elementos (pombos = policiais) em 12 categorias (casas = meses do ano), no pior caso possível colocamos 3 policiais em cada um dos 12 meses (12 × 3 = 36 policiais). Os 4 policiais restantes (40 - 36 = 4) terão obrigatoriamente de cair em meses que já possuem 3 policiais, garantindo que pelo menos um mês terá 3 + 1 = 4 policiais! (Fórmula: teto de 40/12 = teto(3,33) = 4). | ✅ Alternativa correta: B) Pelo menos 4 policiais fazem aniversário no mesmo mês. | ❌ Análise das alternativas: A) São 365/366 dias; C) Não se pode cravar qual mês específico terá 4; D) Todos os 40 poderiam ter nascido em março, por exemplo. | ⚠️ Pegadinha da banca: A FGV ama o Princípio da Casa dos Pombos! Divida os itens pelas categorias e arredonde SEMPRE para cima se houver resto."
+    },
+    {
+      subject: "Informática",
+      topic: "Sistemas Operacionais — Windows 10/11 e Atalhos",
+      board: "FGV Conhecimento",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(FGV) No sistema operacional Microsoft Windows 10/11 (configuração padrão em português), quando um usuário seleciona um arquivo no Explorador de Arquivos e pressiona a combinação de teclas SHIFT + DELETE, o efeito produzido é:",
+      options: [
+        "Enviar o arquivo para a Lixeira com proteção por senha.",
+        "Excluir o arquivo permanentemente do sistema, sem que ele passe pela Lixeira.",
+        "Mover o arquivo para a Área de Transferência (Recortar).",
+        "Criar um atalho para o arquivo na Área de Trabalho."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: No Windows, a tecla DELETE isolada envia o arquivo do disco local para a Lixeira (permitindo restauração). Já o atalho SHIFT + DELETE solicita confirmação para excluir o item permanentemente, sem passar pela Lixeira. | ✅ Alternativa correta: B) Excluir permanentemente sem passar pela Lixeira. | ❌ Análise das alternativas: A) A Lixeira não possui proteção por senha via Shift+Delete; C) Recortar é Ctrl + X; D) Não cria atalho. | ⚠️ Pegadinha da banca: Arquivos apagados diretamente de um pendrive (unidade removível USB) ou unidade de rede já são excluídos permanentemente mesmo usando apenas a tecla DELETE simples!"
+    },
+    {
+      subject: "Física",
+      topic: "Hidrostática — Teorema de Stevin e Princípio de Pascal",
+      board: "FGV Conhecimento",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(FGV — CBM) Durante uma operação de mergulho de busca e salvamento em uma barragem de água doce (densidade = 1.000 kg/m³; g = 10 m/s²; 1 atm = 10⁵ Pa), um bombeiro militar desce da superfície até a profundidade de 20 metros. De acordo com o Teorema de Stevin, a pressão TOTAL (absoluta) suportada pelo mergulhador a 20 metros de profundidade é de:",
+      options: [
+        "1 atm.",
+        "2 atm.",
+        "3 atm.",
+        "20 atm."
+      ],
+      correct_index: 2,
+      explanation: "Conceito-chave: Pelo Teorema de Stevin, a pressão hidrostática da coluna líquida é P_hidro = d · g · h = 1000 · 10 · 20 = 200.000 Pa = 2 · 10⁵ Pa = 2 atm (a cada 10 metros de coluna de água doce, a pressão aumenta cerca de 1 atm). A pressão TOTAL (absoluta) soma a pressão atmosférica na superfície (1 atm) com a pressão hidrostática (2 atm): P_total = 1 atm + 2 atm = 3 atm! | ✅ Alternativa correta: C) 3 atm. | ❌ Análise das alternativas: A) 1 atm é apenas a pressão atmosférica na superfície; B) 2 atm é a pressão efetiva/manométrica (hidrostática), esquecendo de somar 1 atm da atmosfera; D) Confunde metros com atm. | ⚠️ Pegadinha da banca: A cada 10 m de profundidade na água = +1 atm. Mas quando a questão pede a pressão TOTAL ou ABSOLUTA, nunca esqueça de somar +1 atm da superfície!"
+    },
+    {
+      subject: "Legislação Extravagante",
+      topic: "Lei nº 8.072/1990 — Crimes Hediondos",
+      board: "FGV Conhecimento",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(FGV) Com as alterações promovidas pelo Pacote Anticrime (Lei nº 13.964/2019) na Lei nº 8.072/1990 (Lei dos Crimes Hediondos), assinale a alternativa que apresenta uma conduta que É classificada legalmente como crime hediondo:",
+      options: [
+        "Furto qualificado pelo concurso de duas ou mais pessoas.",
+        "Furto qualificado pelo emprego de explosivo ou de artefato análogo que cause perigo comum (art. 155, § 4º-A, do CP).",
+        "Porte ilegal de arma de fogo de uso permitido (art. 14 da Lei nº 10.826/2003).",
+        "Associação para o tráfico de drogas (art. 35 da Lei nº 11.343/2006)."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: A Lei nº 13.964/2019 incluiu no rol taxativo do art. 1º da Lei 8.072/1990 o furto qualificado pelo emprego de explosivo ou de artefato análogo que cause perigo comum (art. 1º, IX), bem como o roubo circunstanciado pela restrição de liberdade da vítima, pelo emprego de arma de fogo ou qualificado por lesão grave/morte (latrocínio). | ✅ Alternativa correta: B) Furto qualificado pelo emprego de explosivo (única modalidade de furto que é crime hediondo!). | ❌ Análise das alternativas: A) Demais qualificadoras do furto não são hediondas; C) Apenas posse/porte de arma de fogo de uso PROIBIDO (e comércio ilegal / tráfico internacional de arma) são hediondos; D) O STJ (Súmula 512 cancelada, mas entendimento mantido para o art. 35) e a Lei 8.072/90 consolidam que a associação para o tráfico (art. 35) NÃO é equiparada a hediondo, nem o tráfico privilegiado (art. 33, § 4º). | ⚠️ Pegadinha da banca: Furto com EXPLOSIVO = Hediondo! Já roubo com arma branca (faca) é roubo majorado, mas NÃO é hediondo (só roubo com arma de fogo, restrição de liberdade ou lesão grave/morte é hediondo)."
+    },
+    {
+      subject: "Direito Constitucional",
+      topic: "Inviolabilidade do Sigilo das Comunicações (Art. 5º, XII, da CF/88)",
+      board: "Cebraspe",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Cebraspe) No que concerne aos direitos e garantias fundamentais e à jurisprudência dos Tribunais Superiores acerca da interceptação telefônica e do acesso a dados de aparelhos celulares apreendidos em prisão em flagrante, assinale a opção CORRETA:",
+      options: [
+        "A interceptação das comunicações telefônicas pode ser determinada por ordem judicial para instruir tanto investigação criminal quanto processo administrativo disciplinar (PAD).",
+        "É lícito aos policiais militares, no momento da prisão em flagrante, vasculharem livremente as conversas do aplicativo WhatsApp do preso sem autorização judicial e sem o consentimento válido do titular.",
+        "A quebra do sigilo das comunicações telefônicas (interceptação) submete-se à cláusula de reserva de jurisdição, exigindo ordem judicial para fins de investigação criminal ou instrução processual penal, mas a prova licitamente colhida na esfera penal pode ser compartilhada com processo administrativo disciplinar (prova emprestada).",
+        "O sigilo da correspondência é direito fundamental absoluto, não admitindo mitigação nem mesmo em estado de defesa ou em unidade prisional."
+      ],
+      correct_index: 2,
+      explanation: "Conceito-chave: Pelo art. 5º, XII, da CF/88 e Lei nº 9.296/1996, a interceptação telefônica exige ORDEM JUDICIAL e só pode ser decretada para investigação criminal ou instrução processual penal. Contudo, o STF e o STJ (Súmula 591 do STJ) admitem a 'prova emprestada' produzida licitamente no processo penal para uso em Processo Administrativo Disciplinar (PAD). | ✅ Alternativa correta: C) Reserva de jurisdição penal + admissibilidade da prova emprestada no PAD (Súmula 591 do STJ). | ❌ Análise das alternativas: A) O juiz não pode decretar interceptação originariamente para um PAD; B) Segundo o STJ e o STF, o acesso policial sem ordem judicial às mensagens do WhatsApp em celular apreendido no flagrante é ILÍCITO; D) Nenhum direito é absoluto: o STF admite abertura de cartas de presos pela administração penitenciária quando houver fundada suspeita de prática ilícita. | ⚠️ Pegadinha da banca: O policial pode apreender o aparelho celular no flagrante (vestígio), mas NÃO pode devassar as conversas do WhatsApp sem prévia ordem judicial!"
+    },
+    {
+      subject: "Direito Administrativo",
+      topic: "Improbidade Administrativa (Lei nº 8.429/1992 atualizada pela Lei nº 14.230/2021)",
+      board: "Cebraspe",
+      difficulty: "dificil",
+      origin: "oficial",
+      statement: "(Cebraspe) Considerando as profundas alterações promovidas pela Lei nº 14.230/2021 na Lei de Improbidade Administrativa (Lei nº 8.429/1992), assinale a opção CORRETA:",
+      options: [
+        "Os atos de improbidade administrativa que causam lesão ao erário (art. 10) admitem tanto a modalidade dolosa quanto a modalidade culposa.",
+        "A configuração de qualquer ato de improbidade administrativa (arts. 9º, 10 e 11) exige, obrigatoriamente, a comprovação de DOLO específico, tendo sido abolida a modalidade culposa da Lei nº 8.429/1992.",
+        "O mero exercício da função ou desempenho de competências públicas, sem comprovação de ato doloso com fim ilícito, basta para configurar improbidade por violação a princípios.",
+        "Os prazos de suspensão dos direitos políticos na nova Lei de Improbidade foram limitados ao máximo de 5 (cinco) anos para todas as modalidades."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Após a reforma da Lei nº 14.230/2021, NÃO EXISTE MAIS improbidade administrativa culposa no Brasil! Todos os tipos (enriquecimento ilícito no art. 9º, lesão ao erário no art. 10 e violação aos princípios no art. 11) exigem DOLO específico (vontade livre e consciente de alcançar o resultado ilícito tipificado). | ✅ Alternativa correta: B) Exigência de dolo em todas as modalidades (fim da improbidade culposa). | ❌ Análise das alternativas: A) A modalidade culposa do art. 10 foi revogada; C) O art. 1º, § 3º, veda expressamente a responsabilização sem dolo específico; D) Na Lei 14.230/2021, a suspensão dos direitos políticos vai até 14 anos (art. 9º) ou 12 anos (art. 10), e o rol do art. 11 passou a ser TAXATIVO. | ⚠️ Pegadinha da banca: O Cebraspe cobra exaustivamente que a Lei 14.230/2021 extinguiu a modalidade culposa e tornou TAXATIVO o rol do art. 11 (violação a princípios)!"
+    },
+    {
+      subject: "Direito Penal",
+      topic: "Crimes contra a Vida e contra o Patrimônio (CP)",
+      board: "Cebraspe",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Cebraspe) Durante assalto à mão armada em uma farmácia, o criminoso efetua disparo para matar o caixa que reagiu e acaba atingindo fatalmente a vítima, mas foge assustado com o barulho do tiro sem conseguir levar nenhum valor ou bem do estabelecimento. Nessa situação hipotética, segundo a Súmula 610 do STF, o agente responderá por:",
+      options: [
+        "Homicídio qualificado consumado em concurso formal com tentativa de roubo.",
+        "Latrocínio consumado (art. 157, § 3º, II, do CP), ainda que não se tenha realizado a subtração de bens da vítima.",
+        "Tentativa de latrocínio, por não ter ocorrido a inversão da posse da coisa alheia móvel.",
+        "Homicídio simples em concurso material com furto tentado."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: A Súmula 610 do STF é taxativa: 'Há crime de latrocínio, quando o homicídio se consuma, ainda que não realize o agente a subtração de bens da vítima'. | ✅ Alternativa correta: B) Latrocínio consumado (Súmula 610 do STF). | ❌ Análise das alternativas: A), C) e D) Contrariam a Súmula 610 do STF. Veja a matriz clássica do latrocínio: Morte consumada + Subtração consumada = Latrocínio CONSUMADO; Morte consumada + Subtração tentada = Latrocínio CONSUMADO (Súmula 610 STF); Morte tentada + Subtração consumada ou tentada = Latrocínio TENTADO! | ⚠️ Pegadinha da banca: O que define se o latrocínio é consumado ou tentado é o resultado MORTE, e a competência para julgar o latrocínio é do JUIZ SINGULAR (Súmula 603 do STF — não vai a Júri Popular, pois é crime contra o patrimônio!)."
+    },
+    {
+      subject: "Direito Processual Penal",
+      topic: "Prisões Cautelares — Prisão Preventiva (Arts. 311 a 316 do CPP)",
+      board: "Cebraspe",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Cebraspe) Acerca da prisão preventiva na sistemática dada ao Código de Processo Penal pela Lei nº 13.964/2019 (Pacote Anticrime), assinale a opção CORRETA:",
+      options: [
+        "O juiz pode decretar a prisão preventiva de ofício durante o curso da ação penal, sendo vedada apenas na fase de inquérito policial.",
+        "É vedada a decretação da prisão preventiva de ofício pelo juiz tanto na fase de investigação policial quanto no curso do processo penal, dependendo sempre de requerimento do Ministério Público, do querelante ou do assistente, ou de representação da autoridade policial.",
+        "A prisão preventiva possui prazo legal fixo de 5 dias prorrogáveis por mais 5 dias em crimes comuns.",
+        "A gravidade abstrata do delito basta, por si só, para fundamentar validamente o decreto de prisão preventiva."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Com o Pacote Anticrime (Lei nº 13.964/2019), foi suprimida do art. 311 do CPP a expressão 'de ofício'. Hoje, o juiz NUNCA pode decretar prisão preventiva de ofício — nem no inquérito, nem na fase processual! Além disso, o art. 316, parágrafo único, exige a revisão da necessidade de sua manutenção a cada 90 dias. | ✅ Alternativa correta: B) Vedação absoluta de prisão preventiva de ofício pelo juiz (art. 311 do CPP). | ❌ Análise das alternativas: A) Antes de 2019 podia no processo, mas hoje é proibido em ambas as fases; C) 5 + 5 dias é o prazo da prisão TEMPORÁRIA (Lei 7.960/89) em crimes comuns (30 + 30 em hediondos); D) O art. 315, § 2º, veda fundamentação baseada apenas na gravidade abstrata do crime. | ⚠️ Pegadinha da banca: Se o delegado representar ou o MP requerer, o juiz pode decretar; o que o juiz NÃO pode é decretar sozinho (de ofício) ou converter o flagrante em preventiva sem provocação do MP ou representação do delegado (STJ/STF)."
+    },
+    {
+      subject: "Língua Portuguesa",
+      topic: "Sintaxe do Período Simples e Composto — Regência e Pontuação",
+      board: "Cebraspe",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Cebraspe) No período 'Os investigadores, que atuaram de forma integrada no caso, recuperaram todos os veículos subtraídos', as vírgulas que isolam a oração 'que atuaram de forma integrada no caso' têm a função sintático-semântica de:",
+      options: [
+        "Restringir o sentido do substantivo 'investigadores', indicando que apenas uma parte deles atuou de forma integrada.",
+        "Demarcar uma oração subordinada adjetiva explicativa, indicando que a totalidade dos investigadores mencionados atuou de forma integrada.",
+        "Separar o sujeito composto do predicado verbal.",
+        "Isolar um adjunto adverbial de tempo deslocado para o início do período."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Oração subordinada adjetiva COM vírgulas = EXPLICATIVA (generaliza o antecedente: todos os investigadores atuaram de forma integrada). Oração subordinada adjetiva SEM vírgulas = RESTRITIVA (delimita um subconjunto: somente os investigadores que atuaram de forma integrada recuperaram os veículos). | ✅ Alternativa correta: B) Demarcar oração subordinada adjetiva explicativa. | ❌ Análise das alternativas: A) Seria restritiva apenas se as vírgulas fossem retiradas; C) Jamais se separa sujeito de verbo por vírgula única; D) É oração adjetiva introduzida por pronome relativo ('que' = os quais). | ⚠️ Pegadinha da banca: No Cebraspe, a retirada das duas vírgulas de uma oração adjetiva explicativa MANTÉM a correção gramatical, mas ALTERA o sentido original do texto (passa de explicativa para restritiva)!"
+    },
+    {
+      subject: "Raciocínio Lógico-Matemático",
+      topic: "Argumentação Lógica e Quantificadores ('Todo', 'Algum', 'Nenhum')",
+      board: "Cebraspe",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Cebraspe) A negação lógica da proposição quantificada 'Todos os documentos apreendidos na operação foram periciados' é corretamente expressa por:",
+      options: [
+        "Nenhum documento apreendido na operação foi periciado.",
+        "Pelo menos um documento apreendido na operação não foi periciado.",
+        "Todos os documentos apreendidos na operação não foram periciados.",
+        "Algum documento apreendido na operação foi periciado."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: A negação do quantificador universal afirmativo ('TODO A é B') NUNCA é 'Nenhum A é B'! Para quebrar a afirmação 'Todos foram periciados', basta que exista pelo menos um (algum) que não tenha sido periciado: 'Algum A não é B' / 'Pelo menos um A não é B' (regra PEA + Não). | ✅ Alternativa correta: B) 'Pelo menos um documento apreendido na operação não foi periciado'. | ❌ Análise das alternativas: A) e C) Negam com 'Nenhum', erro clássico; D) Não negou o predicado ('não foi periciado'). | ⚠️ Pegadinha da banca: Memorize o quadrado de oposições: Negação de 'TODO A é B' = 'Algum A NÃO é B'; Negação de 'NENHUM A é B' = 'Algum A é B'."
+    },
+    {
+      subject: "Informática",
+      topic: "Segurança da Informação — Criptografia, Assinatura Digital e Backup",
+      board: "Cebraspe",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Cebraspe) A respeito de assinatura digital baseada em infraestrutura de chaves públicas (ICP-Brasil) e criptografia assimétrica, assinale a opção CORRETA:",
+      options: [
+        "Para assinar digitalmente um documento eletrônico, o remetente aplica sua própria chave PÚBLICA sobre o resumo criptográfico (hash), e o destinatário valida a assinatura com a chave PRIVADA do remetente.",
+        "Para assinar digitalmente um documento eletrônico, o remetente utiliza sua própria chave PRIVADA sobre o hash do documento, e qualquer destinatário pode verificar a autenticidade e a integridade usando a chave PÚBLICA do remetente.",
+        "A assinatura digital garante automaticamente o sigilo (confidencialidade) do conteúdo do documento, impedindo que terceiros leiam o texto.",
+        "Na criptografia simétrica, cada usuário possui um par de chaves distintas (uma pública e uma privada)."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Na Assinatura Digital (autenticidade, integridade e não repúdio/irretratabilidade), o autor assina com o que só ele tem: sua CHAVE PRIVADA; e os destinatários conferem a assinatura usando a CHAVE PÚBLICA do remetente. Já para garantir SIGILO (confidencialidade) na criptografia assimétrica, cifra-se com a chave PÚBLICA do destinatário e decifra-se com a chave PRIVADA do destinatário. | ✅ Alternativa correta: B) Assina com a chave PRIVADA do remetente e verifica com a chave PÚBLICA do remetente. | ❌ Análise das alternativas: A) Inverte as chaves; C) Assinatura digital garante autenticidade, integridade e não repúdio, mas NÃO garante sigilo/confidencialidade por si só; D) Par de chaves pública/privada é criptografia ASSIMÉTRICA. | ⚠️ Pegadinha da banca: O Cebraspe adora afirmar que 'a assinatura digital garante a confidencialidade da mensagem' — isso está ERRADO (quem garante confidencialidade é a cifragem/criptografia do conteúdo, e não a assinatura)!"
+    },
+    {
+      subject: "Legislação Extravagante",
+      topic: "Lei nº 7.960/1989 — Prisão Temporária",
+      board: "Cebraspe",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Cebraspe) Acerca da prisão temporária (Lei nº 7.960/1989 e Lei nº 8.072/1990), assinale a opção CORRETA:",
+      options: [
+        "A prisão temporária pode ser decretada tanto na fase do inquérito policial quanto durante a instrução processual em juízo.",
+        "A prisão temporária cabe exclusivamente durante a fase de investigação policial (inquérito), não pode ser decretada de ofício pelo juiz e possui prazo de 5 dias (prorrogável por mais 5) nos crimes comuns do rol legal, ou de 30 dias (prorrogável por mais 30) nos crimes hediondos e equiparados.",
+        "O delegado de polícia pode decretar diretamente a prisão temporária em caso de urgência, comunicando o juiz em 24 horas.",
+        "Qualquer contravenção penal admite a decretação de prisão temporária."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: A prisão temporária (Lei nº 7.960/1989) é exclusiva da fase pré-processual (investigação/inquérito), exige representação da autoridade policial ou requerimento do MP (nunca de ofício pelo juiz), aplica-se aos crimes do rol taxativo da lei (ou hediondos/equiparados) e tem prazo de 5 + 5 dias (crimes comuns da Lei 7.960/89) ou 30 + 30 dias (crimes hediondos e equiparados — art. 2º, § 4º, da Lei 8.072/90). | ✅ Alternativa correta: B) Exclusiva da investigação, vedada de ofício, prazos 5+5 (comuns) e 30+30 (hediondos). | ❌ Análise das alternativas: A) Não cabe na fase processual; C) Sujeita-se à reserva de jurisdição (só o juiz decreta); D) Não cabe para contravenções penais. | ⚠️ Pegadinha da banca: No julgamento das ADIs 3360 e 4109, o STF fixou que a prisão temporária exige cumulativamente os incisos I e III do art. 1º, além de fatos novos/contemporâneos e insuficiência de medidas cautelares diversas."
+    },
+    {
+      subject: "Direitos Humanos",
+      topic: "Regras de Mandela e Uso Diferenciado da Força (Portaria Interministerial nº 4.226/2010 e Lei nº 13.060/2014)",
+      board: "Cebraspe",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Cebraspe) Nos termos da Lei nº 13.060/2014 e das diretrizes internacionais de Direitos Humanos aplicáveis à atividade policial, o uso de instrumentos de menor potencial ofensivo pelos agentes de segurança pública pauta-se pelos princípios da:",
+      options: [
+        "Legalidade, necessidade, razoabilidade e proporcionalidade, sendo vedado apontar arma de fogo contra pessoas durante procedimentos de abordagem de rotina como prática padrão sem risco real ou iminente.",
+        "Letalidade imediata, discricionariedade irrestrita e superioridade bélica.",
+        "Retaliação punitiva e presunção de periculosidade absoluta.",
+        "Intervenção mínima, dispensando-se o socorro médico caso o agressor fique ferido."
+      ],
+      correct_index: 0,
+      explanation: "Conceito-chave: A Lei nº 13.060/2014 (art. 2º) determina que os órgãos de segurança pública priorizem a utilização dos instrumentos de menor potencial ofensivo, desde que o seu uso não coloque em risco a integridade física ou psíquica dos policiais, obedecendo aos princípios da legalidade, necessidade, razoabilidade e proporcionalidade. | ✅ Alternativa correta: A) Legalidade, necessidade, razoabilidade e proporcionalidade. | ❌ Análise das alternativas: B), C) e D) Violam frontalmente a Lei 13.060/2014 e a Portaria Interministerial 4.226/2010 (inclusive o dever legal de prestar socorro imediato a feridos e não usar disparo de advertência). | ⚠️ Pegadinha da banca: Pela Portaria Interministerial 4.226/2010 (Diretriz 6), o chamado 'disparo de advertência' NÃO é considerado prática aceitável por causa da imprevisibilidade de seus efeitos!"
+    },
+    {
+      subject: "Física",
+      topic: "Cinemática e Dinâmica — Leis de Newton e Segurança Viária",
+      board: "Cebraspe",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(Cebraspe — PRF/CBM) Uma viatura trafega em linha reta a 72 km/h quando o motorista aciona os freios, parando completamente após percorrer 40 metros com desaceleração constante. O módulo da desaceleração escalar média dessa viatura, em m/s², foi igual a:",
+      options: [
+        "2,5 m/s².",
+        "5,0 m/s².",
+        "10,0 m/s².",
+        "18,0 m/s²."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Primeiro convertemos a velocidade inicial de km/h para m/s dividindo por 3,6: v₀ = 72 / 3,6 = 20 m/s. Como a questão fornece velocidades (v₀ = 20 m/s, v = 0 m/s) e distância (Δs = 40 m) sem envolver o tempo, aplicamos a Equação de Torricelli: v² = v₀² + 2 · a · Δs => 0² = 20² + 2 · a · 40 => 0 = 400 + 80a => |a| = 400 / 80 = 5,0 m/s². | ✅ Alternativa correta: B) 5,0 m/s². | ❌ Análise das alternativas: A), C) e D) Resultam de esquecer a divisão por 3,6 ou o fator 2 da equação de Torricelli. | ⚠️ Pegadinha da banca: Sempre verifique as unidades antes de aplicar Torricelli: 36 km/h = 10 m/s; 72 km/h = 20 m/s; 108 km/h = 30 m/s!"
+    },
+    {
+      subject: "Direito Constitucional",
+      topic: "Súmula Vinculante nº 11 do STF — Uso de Algemas",
+      board: "Instituto AOCP",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(Instituto AOCP — PMPE) A respeito do emprego de algemas na atividade policial, a Súmula Vinculante nº 11 do Supremo Tribunal Federal estabelece que só é lícito o uso de algemas em casos de:",
+      options: [
+        "Qualquer prisão em flagrante por crime hediondo, dispensada justificativa por escrito.",
+        "Resistência e de fundado receio de fuga ou de perigo à integridade física própria ou alheia, por parte do preso ou de terceiros, justificada a excepcionalidade por escrito, sob pena de responsabilidade disciplinar, civil e penal do agente ou da autoridade e de nulidade da prisão ou do ato processual a que se refere.",
+        "Ordem verbal de oficial superior durante operações de garantia da lei e da ordem.",
+        "Condução de suspeitos sem antecedentes criminais, bastando registro oral em audiência de custódia."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: A Súmula Vinculante nº 11 do STF exige dois requisitos cumulativos para a licitude do uso de algemas: (1) Situação fática de resistência, fundado receio de fuga ou perigo à integridade física própria ou alheia (do preso ou de terceiros); e (2) Justificativa da excepcionalidade POR ESCRITO, sob pena de responsabilidade nas 3 esferas (disciplinar, civil e penal) e nulidade do ato. Além disso, o art. 292, parágrafo único, do CPP veda o uso de algemas em mulheres grávidas durante o parto e no puerpério imediato. | ✅ Alternativa correta: B) Reproduz fielmente os requisitos da Súmula Vinculante 11 do STF. | ❌ Análise das alternativas: A), C) e D) Dispensam a justificativa por escrito ou tratam o uso de algemas como regra automática. | ⚠️ Pegadinha da banca: O Instituto AOCP costuma trocar 'justificada a excepcionalidade POR ESCRITO' por 'justificada verbalmente à autoridade policial'!"
+    },
+    {
+      subject: "Direito Constitucional",
+      topic: "Organização Político-Administrativa do Estado e Competências (Arts. 18 a 24 da CF/88)",
+      board: "Instituto AOCP",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Instituto AOCP) Nos termos dos arts. 22 e 24 da Constituição Federal de 1988, compete PRIVATIVAMENTE à União legislar sobre:",
+      options: [
+        "Direito tributário, financeiro, penitenciário, econômico e urbanístico.",
+        "Direito civil, comercial, penal, processual, eleitoral, agrário, marítimo, aeronáutico, espacial e do trabalho.",
+        "Educação, cultura, ensino, desporto, ciência, tecnologia, pesquisa, desenvolvimento e inovação.",
+        "Procedimentos em matéria processual e criação, funcionamento e processo do juizado de pequenas causas."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Pelo mnemônico clássico 'CAPACETE de PM', compete PRIVATIVAMENTE à União (art. 22, I, da CF/88) legislar sobre Direito: Civil, Agrário, Penal, Aeronáutico, Comercial, Eleitoral, Trabalho, Espacial, Processual e Marítimo. Já o mnemônico 'PUTO FE' resume o art. 24, I (competência CONCORRENTE entre União, Estados e DF): Penitenciário, Urbanístico, Tributário, Orçamentário, Financeiro e Econômico. | ✅ Alternativa correta: B) Rol do art. 22, I, da CF/88 (competência privativa da União). | ❌ Análise das alternativas: A), C) e D) Tratam de competências CONCORRENTES do art. 24 da CF/88. | ⚠️ Pegadinha da banca: Cuidado! 'Direito Processual' é competência PRIVATIVA da União (art. 22, I), mas 'procedimentos em matéria processual' é competência CONCORRENTE (art. 24, XI)!"
+    },
+    {
+      subject: "Direito Administrativo",
+      topic: "Organização Administrativa — Administração Direta e Indireta",
+      board: "Instituto AOCP",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(Instituto AOCP) As Polícias Militares e as Secretarias de Defesa Social dos Estados integram a estrutura administrativa do Poder Executivo sem personalidade jurídica própria, atuando por meio do fenômeno da desconcentração administrativa. Portanto, tais instituições classificam-se como:",
+      options: [
+        "Autarquias de regime especial integrantes da Administração Indireta.",
+        "Órgãos públicos integrantes da Administração Pública Direta.",
+        "Fundações públicas de direito privado criadas por descentralização.",
+        "Empresas públicas prestadoras de serviço público essencial."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: DESCONCENTRAÇÃO (mesma pessoa jurídica, vínculo de hierarquia e subordinação) cria ÓRGÃOS PÚBLICOS sem personalidade jurídica própria dentro da Administração Direta (como Ministérios, Secretarias, Polícia Militar, Polícia Civil e Corpo de Bombeiros Militar). Já DESCENTRALIZAÇÃO cria ENTIDADES com personalidade jurídica própria na Administração Indireta (FASE: Fundações, Autarquias, Sociedades de Economia Mista e Empresas Públicas). | ✅ Alternativa correta: B) Órgãos públicos integrantes da Administração Direta. | ❌ Análise das alternativas: A), C) e D) PM e Secretarias não possuem personalidade jurídica própria nem pertencem à Administração Indireta. | ⚠️ Pegadinha da banca: Dica rápida: DesCOncentração = cria Órgãos (com 'O', subordinação); DesCEntralização = cria Entidades (com 'E', vinculação/tutela, sem subordinação)."
+    },
+    {
+      subject: "Direito Administrativo",
+      topic: "Agentes Públicos — Acumulação Remunerada de Cargos (Art. 37, XVI, e Art. 42, § 3º, da CF/88)",
+      board: "Instituto AOCP",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Instituto AOCP) Com a promulgação da Emenda Constitucional nº 101/2019, que acrescentou o § 3º ao art. 42 da Constituição Federal, aos militares dos Estados, do Distrito Federal e dos Territórios (Policiais Militares e Bombeiros Militares) passou-se a permitir, desde que haja compatibilidade de horários e prevalência da atividade militar, a acumulação remunerada de seu cargo militar com:",
+      options: [
+        "Qualquer outro cargo público federal, estadual ou municipal na área administrativa.",
+        "Um cargo de professor, outro cargo técnico ou científico, ou um cargo ou emprego privativo de profissionais de saúde com profissões regulamentadas (aplicação das regras do art. 37, XVI, da CF/88).",
+        "Exclusivamente cargos em comissão de livre nomeação e exoneração.",
+        "Mandato eletivo de Vereador, sem necessidade de transferência para a reserva caso conte com mais de 10 anos de serviço."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: A EC nº 101/2019 estendeu aos militares dos Estados e do DF (art. 42, § 3º, da CF/88) as mesmas hipóteses de acumulação remunerada do art. 37, XVI, com prevalência da atividade militar e compatibilidade de horários, permitindo que o PM/BM acumule seu cargo militar com: (a) 1 cargo de professor; (b) 1 cargo técnico ou científico; ou (c) 1 cargo/emprego privativo de profissionais de saúde com profissões regulamentadas. | ✅ Alternativa correta: B) Estende o art. 37, XVI, aos militares estaduais (EC 101/2019). | ❌ Análise das alternativas: A) e C) A regra geral continua sendo a vedação de acumulação fora das hipóteses constitucionais; D) Para mandato eletivo aplica-se o art. 14, § 8º, da CF/88. | ⚠️ Pegadinha da banca: Atenção! Para os militares das FORÇAS ARMADAS (art. 142, § 3º, II e VIII), a acumulação só é admitida entre dois cargos/empregos privativos de profissionais de saúde; já para os militares ESTADUAIS (PM e CBM — art. 42, § 3º), aplica-se o art. 37, XVI completo (professor, técnico/científico ou saúde)!"
+    },
+    {
+      subject: "Direito Penal",
+      topic: "Imputabilidade Penal e Concurso de Crimes (Arts. 26 a 28 e 69 a 71 do CP)",
+      board: "Instituto AOCP",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Instituto AOCP) De acordo com o art. 28 do Código Penal Brasileiro, NÃO excluem a imputabilidade penal:",
+      options: [
+        "A doença mental que retire inteiramente a capacidade de entendimento do agente no tempo da ação.",
+        "A emoção ou a paixão, bem como a embriaguez voluntária ou culposa, pelo álcool ou substância de efeitos análogos.",
+        "A embriaguez completa proveniente de caso fortuito ou força maior que retire inteiramente a capacidade de entendimento do agente.",
+        "A menoridade penal (menores de 18 anos de idade na data da conduta)."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Segundo o art. 28, incisos I e II, do Código Penal, NÃO excluem a imputabilidade penal: (I) a emoção ou a paixão; (II) a embriaguez, voluntária ou culposa, pelo álcool ou substância de efeitos análogos (teoria da 'actio libera in causa'). Somente a embriaguez COMPLETA decorrente de CASO FORTUITO ou FORÇA MAIOR (art. 28, § 1º) isenta de pena se retirar inteiramente a capacidade de entender ou determinar-se. | ✅ Alternativa correta: B) Emoção, paixão e embriaguez voluntária/culposa não excluem a imputabilidade. | ❌ Análise das alternativas: A), C) e D) São causas legais de inimputabilidade penal (arts. 26, caput, 28, § 1º, e 27 do CP). | ⚠️ Pegadinha da banca: Se a embriaguez por caso fortuito ou força maior for apenas INCOMPLETA (reduz, mas não retira inteiramente a capacidade), não exclui a culpabilidade, mas reduz a pena de 1/3 a 2/3 (art. 28, § 2º)."
+    },
+    {
+      subject: "Direito Processual Penal",
+      topic: "Ação Penal — Espécies e Princípios (Arts. 24 a 62 do CPP)",
+      board: "Instituto AOCP",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Instituto AOCP) No tocante à ação penal pública condicionada à representação da vítima (art. 25 do CPP e art. 102 do CP), a retratação da representação oferecida pelo ofendido é cabível:",
+      options: [
+        "A qualquer tempo, inclusive após a prolação da sentença condenatória de primeira instância.",
+        "Até o oferecimento da denúncia pelo Ministério Público (salvo na Lei Maria da Penha, em que a renúncia à representação pode ocorrer até o recebimento da denúncia, em audiência especial perante o juiz).",
+        "Exclusivamente dentro das primeiras 24 horas após a lavratura do boletim de ocorrência.",
+        "Nunca, pois a representação é irretratável desde o momento de sua assinatura na delegacia."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Na regra geral do Código de Processo Penal (art. 25 do CPP) e do Código Penal (art. 102 do CP), a representação é irretratável DEPOIS de OFERECIDA a denúncia. Já na Lei Maria da Penha (art. 16 da Lei nº 11.340/2006), a retratação/renúncia à representação só é admitida perante o juiz, em audiência especialmente designada com tal finalidade, ANTES do RECEBIMENTO da denúncia e ouvido o Ministério Público. | ✅ Alternativa correta: B) Regra geral do CPP = até o OFERECIMENTO da denúncia; Lei Maria da Penha = até o RECEBIMENTO da denúncia em audiência perante o juiz. | ❌ Análise das alternativas: A), C) e D) Violam os arts. 25 do CPP e 16 da Lei 11.340/2006. | ⚠️ Pegadinha da banca: Grave a diferença cirúrgica: CPP comum = até OFERECER a denúncia; Lei Maria da Penha (art. 16) = até RECEBER a denúncia! (E lembre-se: lesão corporal na Lei Maria da Penha, ainda que leve, é de ação penal pública INCONDICIONADA — Súmula 542 do STJ)."
+    },
+    {
+      subject: "Legislação Extravagante",
+      topic: "Lei nº 7.716/1989 — Crimes Resultantes de Preconceito de Raça ou de Cor (e Lei nº 14.532/2023)",
+      board: "Instituto AOCP",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Instituto AOCP) Com o advento da Lei nº 14.532/2023, que inseriu o art. 2º-A na Lei nº 7.716/1989, a conduta de injuriar alguém, ofendendo-lhe a dignidade ou o decoro, em razão de raça, cor, etnia ou procedência nacional (injúria racial):",
+      options: [
+        "Permanece como crime de menor potencial ofensivo de ação penal privada.",
+        "Passou a ser expressamente tipificada na Lei de Racismo (Lei nº 7.716/1989, art. 2º-A), com pena de reclusão de 2 a 5 anos e multa, sendo crime inafiançável, imprescritível e de ação penal pública incondicionada.",
+        "Admite fiança arbitrada diretamente pelo delegado de polícia e prescreve em 2 anos.",
+        "Só configura crime se praticada por meio da rede mundial de computadores."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: A Lei nº 14.532/2023 consolidou na Lei nº 7.716/1989 (art. 2º-A) o entendimento já firmado pelo STF (HC 154.248): a injúria racial é espécie do gênero racismo, punida com reclusão de 2 a 5 anos e multa (aumentada da metade se cometida por 2 ou mais pessoas), sendo crime INAFIANÇÁVEL, IMPRESCRITÍVEL (art. 5º, XLII, da CF/88) e de ação penal PÚBLICA INCONDICIONADA! | ✅ Alternativa correta: B) Tipificada no art. 2º-A da Lei 7.716/89, inafiançável, imprescritível e de ação pública incondicionada. | ❌ Análise das alternativas: A), C) e D) Desconhecem a Lei 14.532/2023 e a jurisprudência do STF. | ⚠️ Pegadinha da banca: Antes de 2023, a injúria racial ficava no art. 140, § 3º, do CP (que agora ficou restrito a religião, idade ou condição de pessoa idosa ou com deficiência). Hoje, injúria por raça, cor, etnia ou procedência nacional está no art. 2º-A da Lei 7.716/1989!"
+    },
+    {
+      subject: "Legislação Extravagante",
+      topic: "Lei nº 8.069/1990 — Estatuto da Criança e do Adolescente (ECA)",
+      board: "Instituto AOCP",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(Instituto AOCP) Nos termos do art. 2º e dos arts. 103 a 112 da Lei nº 8.069/1990 (Estatuto da Criança e do Adolescente — ECA), considera-se criança a pessoa até 12 anos de idade incompletos, e adolescente aquela entre 12 e 18 anos de idade. Quando uma CRIANÇA (menor de 12 anos) pratica conduta descrita como crime ou contravenção penal (ato infracional), a ela podem ser aplicadas:",
+      options: [
+        "Medidas socioeducativas de internação em estabelecimento educacional por até 3 anos.",
+        "Exclusivamente medidas protetivas previstas no art. 101 do ECA (não cabendo medida socioeducativa para criança).",
+        "Medidas socioeducativas de semiliberdade e liberdade assistida.",
+        "Pena restritiva de direitos convertida em multa aos pais."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Pelo art. 105 do ECA, tanto a criança (< 12 anos) quanto o adolescente (12 a < 18 anos) podem praticar ATO INFRACIONAL. Contudo, à CRIANÇA só se aplicam MEDIDAS PROTETIVAS (art. 101 do ECA). Já ao ADOLESCENTE aplicam-se tanto medidas protetivas quanto MEDIDAS SOCIOEDUCATIVAS (art. 112: advertência, obrigação de reparar o dano, prestação de serviços à comunidade, liberdade assistida, semiliberdade e internação). | ✅ Alternativa correta: B) Criança só recebe medida protetiva (nunca socioeducativa!). | ❌ Análise das alternativas: A) e C) Internação, semiliberdade e liberdade assistida são medidas socioeducativas exclusivas de adolescentes; D) Inexiste no ECA. | ⚠️ Pegadinha da banca: O AOCP costuma afirmar que 'criança não pratica ato infracional' — CUIDADO! Criança pratica sim ato infracional (art. 105), mas a consequência jurídica é apenas medida PROTETIVA (e não socioeducativa)."
+    },
+    {
+      subject: "Direito Militar",
+      topic: "Código Penal Militar (Decreto-Lei nº 1.001/1969) — Crimes Militares em Tempo de Paz (Art. 9º)",
+      board: "Instituto AOCP",
+      difficulty: "dificil",
+      origin: "oficial",
+      statement: "(Instituto AOCP — PMPE) Com a vigência da Lei nº 13.491/2017, que alterou o art. 9º do Código Penal Militar (Decreto-Lei nº 1.001/1969), o conceito de crime militar em tempo de paz foi ampliado, passando a abranger não apenas os delitos previstos no CPM, mas também os crimes previstos na legislação penal comum (crimes militares por extensão), quando praticados nas hipóteses do inciso II do art. 9º. Caso um policial militar em serviço pratique crime doloso contra a vida de um CIVIL, a competência para o julgamento será:",
+      options: [
+        "Da Justiça Militar Estadual (Conselho Especial ou Permanente de Justiça).",
+        "Do Tribunal do Júri da Justiça Comum (art. 9º, § 1º, do CPM e art. 125, § 4º, da CF/88).",
+        "Do Superior Tribunal Militar (STM) em Brasília.",
+        "Do Juizado Especial Criminal Estadual."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Nos termos do art. 125, § 4º, da CF/88 e do art. 9º, § 1º, do Código Penal Militar, compete à Justiça Militar estadual processar e julgar os militares dos Estados nos crimes militares definidos em lei, RESSALVADA a competência do TRIBUNAL DO JÚRI quando a vítima for CIVIL em crime doloso contra a vida! | ✅ Alternativa correta: B) Tribunal do Júri da Justiça Comum (crime doloso contra a vida de civil praticado por militar estadual). | ❌ Análise das alternativas: A) A Justiça Militar Estadual julga crime doloso contra a vida apenas se a vítima também for militar; C) As exceções do § 2º do art. 9º do CPM (Justiça Militar da União) aplicam-se exclusivamente aos militares das Forças Armadas; D) Crime doloso contra a vida vai ao Júri. | ⚠️ Pegadinha da banca: Policial Militar contra CIVIL (doloso contra a vida) = TRIBUNAL DO JÚRI; Policial Militar em serviço contra outro MILITAR (doloso contra a vida) = JUSTIÇA MILITAR ESTADUAL!"
+    },
+    {
+      subject: "Direito Militar",
+      topic: "Código Penal Militar — Crime de Deserção e Motim (Arts. 149 e 187 do CPM)",
+      board: "Instituto AOCP",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Instituto AOCP — PMPE) Nos termos do art. 187 do Código Penal Militar (Decreto-Lei nº 1.001/1969), configura-se o crime propriamente militar de DESERÇÃO quando o militar ausenta-se, sem licença, da unidade em que serve, ou do lugar em que deve permanecer, por mais de:",
+      options: [
+        "24 (vinte e quatro) horas.",
+        "48 (quarenta e oito) horas.",
+        "5 (cinco) dias.",
+        "8 (oito) dias."
+      ],
+      correct_index: 3,
+      explanation: "Conceito-chave: Segundo o art. 187 do CPM, a deserção consuma-se quando o militar se ausenta sem licença por MAIS DE 8 (OITO) DIAS (ou seja, a contagem inicia à 0h do dia seguinte ao da verificação da ausência, consumando-se no 9º dia!). | ✅ Alternativa correta: D) Mais de 8 (oito) dias. | ❌ Análise das alternativas: A), B) e C) Enquanto não ultrapassar 8 dias, o militar encontra-se na condição de 'ausente' (infração disciplinar), e não desertor. | ⚠️ Pegadinha da banca: Não confundir Deserção (art. 187 — mais de 8 dias sem licença) com Abandono de Posto (art. 195 — abandonar, sem ordem superior, o posto ou lugar de serviço que lhe tenha sido designado, antes de terminá-lo, que se consuma instantaneamente!)."
+    },
+    {
+      subject: "Língua Portuguesa",
+      topic: "Figuras de Linguagem e Semântica Textual",
+      board: "Instituto AOCP",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(Instituto AOCP) Na frase 'A corporação perdeu ontem um grande comandante, que descansou em paz após décadas de dedicação à segurança pública', a expressão 'descansou em paz' foi empregada com o objetivo de suavizar uma informação triste ou chocante ('morreu'). Essa figura de pensamento denomina-se:",
+      options: [
+        "Hipérbole.",
+        "Eufemismo.",
+        "Catacrese.",
+        "Prosopopeia (ou personificação)."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Eufemismo é a figura de pensamento que consiste em suavizar, atenuar ou abrandar uma expressão considerada rude, desagradável ou dolorosa ('descansou em paz', 'faltar com a verdade', 'entregar a alma a Deus'). | ✅ Alternativa correta: B) Eufemismo. | ❌ Análise das alternativas: A) Hipérbole é o exagero intencional ('chorar rios de lágrimas'); C) Catacrese é a metáfora desgastada por falta de termo próprio ('braço da cadeira', 'dente de alho', 'embarcar no avião'); D) Prosopopeia atribui ações humanas a seres inanimados. | ⚠️ Pegadinha da banca: O oposto do eufemismo (suavização) é o disfemismo (endurecimento ou expressão pejorativa, como 'bateu as botas')."
+    },
+    {
+      subject: "Língua Portuguesa",
+      topic: "Colocação Pronominal (Próclise, Mesóclise e Ênclise)",
+      board: "Instituto AOCP",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Instituto AOCP) De acordo com as regras de colocação pronominal da norma-padrão, assinale a alternativa em que o pronome oblíquo átono foi posicionado CORRETAMENTE:",
+      options: [
+        "Me informaram que o edital do concurso foi retificado ontem.",
+        "Nunca esquecer-me-ei das lições aprendidas durante o curso de formação.",
+        "Não se comprovou qualquer irregularidade na condução da ocorrência policial.",
+        "Os peritos tinham dedicado-se integralmente à análise balística."
+      ],
+      correct_index: 2,
+      explanation: "Conceito-chave: A palavra negativa 'Não' é fator atrativo obrigatório de PRÓCLISE (pronome antes do verbo): 'Não se comprovou'. | ✅ Alternativa correta: C) Próclise obrigatória atraída pelo advérbio de negação 'Não'. | ❌ Análise das alternativas: A) É proibido iniciar período com pronome oblíquo átono na norma-padrão ('Informaram-me'); B) 'Nunca' é palavra atrativa, exigindo próclise mesmo com verbo no futuro ('Nunca me esquecerei'); D) Jamais se usa ênclise após particípio ('tinham-se dedicado' ou 'tinham se dedicado'). | ⚠️ Pegadinha da banca: As duas proibições de ouro da colocação pronominal: (1) NUNCA inicie frase com pronome oblíquo átono; (2) NUNCA coloque pronome oblíquo átono depois de verbo no futuro (use próclise ou mesóclise) ou no particípio!"
+    },
+    {
+      subject: "Raciocínio Lógico-Matemático",
+      topic: "Sequências Lógicas, Razão, Proporção e Porcentagem",
+      board: "Instituto AOCP",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(Instituto AOCP) O efetivo de uma unidade especializada aumentou 20% no primeiro semestre e, sobre esse novo total, sofreu um aumento adicional de 10% no segundo semestre. O aumento percentual acumulado no ano em relação ao efetivo inicial foi de:",
+      options: [
+        "30%.",
+        "32%.",
+        "28%.",
+        "25%."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Em aumentos percentuais sucessivos, multiplica-se os fatores de atualização (ou adota-se a base 100): Inicial = 100. Após +20%: 100 × 1,20 = 120. Após +10% sobre 120: 120 × 1,10 = 132. Comparando 132 com a base 100, o aumento acumulado foi de 132 - 100 = 32%! | ✅ Alternativa correta: B) 32%. | ❌ Análise das alternativas: A) Soma direta equivocada (20% + 10% = 30%), ignorando que o segundo aumento incide sobre o valor já reajustado; C) e D) Erros de cálculo. | ⚠️ Pegadinha da banca: Se fosse um aumento de 20% seguido de um DESCONTO de 20%, o resultado NÃO voltaria ao valor original (1,20 × 0,80 = 0,96 -> queda de 4%)!"
+    },
+    {
+      subject: "Informática",
+      topic: "Navegadores Web — Navegação Anônima/Privativa e Cookies",
+      board: "Instituto AOCP",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(Instituto AOCP) Ao utilizar a janela de Navegação Anônima (no Google Chrome, atalho Ctrl + Shift + N) ou Navegação Privativa (no Mozilla Firefox, atalho Ctrl + Shift + P), o navegador:",
+      options: [
+        "Oculta completamente o endereço IP do computador perante o provedor de Internet (ISP) e os servidores dos sites visitados.",
+        "Não salva no computador local o histórico de navegação, os cookies da sessão e os dados inseridos em formulários após o fechamento de todas as janelas anônimas, mas a atividade continua visível para os sites visitados, o administrador da rede (empresa/órgão) e o provedor de Internet.",
+        "Impede automaticamente o download de qualquer arquivo ou documento PDF para a pasta Downloads.",
+        "Ativa uma rede privada virtual (VPN) criptografada nativa gratuita em todos os navegadores."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: A navegação anônima/privativa atua APENAS no dispositivo local: ao fechar todas as janelas anônimas, o navegador apaga histórico, cookies e dados de formulário daquela sessão. Porém, ela NÃO torna o usuário invisível na rede (o provedor de internet, o administrador da rede corporativa e os próprios sites acessados continuam vendo o tráfego), e os arquivos baixados (Downloads) e favoritos criados são mantidos no computador! | ✅ Alternativa correta: B) Não salva histórico/cookies localmente após fechar a sessão, mas mantém visibilidade para provedor/rede/sites. | ❌ Análise das alternativas: A) e D) Navegação anônima não é VPN nem rede Tor; C) Downloads realizados na aba anônima permanecem salvos no computador (apenas a lista de histórico de downloads é limpa). | ⚠️ Pegadinha da banca: Lembre os atalhos: Ctrl + Shift + N (Chrome e Edge) vs. Ctrl + Shift + P (Firefox)."
+    },
+    {
+      subject: "História de Pernambuco",
+      topic: "Período Colonial — Economia Açucareira, Invasão Holandesa e Guerra dos Mascates",
+      board: "Instituto AOCP",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Instituto AOCP — PMPE) Entre 1710 e 1711, eclodiu na Capitania de Pernambuco um conflito armado que opôs a aristocracia rural açucareira (os 'nobres da terra' sediados em Olinda, endividados após a expulsão dos holandeses e a concorrência do açúcar antilhano) aos comerciantes reinóis enriquecidos do porto do Recife, que pleiteavam a emancipação político-administrativa da vila. Esse conflito histórico ficou conhecido como:",
+      options: [
+        "Insurreição Pernambucana (1645–1654).",
+        "Guerra dos Mascates (1710–1711).",
+        "Conspiração dos Suassunas (1801).",
+        "Guerra dos Bárbaros."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: A Guerra dos Mascates (1710–1711) foi um conflito nativista entre os senhores de engenho de Olinda (liderados por Bernardo Vieira de Melo) e os comerciantes portugueses do Recife (apelidados pejorativamente de 'mascates'), desencadeado quando a Coroa Portuguesa elevou o Recife à condição de vila autônoma (com pelourinho e Câmara Municipal própria). | ✅ Alternativa correta: B) Guerra dos Mascates. | ❌ Análise das alternativas: A) A Insurreição Pernambucana (1645–1654, Batalhas dos Montes Guararapes) expulsou os holandeses da WIC; C) Conspiração dos Suassunas ocorreu em 1801 sob influência iluminista/francesa; D) Guerra dos Bárbaros foi o conflito contra povos indígenas no sertão nordestino. | ⚠️ Pegadinha da banca: Na Guerra dos Mascates, Bernardo Vieira de Melo chegou a propor na Câmara de Olinda que a capitania se declarasse uma república nos moldes de Veneza ou Holanda — considerado um dos primeiros gritos republicanos no Brasil!"
+    },
+    {
+      subject: "Geografia de Pernambuco",
+      topic: "Economia, Polos de Desenvolvimento e Demografia de Pernambuco",
+      board: "Instituto AOCP",
+      difficulty: "facil",
+      origin: "oficial",
+      statement: "(Instituto AOCP — PMPE) Na organização socioespacial e econômica contemporânea de Pernambuco, destacam-se polos regionais especializados. A associação CORRETA entre a região/municípios pernambucanos e sua principal vocação econômica é:",
+      options: [
+        "Sertão do São Francisco (Petrolina) — fruticultura irrigada voltada à exportação (uva e manga) e vitivinicultura tropical.",
+        "Sertão do Araripe (Araripina, Trindade e Ipubi) — polo petroquímico e portuário de águas profundas.",
+        "Agreste Setentrional (Caruaru, Toritama e Santa Cruz do Capibaribe) — extração de minério de ferro e bauxita.",
+        "Zona da Mata Sul — polo gesseiro responsável por 95% da produção nacional de gipsita."
+      ],
+      correct_index: 0,
+      explanation: "Conceito-chave: Os quatro grandes polos econômicos do interior e litoral de Pernambuco mais cobrados em provas são: (1) Sertão do São Francisco (Petrolina/Lagoa Grande) = Fruticultura irrigada e vinhos tropicais; (2) Sertão do Araripe (Araripina, Trindade, Ipubi, Bodocó, Ouricuri) = Polo Gesseiro (cerca de 95% do gesso do Brasil); (3) Agreste (Caruaru, Toritama e Santa Cruz do Capibaribe) = Polo de Confecções; (4) Litoral Sul / RMR (Ipojuca/Cabo) = Complexo Industrial Portuário de Suape. | ✅ Alternativa correta: A) Sertão do São Francisco (Petrolina) — fruticultura irrigada. | ❌ Análise das alternativas: B) Araripe é o Polo Gesseiro (Suape é que fica no litoral sul); C) Caruaru, Toritama e Santa Cruz do Capibaribe formam o Polo de Confecções do Agreste; D) Zona da Mata é historicamente ligada à agroindústria canavieira (sucroalcooleira). | ⚠️ Pegadinha da banca: As bancas adoram inverter o Polo Gesseiro do Araripe com o Polo de Confecções do Agreste!"
+    },
+    {
+      subject: "Física",
+      topic: "Eletricidade — Lei de Ohm, Potência Elétrica e Efeito Joule (Prevenção de Incêndios)",
+      board: "Instituto AOCP",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Instituto AOCP — CBMPE) Uma das principais causas de incêndios residenciais (incêndios de Classe C quando energizados) é a sobrecarga em instalações elétricas por Efeito Joule. Um aquecedor elétrico ligado a uma rede de tensão U = 220 V é percorrido por uma corrente elétrica de intensidade i = 10 A. A potência elétrica consumida por esse equipamento e a resistência elétrica do seu resistor valem, respectivamente:",
+      options: [
+        "2.200 W e 22 Ω.",
+        "220 W e 2.200 Ω.",
+        "22.000 W e 2,2 Ω.",
+        "1.100 W e 44 Ω."
+      ],
+      correct_index: 0,
+      explanation: "Conceito-chave: Pela fórmula da Potência Elétrica (P = U · i): P = 220 V × 10 A = 2.200 W (2,2 kW). E pela 1ª Lei de Ohm (U = R · i): R = U / i = 220 / 10 = 22 Ω. | ✅ Alternativa correta: A) 2.200 W e 22 Ω. | ❌ Análise das alternativas: B), C) e D) Invertem multiplicação e divisão nas fórmulas P = U·i e U = R·i. | ⚠️ Pegadinha da banca: Em provas de Bombeiro Militar, lembre as classes de incêndio: Classe A = sólidos combustíveis (madeira, papel, tecido — deixam brasas/cinzas); Classe B = líquidos e gases inflamáveis (queimam na superfície); Classe C = equipamentos elétricos ENERGIZADOS; Classe D = metais pirofóricos (magnésio, titânio, sódio); Classe K = óleos e gorduras de cozinhas industriais."
+    },
+    {
+      subject: "Biologia",
+      topic: "Citologia, Histologia e Atendimento a Queimados (Regra dos Nove de Wallace)",
+      board: "Instituto AOCP",
+      difficulty: "medio",
+      origin: "oficial",
+      statement: "(Instituto AOCP — CBMPE) No atendimento pré-hospitalar a vítimas de queimaduras térmicas, a gravidade da lesão depende da profundidade (1º, 2º ou 3º grau) e da superfície corporal queimada (SCQ). A queimadura que atinge a epiderme e a derme parcialmente, caracterizando-se clinicamente por dor intensa e pela formação de flictenas (bolhas), classifica-se quanto à profundidade como queimadura de:",
+      options: [
+        "Primeiro grau (atinge apenas a camada córnea da epiderme, com eritema sem bolhas).",
+        "Segundo grau (espessura parcial, atingindo epiderme e derme, com presença característica de flictenas/bolhas).",
+        "Terceiro grau (espessura total, com destruição de terminações nervosas e placa esbranquiçada/carbonizada indolor ao toque superficial).",
+        "Quarto grau exclusivo de radiação solar leve."
+      ],
+      correct_index: 1,
+      explanation: "Conceito-chave: Classificação das queimaduras quanto à profundidade: (1) 1º Grau = apenas epiderme (eritema/vermelhidão e dor local, SEM bolhas); (2) 2º Grau = epiderme + derme parcial (dor intensa + FLICTENAS/BOLHAS); (3) 3º Grau = espessura total (epiderme + derme + tecidos profundos, aspecto coriáceo/esbranquiçado ou carbonizado, pouca ou nenhuma dor local pela destruição das terminações nervosas). | ✅ Alternativa correta: B) Segundo grau (presença de flictenas/bolhas). | ❌ Análise das alternativas: A) 1º grau não forma bolhas; C) 3º grau destrói a derme inteira e as terminações nervosas; D) Radiação solar leve causa queimadura de 1º grau. | ⚠️ Pegadinha da banca: No APH de queimados, NUNCA se deve furar ou romper as bolhas (flictenas) no local da ocorrência, nem aplicar pomadas, pasta de dente ou gelo direto na lesão!"
     }
   ];
   window.NATIVE_POLICE_QUESTION_BANK = NATIVE_POLICE_QUESTION_BANK;
@@ -1474,7 +2642,7 @@
       q('#questionBattleMode')?.addEventListener('change',updateQuestionPool);
     }
     if(!q('#questionHistoryFilter')){
-      filters.insertAdjacentHTML('beforeend',`<label class="field">Filtro TEC / Caderno<select id="questionHistoryFilter"><option value="all">Todas do banco</option><option value="unanswered">✨ Apenas inéditas (não resolvidas)</option><option value="favorites">⭐ Minhas favoritas</option></select></label>`);
+      filters.insertAdjacentHTML('beforeend',`<label class="field">Filtro TEC / Caderno<select id="questionHistoryFilter"><option value="all">Todas do banco</option><option value="unanswered">✨ Apenas inéditas (não resolvidas)</option><option value="wrong">❌ Questões que errei</option><option value="correct">✅ Questões que acertei</option><option value="favorites">⭐ Minhas favoritas</option></select></label>`);
       q('#questionHistoryFilter')?.addEventListener('change',updateQuestionPool);
     }
     const trainer=q('.questionTrainer');
@@ -1526,6 +2694,12 @@
     if(historyFilter==='unanswered'){
       const unanswered=filtered.filter(item=>!isQuestionAnsweredBefore(item));
       if(unanswered.length)filtered=unanswered;
+    }else if(historyFilter==='wrong'){
+      const errEntries=activeCampaignErrors();
+      filtered=filtered.filter(item=>questionMatchesErrorPool(item,errEntries));
+    }else if(historyFilter==='correct'){
+      const errEntries=activeCampaignErrors();
+      filtered=filtered.filter(item=>isQuestionAnsweredBefore(item)&&!questionMatchesErrorPool(item,errEntries));
     }else if(historyFilter==='favorites'){
       filtered=filtered.filter(item=>isQuestionFavorited(item));
     }
@@ -1873,6 +3047,28 @@
             source_refs:[{title:sourceLabel}]
           }])
         });
+        if(sourceLabel!=='Banco Oficial Compartilhado'){
+          const sharedRows=toAdd.filter(qItem=>!qItem.answer_unknown&&Number.isInteger(Number(qItem.correct_index))&&Number(qItem.correct_index)>=0&&Number(qItem.correct_index)<=4).map(qItem=>({
+            fingerprint:questionFingerprint(qItem),
+            subject:canonicalSubjectName(qItem.subject||subject||'Conteúdo Geral'),
+            topic:String(qItem.topic||title||'Geral').trim().slice(0,160),
+            board:String(qItem.board||sourceLabel||'Banca Oficial').trim().slice(0,80),
+            difficulty:['facil','medio','dificil'].includes(qItem.difficulty)?qItem.difficulty:'medio',
+            origin:['oficial','adaptada_do_pdf','autoral'].includes(qItem.origin)?qItem.origin:'oficial',
+            statement:String(qItem.statement).trim(),
+            options:qItem.options,
+            correct_index:Number(qItem.correct_index),
+            explanation:String(qItem.explanation||'').trim(),
+            created_by:cloudSession.user.id
+          }));
+          if(sharedRows.length){
+            await cloudFetch('shared_question_bank?on_conflict=fingerprint',{
+              method:'POST',
+              headers:{'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},
+              body:JSON.stringify(sharedRows.slice(0,200))
+            }).catch(()=>{});
+          }
+        }
       }catch(e){
         console.warn('Salvamento em nuvem pendente; mantido localmente',e);
       }
@@ -2633,22 +3829,37 @@
     try{
       const session=await validSession();
       if(!session)throw new Error('Sessão expirada. Entre novamente.');
-      const res=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{
-        method:'POST',
-        headers:{...authHeaders(session.access_token)},
-        body:JSON.stringify({action:'shared_question_bank',campaign_id:activeCampaign()?.dbId})
-      });
-      const data=await res.json().catch(()=>({}));
-      if(!res.ok)throw new Error(data.error||'Não foi possível consultar o banco compartilhado.');
-      const shared=Array.isArray(data.questions)?data.questions:[];
+      let shared=[];
+      try{
+        const res=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{
+          method:'POST',
+          headers:{...authHeaders(session.access_token)},
+          body:JSON.stringify({action:'shared_question_bank',campaign_id:activeCampaign()?.dbId})
+        });
+        const data=await res.json().catch(()=>({}));
+        if(res.ok&&Array.isArray(data.questions))shared=data.questions;
+      }catch(_e){}
       if(!shared.length){
+        try{
+          const restRes=await fetch(`${SUPABASE_URL}/rest/v1/shared_question_bank?select=subject,topic,board,difficulty,origin,statement,options,correct_index,explanation&order=created_at.desc&limit=500`,{
+            headers:{...authHeaders(session.access_token)}
+          });
+          if(restRes.ok){
+            const rows=await restRes.json().catch(()=>[]);
+            if(Array.isArray(rows)&&rows.length)shared=rows;
+          }
+        }catch(_e2){}
+      }
+      const combined=[...shared,...(Array.isArray(NATIVE_POLICE_QUESTION_BANK)?NATIVE_POLICE_QUESTION_BANK:[])];
+      ensureNativeQuestionBankLoaded();
+      if(!combined.length){
         if(statusEl)statusEl.textContent='O catálogo compartilhado ainda não possui provas extras além das suas. Importe uma prova ou gere questões na aba ao lado!';
         toast('Nenhuma questão nova encontrada no catálogo compartilhado.');
         return;
       }
-      const added=await saveQuestionsToCampaign('Catálogo Oficial Compartilhado','Conteúdo Geral',shared,'Banco Oficial Compartilhado');
-      if(statusEl)statusEl.textContent=`✓ Catálogo sincronizado: ${shared.length} questão(ões) oficial(is) verificada(s) e disponível(is) para treino neste portal!`;
-      toast(`${added} questão(ões) oficial(is) sincronizada(s) para o seu banco!`);
+      const added=await saveQuestionsToCampaign('Catálogo Oficial Compartilhado','Conteúdo Geral',combined,'Banco Oficial Compartilhado');
+      if(statusEl)statusEl.textContent=`✓ Catálogo sincronizado: ${combined.length} questão(ões) oficial(is) verificada(s) (${added} nova(s) adicionada(s) à campanha)!`;
+      toast(added>0?`${added} questão(ões) oficial(is) sincronizada(s) para o seu banco!`:`Seu banco já contém todas as ${combined.length} questões oficiais do catálogo!`);
     }catch(error){
       toast(error.message);
     }finally{

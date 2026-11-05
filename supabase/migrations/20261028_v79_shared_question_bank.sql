@@ -18,7 +18,7 @@ create table if not exists public.shared_question_bank (
   origin text not null default 'oficial' check (origin in ('oficial', 'adaptada_do_pdf', 'autoral')),
   statement text not null,
   options jsonb not null,
-  correct_index integer not null check (correct_index >= 0 and correct_index <= 3),
+  correct_index integer not null check (correct_index >= 0 and correct_index <= 4),
   explanation text not null default '',
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now()
