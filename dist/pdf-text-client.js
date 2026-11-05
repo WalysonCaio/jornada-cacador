@@ -1389,11 +1389,14 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
             : (doc.detected_subject || doc.metadata?.primary_subject || "Direito Constitucional");
           let extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard });
           let examReport = extractedQs?.report || {};
-          if (examReport.ambiguous && Array.isArray(examReport.cadernos) && examReport.cadernos.length >= 2 && typeof prompt === "function") {
-            const pickedCad = prompt(`Foram identificados múltiplos gabaritos/cadernos neste PDF (${examReport.cadernos.join(", ")}). Digite qual caderno deseja importar:`, examReport.cadernos[0]);
+          if (examReport.ambiguous && Array.isArray(examReport.cadernos) && examReport.cadernos.length >= 2) {
+            const pickedCad = typeof window.askUserExamCadernoChoice === "function"
+              ? await window.askUserExamCadernoChoice(doc, examReport.cadernos)
+              : (typeof prompt === "function" ? prompt(`Foram identificados múltiplos gabaritos/cadernos neste PDF (${examReport.cadernos.join(", ")}). Digite qual caderno deseja importar:`, examReport.cadernos[0]) : examReport.cadernos[0]);
             if (pickedCad && pickedCad.trim()) {
-              extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: doc.title, preferredCaderno: pickedCad.trim() });
+              extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard, preferredCaderno: pickedCad.trim() });
               examReport = extractedQs?.report || {};
+              examReport.pickedCaderno = pickedCad.trim();
             }
           }
           if (examReport.ambiguous) toast(`${examReport.reason} O gabarito oficial não foi importado automaticamente.`);
@@ -1476,8 +1479,12 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
                 percent: examPercent,
                 summary_count: extractedQs.length,
                 shallow_summaries: 0,
-                warnings: examPercent < 100 ? [`Foram importadas ${extractedQs.length} de ${validTotal} questões válidas da prova.`] : [],
-                needs_review: examPercent < 95
+                warnings: [
+                  ...(examReport.pickedCaderno ? [`Gabarito importado do caderno "${examReport.pickedCaderno}". Confira se é o seu.`] : []),
+                  ...(examReport.answerUnknown ? [`${examReport.answerUnknown} questão(ões) foram importadas SEM gabarito e ficam fora de simulados e do desempenho até você adicionar o gabarito oficial.`] : []),
+                  ...(examPercent < 100 ? [`Foram importadas ${extractedQs.length} de ${validTotal} questões válidas da prova.`] : []),
+                ],
+                needs_review: examPercent < 95 || Boolean(examReport.answerUnknown)
               };
               await cloudFetch(`study_documents?id=eq.${doc.id}`, {
                 method: "PATCH",
@@ -2042,6 +2049,7 @@ Gere EXCLUSIVAMENTE um objeto JSON puro (sem markdown) no formato:
         };
       }
 
+      if (resolveAiBtn) resolveAiBtn.hidden = true; // a resolução por IA ainda não foi implementada: não prometer
       resolveAiBtn.onclick = () => {
         dlg.close();
         resolve({ allowWithoutKey: true, resolveWithAi: true });
@@ -2057,13 +2065,53 @@ Gere EXCLUSIVAMENTE um objeto JSON puro (sem markdown) no formato:
   }
   window.askUserExamAnswerKeyOptions = askUserExamAnswerKeyOptions;
 
+  function askUserExamCadernoChoice(doc, cadernos) {
+    return new Promise((resolve) => {
+      let dlg = document.querySelector("#examCadernoChoiceDialog");
+      if (!dlg) {
+        document.body.insertAdjacentHTML("beforeend", `
+          <dialog id="examCadernoChoiceDialog" style="width:min(92vw,440px);padding:20px;border-radius:18px;background:linear-gradient(160deg,#0a1a2c,#050e18);border:1px solid #38bdf8;color:#f8fafc">
+            <div class="eyebrow" style="color:#63e7ff;font-weight:900">📋 MÚLTIPLOS CADERNOS DETECTADOS</div>
+            <h3 style="margin:4px 0 8px">Qual caderno/tipo deseja importar?</h3>
+            <p class="small muted" style="margin:0 0 12px">Este PDF contém gabaritos para mais de um caderno de prova. Selecione abaixo o caderno correspondente às questões deste arquivo:</p>
+            <div id="examCadernoButtonsList" style="display:grid;gap:8px;margin-bottom:12px"></div>
+            <button type="button" class="ghost danger small" id="examCadernoCancelBtn" style="width:100%">Cancelar</button>
+          </dialog>
+        `);
+        dlg = document.querySelector("#examCadernoChoiceDialog");
+      }
+      const listEl = dlg.querySelector("#examCadernoButtonsList");
+      listEl.innerHTML = (cadernos || []).map((c) => `<button type="button" class="action small" data-pick-caderno="${esc(c)}" style="width:100%">📘 Importar Gabarito — ${esc(c)}</button>`).join("");
+      listEl.querySelectorAll("[data-pick-caderno]").forEach((btn) => {
+        btn.onclick = () => {
+          dlg.close();
+          resolve(btn.dataset.pickCaderno);
+        };
+      });
+      dlg.querySelector("#examCadernoCancelBtn").onclick = () => {
+        dlg.close();
+        resolve("");
+      };
+      if (!dlg.open) dlg.showModal();
+    });
+  }
+  window.askUserExamCadernoChoice = askUserExamCadernoChoice;
+
+
+
 
   // Auto-recuperação de provas ou materiais que ficaram travados em 'processing' por queda de rede ou timeout
   if (typeof setTimeout === "function") setTimeout(async () => {
     try {
       if (typeof cloudSession === "undefined" || !cloudSession || !navigator.onLine) return;
       if (typeof cloudDocuments !== "undefined" && Array.isArray(cloudDocuments)) {
-        const stuckDocs = cloudDocuments.filter((d) => !d.is_community && d.processing_status === "processing");
+        // Só considera travado quem está em "processing" há mais de 150 s (a análise de um edital pode levar ~2 min);
+        // sem data confiável, não mexe.
+        const stuckDocs = cloudDocuments.filter((d) => {
+          if (d.is_community || d.processing_status !== "processing") return false;
+          const since = Date.parse(d.updated_at || d.created_at || "");
+          return Number.isFinite(since) && Date.now() - since > 150000;
+        });
         for (const sd of stuckDocs) {
           sd.processing_status = "pending";
           await cloudFetch(`study_documents?id=eq.${encodeURIComponent(sd.id)}`, {

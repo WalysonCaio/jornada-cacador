@@ -194,3 +194,34 @@ const truthOf = (qs) => Object.fromEntries(qs.map((q) => [q.n, q.correct]));
 }
 
 console.log("OK: extrator de provas (19 cenários: Texto I pré-Q01 de Português até 6.000 chars, faixa 01-03, multi-caderno, 5 alternativas e Certo/Errado).");
+
+// ── modo "importar sem gabarito": nunca inventa a resposta (antes virava a alternativa A / CERTO como "oficial") ──
+{
+  const mkNoKey = (n) => `QUESTÃO ${String(n).padStart(2, "0")}\nAssinale a alternativa correta sobre o tema número ${n} do edital de concurso.\n` + [...L].map((l) => `(${l}) Alternativa ${l} da questão ${n} com texto suficiente.`).join("\n");
+  const prova = [1, 2, 3, 4].map(mkNoKey).join("\n\n");
+  const semGab = extract(prova, { allowWithoutKey: true });
+  assert.equal(semGab.length, 4, "o modo sem gabarito ainda deve importar o enunciado");
+  assert(semGab.every((x) => x.answer_unknown === true && x.correct_index === -1), "questão sem gabarito não pode ter alternativa correta inventada");
+  assert(semGab.every((x) => x.origin !== "oficial"), "questão sem gabarito não pode ser 'oficial'");
+  assert.equal(semGab.report.answerUnknown, 4);
+  assert(semGab.every((x) => /SEM gabarito/i.test(x.explanation)), "a explicação deve dizer que não há gabarito");
+  // misto: o que tem gabarito continua oficial e correto; o que não tem fica marcado
+  const comPar = extract([1, 2, 3, 4, 5].map(mkNoKey).join("\n\n") + "\nGABARITO\n1-A 2-B 3-C 4-D", { allowWithoutKey: true });
+  const q5 = comPar.find((x) => /número 5/.test(x.statement)); const q2 = comPar.find((x) => /número 2/.test(x.statement));
+  assert(q5.answer_unknown && q5.correct_index === -1 && q5.origin !== "oficial");
+  assert(!q2.answer_unknown && q2.correct_index === 1 && q2.origin === "oficial");
+  // Certo/Errado sem gabarito também não assume CERTO
+  const ce = extract("Julgue os itens a seguir.\n" + Array.from({ length: 5 }, (_, i) => `QUESTÃO ${60 + i}\nO princípio ${60 + i} da administração pública estabelece regra. ( ) Certo ( ) Errado`).join("\n"), { allowWithoutKey: true });
+  assert(ce.length >= 3 && ce.every((x) => x.correct_index === -1 && x.answer_unknown), "C/E sem gabarito não pode assumir CERTO");
+  // sem a opção, continua recusando
+  assert.equal(extract(prova).length, 0);
+  // questões sem gabarito nunca passam pelo filtro de salvamento/carregamento (correct_index inválido)
+  assert(semGab.every((x) => x.correct_index < 0), "ficam fora de simulados e do desempenho");
+}
+{
+  const pdfSrc = readFileSync(new URL("../dist/pdf-text-client.js", import.meta.url), "utf8");
+  assert(/resolveAiBtn\.hidden = true/.test(pdfSrc), "o botão 'Resolver com IA' não pode aparecer enquanto não existir");
+  assert(/examReport\.answerUnknown/.test(pdfSrc), "a cobertura deve avisar sobre questões sem gabarito");
+  assert(/Date\.now\(\) - since > 150000/.test(pdfSrc), "a auto-recuperação só pode resetar documentos parados há mais de 150 s");
+}
+console.log("OK: extrator sem gabarito (nunca assume A/CERTO, fora de simulados).");

@@ -1648,6 +1648,61 @@
       || null;
   }
 
+  function buildSpecificErrorDiagnosis(item,chosenIndex,correctIndex,isCE){
+    if(chosenIndex===correctIndex)return '';
+    const opts=Array.isArray(item?.options)?item.options:[];
+    const chosenText=String(opts[chosenIndex]||'').trim();
+    const correctText=String(opts[correctIndex]||'').trim();
+    const stmt=String(item?.statement||'').trim();
+    const chosenLetter=isCE?(chosenIndex===0?'CERTO':'ERRADO'):String.fromCharCode(65+(Number(chosenIndex)>=0?chosenIndex:0));
+    const correctLetter=isCE?(correctIndex===0?'CERTO':'ERRADO'):String.fromCharCode(65+(Number(correctIndex)>=0?correctIndex:0));
+    if(chosenIndex===-2){
+      return `Você deixou a questão em branco (estratégia líquida). O ponto central exigido pela banca está na <b>${isCE?correctLetter:'Alternativa '+correctLetter}</b>: <i>"${escText(shortLabel(correctText,160))}"</i>.`;
+    }
+    if(chosenIndex<0||!chosenText){
+      return `O tempo esgotou antes da marcação. A resposta correta é a <b>${isCE?correctLetter:'Alternativa '+correctLetter}</b>: <i>"${escText(shortLabel(correctText,160))}"</i>.`;
+    }
+    const reasons=[];
+    if(/\b(exceto|incorreta|incorreto|desacordo|n[aã]o\s+(?:é|são|constitui|compete|cabe)|falsa|errada)\b/i.test(stmt)){
+      reasons.push(`<b>⚠️ Comando invertido no enunciado:</b> a questão pediu a opção <u>INCORRETA / EXCEÇÃO</u>. A opção <b>${chosenLetter}</b> que você marcou traz uma regra verdadeira ou diferente do erro procurado pela banca.`);
+    }
+    const restrictMatch=chosenText.match(/\b(apenas|somente|exclusivamente|unicamente|sempre|nunca|jamais|em qualquer hip[oó]tese|em nenhuma hip[oó]tese|independentemente|imprescind[ií]vel|prescind[ií]vel|vedad[oa] em qualquer|qualquer caso|obrigatoriamente|facultativamente)\b/i);
+    if(restrictMatch){
+      reasons.push(`<b>🎯 Termo restritivo/absoluto na sua escolha:</b> a opção <b>${chosenLetter}</b> utiliza a expressão <b>"${escText(restrictMatch[1])}"</b>, que invalida a assertiva ao generalizar ou restringir indevidamente a regra prevista na norma.`);
+    }
+    const swapPairs=[
+      [/\bprivativa\b/i,/\b(?:concorrente|comum|exclusiva)\b/i,'competência privativa × concorrente/comum/exclusiva'],
+      [/\bconcorrente\b/i,/\b(?:privativa|comum|exclusiva)\b/i,'competência concorrente × privativa/comum/exclusiva'],
+      [/\bjudici[aá]ria\b/i,/\b(?:ostensiva|administrativa)\b/i,'polícia judiciária (investigativa) × polícia ostensiva/administrativa'],
+      [/\bostensiva\b/i,/\b(?:judici[aá]ria|investigativa)\b/i,'policiamento ostensivo × função de polícia judiciária'],
+      [/\bhabeas\s+corpus\b/i,/\b(?:habeas\s+data|mandado\s+de\s+seguran[cç]a|mandado\s+de\s+injun[cç][aã]o|a[cç][aã]o\s+popular)\b/i,'finalidade específica de cada remédio constitucional'],
+      [/\bhabeas\s+data\b/i,/\b(?:habeas\s+corpus|mandado\s+de\s+seguran[cç]a|mandado\s+de\s+injun[cç][aã]o)\b/i,'acesso/retificação de dados pessoais (Habeas Data) × direito líquido e certo / locomoção'],
+      [/\bmandado\s+de\s+seguran[cç]a\b/i,/\b(?:habeas\s+corpus|habeas\s+data|mandado\s+de\s+injun[cç][aã]o|a[cç][aã]o\s+popular)\b/i,'proteção de direito líquido e certo (MS) × outros remédios constitucionais'],
+      [/\breclus[aã]o\b/i,/\bdeten[cç][aã]o\b/i,'espécie de pena (reclusão × detenção)'],
+      [/\bc[aâ]mara\s+dos\s+deputados\b/i,/\bsenado\s+federal\b/i,'atribuição da Câmara dos Deputados × Senado Federal']
+    ];
+    for(const [reA,reB,label] of swapPairs){
+      if((reA.test(chosenText)&&reB.test(correctText))||(reB.test(chosenText)&&reA.test(correctText))){
+        reasons.push(`<b>🔄 Troca conceitual clássica de banca:</b> a alternativa <b>${chosenLetter}</b> trocou <b>${label}</b> em relação ao gabarito oficial (<b>${correctLetter}</b>).`);
+        break;
+      }
+    }
+    const chosenNums=(chosenText.match(/\b\d+\b/g)||[]).join(', ');
+    const correctNums=(correctText.match(/\b\d+\b/g)||[]).join(', ');
+    if(chosenNums&&correctNums&&chosenNums!==correctNums){
+      reasons.push(`<b>🔢 Divergência de prazo, quórum ou numeração:</b> a opção <b>${chosenLetter}</b> indica <b>${escText(chosenNums)}</b>, enquanto a regra correta na alternativa <b>${correctLetter}</b> estabelece <b>${escText(correctNums)}</b>.`);
+    }
+    if(!reasons.length){
+      if(isCE){
+        reasons.push(`<b>⚖️ Erro de julgamento no item:</b> você julgou como <b>${chosenLetter}</b>, mas o item está <b>${correctLetter}</b> conforme a literalidade da norma e jurisprudência cobrada no tema <b>"${escText(item.topic||item.subject||'Geral')}"</b>.`);
+      }else{
+        reasons.push(`<b>🎯 Onde está o erro na alternativa ${chosenLetter}:</b> o distrator <i>"${escText(shortLabel(chosenText,125))}"</i> contraria o requisito correto previsto na <b>Alternativa ${correctLetter}</b> (<i>"${escText(shortLabel(correctText,125))}"</i>).`);
+      }
+    }
+    return reasons.join('<br>');
+  }
+  window.buildSpecificErrorDiagnosis=buildSpecificErrorDiagnosis;
+
   function formatStepByStepResolution(item,chosenIndex,ok,interactive=true){
     const optsList=Array.isArray(item.options)?item.options:[];
     const isCE=optsList.length===2&&/^certo$/i.test(String(optsList[0]||'').trim());
@@ -1753,6 +1808,7 @@
         <span class="tag">${escText(item.board||(normalizedOrigin(item)==='oficial'?'Prova Oficial':'Estilo Banca'))}</span>
       </div>
       ${directComparisonHtml}
+      ${!ok?(`<div class="stepResolutionBlock wrongAnalysis" style="border-left:4px solid #f43f5e;background:rgba(136,19,55,.22);margin-bottom:8px"><b>🔍 Diagnóstico do Seu Erro (O que você errou e por quê)</b><p style="margin-top:4px;line-height:1.5">${buildSpecificErrorDiagnosis(item,chosenIndex,correctIndex,isCE)}</p></div>`):''}
       ${stepsHtml}
       <details class="resolutionOptionsDetails" ${!ok?'open':''}>
         <summary>Ver conferência alternativa por alternativa (${optRangeLabel})</summary>
@@ -2510,7 +2566,7 @@
           <span class="small muted">${escText(statusLabel)} · ${new Date(doc.created_at).toLocaleDateString('pt-BR')}</span>
         </div>
         <div class="examDocActions">
-          ${status==='ready'?`<button type="button" class="ghost small" data-exam-doc-battle="${doc.id}">◎ Treinar</button><button type="button" class="action small" data-exam-doc-simulado="${doc.id}">▶ Simulado</button>`:`<button type="button" class="action small" data-exam-doc-process="${doc.id}">⚡ Extrair Questões</button>`}
+          ${(status==='ready'&&(doc.metadata?.coverage?.warnings||[]).some(w=>/SEM gabarito/i.test(w)))?`<button type="button" class="action small" data-add-key-doc="${doc.id}" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#040c16;font-weight:900">📋 Adicionar Gabarito</button>`:''}${status==='ready'?`<button type="button" class="ghost small" data-exam-doc-battle="${doc.id}">◎ Treinar</button><button type="button" class="action small" data-exam-doc-simulado="${doc.id}">▶ Simulado</button>`:`<button type="button" class="action small" data-exam-doc-process="${doc.id}">⚡ Extrair Questões</button>`}
         </div>
       </div>`;
     }).join(''):`<div class="examEmptyState">
@@ -2933,7 +2989,9 @@
         }
       }
       report.expected++;
-      const key=keyMap.get(b.num)||inlineAns||(opts.allowWithoutKey?(isCE?'C':'A'):null);
+      const realKey=keyMap.get(b.num)||inlineAns||null;
+      const key=realKey||(opts.allowWithoutKey?'?':null);
+      const unknownKey=!realKey&&key==='?';
       if(key==='ANULADA'){report.annulled++;continue}
       if(!key){report.missingKey++;continue}
 
@@ -2959,19 +3017,21 @@
         let statement=block.slice(0,picked[0].index).replace(/\s+/g,' ').trim();
         statement=statement.replace(/\bAlternativas\s*$/i,'').trim();
         const options=picked.map((o,i)=>block.slice(o.index+o.len,i+1<picked.length?picked[i+1].index:block.length).replace(/\s+/g,' ').trim());
-        const correctIdx=(opts.allowWithoutKey&&!keyMap.has(b.num)&&!inlineAns)?0:picked.findIndex(o=>o.letter===key);
-        if(statement.length>=10&&correctIdx>=0&&options.every(Boolean)){
+        const correctIdx=unknownKey?-1:picked.findIndex(o=>o.letter===key);
+        if(statement.length>=10&&(correctIdx>=0||unknownKey)&&options.every(Boolean)){
           const pTopic=inferQuestionPedagogicalTopic(statement,defaultSubject,b.num);
           item={statement,options,correct_index:correctIdx,topic:pTopic,difficulty:'medio',
-            explanation:inlineComment||(opts.allowWithoutKey&&!keyMap.has(b.num)?'Questão extraída do caderno de questões do PDF.':`Gabarito do documento: alternativa ${key} ("${options[correctIdx]}").`)};
+            explanation:inlineComment||(unknownKey?'Questão importada SEM gabarito: ainda não pode ser corrigida. Adicione o gabarito oficial para usá-la em simulados.':`Gabarito do documento: alternativa ${key} ("${options[correctIdx]}").`)};
+          if(unknownKey)item.answer_unknown=true;
         }
       }else if((key==='C'||key==='E'||opts.allowWithoutKey)&&picked.length===0&&(isCE||inlineMode||opts.allowWithoutKey||/\bcerto\b[\s\S]*\berrado\b|\bjulgue\b/i.test(block))){
         let statement=block.replace(/Alternativas\s+Certo\s+Errado[\s\S]*$/i,'').replace(/\(\s*\)\s*Certo[\s\S]*$/i,'').replace(/\s+/g,' ').trim();
         if(statement.length>=12){
           const pTopic=inferQuestionPedagogicalTopic(statement,defaultSubject,b.num);
-          item={statement:`[Julgue o item em CERTO ou ERRADO] ${statement}`,options:['CERTO','ERRADO'],correct_index:key==='E'?1:0,
+          item={statement:`[Julgue o item em CERTO ou ERRADO] ${statement}`,options:['CERTO','ERRADO'],correct_index:unknownKey?-1:(key==='E'?1:0),
             topic:pTopic,difficulty:'dificil',
-            explanation:inlineComment||(opts.allowWithoutKey&&!keyMap.has(b.num)?'Item C/E extraído do caderno de questões do PDF.':`Gabarito do documento: ${key==='C'?'CERTO':'ERRADO'}.`)};
+            explanation:inlineComment||(unknownKey?'Item C/E importado SEM gabarito: ainda não pode ser corrigido. Adicione o gabarito oficial para usá-lo em simulados.':`Gabarito do documento: ${key==='C'?'CERTO':'ERRADO'}.`)};
+          if(unknownKey)item.answer_unknown=true;
         }
       }
       if(item){
@@ -2986,7 +3046,8 @@
         const inferred=canonicalSubjectName(item.statement,defaultSubject);
         item.subject=inferred&&inferred!=='Conteúdo Geral'?inferred:canonicalSubjectName(defaultSubject);
         item.board=defaultBoard;
-        item.origin='oficial';
+        item.origin=item.answer_unknown?'adaptada_do_pdf':'oficial';
+        if(item.answer_unknown)report.answerUnknown=(report.answerUnknown||0)+1;
         results.push(item);
       }else report.skipped++;
       if(newBase){pendingBase=newBase;baseAge=0;baseRangeStart=newRangeStart;baseRangeEnd=newRangeEnd}else baseAge++;
@@ -3393,7 +3454,8 @@
 
     const reviewItems=questions.map((item,i)=>{
       const chosen=answers[i],correct=Number(item.correct_index),ok=chosen===correct;
-      return `<div class="topic" style="border-left:4px solid ${chosen===null?'var(--gold)':ok?'var(--green)':'var(--red)'};display:block"><div style="margin-bottom:8px"><b>Questão ${i+1} · ${escText(learningCategory(item.subject))}</b> <span class="tag">${chosen===null?'␣ Em branco':ok?'✓ Acertou':'✗ Errou'}</span></div><div class="small" style="margin:6px 0 10px">${escText(item.statement)}</div>${formatStepByStepResolution(item,chosen,ok,false)}</div>`;
+      const statusKind=chosen===null?'blank':ok?'correct':'wrong';
+      return `<div class="topic simuladoReviewItem" data-sim-rev-kind="${statusKind}" style="border-left:4px solid ${chosen===null?'var(--gold)':ok?'var(--green)':'var(--red)'};display:block"><div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>Questão ${i+1} · ${escText(learningCategory(item.subject))} (${escText(item.topic||'Geral')})</b> <span class="tag" style="color:${chosen===null?'#facc15':ok?'#34d399':'#fb7185'}">${chosen===null?'␣ Em branco':ok?'✓ Acertou':'✗ Você errou'}</span></div><div class="small" style="margin:6px 0 10px;white-space:pre-line">${escText(item.statement)}</div>${formatStepByStepResolution(item,chosen===null?-2:chosen,ok,false)}</div>`;
     }).join('');
 
     const liquidSummary=scoringMode==='liquid'
@@ -3403,7 +3465,30 @@
     q('#simuladoStage').hidden=true;
     const resultStage=q('#simuladoResultStage');
     resultStage.hidden=false;
-    resultStage.innerHTML=`<div class="card"><div class="sectionHead"><div><div class="eyebrow">RESULTADO DO SIMULADO</div><h2>Você acertou ${totalCorrect} de ${questions.length} (${rawRate}% bruto)</h2>${liquidSummary}<p class="small muted" style="margin:4px 0 0">Tempo utilizado: ${elapsedMinutes} min · Os erros foram enviados automaticamente ao seu Caderno de Erros.</p></div><span class="tag">${displayRate>=70?'Caveira Aprovado (≥70%)':'Abaixo do corte — revisar'}</span></div><div class="performanceChart" style="margin-top:12px">${subjectRows}</div></div><div class="card"><div class="sectionHead"><h3>Gabarito comentado passo a passo</h3><button class="action" id="closeFinishedSimulado" type="button" style="width:auto;padding:10px 18px">Concluir e fechar</button></div><div class="list">${reviewItems}</div></div>`;
+    resultStage.innerHTML=`<div class="card"><div class="sectionHead"><div><div class="eyebrow">RESULTADO DO SIMULADO</div><h2>Você acertou ${totalCorrect} de ${questions.length} (${rawRate}% bruto)</h2>${liquidSummary}<p class="small muted" style="margin:4px 0 0">Tempo utilizado: ${elapsedMinutes} min · Os erros foram enviados automaticamente ao seu Caderno de Erros.</p></div><span class="tag">${displayRate>=70?'Caveira Aprovado (≥70%)':'Abaixo do corte — revisar'}</span></div><div class="performanceChart" style="margin-top:12px">${subjectRows}</div></div><div class="card"><div class="sectionHead" style="flex-wrap:wrap;gap:8px"><div><h3>Diagnóstico de Erros e Gabarito Comentado</h3><p class="small muted" style="margin:2px 0 0">Confira abaixo o que você marcou em cada questão, a explicação do seu erro e o fundamento da alternativa correta:</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="ghost small" id="retrySimuladoWrongsBtn" type="button" ${totalWrong===0?'hidden':''} style="width:auto;border-color:#f43f5e;color:#fda4af">🔁 Refazer ${totalWrong} errada(s)</button><button class="action" id="closeFinishedSimulado" type="button" style="width:auto;padding:10px 18px">Concluir e fechar</button></div></div><div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0"><button type="button" class="quickBoardPill active" data-sim-rev-filter="all">Todas (${questions.length})</button><button type="button" class="quickBoardPill" data-sim-rev-filter="wrong">✗ Apenas Erros (${totalWrong})</button><button type="button" class="quickBoardPill" data-sim-rev-filter="blank">⚪ Em Branco (${totalBlank})</button><button type="button" class="quickBoardPill" data-sim-rev-filter="correct">✓ Acertos (${totalCorrect})</button></div><div class="list" id="simuladoReviewItemsList">${reviewItems}</div></div>`;
+    resultStage.querySelectorAll('[data-sim-rev-filter]').forEach(fBtn=>{
+      fBtn.onclick=()=>{
+        resultStage.querySelectorAll('[data-sim-rev-filter]').forEach(b=>b.classList.remove('active'));
+        fBtn.classList.add('active');
+        const kind=fBtn.dataset.simRevFilter;
+        resultStage.querySelectorAll('.simuladoReviewItem').forEach(el=>{
+          el.hidden=(kind!=='all'&&el.dataset.simRevKind!==kind);
+        });
+      };
+    });
+    const retrySimBtn=q('#retrySimuladoWrongsBtn');
+    if(retrySimBtn){
+      retrySimBtn.onclick=()=>{
+        const wrongQs=questions.filter((item,idx)=>answers[idx]!==null&&answers[idx]!==Number(item.correct_index));
+        if(!wrongQs.length)return;
+        activeSimulado=null;
+        q('#simuladoDialog')?.close();
+        activeQuestions={mode:'retry_errors',subject:'Revisão do Simulado',questions:wrongQs.map(prepareQuestion),current:0,correct:0,blankCount:0,answered:false};
+        if(q('#questionDialogTitle'))q('#questionDialogTitle').textContent=`⚔️ Correção dos Erros do Simulado (${wrongQs.length})`;
+        q('#questionDialog')?.showModal();
+        window.showQuestion();
+      };
+    }
     q('#closeFinishedSimulado').onclick=()=>{
       activeSimulado=null;
       q('#simuladoDialog')?.close();
@@ -6677,7 +6762,11 @@
       playCompletionChime();
       activeDuelSession=null;
       renderDuelArena();
-      toast(isDraw?`🤝 Empate técnico contra ${bot.name} (${score}/${totalQ} em ${totalTimeS}s)!`:iWon?`🏆 VITÓRIA NO X1 CONTRA ${bot.name.toUpperCase()}! Placar: ${score}/${totalQ} (${totalTimeS}s) × ${botScore}/${totalQ} (${botTimeS}s)!`:`⚔️ ${bot.name} venceu por ${botScore}/${totalQ} (${botTimeS}s) contra ${score}/${totalQ} (${totalTimeS}s). Tente a revanche!`);
+      const summaryToast=isDraw?`🤝 Empate técnico contra ${bot.name} (${score}/${totalQ} em ${totalTimeS}s)!`:iWon?`🏆 VITÓRIA NO X1 CONTRA ${bot.name.toUpperCase()}! Placar: ${score}/${totalQ} (${totalTimeS}s) × ${botScore}/${totalQ} (${botTimeS}s)!`:`⚔️ ${bot.name} venceu por ${botScore}/${totalQ} (${botTimeS}s) contra ${score}/${totalQ} (${totalTimeS}s). Tente a revanche!`;
+      toast(summaryToast);
+      if(typeof window.showDuelPostMatchSummaryModal==='function'){
+        window.showDuelPostMatchSummaryModal(duel,answers,{myScore:score,myTimeS:totalTimeS,oppScore:botScore,oppTimeS:botTimeS,oppName:bot.name,iWon,isDraw,completed:true});
+      }
       return;
     }
 
@@ -6705,11 +6794,21 @@
         const shownScore=Number.isFinite(finalScore)?finalScore:score;
         const finalTime=Number(isChal?updated.challenger_time_s:updated.opponent_time_s);
         const shownTime=Number.isFinite(finalTime)?finalTime:totalTimeS;
+        const oppScore=Number(isChal?updated.opponent_score:updated.challenger_score)||0;
+        const oppTime=Number(isChal?updated.opponent_time_s:updated.challenger_time_s)||0;
+        const oppName=isChal?updated.opponent_name:updated.challenger_name;
         toast(updated.is_draw?`🤝 Duelo empatado (${shownScore}/${duel.questions.length})!`:won?`🏆 VITÓRIA NO X1! Você venceu por ${shownScore}/${duel.questions.length} (${shownTime}s)!`:`Duelo finalizado (${shownScore}/${duel.questions.length}). Confira o placar na Arena!`);
+        if(typeof window.showDuelPostMatchSummaryModal==='function'){
+          window.showDuelPostMatchSummaryModal(duel,answers,{myScore:shownScore,myTimeS:shownTime,oppScore,oppTimeS:oppTime,oppName:oppName||'Oponente',iWon:won,isDraw:Boolean(updated.is_draw),completed:true});
+        }
       }else{
         const myIdPending=cloudSession?.user?.id,isChalPending=updated.challenger_id===myIdPending;
         const pendScore=Number(isChalPending?updated.challenger_score:updated.opponent_score),pendTime=Number(isChalPending?updated.challenger_time_s:updated.opponent_time_s);
+        const oppName=isChalPending?updated.opponent_name:updated.challenger_name;
         toast(`✓ Sua rodada (${Number.isFinite(pendScore)?pendScore:score}/${duel.questions.length} em ${Number.isFinite(pendTime)?pendTime:totalTimeS}s) foi registrada! Aguardando o oponente responder.`);
+        if(typeof window.showDuelPostMatchSummaryModal==='function'){
+          window.showDuelPostMatchSummaryModal(duel,answers,{myScore:Number.isFinite(pendScore)?pendScore:score,myTimeS:Number.isFinite(pendTime)?pendTime:totalTimeS,oppScore:null,oppTimeS:null,oppName:oppName||'Oponente',iWon:false,isDraw:false,completed:false});
+        }
       }
     }catch(err){
       toast(err.message||'Não foi possível registrar o duelo.');
@@ -8859,351 +8958,12 @@
       }
     }
   },25000);
-  const remembered=(()=>{try{return sessionStorage.getItem(viewKey)}catch{return null}
-  // ── r129: Purge de questões inválidas antigas no Caderno de Erros e Tela de Resultado + Story do Instagram (9:16) ──
-  function purgeInvalidPedagogicalErrors(){
-    if(typeof state==='undefined'||!state?.errors||typeof window.isValidPedagogicalQuestion!=='function')return;
-    let removed=0;
-    for(const [k,err] of Object.entries(state.errors)){
-      const stmt=String(err?.question||'').trim();
-      if(!stmt)continue;
-      const fakeQ={statement:stmt,options:[err.correctAnswer||'Opção A',err.lastChosen||'Opção B','Opção C','Opção D'],topic:err.topic||''};
-      if(!window.isValidPedagogicalQuestion(fakeQ)){
-        delete state.errors[k];
-        removed++;
-      }
-    }
-    if(removed>0&&typeof save==='function')save();
-  }
-  setTimeout(purgeInvalidPedagogicalErrors,800);
-
-  const STORY_BANNERS=[
-    {id:'solo',name:'Caçador Solo Leveling',url:'./login-banner.jpg'},
-    {id:'boss',name:'Arena das Bancas',url:'./bancas-boss-banner.jpg'},
-    {id:'tactical',name:'Comando Tático',url:'./og-banner-1200x630.jpg'}
-  ];
-  window._selectedStoryBannerIdx=0;
-  window._lastBatterySnapshot=null;
-
-  function ensureBatteryResultStoryDialog(){
-    let dlg=q('#batteryResultStoryDialog');
-    if(dlg)return dlg;
-    document.body.insertAdjacentHTML('beforeend',`
-      <dialog id="batteryResultStoryDialog" aria-label="Resultado da Bateria e Story do Caçador">
-        <div class="sectionHead" style="margin-bottom:8px">
-          <div>
-            <div class="eyebrow" style="color:#63e7ff">RELATÓRIO DE COMBATE CONCLUÍDO</div>
-            <h2 id="storyModalTitle" style="margin:2px 0 0;font-size:1.22rem">Resultado da Bateria</h2>
-          </div>
-          <button type="button" class="ghost small" id="closeBatteryStoryDialogBtn" style="width:auto;padding:6px 12px">✕ Fechar</button>
-        </div>
-        <div id="batteryResultSummaryBadges" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
-
-        <div class="storyPreviewFrame" id="storyPreviewFrame">
-          <div class="storyPreviewOverlay"></div>
-          <div class="storyPreviewContent" id="storyPreviewInner"></div>
-        </div>
-
-        <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:10px 0">
-          <button type="button" class="ghost small" id="cycleStoryBannerBtn" style="width:auto;padding:6px 12px;font-size:.78rem">🎨 Trocar Fundo do Story</button>
-          <button type="button" class="action" id="shareHunterStoryBtn" style="width:auto;padding:10px 18px;font-weight:900">📲 Compartilhar / Baixar Story (Instagram 9:16)</button>
-        </div>
-
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid #1e3b56">
-          <button type="button" class="ghost" id="retryWrongBatteryBtn" hidden style="flex:1">🔁 Refazer as que errei</button>
-          <button type="button" class="action" id="finishBatteryStoryBtn" style="flex:1">✓ Concluir e Voltar</button>
-        </div>
-      </dialog>
-    `);
-    dlg=q('#batteryResultStoryDialog');
-    q('#closeBatteryStoryDialogBtn').onclick=()=>dlg.close();
-    q('#finishBatteryStoryBtn').onclick=()=>dlg.close();
-    q('#cycleStoryBannerBtn').onclick=()=>{
-      window._selectedStoryBannerIdx=((window._selectedStoryBannerIdx||0)+1)%STORY_BANNERS.length;
-      if(window._lastBatterySnapshot)renderStoryModalPreview(window._lastBatterySnapshot);
-    };
-    q('#shareHunterStoryBtn').onclick=()=>{
-      if(window._lastBatterySnapshot)window.shareOrDownloadHunterStoryCard(window._lastBatterySnapshot);
-    };
-    return dlg;
-  }
-
-  function renderStoryModalPreview(snap){
-    const banner=STORY_BANNERS[window._selectedStoryBannerIdx||0]||STORY_BANNERS[0];
-    const frame=q('#storyPreviewFrame');
-    const inner=q('#storyPreviewInner');
-    const badges=q('#batteryResultSummaryBadges');
-    if(!frame||!inner)return;
-    frame.style.backgroundImage=`url('${banner.url}')`;
-
-    const total=Math.max(1,Number(snap.total||snap.questions?.length||1));
-    const correct=Number(snap.correct||0);
-    const blankCnt=Number(snap.blankCnt||snap.blankCount||0);
-    const wrongCnt=Math.max(0,total-correct-blankCnt);
-    const score=Math.round((correct/total)*100);
-    const liqScore=Math.max(0,correct-wrongCnt);
-    const earnedXp=correct*25+Number(snap.bonusXp||0)+(snap.mode==='boss'&&score>=70?300:0);
-    const subj=String(snap.subject||'Treino Tático');
-    const campName=(typeof activeCampaign==='function'&&activeCampaign()?.name)||'Concurso Policial';
-    const rankLabel=q('#rank')?.textContent||'Caçador Rank E';
-    const streakDays=Number(state?.streak||0);
-    const hunterName=String(state?.profile?.displayName||cloudSession?.user?.email?.split('@')[0]||'Caçador').slice(0,24);
-
-    if(badges){
-      badges.innerHTML=`
-        <span class="qMetaPill board">🎯 Acertos: ${correct}/${total} (${score}%)</span>
-        <span class="qMetaPill">⚖️ Líquido Caveira: ${liqScore} pt(s)</span>
-        ${blankCnt?`<span class="qMetaPill">⚪ Em branco: ${blankCnt}</span>`:''}
-        <span class="qMetaPill facil">⚡ +${earnedXp} XP</span>
-      `;
-    }
-
-    const tierPhrase=score>=85
-      ?'🔥 DESEMPENHO DE ELITE! MIRA CALIBRADA PARA A APROVAÇÃO!'
-      :score>=70
-        ?'⚔️ MISSÃO CUMPRIDA COM CONSISTÊNCIA! AVANÇANDO NO EDITAL!'
-        :'🛡️ TREINO DURO, COMBATE FÁCIL! CADA ERRO CORRIGIDO É UM PASSO!';
-
-    inner.innerHTML=`
-      <div>
-        <div style="font-size:.62rem;font-weight:900;letter-spacing:.12em;color:#63e7ff;text-transform:uppercase">⚔️ JORNADA DO CAÇADOR · STORY 9:16</div>
-        <div style="font-size:.82rem;font-weight:800;margin-top:3px;color:#f8fafc">${escText(hunterName)} · <span style="color:#facc15">${escText(rankLabel)}</span></div>
-        <div style="font-size:.68rem;color:#cbd5e1;margin-top:2px">${escText(campName)}</div>
-      </div>
-
-      <div style="my:auto;padding:10px 6px;border-radius:16px;background:rgba(4,12,24,.72);border:1px solid rgba(99,231,255,.35);backdrop-filter:blur(4px)">
-        <div style="font-size:.7rem;color:#9cb6cc;text-transform:uppercase;font-weight:800">${escText(subj)}</div>
-        <div class="storyBigScore" style="margin-top:4px">${correct}/${total}</div>
-        <div style="font-size:.75rem;color:#e2e8f0;font-weight:700">QUESTÕES CERTAS</div>
-        <div class="storyAccuracyPill">${score}% de Precisão</div>
-      </div>
-
-      <div>
-        <div class="storyMetricsMiniGrid">
-          <div><b>${liqScore} pt</b><span>Líquido</span></div>
-          <div><b>+${earnedXp}</b><span>XP Ganho</span></div>
-          <div><b>🔥 ${streakDays}d</b><span>Ofensiva</span></div>
-        </div>
-        <div style="font-size:.66rem;font-weight:800;color:#fde047;margin-top:8px;line-height:1.35">${tierPhrase}</div>
-      </div>
-    `;
-
-    const retryBtn=q('#retryWrongBatteryBtn');
-    const wrongQuestions=(snap.questions||[]).filter(qItem=>qItem?._lastAttempt&&!qItem._lastAttempt.ok);
-    if(retryBtn){
-      if(wrongQuestions.length>0){
-        retryBtn.hidden=false;
-        retryBtn.textContent=`🔁 Refazer ${wrongQuestions.length} errada(s)`;
-        retryBtn.onclick=()=>{
-          q('#batteryResultStoryDialog')?.close();
-          activeQuestions={
-            mode:'retry_errors',
-            subject:subj,
-            questions:wrongQuestions.map(qItem=>({...qItem,_lastAttempt:null})),
-            current:0,
-            correct:0,
-            blankCount:0,
-            answered:false
-          };
-          if(q('#questionDialogTitle'))q('#questionDialogTitle').textContent=`Revisão Cirúrgica (${wrongQuestions.length} errada(s))`;
-          q('#questionDialog')?.showModal();
-          window.showQuestion();
-        };
-      }else{
-        retryBtn.hidden=true;
-      }
-    }
-  }
-
-  window.showBatteryResultStoryModal=function(snap){
-    if(!snap)return;
-    window._lastBatterySnapshot=snap;
-    const dlg=ensureBatteryResultStoryDialog();
-    renderStoryModalPreview(snap);
-    if(!dlg.open)dlg.showModal();
-  };
-
-  window.shareOrDownloadHunterStoryCard=async function(snap){
-    const data=snap||window._lastBatterySnapshot;
-    if(!data)return;
-    const banner=STORY_BANNERS[window._selectedStoryBannerIdx||0]||STORY_BANNERS[0];
-    const canvas=document.createElement('canvas');
-    canvas.width=1080;
-    canvas.height=1920;
-    const ctx=canvas.getContext('2d');
-
-    // Fundo padrão escuro tático
-    const bgGrad=ctx.createLinearGradient(0,0,0,1920);
-    bgGrad.addColorStop(0,'#061220');
-    bgGrad.addColorStop(0.5,'#0b2138');
-    bgGrad.addColorStop(1,'#040b14');
-    ctx.fillStyle=bgGrad;
-    ctx.fillRect(0,0,1080,1920);
-
-    // Carrega a imagem do banner escolhido com cover proporcional 9:16
-    try{
-      const img=await new Promise((resolve,reject)=>{
-        const im=new Image();
-        im.crossOrigin='anonymous';
-        im.onload=()=>resolve(im);
-        im.onerror=reject;
-        im.src=banner.url;
-      });
-      const scale=Math.max(1080/img.width,1920/img.height);
-      const dw=img.width*scale,dh=img.height*scale;
-      const dx=(1080-dw)/2,dy=(1920-dh)/2;
-      ctx.drawImage(img,dx,dy,dw,dh);
-    }catch{}
-
-    // Overlay tático para leitura perfeita
-    const ov=ctx.createLinearGradient(0,0,0,1920);
-    ov.addColorStop(0,'rgba(4,10,20,0.84)');
-    ov.addColorStop(0.45,'rgba(6,18,34,0.68)');
-    ov.addColorStop(1,'rgba(3,8,16,0.94)');
-    ctx.fillStyle=ov;
-    ctx.fillRect(0,0,1080,1920);
-
-    // Moldura neon
-    ctx.strokeStyle='rgba(99,231,255,0.55)';
-    ctx.lineWidth=6;
-    ctx.strokeRect(48,48,984,1824);
-
-    const total=Math.max(1,Number(data.total||data.questions?.length||1));
-    const correct=Number(data.correct||0);
-    const blankCnt=Number(data.blankCnt||data.blankCount||0);
-    const wrongCnt=Math.max(0,total-correct-blankCnt);
-    const score=Math.round((correct/total)*100);
-    const liqScore=Math.max(0,correct-wrongCnt);
-    const earnedXp=correct*25+Number(data.bonusXp||0)+(data.mode==='boss'&&score>=70?300:0);
-    const subj=String(data.subject||'Treino Tático').slice(0,38);
-    const campName=String((typeof activeCampaign==='function'&&activeCampaign()?.name)||'Concurso Policial').slice(0,44);
-    const rankLabel=String(q('#rank')?.textContent||'Caçador Rank E');
-    const streakDays=Number(state?.streak||0);
-    const hunterName=String(state?.profile?.displayName||cloudSession?.user?.email?.split('@')[0]||'Caçador').slice(0,26);
-
-    ctx.textAlign='center';
-    ctx.fillStyle='#63e7ff';
-    ctx.font='900 34px system-ui, -apple-system, sans-serif';
-    ctx.fillText('⚔️ JORNADA DO CAÇADOR · RELATÓRIO DE MISSÃO',540,150);
-
-    ctx.fillStyle='#ffffff';
-    ctx.font='800 54px system-ui, -apple-system, sans-serif';
-    ctx.fillText(hunterName.toUpperCase(),540,235);
-
-    ctx.fillStyle='#facc15';
-    ctx.font='800 40px system-ui, -apple-system, sans-serif';
-    ctx.fillText(`${rankLabel}  ·  ${campName}`,540,300);
-
-    // Card central do placar
-    ctx.fillStyle='rgba(6,18,32,0.84)';
-    ctx.strokeStyle='rgba(99,231,255,0.5)';
-    ctx.lineWidth=4;
-    ctx.beginPath();
-    if(typeof ctx.roundRect==='function')ctx.roundRect(110,430,860,760,36);
-    else ctx.rect(110,430,860,760);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle='#9cb6cc';
-    ctx.font='800 36px system-ui, -apple-system, sans-serif';
-    ctx.fillText(subj.toUpperCase(),540,520);
-
-    ctx.fillStyle='#63e7ff';
-    ctx.font='900 210px system-ui, -apple-system, sans-serif';
-    ctx.fillText(`${correct}/${total}`,540,760);
-
-    ctx.fillStyle='#f8fafc';
-    ctx.font='800 44px system-ui, -apple-system, sans-serif';
-    ctx.fillText('QUESTÕES ACERTADAS',540,840);
-
-    // Pílula de precisão
-    ctx.fillStyle=score>=75?'rgba(16,185,129,0.28)':'rgba(56,189,248,0.25)';
-    ctx.strokeStyle=score>=75?'#34d399':'#38bdf8';
-    ctx.lineWidth=4;
-    ctx.beginPath();
-    if(typeof ctx.roundRect==='function')ctx.roundRect(270,910,540,110,55);
-    else ctx.rect(270,910,540,110);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle=score>=75?'#6ee7b7':'#7dd3fc';
-    ctx.font='900 54px system-ui, -apple-system, sans-serif';
-    ctx.fillText(`🎯 ${score}% DE PRECISÃO`,540,982);
-
-    ctx.fillStyle='#cbd5e1';
-    ctx.font='700 34px system-ui, -apple-system, sans-serif';
-    ctx.fillText(`Placar Líquido Caveira: ${liqScore} pt(s)   ·   Em branco: ${blankCnt}`,540,1115);
-
-    // 3 blocos inferiores (Líquido, XP, Ofensiva)
-    const boxes=[
-      {label:'PLACAR LÍQUIDO',val:`${liqScore} pt`},
-      {label:'XP CONQUISTADO',val:`+${earnedXp} XP`},
-      {label:'OFENSIVA ATUAL',val:`🔥 ${streakDays} dias`}
-    ];
-    boxes.forEach((b,idx)=>{
-      const bx=110+idx*295;
-      ctx.fillStyle='rgba(8,24,42,0.88)';
-      ctx.strokeStyle='rgba(99,231,255,0.35)';
-      ctx.lineWidth=3;
-      ctx.beginPath();
-      if(typeof ctx.roundRect==='function')ctx.roundRect(bx,1270,270,210,24);
-      else ctx.rect(bx,1270,270,210);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle='#ffffff';
-      ctx.font='900 48px system-ui, -apple-system, sans-serif';
-      ctx.fillText(b.val,bx+135,1375);
-
-      ctx.fillStyle='#9cb6cc';
-      ctx.font='800 24px system-ui, -apple-system, sans-serif';
-      ctx.fillText(b.label,bx+135,1435);
-    });
-
-    ctx.fillStyle='#fde047';
-    ctx.font='800 36px system-ui, -apple-system, sans-serif';
-    const footerMsg=score>=80
-      ?'“A preparação silenciosa de hoje sustenta a vitória de amanhã.”'
-      :'“Constância e revisão cirúrgica até a posse!”';
-    ctx.fillText(footerMsg,540,1630);
-
-    ctx.fillStyle='#64748b';
-    ctx.font='700 28px system-ui, -apple-system, sans-serif';
-    ctx.fillText(`Gerado em ${new Date().toLocaleDateString('pt-BR')} · Plataforma Jornada do Caçador`,540,1785);
-
-    const blob=await new Promise(res=>canvas.toBlob(res,'image/png',0.95));
-    if(!blob)return toast('Não foi possível gerar a imagem do Story.');
-    const fileName=`story-cacador-${correct}-${total}-${score}pct.png`;
-    const file=new File([blob],fileName,{type:'image/png'});
-
-    if(navigator.canShare&&navigator.canShare({files:[file]})){
-      try{
-        await navigator.share({
-          files:[file],
-          title:'Meu Resultado na Jornada do Caçador',
-          text:`Fiz ${correct}/${total} (${score}%) em ${subj} na Jornada do Caçador! 🔥`
-        });
-        toast('📲 Card Story enviado para compartilhamento!');
-        return;
-      }catch(err){
-        if(err?.name==='AbortError')return;
-      }
-    }
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url;
-    a.download=fileName;
-    a.click();
-    setTimeout(()=>URL.revokeObjectURL(url),2500);
-    toast('📥 Imagem Story (9:16) baixada! Pronta para postar no Instagram/WhatsApp.');
-  };
-
-})();
+  const remembered=(()=>{try{return sessionStorage.getItem(viewKey)}catch{return null}})();
   if(remembered&&q(`#${CSS.escape(remembered)}`)?.classList.contains('view'))openView(remembered);
   q('#aboutDialog .tag')&&(q('#aboutDialog .tag').textContent='Versão 78 · experiência orientada ao estudo');
   q('#diagnosticsDialog .small.muted')&&(q('#diagnosticsDialog .small.muted').textContent='Versão 78 · interface, questões, simulados, IA, PDFs e sincronização');
 
-  // ── r129: Purge de questões inválidas antigas no Caderno de Erros e Tela de Resultado + Story do Instagram (9:16) ──
+  // ── r138: Purge de questões inválidas, Story 9:16 + Revisão de Erros na Bateria, Pós-Duelo X1 e Adicionar Gabarito Depois ──
   function purgeInvalidPedagogicalErrors(){
     if(typeof state==='undefined'||!state?.errors||typeof window.isValidPedagogicalQuestion!=='function')return;
     let removed=0;
@@ -9232,7 +8992,7 @@
     let dlg=q('#batteryResultStoryDialog');
     if(dlg)return dlg;
     document.body.insertAdjacentHTML('beforeend',`
-      <dialog id="batteryResultStoryDialog" aria-label="Resultado da Bateria e Story do Caçador">
+      <dialog id="batteryResultStoryDialog" aria-label="Resultado da Bateria e Story do Caçador" style="width:min(95vw,680px);max-height:90dvh;overflow-y:auto">
         <div class="sectionHead" style="margin-bottom:8px">
           <div>
             <div class="eyebrow" style="color:#63e7ff">RELATÓRIO DE COMBATE CONCLUÍDO</div>
@@ -9252,8 +9012,10 @@
           <button type="button" class="action" id="shareHunterStoryBtn" style="width:auto;padding:10px 18px;font-weight:900">📲 Compartilhar / Baixar Story (Instagram 9:16)</button>
         </div>
 
+        <div id="batteryQuestionsErrorReviewBox" style="margin-top:14px;padding-top:12px;border-top:1px solid #1e3b56"></div>
+
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid #1e3b56">
-          <button type="button" class="ghost" id="retryWrongBatteryBtn" hidden style="flex:1">🔁 Refazer as que errei</button>
+          <button type="button" class="ghost" id="retryWrongBatteryBtn" hidden style="flex:1;border-color:#f43f5e;color:#fda4af">🔁 Refazer as que errei</button>
           <button type="button" class="action" id="finishBatteryStoryBtn" style="flex:1">✓ Concluir e Voltar</button>
         </div>
       </dialog>
@@ -9276,6 +9038,7 @@
     const frame=q('#storyPreviewFrame');
     const inner=q('#storyPreviewInner');
     const badges=q('#batteryResultSummaryBadges');
+    const reviewBox=q('#batteryQuestionsErrorReviewBox');
     if(!frame||!inner)return;
     frame.style.backgroundImage=`url('${banner.url}')`;
 
@@ -9331,6 +9094,33 @@
       </div>
     `;
 
+    if(reviewBox&&Array.isArray(snap.questions)&&snap.questions.length){
+      const itemsHtml=snap.questions.map((qItem,idx)=>{
+        const att=qItem?._lastAttempt||null;
+        const chosenIdx=att&&Number.isInteger(att.chosenIndex)?att.chosenIndex:-2;
+        const ok=Boolean(att?.ok);
+        const borderColor=ok?'#10b981':chosenIdx===-2?'#f59e0b':'#f43f5e';
+        const statusBadge=ok?'<span class="tag" style="color:#34d399">✓ Acertou</span>':chosenIdx===-2?'<span class="tag" style="color:#facc15">⚪ Em branco</span>':'<span class="tag" style="color:#fb7185">✗ Você errou</span>';
+        return `
+          <details class="topic" ${!ok?'open':''} style="border-left:4px solid ${borderColor};display:block;margin-bottom:8px;padding:10px 12px">
+            <summary style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:800">
+              <span>Questão ${idx+1} · ${escText(learningCategory(qItem.subject))} (${escText(shortLabel(qItem.topic||'Geral',36))})</span>
+              ${statusBadge}
+            </summary>
+            <div class="small" style="margin:8px 0 10px;white-space:pre-line;color:#e2e8f0">${escText(qItem.statement)}</div>
+            ${formatStepByStepResolution(qItem,chosenIdx,ok,false)}
+          </details>
+        `;
+      }).join('');
+      reviewBox.innerHTML=`
+        <div style="margin-bottom:8px">
+          <b style="color:#63e7ff;font-size:.92rem">📋 Revisão da Bateria & Diagnóstico dos Seus Erros (${wrongCnt} erro(s))</b>
+          <p class="small muted" style="margin:2px 0 0">As questões que você errou já estão abertas abaixo com a análise da alternativa marcada e o gabarito comentado:</p>
+        </div>
+        <div>${itemsHtml}</div>
+      `;
+    }
+
     const retryBtn=q('#retryWrongBatteryBtn');
     const wrongQuestions=(snap.questions||[]).filter(qItem=>qItem?._lastAttempt&&!qItem._lastAttempt.ok);
     if(retryBtn){
@@ -9366,6 +9156,203 @@
     if(!dlg.open)dlg.showModal();
   };
 
+  // Modal de Resultado e Revisão de Erros ao Finalizar o Duelo X1
+  function showDuelPostMatchSummaryModal(duel,answers,meta={}){
+    if(!duel||!Array.isArray(duel.questions))return;
+    let dlg=q('#duelPostMatchDialog');
+    if(!dlg){
+      document.body.insertAdjacentHTML('beforeend',`
+        <dialog id="duelPostMatchDialog" aria-label="Resultado e Revisão de Erros do Duelo X1" style="width:min(95vw,700px);max-height:90dvh;overflow-y:auto;padding:20px;border-radius:18px;background:linear-gradient(160deg,#081526,#040b14);border:1px solid #38bdf8;color:#f8fafc">
+          <div class="sectionHead" style="margin-bottom:10px">
+            <div>
+              <div class="eyebrow" id="duelPostMatchEyebrow" style="color:#63e7ff;font-weight:900">⚔️ RELATÓRIO DA ARENA X1</div>
+              <h2 id="duelPostMatchTitle" style="margin:3px 0 0;font-size:1.25rem">Resultado do Duelo</h2>
+            </div>
+            <button type="button" class="ghost small" id="closeDuelPostMatchTopBtn" style="width:auto;padding:6px 12px">✕ Fechar</button>
+          </div>
+          <div id="duelPostMatchScoreboard" style="margin-bottom:14px"></div>
+          <div id="duelPostMatchReviewList"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid #1e3b56">
+            <button type="button" class="ghost" id="retryDuelWrongQuestionsBtn" hidden style="flex:1;border-color:#f43f5e;color:#fda4af">🔁 Treinar as que errei no Duelo</button>
+            <button type="button" class="action" id="closeDuelPostMatchBottomBtn" style="flex:1">✓ Concluir Revisão do Duelo</button>
+          </div>
+        </dialog>
+      `);
+      dlg=q('#duelPostMatchDialog');
+      q('#closeDuelPostMatchTopBtn').onclick=()=>dlg.close();
+      q('#closeDuelPostMatchBottomBtn').onclick=()=>dlg.close();
+    }
+    const totalQ=duel.questions.length;
+    const myScore=Number(meta.myScore||0);
+    const myTimeS=Number(meta.myTimeS||0);
+    const oppName=String(meta.oppName||'Oponente');
+    const titleEl=q('#duelPostMatchTitle');
+    const scoreBox=q('#duelPostMatchScoreboard');
+    const listBox=q('#duelPostMatchReviewList');
+
+    if(titleEl){
+      if(!meta.completed)titleEl.textContent=`Sua Rodada: ${myScore}/${totalQ} em ${myTimeS}s (Aguardando ${oppName})`;
+      else if(meta.isDraw)titleEl.textContent=`🤝 Empate Técnico contra ${oppName} (${myScore}/${totalQ})`;
+      else if(meta.iWon)titleEl.textContent=`🏆 Vitória no X1 contra ${oppName}!`;
+      else titleEl.textContent=`⚔️ Fim de Duelo contra ${oppName} — Revise seus Erros`;
+    }
+
+    if(scoreBox){
+      scoreBox.innerHTML=`
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;padding:12px;border-radius:14px;background:rgba(10,25,44,.85);border:1px solid #234d70;text-align:center">
+          <div>
+            <span class="small muted">VOCÊ</span>
+            <div style="font-size:1.45rem;font-weight:900;color:#63e7ff">${myScore}/${totalQ}</div>
+            <span class="small muted">⏱️ ${myTimeS}s</span>
+          </div>
+          <div style="font-weight:900;color:#facc15;font-size:1.1rem">VS</div>
+          <div>
+            <span class="small muted">${escText(oppName.toUpperCase())}</span>
+            <div style="font-size:1.45rem;font-weight:900;color:${meta.completed?'#f8fafc':'#94a3b8'}">${meta.completed?`${meta.oppScore}/${totalQ}`:'⏳ Pendente'}</div>
+            <span class="small muted">${meta.completed?`⏱️ ${meta.oppTimeS}s`:'Aguardando rodada'}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    const ansByIdx=new Map((answers||[]).map(a=>[Number(a.index),a]));
+    const wrongDuelQs=[];
+    if(listBox){
+      const itemsHtml=duel.questions.map((qItem,idx)=>{
+        const ans=ansByIdx.get(idx);
+        const chosenIdx=ans&&Number.isInteger(ans.chosen)?ans.chosen:-1;
+        const correctIdx=Number(qItem.correct_index)||0;
+        const ok=chosenIdx===correctIdx;
+        if(!ok)wrongDuelQs.push(qItem);
+        const spentS=ans?.time_s||0;
+        const borderColor=ok?'#10b981':'#f43f5e';
+        return `
+          <details class="topic" ${!ok?'open':''} style="border-left:4px solid ${borderColor};display:block;margin-bottom:8px;padding:10px 12px">
+            <summary style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:800">
+              <span>Rodada ${idx+1} · ${escText(learningCategory(qItem.subject))} (${spentS}s)</span>
+              <span class="tag" style="color:${ok?'#34d399':'#fb7185'}">${ok?'✓ Acertou':chosenIdx<0?'⏰ Tempo esgotado':'✗ Você errou'}</span>
+            </summary>
+            <div class="small" style="margin:8px 0 10px;white-space:pre-line;color:#e2e8f0">${escText(qItem.statement)}</div>
+            ${formatStepByStepResolution(qItem,chosenIdx,ok,false)}
+          </details>
+        `;
+      }).join('');
+      listBox.innerHTML=`
+        <div style="margin-bottom:8px">
+          <b style="color:#63e7ff;font-size:.92rem">📋 Gabarito Comentado & Diagnóstico dos Seus Erros no Duelo (${wrongDuelQs.length} erro(s))</b>
+          <p class="small muted" style="margin:2px 0 0">Veja abaixo o que você marcou em cada rodada e a explicação detalhada de cada questão:</p>
+        </div>
+        <div>${itemsHtml}</div>
+      `;
+    }
+
+    const retryBtn=q('#retryDuelWrongQuestionsBtn');
+    if(retryBtn){
+      if(wrongDuelQs.length>0){
+        retryBtn.hidden=false;
+        retryBtn.textContent=`🔁 Treinar ${wrongDuelQs.length} que errei no Duelo`;
+        retryBtn.onclick=()=>{
+          dlg.close();
+          activeQuestions={mode:'retry_errors',subject:duel.subject||'Revisão do Duelo X1',questions:wrongDuelQs.map(prepareQuestion),current:0,correct:0,blankCount:0,answered:false};
+          if(q('#questionDialogTitle'))q('#questionDialogTitle').textContent=`⚔️ Revisão Pós-Duelo X1 (${wrongDuelQs.length} errada(s))`;
+          q('#questionDialog')?.showModal();
+          window.showQuestion();
+        };
+      }else{
+        retryBtn.hidden=true;
+      }
+    }
+    if(!dlg.open)dlg.showModal();
+  }
+  window.showDuelPostMatchSummaryModal=showDuelPostMatchSummaryModal;
+
+  // Botão "📋 Adicionar Gabarito Oficial" direto no card do documento sem precisar reenviar o PDF
+  async function attachAnswerKeyToExistingDoc(docId){
+    const doc=(typeof cloudDocuments!=='undefined'?cloudDocuments:[]).find(d=>String(d.id)===String(docId));
+    if(!doc)return toast('Documento não localizado.');
+    if(typeof window.askUserExamAnswerKeyOptions!=='function'){
+      if(typeof processEditalDocument==='function')return processEditalDocument(docId);
+      return;
+    }
+    const userChoice=await window.askUserExamAnswerKeyOptions(doc,[],{reason:'Cole o gabarito oficial ou anexe o PDF do gabarito para ativar a correção destas questões nos simulados:'});
+    if(!userChoice||userChoice.cancelled)return;
+    if(!userChoice.appendedText){
+      return toast('Cole ou selecione o arquivo PDF com o gabarito oficial para aplicar.');
+    }
+    const keyMap=parseExamAnswerKeyTable(`GABARITO OFICIAL DEFINITIVO\n${userChoice.appendedText}`,userChoice.preferredCaderno||'');
+    if(!keyMap||keyMap.size===0){
+      return toast('Não foi possível identificar pares número-resposta (ex.: 1-A 2-B 3-C...). Verifique o formato colado.');
+    }
+    try{
+      toast('Aplicando gabarito oficial às questões do caderno...');
+      const session=await validSession();
+      if(!session)return toast('Entre na sua conta para salvar o gabarito.');
+      const res=await cloudFetch(`generated_study_content?source_document_id=eq.${encodeURIComponent(doc.id)}&select=id,title,content`);
+      const rows=await res.json().catch(()=>[]);
+      if(!Array.isArray(rows)||!rows.length){
+        if(typeof processEditalDocument==='function')return processEditalDocument(docId);
+        return;
+      }
+      let updatedCount=0,stillUnknown=0,qCounter=0;
+      for(const row of rows){
+        const qs=Array.isArray(row.content?.questions)?row.content.questions:[];
+        if(!qs.length)continue;
+        for(let i=0;i<qs.length;i++){
+          qCounter++;
+          const qItem=qs[i];
+          const numMatch=String(qItem.topic||'').match(/\b(\d{1,3})\b/);
+          const qNum=Number(qItem.exam_order)||(numMatch?Number(numMatch[1]):qCounter);
+          const ansLetter=keyMap.get(qNum)||keyMap.get(i+1);
+          if(ansLetter&&ansLetter!=='ANULADA'){
+            const opts=Array.isArray(qItem.options)?qItem.options:[];
+            const isCE=opts.length===2&&/^certo$/i.test(String(opts[0]||''));
+            const newIdx=isCE?(ansLetter==='E'?1:0):'ABCDE'.indexOf(ansLetter);
+            if(newIdx>=0&&newIdx<opts.length){
+              qItem.correct_index=newIdx;
+              delete qItem.answer_unknown;
+              qItem.origin='oficial';
+              if(/SEM gabarito/i.test(String(qItem.explanation||''))){
+                qItem.explanation=`Gabarito oficial aplicado: ${isCE?(newIdx===0?'CERTO':'ERRADO'):`alternativa ${ansLetter} ("${opts[newIdx]}")`}.`;
+              }
+              updatedCount++;
+            }
+          }else if(qItem.answer_unknown||Number(qItem.correct_index)<0){
+            stillUnknown++;
+          }
+        }
+        await cloudFetch(`generated_study_content?id=eq.${encodeURIComponent(row.id)}`,{
+          method:'PATCH',
+          body:JSON.stringify({content:{...row.content,questions:qs}})
+        });
+      }
+      const nextCoverage={
+        ...(doc.metadata?.coverage||{}),
+        needs_review:stillUnknown>0,
+        warnings:stillUnknown>0?[`${stillUnknown} questão(ões) ainda permanecem sem gabarito.`]:[]
+      };
+      await cloudFetch(`study_documents?id=eq.${encodeURIComponent(doc.id)}`,{
+        method:'PATCH',
+        body:JSON.stringify({metadata:{...(doc.metadata||{}),coverage:nextCoverage}})
+      });
+      doc.metadata={...(doc.metadata||{}),coverage:nextCoverage};
+      await Promise.all([loadGeneratedContent(),loadCloudDocuments()]);
+      render();
+      if(typeof renderExamBankHub==='function')renderExamBankHub();
+      toast(`✓ Gabarito aplicado com sucesso a ${updatedCount} questão(ões) de “${doc.title}”! Agora elas já estão ativas nos simulados.`);
+    }catch(err){
+      toast(err?.message||'Não foi possível salvar o gabarito.');
+    }
+  }
+  window.attachAnswerKeyToExistingDoc=attachAnswerKeyToExistingDoc;
+
+  document.addEventListener('click',e=>{
+    const addKeyBtn=e.target.closest?.('[data-add-key-doc]');
+    if(addKeyBtn){
+      e.preventDefault();
+      attachAnswerKeyToExistingDoc(addKeyBtn.dataset.addKeyDoc);
+    }
+  });
+
   window.shareOrDownloadHunterStoryCard=async function(snap){
     const data=snap||window._lastBatterySnapshot;
     if(!data)return;
@@ -9375,7 +9362,6 @@
     canvas.height=1920;
     const ctx=canvas.getContext('2d');
 
-    // Fundo padrão escuro tático
     const bgGrad=ctx.createLinearGradient(0,0,0,1920);
     bgGrad.addColorStop(0,'#061220');
     bgGrad.addColorStop(0.5,'#0b2138');
@@ -9383,7 +9369,6 @@
     ctx.fillStyle=bgGrad;
     ctx.fillRect(0,0,1080,1920);
 
-    // Carrega a imagem do banner escolhido com cover proporcional 9:16
     try{
       const img=await new Promise((resolve,reject)=>{
         const im=new Image();
@@ -9398,7 +9383,6 @@
       ctx.drawImage(img,dx,dy,dw,dh);
     }catch{}
 
-    // Overlay tático para leitura perfeita
     const ov=ctx.createLinearGradient(0,0,0,1920);
     ov.addColorStop(0,'rgba(4,10,20,0.84)');
     ov.addColorStop(0.45,'rgba(6,18,34,0.68)');
@@ -9406,7 +9390,6 @@
     ctx.fillStyle=ov;
     ctx.fillRect(0,0,1080,1920);
 
-    // Moldura neon
     ctx.strokeStyle='rgba(99,231,255,0.55)';
     ctx.lineWidth=6;
     ctx.strokeRect(48,48,984,1824);
@@ -9437,7 +9420,6 @@
     ctx.font='800 40px system-ui, -apple-system, sans-serif';
     ctx.fillText(`${rankLabel}  ·  ${campName}`,540,300);
 
-    // Card central do placar
     ctx.fillStyle='rgba(6,18,32,0.84)';
     ctx.strokeStyle='rgba(99,231,255,0.5)';
     ctx.lineWidth=4;
@@ -9459,7 +9441,6 @@
     ctx.font='800 44px system-ui, -apple-system, sans-serif';
     ctx.fillText('QUESTÕES ACERTADAS',540,840);
 
-    // Pílula de precisão
     ctx.fillStyle=score>=75?'rgba(16,185,129,0.28)':'rgba(56,189,248,0.25)';
     ctx.strokeStyle=score>=75?'#34d399':'#38bdf8';
     ctx.lineWidth=4;
@@ -9477,7 +9458,6 @@
     ctx.font='700 34px system-ui, -apple-system, sans-serif';
     ctx.fillText(`Placar Líquido Caveira: ${liqScore} pt(s)   ·   Em branco: ${blankCnt}`,540,1115);
 
-    // 3 blocos inferiores (Líquido, XP, Ofensiva)
     const boxes=[
       {label:'PLACAR LÍQUIDO',val:`${liqScore} pt`},
       {label:'XP CONQUISTADO',val:`+${earnedXp} XP`},

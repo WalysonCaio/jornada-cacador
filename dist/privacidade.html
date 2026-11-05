@@ -27,33 +27,45 @@
       <a href="termos.html">Termos de Uso</a>
       <a href="cookies.html">Política de Cookies</a>
     </nav>
-    
+
 <h1>Política de Privacidade (LGPD)</h1>
-<p class="meta"><b>Plataforma:</b> Jornada do Caçador · <b>Última atualização:</b> Novembro de 2026 · Em conformidade com a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 — LGPD) e o Marco Civil da Internet (Lei nº 12.965/2014).</p>
-<div class="box"><b>Resumo transparente:</b> A <b>Jornada do Caçador</b> coleta apenas os dados estritamente necessários para sincronizar seu progresso de estudos, analisar seus PDFs/redações sob seu comando e permitir recursos cooperativos opcionais (Ranking e Guilda). Você pode exportar um backup completo em JSON ou excluir definitivamente sua conta e todos os seus dados a qualquer momento direto pelo menu <b>Minha Conta</b>.</div>
-<h2>1. Dados coletados e finalidade</h2>
+<p class="meta"><b>Plataforma:</b> Jornada do Caçador · <b>Última atualização:</b> Novembro de 2026 · Em conformidade com a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 — LGPD, Art. 9º) e o Marco Civil da Internet (Lei nº 12.965/2014).</p>
+<div class="box"><b>Resumo transparente:</b> A <b>Jornada do Caçador</b> coleta apenas os dados estritamente necessários para sincronizar seu progresso de estudos, analisar seus PDFs/redações sob seu comando e permitir recursos cooperativos opcionais (Ranking, Duelos X1 e Biblioteca Comunitária). Você pode exportar um backup completo em JSON ou excluir definitivamente sua conta e todos os seus dados a qualquer momento direto pelo menu <b>Minha Conta</b>.</div>
+
+<h2>1. Identificação do Controlador e Canal do Encarregado (DPO)</h2>
 <ul>
-  <li><b>Dados de cadastro e autenticação:</b> nome/apelido de exibição, endereço de e-mail e senha criptografada (gerenciada via Supabase Auth) para permitir o acesso seguro e a sincronização do seu progresso entre celular e computador.</li>
-  <li><b>Dados de progresso pedagógico:</b> missões concluídas, tempo de foco no cronômetro, pontuações em questões/simulados, índices de treino físico (TAF), flashcards e anotações pessoais.</li>
-  <li><b>Arquivos enviados pelo usuário (PDFs e Redações):</b> editais, materiais de estudo em PDF e folhas de redação enviados voluntariamente para geração de resumos, questões e correções automatizadas por Inteligência Artificial.</li>
-  <li><b>Chave de API pessoal (opcional — BYOK):</b> caso o usuário opte por informar sua própria chave da API Google Gemini, ela é armazenada criptografada no cofre seguro (Supabase Vault) exclusivamente para processar análises em nome do próprio usuário, sem nunca ser exibida em texto aberto após o salvamento.</li>
-  <li><b>Interações comunitárias (Ranking, Duelo X1 e Chat da Guilda):</b> apelido, cargo-alvo, pontuação de XP/ofensiva e mensagens enviadas voluntariamente no mural da Guilda.</li>
+  <li><b>Controlador responsável pela plataforma:</b> Projeto Independente Jornada do Caçador (Idealização, administração e desenvolvimento: Walyson Caio).</li>
+  <li><b>Encarregado pelo Tratamento de Dados Pessoais (DPO) / Canal de Atendimento ao Titular:</b> solicitações relativas à privacidade, dúvidas ou exercício de direitos previstos no Art. 18 da LGPD podem ser realizadas diretamente pelas ferramentas de autoatendimento no menu <i>Minha Conta</i> do aplicativo ou pelo canal administrativo disponibilizado no painel oficial da aplicação.</li>
 </ul>
-<h2>2. Proteção contra exposição de dados pessoais em PDFs compartilhados</h2>
-<p>Na <b>Biblioteca Compartilhada da Comunidade</b>, o usuário pode escolher manter cada material como <b>Público (opt-in)</b> ou <b>Privado (🔒)</b>. Mesmo quando compartilhado com a comunidade do concurso, o arquivo PDF bruto original tem o download bloqueado e os textos extraídos passam por filtro automatizado de higienização (<code>sanitize_personal_watermarks</code>) que remove números de CPF, e-mails e marcas d'água de identificação pessoal.</p>
-<h2>3. Compartilhamento com operadores de tecnologia</h2>
-<p>Não vendemos nem cedemos dados pessoais para fins publicitários. Para executar as funcionalidades do aplicativo, utilizamos exclusivamente operadores de infraestrutura em nuvem e processamento de IA sob conexão criptografada (HTTPS/TLS):</p>
+
+<h2>2. Dados coletados, finalidade e bases legais (Art. 7º da LGPD)</h2>
 <ul>
-  <li><b>Supabase (Banco de Dados, Autenticação e Armazenamento com isolamento Row Level Security — RLS);</b></li>
-  <li><b>Cloudflare Pages / Workers (Hospedagem segura e entrega de conteúdo);</b></li>
-  <li><b>Provedores de Inteligência Artificial (Google Gemini API, DeepSeek API e Groq API):</b> acionados somente quando o usuário solicita análise de PDF, correção de redação ou consulta ao Instrutor IA.</li>
+  <li><b>Dados de cadastro e autenticação (Execução de serviço — Art. 7º, V):</b> nome/apelido de exibição, endereço de e-mail e senha criptografada (gerenciada via Supabase Auth) para login seguro e sincronização entre dispositivos.</li>
+  <li><b>Dados de progresso pedagógico (Execução de serviço — Art. 7º, V):</b> missões concluídas, tempo de foco no cronômetro, pontuações em questões/simulados, índices de treino físico (TAF), flashcards e anotações pessoais.</li>
+  <li><b>Arquivos enviados pelo usuário — PDFs e Redações (Execução de serviço — Art. 7º, V):</b> editais, materiais de estudo em PDF e folhas de redação enviados voluntariamente para geração de resumos, questões e correções automatizadas.</li>
+  <li><b>Chave de API pessoal opcional — BYOK (Consentimento — Art. 7º, I):</b> caso o usuário informe sua chave da API Google Gemini, ela é armazenada criptografada no cofre seguro (Supabase Vault) exclusivamente para processar análises em nome do próprio titular.</li>
+  <li><b>Interações comunitárias — Ranking, Duelo X1, Chat da Guilda e Biblioteca (Consentimento — Art. 7º, I):</b> apelido público configurável pelo usuário, cargo-alvo, XP e materiais marcados para compartilhamento comunitário.</li>
 </ul>
-<h2>4. Direitos do titular dos dados (Art. 18 da LGPD)</h2>
-<p>Você pode exercer seus direitos de acesso, portabilidade, correção, anonimização e eliminação diretamente dentro da plataforma, sem burocracia:</p>
+
+<h2>3. Compartilhamento Comunitário e Direitos Autorais</h2>
+<p>Na <b>Biblioteca Compartilhada da Comunidade</b>, o compartilhamento é controlado pelo usuário no momento do envio (caixa <i>Compartilhar resumos e questões com a comunidade</i>) e pode ser desligado a qualquer momento clicando no botão <b>🤝 Público / 🔒 Privado</b> no card de cada arquivo. O arquivo PDF original jamais pode ser baixado por terceiros, e todo texto passa por filtro automatizado (<code>sanitize_personal_watermarks</code>) que remove CPF, e-mail e marcas d'água pessoais. O usuário compromete-se a não compartilhar obras protegidas por direitos autorais de terceiros sem autorização.</p>
+
+<h2>4. Operadores de Tecnologia e Transferência Internacional de Dados (Art. 33 da LGPD)</h2>
+<p>Não comercializamos dados pessoais. Para executar o aplicativo sob conexão criptografada (HTTPS/TLS), utilizamos operadores de infraestrutura global que podem realizar processamento e transferência internacional de dados:</p>
 <ul>
-  <li><b>Portabilidade / Exportação:</b> em <i>Menu → Diagnóstico e backup → Exportar backup</i>, você baixa instantaneamente um arquivo JSON com todo o seu histórico.</li>
-  <li><b>Eliminação total de conteúdos ou da conta:</b> em <i>Minha Conta → Redefinir perfil e apagar conteúdos</i> ou <i>Excluir minha conta</i>, todos os seus portais, PDFs, resumos, redações e registros são apagados imediatamente do banco de dados mediante confirmação de senha.</li>
+  <li><b>Supabase Inc. (EUA / AWS):</b> banco de dados PostgreSQL com isolamento Row Level Security (RLS) nas 19 tabelas, autenticação e armazenamento seguro de arquivos.</li>
+  <li><b>Cloudflare Inc. (EUA / Rede Global):</b> hospedagem da aplicação web e proteção de borda.</li>
+  <li><b>Provedores de Inteligência Artificial (Transferência Internacional em Trânsito):</b> quando o usuário solicita análise de PDF, redação ou consulta ao Instrutor IA, os trechos de texto são processados por <b>Google LLC — Gemini API (EUA)</b> e, em caso de contingência/reserva técnica, por <b>Groq Inc. (EUA)</b> ou <b>DeepSeek (China)</b>, exclusivamente para gerar o retorno didático solicitado.</li>
 </ul>
+
+<h2>5. Prazo de Retenção e Exclusão Definitiva (Art. 15 e 16 da LGPD)</h2>
+<ul>
+  <li><b>Retenção:</b> os dados são mantidos apenas enquanto o usuário mantiver sua conta ativa na plataforma.</li>
+  <li><b>Eliminação imediata pelo titular:</b> ao acionar <i>Minha Conta → Excluir minha conta</i> (ou <i>Redefinir perfil</i>), a função de segurança <code>account-security</code> apaga imediatamente e de forma irreversível todos os documentos do Storage, resumos, questões, redações, chaves no Vault, histórico de duelos e o registro de autenticação.</li>
+</ul>
+
+<h2>6. Menores de Idade e Segurança da Informação</h2>
+<p>A plataforma é destinada a candidatos a concursos públicos (maiores de 18 anos, ou maiores de 16 anos assistidos por seus pais ou responsáveis legais, nos termos do Art. 14 da LGPD). Adotamos políticas estritas de controle de acesso por linha (RLS), verificação de integridade no servidor (<code>server_verified</code>), cabeçalhos de segurança CSP e criptografia em repouso e em trânsito.</p>
 
   </main>
 </body>
