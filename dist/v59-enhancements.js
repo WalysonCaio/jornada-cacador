@@ -47,6 +47,175 @@
   window.openSummarySource=async function(id){const item=ALL_SUMMARIES.find(summary=>summary.id===id),doc=cloudDocuments.find(document=>document.id===item?.documentId);if(!doc)return toast('O PDF de origem não está disponível.');try{const url=await signedDocumentUrl(doc);window.open(`${url}#page=${Math.max(1,item.pageStart||1)}&view=FitH`,'_blank','noopener')}catch(error){toast(error.message)}};
   window.reportSummaryIssue=function(id){const item=ALL_SUMMARIES.find(summary=>summary.id===id);if(!item)return;const current=state.contentIssues?.[id]?.note||'',note=prompt('Descreva o possível erro ou ponto que precisa ser conferido:',current);if(note===null)return;state.contentIssues=state.contentIssues||{};if(note.trim())state.contentIssues[id]={note:note.trim(),title:item.title,source:item.source,campaignId:state.activeCampaignId,reported_at:new Date().toISOString()};else delete state.contentIssues[id];save();renderSummaries($('#summarySearch')?.value||'');toast(note.trim()?'Ponto marcado para conferência.':'Marcação removida.')};
 
+
+  function computeSummaryDidacticOrder(s){
+    const title=String(s?.title||'').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const source=String(s?.source||'').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const cat=String(s?.category||'').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const combined=`${title} ${source}`;
+
+    // 1. Se o título já começa com Manual 01, 02, 03 ou numeração explícita "1.", "2."
+    const leadNum=title.match(/^(?:manual|aula|modulo|capitulo|bloco)?\s*0*(\d{1,3})\b/);
+    if(leadNum)return Number(leadNum[1]);
+
+    // 2. Direito Constitucional: ordem estrita da Constituição Federal (Art. 1º -> Art. 2º -> Art. 3º -> Art. 4º -> Art. 5º -> Art. 6º -> Art. 12 -> Art. 14 -> Art. 18 -> Art. 37 -> Art. 44 -> Art. 76 -> Art. 92 -> Art. 136 -> Art. 144)
+    if(cat.includes('constitucional')){
+      if(/teoria da constituicao|poder constituinte|classificacao das constituicoes|aplicabilidade/.test(combined))return 0.5;
+      if(/fundamentos da republica|so-ci-di-va-plu|soberania, cidadania|art\.?\s*1\b/.test(combined))return 1;
+      if(/organizacao dos poderes|separacao dos poderes|harmonia entre os poderes|art\.?\s*2\b/.test(combined))return 2;
+      if(/objetivos fundamentais|construir uma sociedade|erradicar a pobreza|art\.?\s*3\b/.test(combined))return 3;
+      if(/relacoes internacionais|autodeterminacao dos povos|concessao de asilo|art\.?\s*4\b/.test(combined))return 4;
+      const artMatch=title.match(/\bart(?:igo|s)?\.?\s*(\d{1,3})\b/)||source.match(/\bart(?:igo|s)?\.?\s*(\d{1,3})\b/);
+      if(artMatch){
+        const n=Number(artMatch[1]);
+        if(n===5){
+          if(/teoria geral|vida|igualdade|principio da igualdade/.test(title))return 5.05;
+          if(/liberdade|locomocao|pensamento|expressao|crenca|profiss/.test(title))return 5.10;
+          if(/domicilio|inviolabilidade|sigilo|correspondencia|reuniao|associacao/.test(title))return 5.15;
+          if(/propriedade|desapropriacao|direito de peticao|certidao/.test(title))return 5.20;
+          if(/pena|prisao|flagrante|racismo|tortura|inafiancave|imprescritive| contraditorio/.test(title))return 5.25;
+          if(/remedios|habeas|mandado de seguranca|mandado de injuncao|acao popular/.test(title))return 5.30;
+          return 5.18;
+        }
+        return n;
+      }
+      if(/principios fundamentais/.test(combined))return 1.5;
+      if(/direitos individuais|direitos e deveres individuais|liberdades/.test(combined))return 5.12;
+      if(/remedios constitucionais|habeas corpus|mandado de seguranca|acao popular/.test(combined))return 5.35;
+      if(/direitos sociais|trabalhadores/.test(combined))return 6;
+      if(/nacionalidade|nato|naturalizado/.test(combined))return 12;
+      if(/direitos politicos|partidos politicos|plebiscito|sufragio/.test(combined))return 14;
+      if(/organizacao politico|organizacao do estado|uniao|estados|municipios|competencia/.test(combined))return 18;
+      if(/administracao publica|servidores|limpe|nepotismo|sumula vinculante 13/.test(combined))return 37;
+      if(/militares dos estados/.test(combined))return 42;
+      if(/poder legislativo|congresso nacional|camara|senado|processo legislativo/.test(combined))return 44;
+      if(/poder executivo|presidente da republica/.test(combined))return 76;
+      if(/poder judiciario|supremo tribunal|stf|stj|ministerio publico|defensoria|funcoes essenciais/.test(combined))return 92;
+      if(/estado de defesa|estado de sitio|forcas armadas/.test(combined))return 136;
+      if(/seguranca publica|policia|bombeiro/.test(combined))return 144;
+      return 200;
+    }
+
+    // 3. Qualquer outra disciplina com "Art. X" explícito no título
+    const explicitArt=title.match(/\bart(?:igo|s)?\.?\s*(\d{1,3})\b/);
+    if(explicitArt)return Number(explicitArt[1]);
+
+    // 4. Língua Portuguesa (Ordem didática: Fonética/Acentuação -> Morfologia/Classes -> Colocação -> Sintaxe -> Concordância -> Regência/Crase -> Pontuação -> Coesão/Semântica -> Interpretação/Tipologia)
+    if(cat.includes('portugues')){
+      if(/fonetica|ortografia|acentuacao|divisao silabica|hifen/.test(title))return 1;
+      if(/formacao de palavras|estrutura/.test(title))return 2;
+      if(/classes de palavras|morfologia|substantivo|adjetivo|verbo|adverbio|pronome|conjunc/.test(title))return 3;
+      if(/colocacao pronominal|proclise|mesoclise|enclise/.test(title))return 4;
+      if(/sintaxe|periodo simples|sujeito|predicado|funcoes do se|particula apassivadora/.test(title))return 5;
+      if(/periodo composto|coordenacao|subordinacao|oracoes/.test(title))return 6;
+      if(/concordancia/.test(title))return 7;
+      if(/regencia|crase/.test(title))return 8;
+      if(/pontuacao|virgula/.test(title))return 9;
+      if(/semantica|coesao|coerencia|reescrita|figuras de linguagem/.test(title))return 10;
+      if(/tipologia|generos|interpretacao|compreensao/.test(title))return 11;
+      if(/redacao oficial/.test(title))return 12;
+      return 50;
+    }
+
+    // 5. Raciocínio Lógico-Matemático (Proposições -> Tabela-Verdade -> Equivalências/Negação -> Quantificadores/Argumentação -> Conjuntos -> Razão/Porcentagem -> Combinatória/Probabilidade)
+    if(cat.includes('raciocinio')||cat.includes('logico')||cat.includes('matematica')){
+      if(/proposic|conectivos|estruturas logicas/.test(title))return 1;
+      if(/tabela-verdade|tautologia|contradicao|contingencia/.test(title))return 2;
+      if(/equivalencia|negacao|de morgan|mane/.test(title))return 3;
+      if(/quantificadores|diagramas logicos|todo, algum/.test(title))return 4;
+      if(/argumentacao|deducao|validade/.test(title))return 5;
+      if(/conjuntos|venn/.test(title))return 6;
+      if(/sequencias|razao|proporcao|porcentagem|regra de tres/.test(title))return 7;
+      if(/combinatoria|arranjo|combinacao|permutacao|pombos/.test(title))return 8;
+      if(/probabilidade/.test(title))return 9;
+      return 50;
+    }
+
+    // 6. Direito Administrativo
+    if(cat.includes('administrativo')){
+      if(/principios|regime juridico|limpe/.test(title))return 1;
+      if(/organizacao administrativa|direta e indireta|desconcentracao|descentralizacao|autarquia/.test(title))return 2;
+      if(/poderes|poder de policia|hierarquico|disciplinar/.test(title))return 3;
+      if(/atos administrativos|requisitos|atributos|anulacao|revogacao/.test(title))return 4;
+      if(/agentes publicos|servidores|acumulacao/.test(title))return 5;
+      if(/servicos publicos|licitac|contratos/.test(title))return 6;
+      if(/responsabilidade civil/.test(title))return 7;
+      if(/controle|improbidade/.test(title))return 8;
+      return 50;
+    }
+
+    // 7. Direito Penal
+    if(cat.includes('penal')&&!cat.includes('processual')){
+      if(/aplicacao da lei|principios|tempo e lugar|luta/.test(title))return 1;
+      if(/fato tipico|teoria do crime|conduta|dolo|tentativa|desistencia|arrependimento/.test(title))return 2;
+      if(/ilicitude|excludentes|legitima defesa|estado de necessidade/.test(title))return 3;
+      if(/culpabilidade|imputabilidade/.test(title))return 4;
+      if(/concurso de pessoas|concurso de crimes/.test(title))return 5;
+      if(/crimes contra a pessoa|crimes contra a vida|homicidio|lesao/.test(title))return 6;
+      if(/patrimonio|furto|roubo|latrocinio|estelionato/.test(title))return 7;
+      if(/administracao publica|peculato|concussao|corrupcao|prevaricacao/.test(title))return 8;
+      return 50;
+    }
+
+    // 8. Direito Processual Penal
+    if(cat.includes('processual')){
+      if(/principios|disposicoes preliminares|juiz das garantias/.test(title))return 1;
+      if(/inquerito policial/.test(title))return 2;
+      if(/acao penal/.test(title))return 3;
+      if(/competencia|jurisdicao/.test(title))return 4;
+      if(/prova|cadeia de custodia/.test(title))return 5;
+      if(/flagrante|prisao em flagrante/.test(title))return 6;
+      if(/preventiva|temporaria|cautelares/.test(title))return 7;
+      return 50;
+    }
+
+    // 9. História de Pernambuco (Ordem Cronológica Século XVI -> XVII -> XVIII -> 1817 -> 1824 -> 1848 -> Século XX)
+    if(cat.includes('historia')){
+      if(/indigena|capitania|duarte coelho|acucar|colonial/.test(title))return 1;
+      if(/holand|nassau|insurreicao|guararapes/.test(title))return 2;
+      if(/mascates|suassunas/.test(title))return 3;
+      if(/1817|revolucao pernambucana/.test(title))return 4;
+      if(/1824|confederacao do equador/.test(title))return 5;
+      if(/regencia|cabanada|abrilada|setembrada|carneirada|1848|praieira/.test(title))return 6;
+      if(/republica|vargas|cangaco|moderniz/.test(title))return 7;
+      return 50;
+    }
+
+    return Number(s?.pageStart||s?.page||999);
+  }
+
+  function formatDidacticSummaryTitle(s){
+    const raw=String(s?.title||'').trim();
+    const norm=raw.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const cat=String(s?.category||'').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(cat.includes('constitucional')&&!/\bart\.?\s*\d/i.test(raw)){
+      if(/fundamentos da republica/.test(norm))return `${raw} (Art. 1º)`;
+      if(/organizacao dos poderes|separacao dos poderes/.test(norm))return `${raw} (Art. 2º)`;
+      if(/objetivos fundamentais/.test(norm))return `${raw} (Art. 3º)`;
+      if(/relacoes internacionais/.test(norm))return `${raw} (Art. 4º)`;
+      if(/liberdades de locomocao|direitos individuais e coletivos|remedios constitucionais/.test(norm))return `${raw} (Art. 5º)`;
+      if(/direitos sociais/.test(norm))return `${raw} (Arts. 6º a 11)`;
+      if(/nacionalidade/.test(norm))return `${raw} (Art. 12)`;
+      if(/direitos politicos/.test(norm))return `${raw} (Arts. 14 a 17)`;
+      if(/seguranca publica/.test(norm))return `${raw} (Art. 144)`;
+    }
+    return raw;
+  }
+
+  function sortSummariesDidactically(list){
+    return (list||[]).slice().sort((a,b)=>{
+      const ra=computeSummaryDidacticOrder(a);
+      const rb=computeSummaryDidacticOrder(b);
+      if(ra!==rb)return ra-rb;
+      const pa=Number(a?.pageStart||a?.page||9999);
+      const pb=Number(b?.pageStart||b?.page||9999);
+      if(pa!==pb)return pa-pb;
+      return String(a?.title||'').localeCompare(String(b?.title||''),'pt-BR');
+    });
+  }
+  window.sortSummariesDidactically=sortSummariesDidactically;
+  window.formatDidacticSummaryTitle=formatDidacticSummaryTitle;
+
   renderSummaries=function(query=''){
     const q=query.trim().toLocaleLowerCase('pt-BR'),filter=$('#summaryFilter')?.value||libraryUI.summaryFilter[state.activeCampaignId]||'all',filterKey=filter==='all'?'all':subjectKey(filter);
     const items=ALL_SUMMARIES.filter(s=>{
@@ -58,10 +227,10 @@
     const groups=items.reduce((out,item)=>{(out[item.category]||=[]).push(item);return out},{});
     const card=s=>{
       const isOpen=!!libraryUI.openSummaries[summaryStateKey(s.id)];
-      return `<article class="summaryCard${isOpen?' open':''}"><button class="summaryHead" data-summary="${s.id}" data-norm-done="1"><span class="summaryTitle"><span class="summaryMeta">${esc(s.source||'PDF enviado')} · ${s.approved?'✓ CONFERIDO PELO USUÁRIO':'GERADO POR IA'}${state.contentIssues?.[s.id]?' · ⚠ REVISAR':''}</span><span>${esc(s.title)}</span></span><span>${isOpen?'−':'＋'}</span></button><div class="summaryBody">${s.pageStart?`<span class="tag">Fonte: pág. ${s.pageStart}${s.pageEnd>s.pageStart?`–${s.pageEnd}`:''}</span>`:''}${s.explanation?`<p class="lessonIntro">${esc(s.explanation)}</p>`:''}<div class="lessonBox"><b>Pontos essenciais</b><ul>${(s.points||[]).map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>${s.example?`<div class="lessonBox"><b>Exemplo explicado</b>${esc(s.example)}</div>`:''}${s.bizu?`<div class="lessonBox bizu"><b>✓ Bizu de prova</b>${esc(s.bizu)}</div>`:''}${s.mnemonic?`<div class="lessonBox mnemonic"><b>◆ Mnemônico</b>${esc(s.mnemonic)}</div>`:''}${s.trap?`<div class="lessonBox trap"><b>⚠ Pegadinha frequente</b>${esc(s.trap)}</div>`:''}${state.contentIssues?.[s.id]?`<div class="lessonBox trap"><b>Ponto marcado para conferência</b>${esc(state.contentIssues[s.id].note)}</div>`:''}<div class="summaryActions"><button class="action small" type="button" data-open-mindmap="${s.id}" style="width:auto">🗺️ Mapa Mental Tático</button>${s.documentId?`<button class="ghost" data-open-summary-source="${s.id}">Abrir PDF na página</button>`:''}<button class="ghost" data-approve-summary="${s.id}" data-approved="${s.approved?'1':'0'}">${s.approved?'Remover conferência':'Marcar como conferido'}</button><button class="ghost" data-report-summary="${s.id}">${state.contentIssues?.[s.id]?'Editar alerta':'Informar possível erro'}</button></div><div class="mindMapContainer" id="mindMapBox-${s.id}" hidden></div><p class="small muted">${s.approved?'Você registrou que conferiu este conteúdo.':'Conteúdo gerado por IA: confira o PDF original antes de decisões de estudo importantes.'}</p></div></article>`;
+      return `<article class="summaryCard${isOpen?' open':''}"><button class="summaryHead" data-summary="${s.id}" data-norm-done="1"><span class="summaryTitle"><span class="summaryMeta">${esc(s.source||'PDF enviado')} · ${s.approved?'✓ CONFERIDO PELO USUÁRIO':'GERADO POR IA'}${state.contentIssues?.[s.id]?' · ⚠ REVISAR':''}</span><span>${esc(typeof formatDidacticSummaryTitle==='function'?formatDidacticSummaryTitle(s):s.title)}</span></span><span>${isOpen?'−':'＋'}</span></button><div class="summaryBody">${s.pageStart?`<span class="tag">Fonte: pág. ${s.pageStart}${s.pageEnd>s.pageStart?`–${s.pageEnd}`:''}</span>`:''}${s.explanation?`<p class="lessonIntro">${esc(s.explanation)}</p>`:''}<div class="lessonBox"><b>Pontos essenciais</b><ul>${(s.points||[]).map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>${s.example?`<div class="lessonBox"><b>Exemplo explicado</b>${esc(s.example)}</div>`:''}${s.bizu?`<div class="lessonBox bizu"><b>✓ Bizu de prova</b>${esc(s.bizu)}</div>`:''}${s.mnemonic?`<div class="lessonBox mnemonic"><b>◆ Mnemônico</b>${esc(s.mnemonic)}</div>`:''}${s.trap?`<div class="lessonBox trap"><b>⚠ Pegadinha frequente</b>${esc(s.trap)}</div>`:''}${state.contentIssues?.[s.id]?`<div class="lessonBox trap"><b>Ponto marcado para conferência</b>${esc(state.contentIssues[s.id].note)}</div>`:''}<div class="summaryActions"><button class="action small" type="button" data-open-mindmap="${s.id}" style="width:auto">🗺️ Mapa Mental Tático</button>${s.documentId?`<button class="ghost" data-open-summary-source="${s.id}">Abrir PDF na página</button>`:''}<button class="ghost" data-approve-summary="${s.id}" data-approved="${s.approved?'1':'0'}">${s.approved?'Remover conferência':'Marcar como conferido'}</button><button class="ghost" data-report-summary="${s.id}">${state.contentIssues?.[s.id]?'Editar alerta':'Informar possível erro'}</button></div><div class="mindMapContainer" id="mindMapBox-${s.id}" hidden></div><p class="small muted">${s.approved?'Você registrou que conferiu este conteúdo.':'Conteúdo gerado por IA: confira o PDF original antes de decisões de estudo importantes.'}</p></div></article>`;
     };
     const sortedGroups=Object.entries(groups).sort(([a],[b])=>a.localeCompare(b,'pt-BR'));
-    $('#summaryList').innerHTML=items.length?`<div class="libraryFolders">${sortedGroups.map(([subject,subjectItems],idx)=>{const key=`study:${state.activeCampaignId}:${subjectKey(subject)}`,open=q?true:(libraryUI.studyFolders[key]!==undefined?libraryUI.studyFolders[key]:idx===0);return`<section class="libraryFolder ${open?'open':''}" data-study-folder="${esc(key)}"><button class="folderHead" data-study-folder-toggle="${esc(key)}"><span><i>▤</i>${esc(subject)}</span><span class="tag">${subjectItems.length} resumo${subjectItems.length===1?'':'s'}</span></button><div class="folderBody">${subjectItems.map(card).join('')}</div></section>`}).join('')}</div>`:'<div class="empty">Nenhum resumo corresponde aos filtros. Envie um PDF na Biblioteca e gere o conteúdo.</div>';
+    $('#summaryList').innerHTML=items.length?`<div class="libraryFolders">${sortedGroups.map(([subject,subjectItems],idx)=>{const key=`study:${state.activeCampaignId}:${subjectKey(subject)}`,open=q?true:(libraryUI.studyFolders[key]!==undefined?libraryUI.studyFolders[key]:idx===0);return`<section class="libraryFolder ${open?'open':''}" data-study-folder="${esc(key)}"><button class="folderHead" data-study-folder-toggle="${esc(key)}"><span><i>▤</i>${esc(subject)}</span><span class="tag">${subjectItems.length} resumo${subjectItems.length===1?'':'s'}</span></button><div class="folderBody">${(typeof sortSummariesDidactically==='function'?sortSummariesDidactically(subjectItems):subjectItems).map(card).join('')}</div></section>`}).join('')}</div>`:'<div class="empty">Nenhum resumo corresponde aos filtros. Envie um PDF na Biblioteca e gere o conteúdo.</div>';
     $$('[data-study-folder-toggle]').forEach(button=>button.onclick=()=>{const folder=button.closest('.libraryFolder'),open=!folder.classList.contains('open');folder.classList.toggle('open',open);libraryUI.studyFolders[button.dataset.studyFolderToggle]=open;saveLibraryUI()});
     $$('[data-summary]').forEach(b=>b.onclick=()=>{const summary=b.closest('.summaryCard');summary.classList.toggle('open');b.lastElementChild.textContent=summary.classList.contains('open')?'−':'＋'});
     $$('[data-open-summary-source]').forEach(button=>button.onclick=()=>openSummarySource(button.dataset.openSummarySource));

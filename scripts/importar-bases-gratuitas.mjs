@@ -53,8 +53,8 @@ async function fetchHuggingFaceRows(dataset, config, split, limit = 100) {
 }
 
 async function main() {
-  mkdirSync("banco-questoes", { recursive: true });
-  const existingPath = "banco-questoes/pacote-117-questoes-bancas-oficiais.json";
+  const outDir = existsSync("banco-questoes") ? "banco-questoes" : "."; mkdirSync(outDir, { recursive: true });
+  const existingPath = `${outDir}/pacote-117-questoes-bancas-oficiais.json`;
   const baseQuestions = existsSync(existingPath) ? JSON.parse(readFileSync(existingPath, "utf8")) : [];
   const seen = new Set(baseQuestions.map(q => normalizeFingerprint(q.statement)));
   const collected = [];
@@ -95,7 +95,7 @@ async function main() {
   }
 
   const allUnique = [...baseQuestions, ...collected];
-  writeFileSync("banco-questoes/lote-bases-gratuitas.json", JSON.stringify(allUnique, null, 2), "utf8");
+  writeFileSync(`${outDir}/lote-bases-gratuitas.json`, JSON.stringify(allUnique, null, 2), "utf8");
 
   const sqlRows = allUnique.map(q => {
     const fp = sqlEsc(normalizeFingerprint(q.statement));
@@ -111,7 +111,7 @@ async function main() {
     "  subject = EXCLUDED.subject, topic = EXCLUDED.topic, board = EXCLUDED.board, options = EXCLUDED.options, correct_index = EXCLUDED.correct_index, explanation = EXCLUDED.explanation;"
   ].join("\n");
 
-  writeFileSync("banco-questoes/lote-bases-gratuitas.sql", sql, "utf8");
+  writeFileSync(`${outDir}/lote-bases-gratuitas.sql`, sql, "utf8");
   console.log(`✓ Concluído! Total sem repetidas: ${allUnique.length} questões salvas em banco-questoes/lote-bases-gratuitas.json e .sql`);
 }
 

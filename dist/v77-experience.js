@@ -2502,49 +2502,73 @@
   function renderEstudeiCycleWidget(){
     ensureNativePedagogicalCouplingLoaded();
     if(typeof document==='undefined')return;
-    const host=document.querySelector('#timerDisplay')?.closest('.card, .panel, section, div');
+    const host=document.querySelector('.card.timer')||document.querySelector('#clock')?.closest('.card')||document.querySelector('#timerDisplay')?.closest('.card, .panel, section, div');
     if(!host)return;
     const existing=document.querySelector('#estudeiCycleWidget');
     if(existing)existing.remove();
     const st=getEstudeiCycleState();
-    const curr=ESTUDEI_CYCLE_BLOCKS[st.currentIndex%ESTUDEI_CYCLE_BLOCKS.length];
-    const next=ESTUDEI_CYCLE_BLOCKS[(st.currentIndex+1)%ESTUDEI_CYCLE_BLOCKS.length];
+    const dynamicSubjects=(typeof LEARNING_SUBJECTS!=='undefined'&&Array.isArray(LEARNING_SUBJECTS)&&LEARNING_SUBJECTS.length>=3)
+      ?LEARNING_SUBJECTS.filter(s=>!/manuais do cacador/i.test(s))
+      :null;
+    const blocks=(dynamicSubjects&&dynamicSubjects.length>=3)
+      ?dynamicSubjects.map((s,i)=>({subject:s,minutes:i%2===0?60:50,mode:i%3===0?'Teoria + Questões':i%3===1?'Lei Seca + Questões':'Revisão + Flashcards'}))
+      :ESTUDEI_CYCLE_BLOCKS;
+    const curr=blocks[(st.currentIndex||0)%blocks.length];
+    const next=blocks[((st.currentIndex||0)+1)%blocks.length];
     const box=document.createElement('div');
     box.id='estudeiCycleWidget';
-    box.style.cssText='margin-top:12px;padding:12px 14px;border-radius:12px;background:rgba(15,23,42,0.75);border:1px solid rgba(56,189,248,0.28);font-size:13px;';
+    box.style.cssText='margin-top:12px;padding:12px 14px;border-radius:12px;background:rgba(8,20,38,0.88);border:1px solid rgba(56,189,248,0.35);font-size:13px;text-align:left;';
     box.innerHTML=`
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-        <strong style="color:#38bdf8;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;">🔄 Ciclo de Estudos Dinâmico · Bloco #${(st.completedBlocks||0)+1}</strong>
-        <span style="font-size:11px;opacity:0.8;">Continua de onde parou</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+        <strong style="color:#38bdf8;font-size:11.5px;letter-spacing:0.04em;text-transform:uppercase;">🔄 Ciclo de Estudos Dinâmico · Bloco #${(st.completedBlocks||0)+1}</strong>
+        <span style="font-size:11px;color:#94a3b8;">Continua de onde parou</span>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-        <div>
-          <div style="font-weight:700;font-size:14px;color:#f8fafc;">🎯 Agora: ${curr.subject} (${curr.minutes} min · ${curr.mode})</div>
-          <div style="font-size:12px;opacity:0.75;">⏭️ Próximo da fila: ${next.subject} (${next.minutes} min)</div>
+      <div style="margin-bottom:10px;padding:8px 10px;border-radius:8px;background:rgba(15,23,42,0.9);border:1px solid rgba(56,189,248,0.18);">
+        <div style="font-weight:800;font-size:13.5px;color:#f8fafc;">🎯 Agora: ${escText(curr.subject)} <span style="color:#38bdf8;font-weight:700;">(${curr.minutes} min · ${curr.mode})</span></div>
+        <div style="font-size:11.5px;color:#94a3b8;margin-top:3px;">⏭️ Próximo da fila: ${escText(next.subject)} (${next.minutes} min)</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+          <button type="button" id="startEstudeiBlockNowBtn" class="action small" style="width:auto;padding:5px 10px;font-size:11.5px;">▶ Estudar Matéria</button>
+          <button type="button" id="advanceEstudeiCycleBtn" class="ghost small" style="width:auto;padding:5px 10px;font-size:11.5px;border-color:rgba(56,189,248,0.45);">✓ Concluir Bloco e Girar Ciclo</button>
         </div>
-        <button type="button" id="advanceEstudeiCycleBtn" class="ghost" style="padding:6px 12px;font-size:12px;border-color:rgba(56,189,248,0.45);">✓ Concluir Bloco e Girar Ciclo</button>
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-top:8px;border-top:1px solid rgba(148,163,184,0.16);">
-        <span style="font-size:11px;opacity:0.8;margin-right:4px;">Horas líquidas:</span>
-        <button type="button" data-estudei-cat="teoria" class="ghost" style="padding:3px 9px;font-size:11px;${st.activeCategory==='teoria'?'border-color:#38bdf8;color:#38bdf8;font-weight:700;':''}">📖 Teoria (${st.categoryMinutes?.teoria||0}m)</button>
-        <button type="button" data-estudei-cat="lei_seca" class="ghost" style="padding:3px 9px;font-size:11px;${st.activeCategory==='lei_seca'?'border-color:#38bdf8;color:#38bdf8;font-weight:700;':''}">📜 Lei Seca (${st.categoryMinutes?.lei_seca||0}m)</button>
-        <button type="button" data-estudei-cat="questoes" class="ghost" style="padding:3px 9px;font-size:11px;${st.activeCategory==='questoes'?'border-color:#38bdf8;color:#38bdf8;font-weight:700;':''}">🎯 Questões (${st.categoryMinutes?.questoes||0}m)</button>
-        <button type="button" data-estudei-cat="revisao" class="ghost" style="padding:3px 9px;font-size:11px;${st.activeCategory==='revisao'?'border-color:#38bdf8;color:#38bdf8;font-weight:700;':''}">🔁 Revisão (${st.categoryMinutes?.revisao||0}m)</button>
+      <div style="padding-top:6px;border-top:1px solid rgba(148,163,184,0.16);">
+        <div style="font-size:11px;color:#cbd5e1;margin-bottom:6px;font-weight:700;">⏱️ Categorizar Horas Líquidas no Cronômetro:</div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;">
+          <button type="button" data-estudei-cat="teoria" class="ghost small" style="padding:5px 6px;font-size:11px;justify-content:center;${st.activeCategory==='teoria'?'border-color:#38bdf8;color:#38bdf8;font-weight:800;background:rgba(56,189,248,0.12);':''}">📖 Teoria (${st.categoryMinutes?.teoria||0}m)</button>
+          <button type="button" data-estudei-cat="lei_seca" class="ghost small" style="padding:5px 6px;font-size:11px;justify-content:center;${st.activeCategory==='lei_seca'?'border-color:#38bdf8;color:#38bdf8;font-weight:800;background:rgba(56,189,248,0.12);':''}">📜 Lei Seca (${st.categoryMinutes?.lei_seca||0}m)</button>
+          <button type="button" data-estudei-cat="questoes" class="ghost small" style="padding:5px 6px;font-size:11px;justify-content:center;${st.activeCategory==='questoes'?'border-color:#38bdf8;color:#38bdf8;font-weight:800;background:rgba(56,189,248,0.12);':''}">🎯 Questões (${st.categoryMinutes?.questoes||0}m)</button>
+          <button type="button" data-estudei-cat="revisao" class="ghost small" style="padding:5px 6px;font-size:11px;justify-content:center;${st.activeCategory==='revisao'?'border-color:#38bdf8;color:#38bdf8;font-weight:800;background:rgba(56,189,248,0.12);':''}">🔁 Revisão (${st.categoryMinutes?.revisao||0}m)</button>
+        </div>
       </div>
     `;
-    host.appendChild(box);
+    const manualBtn=host.querySelector('#openManualStudy');
+    if(manualBtn)manualBtn.insertAdjacentElement('beforebegin',box);
+    else host.appendChild(box);
+
+    box.querySelector('#startEstudeiBlockNowBtn')?.addEventListener('click',()=>{
+      const sf=document.querySelector('#summaryFilter');
+      const studyNav=document.querySelector('[data-view="study"]');
+      if(studyNav)studyNav.click();
+      if(sf){
+        const matchOpt=[...sf.options].find(o=>subjectKey(o.value)===subjectKey(curr.subject));
+        if(matchOpt){sf.value=matchOpt.value;sf.dispatchEvent(new Event('change'));}
+      }
+      if(typeof toast==='function')toast(`🎯 Ciclo aberto em ${curr.subject}! Dê o play no Cronômetro de Foco.`);
+    });
+
     box.querySelector('#advanceEstudeiCycleBtn')?.addEventListener('click',()=>{
       const c=getEstudeiCycleState();
-      const b=ESTUDEI_CYCLE_BLOCKS[c.currentIndex%ESTUDEI_CYCLE_BLOCKS.length];
-      c.currentIndex=(c.currentIndex+1)%ESTUDEI_CYCLE_BLOCKS.length;
+      const b=blocks[(c.currentIndex||0)%blocks.length];
+      c.currentIndex=((c.currentIndex||0)+1)%blocks.length;
       c.completedBlocks=(c.completedBlocks||0)+1;
       const cat=c.activeCategory||'teoria';
       c.categoryMinutes=c.categoryMinutes||{};
       c.categoryMinutes[cat]=(c.categoryMinutes[cat]||0)+b.minutes;
       saveEstudeiCycleState(c);
       renderEstudeiCycleWidget();
-      if(typeof toast==='function')toast(`✓ Bloco de ${b.subject} concluído! Próximo: ${ESTUDEI_CYCLE_BLOCKS[c.currentIndex].subject}`);
+      if(typeof toast==='function')toast(`✓ Bloco de ${b.subject} (+${b.minutes}m em ${cat.replace('_',' ')}) concluído! Próximo: ${blocks[c.currentIndex%blocks.length].subject}`);
     });
+
     box.querySelectorAll('[data-estudei-cat]').forEach(btn=>{
       btn.addEventListener('click',()=>{
         const c=getEstudeiCycleState();
@@ -2555,6 +2579,106 @@
     });
   }
 
+  function renderEstudeiEditalThermometer(){
+    if(typeof document==='undefined')return;
+    const mapSection=document.querySelector('#map');
+    if(!mapSection)return;
+    const existing=document.querySelector('#estudeiEditalThermometer');
+    if(existing)existing.remove();
+    const missions=typeof missionPool==='function'?missionPool().filter(m=>!String(m.id||'').startsWith('setup-')):[];
+    const totalTopics=Math.max(1,missions.length);
+    const doneTopics=missions.filter(m=>state?.done?.[m.id]).length;
+    const theoryPct=Math.min(100,Math.round((doneTopics/totalTopics)*100));
+
+    const editalSubjects=[...new Set(missions.map(m=>subjectKey(m.subject)).filter(Boolean))];
+    const totalSubj=Math.max(1,editalSubjects.length||10);
+    const answeredFp=Object.keys(state?.answeredQuestionFingerprints||{}).length;
+    const scoreEntries=Array.isArray(state?.scores)?state.scores.length:0;
+    const testedCount=Math.min(totalSubj,Math.round((answeredFp/5)+scoreEntries));
+    const practicePct=Math.min(100,Math.round((testedCount/totalSubj)*100));
+
+    const diagMsg=theoryPct>practicePct+20
+      ?'⚠️ Você avançou mais na teoria do que nas questões. Use o próximo bloco do Ciclo para resolver questões!'
+      :practicePct>theoryPct+20
+        ?'💡 Excelente volume de questões! Marque no edital os tópicos cuja teoria e lei seca você já fechou.'
+        :'✅ Ritmo equilibrado entre Cobertura Teórica do Edital e Cobertura Prática em Questões!';
+
+    const card=document.createElement('div');
+    card.id='estudeiEditalThermometer';
+    card.className='card';
+    card.style.cssText='margin-bottom:12px;border:1px solid rgba(56,189,248,0.32);background:linear-gradient(135deg,rgba(10,25,47,0.92),rgba(15,23,42,0.9));';
+    card.innerHTML=`
+      <div class="sectionHead" style="margin-bottom:8px;">
+        <div>
+          <div class="eyebrow" style="color:#38bdf8;">TERMÔMETRO DUPLO DE COBERTURA DO EDITAL (ESTILO ESTUDEI)</div>
+          <h3 style="margin:2px 0 0;">📊 Teoria Lida vs. Prática Testada em Questões</h3>
+        </div>
+        <span class="tag">${doneTopics}/${missions.length} tópicos vistos</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:8px;">
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+            <b>📖 Cobertura Teórica (Tópicos Vistos)</b>
+            <span style="color:#38bdf8;font-weight:800;">${theoryPct}%</span>
+          </div>
+          <div class="bar"><div class="fill" style="width:${theoryPct}%;background:linear-gradient(90deg,#0284c7,#38bdf8);"></div></div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+            <b>🎯 Cobertura Prática (Testado em Questões)</b>
+            <span style="color:#34d399;font-weight:800;">${practicePct}%</span>
+          </div>
+          <div class="bar"><div class="fill" style="width:${practicePct}%;background:linear-gradient(90deg,#059669,#34d399);"></div></div>
+        </div>
+      </div>
+      <div class="small muted">${diagMsg}</div>
+    `;
+    const subjectsGrid=mapSection.querySelector('#subjects');
+    if(subjectsGrid)subjectsGrid.insertAdjacentElement('beforebegin',card);
+    else mapSection.appendChild(card);
+  }
+
+  function ensureManuaisCacadorShortcutBar(){
+    if(typeof document==='undefined')return;
+    const filters=document.querySelector('#summaries .summaryFilters');
+    if(!filters||document.querySelector('#openManuaisCacadorBtn'))return;
+    filters.insertAdjacentHTML('beforeend',`<button type="button" class="ghost small" id="openManuaisCacadorBtn" style="white-space:nowrap;border-color:rgba(250,204,21,0.45);color:#fde047;">📚 Manuais do Caçador (Método)</button>`);
+    document.querySelector('#openManuaisCacadorBtn')?.addEventListener('click',()=>{
+      ensureNativePedagogicalCouplingLoaded();
+      const sf=document.querySelector('#summaryFilter');
+      if(sf){
+        let opt=[...sf.options].find(o=>/manuais do cacador/i.test(o.value));
+        if(!opt){
+          opt=new Option('Manuais do Caçador (Método & Estratégia)','Manuais do Caçador (Método & Estratégia)');
+          sf.add(opt);
+        }
+        sf.value=opt.value;
+        sf.dispatchEvent(new Event('change'));
+      }
+      if(typeof renderSummaries==='function')renderSummaries('');
+      if(typeof toast==='function')toast('📚 Manuais do Caçador abertos (Ciclo de Estudos, Engenharia Reversa e Revisão 1-7-30)!');
+    });
+  }
+
+  function initAllEstudeiUpgrades(){
+    try{
+      ensureNativePedagogicalCouplingLoaded();
+      renderEstudeiCycleWidget();
+      renderEstudeiEditalThermometer();
+      ensureManuaisCacadorShortcutBar();
+    }catch(_e){}
+  }
+  function creditEstudeiFocusMinutes(mins){
+    if(!mins||mins<=0)return;
+    const c=getEstudeiCycleState();
+    const cat=c.activeCategory||'teoria';
+    c.categoryMinutes=c.categoryMinutes||{};
+    c.categoryMinutes[cat]=(c.categoryMinutes[cat]||0)+mins;
+    saveEstudeiCycleState(c);
+    renderEstudeiCycleWidget();
+  }
+  window.creditEstudeiFocusMinutes=creditEstudeiFocusMinutes;
+  window.initAllEstudeiUpgrades=initAllEstudeiUpgrades;
 
   function getNativeQuestionsForSubject(subject, boardFilter = 'all') {
     const sKey = subjectKey(learningCategory(subject));
@@ -4400,7 +4524,8 @@
     try{
       const text=await file.text();
       if(q('#pasteQuestionRawText'))q('#pasteQuestionRawText').value=text;
-      toast('Arquivo carregado! Clique em “Converter e Salvar no Banco”.');
+      toast('⏳ Importando arquivo JSON para o seu banco de questões...');
+      await handleParseAndSaveRawQuestions();
     }catch{
       toast('Não foi possível ler o arquivo selecionado.');
     }finally{
@@ -6468,6 +6593,8 @@
 
     filtered.sort((a,b)=>{
       if(leaderboardSort==='xp')return (b.xp-a.xp)||(b.streak-a.streak)||(b.accuracy-a.accuracy);
+      if(leaderboardSort==='hours')return ((b.missions_done*50+b.streak*30)-(a.missions_done*50+a.streak*30))||(b.xp-a.xp);
+      if(leaderboardSort==='questions')return ((b.missions_done*20+Math.round(b.xp/15))-(a.missions_done*20+Math.round(a.xp/15)))||(b.accuracy-a.accuracy);
       if(leaderboardSort==='accuracy')return (b.accuracy-a.accuracy)||(b.missions_done-a.missions_done)||(b.streak-a.streak);
       return (b.streak-a.streak)||(b.xp-a.xp)||(b.accuracy-a.accuracy);
     });
@@ -6526,11 +6653,25 @@
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <div class="card" style="margin-bottom:12px;background:linear-gradient(135deg,rgba(15,23,42,0.92),rgba(30,41,59,0.85));border:1px solid rgba(56,189,248,0.3)">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(148,163,184,0.16)">
+          <div>
+            <span class="eyebrow" style="color:#38bdf8">MÉTODO ESTUDEI · PLACAR DE CONSTÂNCIA</span>
+            <div class="small muted">Compare seu ritmo na semana (reinicia todo domingo às 23h59) ou no acumulado geral.</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" class="ghost small ${(window._rankPeriod||'weekly')==='weekly'?'active':''}" data-rank-period="weekly" style="${(window._rankPeriod||'weekly')==='weekly'?'border-color:#38bdf8;color:#38bdf8;font-weight:800':''}">📅 Desta Semana (Dom–Sáb)</button>
+            <button type="button" class="ghost small ${window._rankPeriod==='alltime'?'active':''}" data-rank-period="alltime" style="${window._rankPeriod==='alltime'?'border-color:#38bdf8;color:#38bdf8;font-weight:800':''}">🏆 Histórico Geral</button>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button type="button" class="ghost small ${leaderboardSort==='streak'?'active':''}" data-rank-sort="streak">🔥 Por Ofensiva</button>
+          <button type="button" class="ghost small ${leaderboardSort==='hours'?'active':''}" data-rank-sort="hours">⏱️ Horas de Estudo</button>
+          <button type="button" class="ghost small ${leaderboardSort==='questions'?'active':''}" data-rank-sort="questions">📝 Questões Resolvidas</button>
           <button type="button" class="ghost small ${leaderboardSort==='xp'?'active':''}" data-rank-sort="xp">⚡ Por XP / Patente</button>
           <button type="button" class="ghost small ${leaderboardSort==='accuracy'?'active':''}" data-rank-sort="accuracy">🎯 Por Desempenho</button>
+        </div>
         </div>
         <select id="rankRoleFilterSelect" style="max-width:260px">
           <option value="all" ${leaderboardRoleFilter==='all'?'selected':''}>Todos os concursos (${list.length} caçadores)</option>
