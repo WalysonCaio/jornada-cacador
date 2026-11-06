@@ -2623,11 +2623,32 @@
   ];
 
   function getEstudeiCycleState(){
+    const today=typeof localDayKey==='function'?localDayKey():new Date().toISOString().slice(0,10);
+    let st={currentIndex:0,completedBlocks:0,activeCategory:'teoria',date:today,categoryMinutes:{teoria:0,lei_seca:0,questoes:0,revisao:0},customSubject:''};
     try{
       const raw=localStorage.getItem('jc_estudei_cycle_v1');
-      if(raw)return JSON.parse(raw);
+      if(raw)st={...st,...JSON.parse(raw)};
     }catch(_e){}
-    return {currentIndex:0,completedBlocks:0,activeCategory:'teoria',categoryMinutes:{teoria:0,lei_seca:0,questoes:0,revisao:0},customSubject:''};
+    if(st.date!==today){
+      st.date=today;
+      st.categoryMinutes={teoria:0,lei_seca:0,questoes:0,revisao:0};
+    }
+    st.categoryMinutes=st.categoryMinutes||{teoria:0,lei_seca:0,questoes:0,revisao:0};
+    const realTodayMins=Math.max(0,Math.floor(Number(state?.studyByDay?.[today]||0)/60));
+    const activeCat=st.activeCategory||'teoria';
+    const catKeys=['teoria','lei_seca','questoes','revisao'];
+    const totalCatMins=catKeys.reduce((sum,k)=>sum+Math.max(0,Number(st.categoryMinutes[k]||0)),0);
+    if(totalCatMins!==realTodayMins){
+      const otherMins=catKeys.filter(k=>k!==activeCat).reduce((sum,k)=>sum+Math.max(0,Number(st.categoryMinutes[k]||0)),0);
+      if(otherMins<=realTodayMins){
+        st.categoryMinutes[activeCat]=realTodayMins-otherMins;
+      }else{
+        st.categoryMinutes={teoria:0,lei_seca:0,questoes:0,revisao:0};
+        st.categoryMinutes[activeCat]=realTodayMins;
+      }
+      saveEstudeiCycleState(st);
+    }
+    return st;
   }
   function saveEstudeiCycleState(st){
     try{localStorage.setItem('jc_estudei_cycle_v1',JSON.stringify(st));}catch(_e){}
@@ -2811,9 +2832,6 @@
         const c=getEstudeiCycleState();
         c.completedBlocks=(c.completedBlocks||0)+1;
         c.customSubject=nextSubject;
-        const cat=c.activeCategory||'teoria';
-        c.categoryMinutes=c.categoryMinutes||{};
-        c.categoryMinutes[cat]=(c.categoryMinutes[cat]||0)+50;
         saveEstudeiCycleState(c);
         if(!switchDailyMissionToSubject(nextSubject))renderEstudeiCycleWidget();
         if(typeof toast==='function')toast(`✓ Ciclo girado para ${nextSubject}! Missão Atual e Cronômetro sincronizados.`);
@@ -2942,6 +2960,7 @@
     c.categoryMinutes[cat]=(c.categoryMinutes[cat]||0)+mins;
     saveEstudeiCycleState(c);
     renderEstudeiCycleWidget();
+    if(typeof evaluateAndAutoCheckDailySteps==='function')evaluateAndAutoCheckDailySteps('focus_minutes');
   }
   window.creditEstudeiFocusMinutes=creditEstudeiFocusMinutes;
   window.initAllEstudeiUpgrades=initAllEstudeiUpgrades;
@@ -9052,13 +9071,16 @@
     const steps=typeof dailyStepsFor==='function'?dailyStepsFor(state.settings?.dailyMinutes||180):[];
     if(!steps.length)return;
     state.dailySteps=state.dailySteps||{};
+    const manualUncheck=state.dailyStepsManualUncheck?.[state.daily]||{};
+    const focusSecToday=Math.max(Number(state.studyByDay?.[tracker.date]||0),(typeof focusBlockSeconds==='function'&&typeof timerLeft==='number'&&timerLeft>0)?Math.max(0,focusBlockSeconds()-timerLeft):0);
+    if(focusSecToday>=600)tracker.theoryRead=true;
     let newlyChecked=[];
 
     steps.forEach((label,idx)=>{
-      if(state.dailySteps[idx])return;
+      if(state.dailySteps[idx]||manualUncheck[idx])return;
       const norm=normalizeText(label);
       if(/teoria|revisar o resumo principal/.test(norm)){
-        if(tracker.theoryRead||Number(state.studyByDay?.[tracker.date]||0)>=600){
+        if(tracker.theoryRead||focusSecToday>=600){
           state.dailySteps[idx]=true;
           newlyChecked.push(label);
         }
@@ -9249,6 +9271,22 @@
         setTimeout(()=>evaluateAndAutoCheckDailySteps('error_reviewed'),60);
       }
     });
+
+    // 6) Hook em saveManualStudy e no cronômetro de foco (10 min de foco marca a Etapa 1 automaticamente)
+    const baseSaveManual=typeof saveManualStudy==='function'?saveManualStudy:null;
+    if(baseSaveManual&&!baseSaveManual._dailyHooked){
+      window.saveManualStudy=saveManualStudy=async function(){
+        const res=await baseSaveManual();
+        evaluateAndAutoCheckDailySteps('manual_study');
+        if(typeof renderEstudeiCycleWidget==='function')renderEstudeiCycleWidget();
+        return res;
+      };
+      saveManualStudy._dailyHooked=true;
+    }
+
+    window.evaluateAndAutoCheckDailySteps=evaluateAndAutoCheckDailySteps;
+    window.decorateDailyStepProgressLabels=decorateDailyStepProgressLabels;
+    setTimeout(()=>evaluateAndAutoCheckDailySteps('init'),50);
   }
 
 

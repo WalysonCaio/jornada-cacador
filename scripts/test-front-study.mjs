@@ -1195,3 +1195,15 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
 
   console.log("OK: Tema Claro/Escuro no Menu (sem quebrar .tabs) e 6 aprimoramentos TEC/Caveira/Gran/Estudei (r149) validados.");
 }
+
+// ── Validação r151: Marcação Automática da 1ª Etapa aos 10 min de Foco (600s) + Sincronia Real dos Minutos por Modalidade ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+
+  assert.ok(htmlSrc.includes("todaySec>=600&&!state.dailySteps[0]") && htmlSrc.includes("evaluateAndAutoCheckDailySteps('focus_10min')"), "Cronômetro (tickClock / applyFocusElapsed / renderDaily) deve marcar automaticamente a 1ª etapa ao atingir 10 min (600s) de foco");
+  assert.ok(v77Src.includes("evaluateAndAutoCheckDailySteps('focus_minutes')") && v77Src.includes("if(focusSecToday>=600)tracker.theoryRead=true;"), "creditEstudeiFocusMinutes e evaluateAndAutoCheckDailySteps devem marcar theoryRead=true e a etapa 0 aos 10 min de foco");
+  assert.ok(v77Src.includes("const realTodayMins=Math.max(0,Math.floor(Number(state?.studyByDay?.[today]||0)/60));") && !v77Src.includes("(c.categoryMinutes[cat]||0)+50"), "Modalidade do Cronômetro deve reconciliar minutos com o tempo real estudado hoje e nunca somar +50m artificiais ao girar matéria");
+
+  console.log("OK: Marcação automática aos 10 min de foco e sincronia dos minutos da Modalidade do Cronômetro (r151) validadas.");
+}
