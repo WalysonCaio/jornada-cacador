@@ -1423,6 +1423,39 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
           }
 
           if (Array.isArray(extractedQs) && extractedQs.length >= 3 && !examReport.ambiguous && (Number(examReport.percent) >= 50 || examReport.noKey || userChoice?.allowWithoutKey)) {
+            // Aprimoramento 3: Recorte automático de figuras/gráficos/tabelas via canvas (pdf.js) para questões que mencionam elementos visuais
+            try {
+              const visualRe = /\b(figura|imagem|gr[áa]fico|tabela|quadro|diagrama|planilha|charge|tirinha|mapa|esquema|ilustra[çc][ãa]o)\b/i;
+              const visualQs = extractedQs.filter(q => visualRe.test(String(q.statement || "")) && !q.figure_data_url);
+              if (visualQs.length > 0 && pdfBytes && typeof document !== "undefined") {
+                const pdfjs = await import("./pdf.mjs");
+                const figPdf = await openPdfDocumentWithFallback(pdfjs, pdfBytes);
+                const pageSnapCache = new Map();
+                for (const vq of visualQs.slice(0, 12)) {
+                  const snippet = String(vq.statement || "").replace(/\s+/g, " ").trim().slice(0, 45).toLowerCase();
+                  const matchedPageObj = pages.find(p => String(p.text || "").replace(/\s+/g, " ").toLowerCase().includes(snippet));
+                  const pageNum = matchedPageObj?.page || 1;
+                  if (pageNum >= 1 && pageNum <= figPdf.numPages) {
+                    if (!pageSnapCache.has(pageNum)) {
+                      const pg = await figPdf.getPage(pageNum);
+                      const vp = pg.getViewport({ scale: 1.15 });
+                      const cnv = document.createElement("canvas");
+                      cnv.width = Math.floor(vp.width);
+                      cnv.height = Math.floor(vp.height);
+                      const ctx2d = cnv.getContext("2d");
+                      await pg.render({ canvasContext: ctx2d, viewport: vp }).promise;
+                      pg.cleanup();
+                      pageSnapCache.set(pageNum, cnv.toDataURL("image/jpeg", 0.68));
+                    }
+                    vq.figure_data_url = pageSnapCache.get(pageNum);
+                    vq.figure_page = pageNum;
+                  }
+                }
+                try { await figPdf.destroy(); } catch {}
+              }
+            } catch (figErr) {
+              console.warn("Aviso ao recortar figura de questão do PDF:", figErr);
+            }
             const bySubj = {};
             for (const qItem of extractedQs) {
               const s = qItem.subject || fallbackSubj;

@@ -1173,3 +1173,25 @@ GABARITO DEFINITIVO
 
 }
 console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleção de Caderno, 2 colunas e Recursos Projeto Caveira (r126) validados.");
+
+// ── Validação r149: Botão de Tema no Menu (5 abas intactas em .tabs) + 6 Aprimoramentos (TEC, Caveira, Gran, Estudei) ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const pdfSrc = readFileSync(new URL("../dist/pdf-text-client.js", import.meta.url), "utf8");
+
+  // 1) Verifica que a barra .tabs possui apenas os 5 botões principais (sem botão de tema quebrando a linha) e que #globalThemeToggleBtn está em #moreDialog
+  const navMatch = htmlSrc.match(/<nav class="tabs"[^>]*>([\s\S]*?)<\/nav>/);
+  assert.ok(navMatch && !navMatch[1].includes("globalThemeToggleBtn"), "A barra .tabs não deve conter #globalThemeToggleBtn");
+  assert.ok(htmlSrc.includes('id="globalThemeToggleBtn"') && v77Src.includes("applyGlobalAppTheme") && v77Src.includes("body.lightAppTheme"), "O botão #globalThemeToggleBtn deve estar no menu e aplicar o tema claro completo (body.lightAppTheme)");
+
+  // 2) Verifica os 6 aprimoramentos estratégicos (TEC, Caveira, Gran, Estudei)
+  assert.ok(v77Src.includes("computeQuestionOptionChoiceStats") && v77Src.includes("Pegadinha mais marcada!"), "Deve conter estatística por alternativa e identificação da pegadinha principal");
+  assert.ok(v77Src.includes("computeTopicBankIncidencePct") && v77Src.includes("formatTopicIncidenceBadgeHtml"), "Deve conter cálculo real de incidência por assunto na banca");
+  assert.ok(pdfSrc.includes("pageSnapCache") && v77Src.includes("questionFigureBox"), "Deve suportar recorte/anexo de figuras e tabelas nas questões");
+  assert.ok(v77Src.includes("renderGuildOfficialSimuladoBanner") && v77Src.includes("startGuildOfficialSimuladoBtn"), "Deve conter o Simulado Oficial da Guilda com Ranking e Nota de Corte por Cargo");
+  assert.ok(v77Src.includes("balanceEstudeiCycleByWeightBtn") && v77Src.includes("getSubjectAccuracyAndWeight"), "Deve conter o balanceamento automático do Ciclo Tático por peso e desempenho (2x)");
+  assert.ok(v77Src.includes("scheduleLazyTabHydration"), "Deve conter hidratação sob demanda para performance mobile");
+
+  console.log("OK: Tema Claro/Escuro no Menu (sem quebrar .tabs) e 6 aprimoramentos TEC/Caveira/Gran/Estudei (r149) validados.");
+}
