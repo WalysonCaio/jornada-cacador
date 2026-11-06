@@ -215,7 +215,8 @@ body.lightPaperMode mark.targetExprHighlight{background:#bae6fd!important;border
 .cutoffScaleTicks span.t72{color:#facc15;font-weight:800}
 .cutoffScaleTicks span.t80{color:#59e6ff;font-weight:800}
 @media(max-width:719px){
-  .cutoffHeaderRow{flex-direction:column!important;align-items:flex-start!important;gap:8px!important}
+  .cutoffHeaderRow{flex-direction:row!important;flex-wrap:wrap!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;margin-bottom:8px!important}
+  .cutoffHeaderRow>div:first-child{flex:1 1 100%!important;min-height:0!important;height:auto!important}
   .cutoffBottleneckRow{flex-direction:column!important;align-items:stretch!important;gap:10px!important;padding:12px!important}
   .cutoffBottleneckTitleRow{display:flex!important;flex-direction:column!important;align-items:flex-start!important;gap:6px!important}
   .cutoffPill{white-space:normal!important;line-height:1.35!important;display:inline-block!important}

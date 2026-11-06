@@ -2439,9 +2439,45 @@
   }
   window.ensureNativeQuestionBankLoaded = ensureNativeQuestionBankLoaded;
 
-  // ── r142: Acoplamento Pedagógico Nativo (Apostilas Base + Lei Seca + Bizus + Flashcards) + Ciclo Estudei ──
+  // ── r145: Acoplamento Pedagógico Fiel ao Edital + Horas Líquidas Compactas + Ciclo Tático Sincronizado com a Missão ──
+  function getActiveEditalSubjectsList(){
+    try{
+      const missions=typeof missionPool==='function'?missionPool().filter(m=>m&&m.subject&&!String(m.id||'').startsWith('setup-')):[];
+      const seen=new Set();
+      const list=[];
+      for(const m of missions){
+        const c=canonicalSubjectName(m.subject);
+        const k=subjectKey(c);
+        if(c&&k&&!seen.has(k)){
+          seen.add(k);
+          list.push(c);
+        }
+      }
+      if(list.length)return list;
+    }catch(_e){}
+    const campName=String((typeof activeCampaign==='function'?activeCampaign()?.name:'')||'').toLowerCase();
+    const isBombeiro=/cbm|bombeiro/.test(campName);
+    const base=['Língua Portuguesa','História de Pernambuco','Raciocínio Lógico-Matemático','Informática','Direito Constitucional','Direitos Humanos','Legislação Extravagante','Direito Militar'];
+    return isBombeiro?[...base,'Física','Biologia']:base;
+  }
+
   function ensureNativePedagogicalCouplingLoaded(){
     try{
+      const allowedSubjects=getActiveEditalSubjectsList();
+      const allowedKeys=new Set(allowedSubjects.map(s=>subjectKey(s)));
+      const campName=String((typeof activeCampaign==='function'?activeCampaign()?.name:'')||'').toLowerCase();
+      const isBombeiro=/cbm|bombeiro/.test(campName);
+
+      // Remove Biologia/Física que tenham entrado por engano em portais que não têm essas matérias no edital
+      if(!isBombeiro&&typeof ALL_SUMMARIES!=='undefined'&&Array.isArray(ALL_SUMMARIES)){
+        for(let i=ALL_SUMMARIES.length-1;i>=0;i--){
+          const catKey=subjectKey(ALL_SUMMARIES[i]?.category||'');
+          if(ALL_SUMMARIES[i]?.is_native_coupling&&(catKey==='fisica'||catKey==='biologia')&&!allowedKeys.has(catKey)){
+            ALL_SUMMARIES.splice(i,1);
+          }
+        }
+      }
+
       const baseList=[
         ...(typeof window.BASIC_SUMMARIES!=='undefined'&&Array.isArray(window.BASIC_SUMMARIES)?window.BASIC_SUMMARIES:[]),
         ...(typeof window.MATERIAL_DEEP_DIVES!=='undefined'&&Array.isArray(window.MATERIAL_DEEP_DIVES)?window.MATERIAL_DEEP_DIVES:[])
@@ -2449,21 +2485,30 @@
       if(typeof ALL_SUMMARIES!=='undefined'&&Array.isArray(ALL_SUMMARIES)&&baseList.length){
         const existingIds=new Set(ALL_SUMMARIES.map(s=>String(s?.id||s?.title||'').toLowerCase()));
         for(const item of baseList){
+          const rawCat=item.category||item.subject||'Conteúdo Geral';
+          const isManual=/manuais do cacador/i.test(rawCat);
+          const normCat=isManual?'Manuais do Caçador (Método & Estratégia)':canonicalSubjectName(rawCat);
+          const catKey=subjectKey(normCat);
+          // Só injeta resumo nativo se a disciplina fizer parte do edital ativo (ou for Manual do Caçador)
+          if(!isManual&&allowedKeys.size&&!allowedKeys.has(catKey))continue;
           const key=String(item?.id||item?.title||'').toLowerCase();
           if(key&&!existingIds.has(key)){
             existingIds.add(key);
             ALL_SUMMARIES.push({
               ...item,
-              category:canonicalSubjectName(item.category||item.subject||'Conteúdo Geral'),
+              category:normCat,
               is_native_coupling:true
             });
           }
         }
       }
-      if(typeof ALL_FLASHCARDS!=='undefined'&&Array.isArray(ALL_FLASHCARDS)&&baseList.length){
+      if(typeof ALL_FLASHCARDS!=='undefined'&&Array.isArray(window.ALL_FLASHCARDS)&&baseList.length){
         const existingFronts=new Set(ALL_FLASHCARDS.map(c=>String(Array.isArray(c)?c[1]:c?.front||'').toLowerCase()));
         for(const item of baseList){
-          const subj=canonicalSubjectName(item.category||item.subject||'Conteúdo Geral');
+          const rawCat=item.category||item.subject||'Conteúdo Geral';
+          if(/manuais do cacador/i.test(rawCat))continue;
+          const subj=canonicalSubjectName(rawCat);
+          if(allowedKeys.size&&!allowedKeys.has(subjectKey(subj)))continue;
           const front=`[${item.title}] Qual o bizu e a regra central cobrada pelas bancas?`;
           const back=[item.bizu?`💡 Bizu: ${item.bizu}`:'',item.mnemonic?`🧠 Mnemônico: ${item.mnemonic}`:'',item.trap?`⚠️ Pegadinha: ${item.trap}`:'',item.points?.[0]||''].filter(Boolean).join(' | ');
           if(back&&!existingFronts.has(front.toLowerCase())){
@@ -2478,15 +2523,13 @@
 
   const ESTUDEI_CYCLE_BLOCKS=[
     {subject:'Língua Portuguesa',minutes:60,mode:'Teoria + Questões'},
+    {subject:'História de Pernambuco',minutes:50,mode:'Resumo + Questões'},
+    {subject:'Raciocínio Lógico-Matemático',minutes:50,mode:'Prática de Questões'},
     {subject:'Direito Constitucional',minutes:60,mode:'Lei Seca + Questões'},
-    {subject:'Raciocínio Lógico-Matemático',minutes:45,mode:'Prática de Questões'},
-    {subject:'Direito Penal',minutes:60,mode:'Lei Seca + Questões'},
-    {subject:'Legislação Extravagante',minutes:60,mode:'Lei Seca + Flashcards'},
-    {subject:'Direito Processual Penal',minutes:50,mode:'Lei Seca + Questões'},
-    {subject:'Direito Administrativo',minutes:50,mode:'Resumo + Questões'},
     {subject:'Informática',minutes:45,mode:'Teoria + Questões'},
-    {subject:'História de Pernambuco',minutes:45,mode:'Resumo + Flashcards'},
-    {subject:'Geografia de Pernambuco',minutes:45,mode:'Resumo + Questões'}
+    {subject:'Direitos Humanos',minutes:50,mode:'Lei Seca + Questões'},
+    {subject:'Legislação Extravagante',minutes:60,mode:'Lei Seca + Flashcards'},
+    {subject:'Direito Militar',minutes:50,mode:'Lei Seca + Questões'}
   ];
 
   function getEstudeiCycleState(){
@@ -2494,89 +2537,149 @@
       const raw=localStorage.getItem('jc_estudei_cycle_v1');
       if(raw)return JSON.parse(raw);
     }catch(_e){}
-    return {currentIndex:0,completedBlocks:0,activeCategory:'teoria',categoryMinutes:{teoria:0,lei_seca:0,questoes:0,revisao:0}};
+    return {currentIndex:0,completedBlocks:0,activeCategory:'teoria',categoryMinutes:{teoria:0,lei_seca:0,questoes:0,revisao:0},customSubject:''};
   }
   function saveEstudeiCycleState(st){
     try{localStorage.setItem('jc_estudei_cycle_v1',JSON.stringify(st));}catch(_e){}
   }
+
   function renderEstudeiCycleWidget(){
     ensureNativePedagogicalCouplingLoaded();
     if(typeof document==='undefined')return;
-    const host=document.querySelector('.card.timer')||document.querySelector('#clock')?.closest('.card')||document.querySelector('#timerDisplay')?.closest('.card, .panel, section, div');
-    if(!host)return;
-    const existing=document.querySelector('#estudeiCycleWidget');
-    if(existing)existing.remove();
+
     const st=getEstudeiCycleState();
-    const dynamicSubjects=(typeof LEARNING_SUBJECTS!=='undefined'&&Array.isArray(LEARNING_SUBJECTS)&&LEARNING_SUBJECTS.length>=3)
-      ?LEARNING_SUBJECTS.filter(s=>!/manuais do cacador/i.test(s))
-      :null;
-    const blocks=(dynamicSubjects&&dynamicSubjects.length>=3)
-      ?dynamicSubjects.map((s,i)=>({subject:s,minutes:i%2===0?60:50,mode:i%3===0?'Teoria + Questões':i%3===1?'Lei Seca + Questões':'Revisão + Flashcards'}))
-      :ESTUDEI_CYCLE_BLOCKS;
-    const curr=blocks[(st.currentIndex||0)%blocks.length];
-    const next=blocks[((st.currentIndex||0)+1)%blocks.length];
-    const box=document.createElement('div');
-    box.id='estudeiCycleWidget';
-    box.style.cssText='margin-top:12px;padding:12px 14px;border-radius:12px;background:rgba(8,20,38,0.88);border:1px solid rgba(56,189,248,0.35);font-size:13px;text-align:left;';
-    box.innerHTML=`
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-        <strong style="color:#38bdf8;font-size:11.5px;letter-spacing:0.04em;text-transform:uppercase;">🔄 Ciclo Tático de Estudos · Bloco #${(st.completedBlocks||0)+1}</strong>
-        <span style="font-size:11px;color:#94a3b8;">Continua de onde parou</span>
-      </div>
-      <div style="margin-bottom:10px;padding:8px 10px;border-radius:8px;background:rgba(15,23,42,0.9);border:1px solid rgba(56,189,248,0.18);">
-        <div style="font-weight:800;font-size:13.5px;color:#f8fafc;">🎯 Agora: ${escText(curr.subject)} <span style="color:#38bdf8;font-weight:700;">(${curr.minutes} min · ${curr.mode})</span></div>
-        <div style="font-size:11.5px;color:#94a3b8;margin-top:3px;">⏭️ Próximo da fila: ${escText(next.subject)} (${next.minutes} min)</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
-          <button type="button" id="startEstudeiBlockNowBtn" class="action small" style="width:auto;padding:5px 10px;font-size:11.5px;">▶ Estudar Matéria</button>
-          <button type="button" id="advanceEstudeiCycleBtn" class="ghost small" style="width:auto;padding:5px 10px;font-size:11.5px;border-color:rgba(56,189,248,0.45);">✓ Concluir Bloco e Girar Ciclo</button>
+    const editalSubjects=getActiveEditalSubjectsList();
+    const missions=typeof missionPool==='function'?missionPool():[];
+    const currentDailyMission=missions.find(m=>m.id===state?.daily)||missions.find(m=>!state?.done?.[m.id])||missions[0]||null;
+    const missionSubject=currentDailyMission?canonicalSubjectName(currentDailyMission.subject):editalSubjects[0]||'Língua Portuguesa';
+
+    // Garante que a matéria ativa do Ciclo seja sempre do Edital do aluno e sincronizada com a Missão Diária por padrão
+    let activeIdx=editalSubjects.findIndex(s=>subjectKey(s)===subjectKey(st.customSubject||missionSubject));
+    if(activeIdx<0)activeIdx=0;
+    const currSubject=editalSubjects[activeIdx]||missionSubject;
+    const nextSubject=editalSubjects[(activeIdx+1)%editalSubjects.length]||currSubject;
+    const currTopicObj=missions.find(m=>subjectKey(canonicalSubjectName(m.subject))===subjectKey(currSubject)&&!state?.done?.[m.id])||currentDailyMission;
+    const currTopicName=currTopicObj?.name||'Tópico prioritário do edital';
+
+    // 1) No Cronômetro de Foco (.card.timer): coloca APENAS a barra compacta de Modalidade de Horas Líquidas (sem aumentar a altura nem criar buraco na coluna esquerda!)
+    const timerHost=document.querySelector('.card.timer')||document.querySelector('#clock')?.closest('.card');
+    if(timerHost){
+      const oldTimerBox=timerHost.querySelector('#estudeiCycleWidget');
+      if(oldTimerBox)oldTimerBox.remove();
+      const oldCompact=timerHost.querySelector('#timerLiquidCategoryBar');
+      if(oldCompact)oldCompact.remove();
+      const compactBar=document.createElement('div');
+      compactBar.id='timerLiquidCategoryBar';
+      compactBar.style.cssText='margin:8px 0 6px;padding:7px 8px;border-radius:10px;background:rgba(7,19,32,0.85);border:1px solid rgba(56,189,248,0.22);text-align:left;';
+      compactBar.innerHTML=`
+        <div style="font-size:10.5px;color:#94a3b8;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center;">
+          <span>⏱️ <b>Modalidade do Cronômetro:</b></span>
+          <span style="color:#38bdf8;font-weight:700;">${escText(shortLabel(currSubject,22))}</span>
         </div>
-      </div>
-      <div style="padding-top:6px;border-top:1px solid rgba(148,163,184,0.16);">
-        <div style="font-size:11px;color:#cbd5e1;margin-bottom:6px;font-weight:700;">⏱️ Categorizar Horas Líquidas no Cronômetro:</div>
-        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;">
-          <button type="button" data-estudei-cat="teoria" class="ghost small" style="padding:5px 6px;font-size:11px;justify-content:center;${st.activeCategory==='teoria'?'border-color:#38bdf8;color:#38bdf8;font-weight:800;background:rgba(56,189,248,0.12);':''}">📖 Teoria (${st.categoryMinutes?.teoria||0}m)</button>
-          <button type="button" data-estudei-cat="lei_seca" class="ghost small" style="padding:5px 6px;font-size:11px;justify-content:center;${st.activeCategory==='lei_seca'?'border-color:#38bdf8;color:#38bdf8;font-weight:800;background:rgba(56,189,248,0.12);':''}">📜 Lei Seca (${st.categoryMinutes?.lei_seca||0}m)</button>
-          <button type="button" data-estudei-cat="questoes" class="ghost small" style="padding:5px 6px;font-size:11px;justify-content:center;${st.activeCategory==='questoes'?'border-color:#38bdf8;color:#38bdf8;font-weight:800;background:rgba(56,189,248,0.12);':''}">🎯 Questões (${st.categoryMinutes?.questoes||0}m)</button>
-          <button type="button" data-estudei-cat="revisao" class="ghost small" style="padding:5px 6px;font-size:11px;justify-content:center;${st.activeCategory==='revisao'?'border-color:#38bdf8;color:#38bdf8;font-weight:800;background:rgba(56,189,248,0.12);':''}">🔁 Revisão (${st.categoryMinutes?.revisao||0}m)</button>
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;">
+          <button type="button" data-estudei-cat="teoria" class="ghost small" style="min-height:28px;padding:3px 2px;font-size:10px;justify-content:center;${st.activeCategory==='teoria'?'border-color:#38bdf8;color:#38bdf8;font-weight:800;background:rgba(56,189,248,0.14);':''}">📖 Teoria<br>${st.categoryMinutes?.teoria||0}m</button>
+          <button type="button" data-estudei-cat="lei_seca" class="ghost small" style="min-height:28px;padding:3px 2px;font-size:10px;justify-content:center;${st.activeCategory==='lei_seca'?'border-color:#38bdf8;color:#38bdf8;font-weight:800;background:rgba(56,189,248,0.14);':''}">📜 Lei<br>${st.categoryMinutes?.lei_seca||0}m</button>
+          <button type="button" data-estudei-cat="questoes" class="ghost small" style="min-height:28px;padding:3px 2px;font-size:10px;justify-content:center;${st.activeCategory==='questoes'?'border-color:#38bdf8;color:#38bdf8;font-weight:800;background:rgba(56,189,248,0.14);':''}">🎯 Quest.<br>${st.categoryMinutes?.questoes||0}m</button>
+          <button type="button" data-estudei-cat="revisao" class="ghost small" style="min-height:28px;padding:3px 2px;font-size:10px;justify-content:center;${st.activeCategory==='revisao'?'border-color:#38bdf8;color:#38bdf8;font-weight:800;background:rgba(56,189,248,0.14);':''}">🔁 Rev.<br>${st.categoryMinutes?.revisao||0}m</button>
         </div>
-      </div>
-    `;
-    const manualBtn=host.querySelector('#openManualStudy');
-    if(manualBtn)manualBtn.insertAdjacentElement('beforebegin',box);
-    else host.appendChild(box);
+      `;
+      const manualBtn=timerHost.querySelector('#openManualStudy');
+      if(manualBtn)manualBtn.insertAdjacentElement('beforebegin',compactBar);
+      else timerHost.appendChild(compactBar);
 
-    box.querySelector('#startEstudeiBlockNowBtn')?.addEventListener('click',()=>{
-      const sf=document.querySelector('#summaryFilter');
-      const studyNav=document.querySelector('[data-view="study"]');
-      if(studyNav)studyNav.click();
-      if(sf){
-        const matchOpt=[...sf.options].find(o=>subjectKey(o.value)===subjectKey(curr.subject));
-        if(matchOpt){sf.value=matchOpt.value;sf.dispatchEvent(new Event('change'));}
-      }
-      if(typeof toast==='function')toast(`🎯 Ciclo aberto em ${curr.subject}! Dê o play no Cronômetro de Foco.`);
-    });
+      compactBar.querySelectorAll('[data-estudei-cat]').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          const c=getEstudeiCycleState();
+          c.activeCategory=btn.getAttribute('data-estudei-cat')||'teoria';
+          saveEstudeiCycleState(c);
+          renderEstudeiCycleWidget();
+        });
+      });
+    }
 
-    box.querySelector('#advanceEstudeiCycleBtn')?.addEventListener('click',()=>{
-      const c=getEstudeiCycleState();
-      const b=blocks[(c.currentIndex||0)%blocks.length];
-      c.currentIndex=((c.currentIndex||0)+1)%blocks.length;
-      c.completedBlocks=(c.completedBlocks||0)+1;
-      const cat=c.activeCategory||'teoria';
-      c.categoryMinutes=c.categoryMinutes||{};
-      c.categoryMinutes[cat]=(c.categoryMinutes[cat]||0)+b.minutes;
-      saveEstudeiCycleState(c);
-      renderEstudeiCycleWidget();
-      if(typeof toast==='function')toast(`✓ Bloco de ${b.subject} (+${b.minutes}m em ${cat.replace('_',' ')}) concluído! Próximo: ${blocks[c.currentIndex%blocks.length].subject}`);
-    });
+    // 2) No card "Plano diário" (#dailyPlan): exibe a Fila de Rotação de Disciplinas do Edital Sincronizado (100% alinhada à Missão Diária e sem buraco no layout!)
+    const planEl=document.querySelector('#dailyPlan');
+    const planCard=planEl?.closest('.card');
+    if(planCard){
+      const existingCycle=planCard.querySelector('#estudeiCycleWidget');
+      if(existingCycle)existingCycle.remove();
+      const box=document.createElement('div');
+      box.id='estudeiCycleWidget';
+      box.style.cssText='margin-bottom:12px;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,rgba(8,22,38,0.95),rgba(12,30,52,0.9));border:1px solid rgba(56,189,248,0.32);';
+      const pillsHtml=editalSubjects.map((subj,idx)=>{
+        const isCurrent=idx===activeIdx;
+        return `<button type="button" data-cycle-pick-subj="${escText(subj)}" class="ghost small" style="width:auto;min-height:30px;padding:4px 10px;font-size:11.5px;border-radius:999px;${isCurrent?'background:rgba(56,189,248,0.2);border-color:#38bdf8;color:#fff;font-weight:800;':'opacity:0.8;'}">${idx+1}. ${escText(subj)}${isCurrent?' (Atual)':''}</button>`;
+      }).join('');
+      box.innerHTML=`
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <div>
+            <span class="eyebrow" style="color:#38bdf8;">🔄 CICLO TÁTICO DO SEU EDITAL · BLOCO #${(st.completedBlocks||0)+1}</span>
+            <div style="font-weight:800;font-size:14.5px;color:#f8fafc;margin-top:2px;">🎯 Matéria em Foco: <span style="color:#38bdf8;">${escText(currSubject)}</span></div>
+            <div class="small muted" style="margin-top:2px;">Assunto da vez: <b>${escText(currTopicName)}</b> · ⏭️ Próxima da fila: <b>${escText(nextSubject)}</b></div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" id="startEstudeiBlockNowBtn" class="action small" style="width:auto;padding:7px 12px;font-size:12px;">📖 1. Abrir Resumo</button>
+            <button type="button" id="practiceEstudeiBlockBtn" class="ghost small" style="width:auto;padding:7px 12px;font-size:12px;border-color:rgba(52,211,153,0.45);color:#6ee7b7;">🎯 2. Questões</button>
+            <button type="button" id="advanceEstudeiCycleBtn" class="ghost small" style="width:auto;padding:7px 12px;font-size:12px;border-color:rgba(56,189,248,0.45);">⏭️ Girar para Próxima Matéria</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-top:8px;border-top:1px solid rgba(148,163,184,0.15);">
+          <span class="small muted" style="font-size:11px;margin-right:2px;">Ordem das matérias do seu edital:</span>
+          ${pillsHtml}
+        </div>
+      `;
+      planEl.insertAdjacentElement('beforebegin',box);
 
-    box.querySelectorAll('[data-estudei-cat]').forEach(btn=>{
-      btn.addEventListener('click',()=>{
+      box.querySelectorAll('[data-cycle-pick-subj]').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          const chosen=btn.getAttribute('data-cycle-pick-subj');
+          const c=getEstudeiCycleState();
+          c.customSubject=chosen;
+          saveEstudeiCycleState(c);
+          renderEstudeiCycleWidget();
+        });
+      });
+
+      box.querySelector('#startEstudeiBlockNowBtn')?.addEventListener('click',()=>{
+        const studyNav=document.querySelector('[data-view="study"]')||document.querySelector('.tab[data-tab="study"]');
+        if(studyNav)studyNav.click();
+        else if(typeof renderViewById==='function')renderViewById('study',true);
+        setTimeout(()=>{
+          const sf=document.querySelector('#summaryFilter');
+          if(sf){
+            const matchOpt=[...sf.options].find(o=>subjectKey(o.value)===subjectKey(currSubject));
+            if(matchOpt){sf.value=matchOpt.value;sf.dispatchEvent(new Event('change'));}
+          }
+        },60);
+        if(typeof toast==='function')toast(`📖 Abrindo resumos de ${currSubject}!`);
+      });
+
+      box.querySelector('#practiceEstudeiBlockBtn')?.addEventListener('click',()=>{
+        const qNav=document.querySelector('[data-view="report"]')||document.querySelector('.tab[data-tab="report"]');
+        if(qNav)qNav.click();
+        else if(typeof renderViewById==='function')renderViewById('report',true);
+        setTimeout(()=>{
+          const qSubj=document.querySelector('#questionSubject');
+          if(qSubj){
+            const matchOpt=[...qSubj.options].find(o=>subjectKey(o.value)===subjectKey(currSubject));
+            if(matchOpt){qSubj.value=matchOpt.value;qSubj.dispatchEvent(new Event('change'));}
+          }
+        },60);
+        if(typeof toast==='function')toast(`🎯 Bateria filtrada em ${currSubject}!`);
+      });
+
+      box.querySelector('#advanceEstudeiCycleBtn')?.addEventListener('click',()=>{
         const c=getEstudeiCycleState();
-        c.activeCategory=btn.getAttribute('data-estudei-cat')||'teoria';
+        c.completedBlocks=(c.completedBlocks||0)+1;
+        c.customSubject=nextSubject;
+        const cat=c.activeCategory||'teoria';
+        c.categoryMinutes=c.categoryMinutes||{};
+        c.categoryMinutes[cat]=(c.categoryMinutes[cat]||0)+50;
         saveEstudeiCycleState(c);
         renderEstudeiCycleWidget();
+        if(typeof toast==='function')toast(`✓ Bloco de ${currSubject} concluído! Agora no Ciclo: ${nextSubject}`);
       });
-    });
+    }
   }
 
   function renderEstudeiEditalThermometer(){
@@ -2591,7 +2694,7 @@
     const theoryPct=Math.min(100,Math.round((doneTopics/totalTopics)*100));
 
     const editalSubjects=[...new Set(missions.map(m=>subjectKey(m.subject)).filter(Boolean))];
-    const totalSubj=Math.max(1,editalSubjects.length||10);
+    const totalSubj=Math.max(1,editalSubjects.length||8);
     const answeredFp=Object.keys(state?.answeredQuestionFingerprints||{}).length;
     const scoreEntries=Array.isArray(state?.scores)?state.scores.length:0;
     const testedCount=Math.min(totalSubj,Math.round((answeredFp/5)+scoreEntries));
@@ -2686,7 +2789,14 @@
     window.addEventListener('load',initAllEstudeiUpgrades);
     document.addEventListener('click',e=>{
       if(e.target?.closest?.('[data-view], .navBtn, #reroll, #saveSettings, #timerToggle, #timerReset')){
-        setTimeout(initAllEstudeiUpgrades,50);
+        setTimeout(()=>{
+          if(e.target?.closest?.('#reroll')){
+            const c=getEstudeiCycleState();
+            c.customSubject='';
+            saveEstudeiCycleState(c);
+          }
+          initAllEstudeiUpgrades();
+        },60);
       }
     });
   }
