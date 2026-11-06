@@ -77,28 +77,33 @@
     if(q('#questionShortcutMeta'))q('#questionShortcutMeta').textContent=`${ALL_QUESTIONS?.length||0} questão${ALL_QUESTIONS?.length===1?'':'ões'} disponíveis`;
 
     const dailyBox=q('#dailyMission');
-    if(dailyBox&&mission&&!q('#practiceDailySubjectBtn')){
+    if(dailyBox&&mission){
       const finishBtn=q('#finishDaily');
-      if(finishBtn){
+      if(finishBtn&&!q('#practiceDailySubjectBtn')){
         finishBtn.insertAdjacentHTML('afterend',`<div class="dailyExtraRow" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px"><button class="ghost" id="practiceDailySubjectBtn" type="button">◎ Questões de ${escText(mission.subject||'hoje')}</button><button class="ghost" id="startSprint5MinBtn" type="button">⚡ Sprint Rápido (5 min)</button></div>`);
-        q('#practiceDailySubjectBtn').onclick=()=>{
+      }
+      const practiceBtn=q('#practiceDailySubjectBtn');
+      if(practiceBtn){
+        practiceBtn.innerHTML=`◎ Questões de ${escText(mission.subject||'hoje')}`;
+        practiceBtn.onclick=()=>{
+          const curMission=(typeof missionPool==='function'?missionPool():[]).find(item=>item.id===state?.daily)||mission;
           const allQ=ALL_QUESTIONS||[];
-          const subjPool=allQ.filter(x=>topicKey(learningCategory(x.subject))===topicKey(mission.subject));
-          const topicMatches=subjPool.filter(x=>normalizeText(`${x.topic||''} ${x.statement||''}`).includes(normalizeText(mission.name||'').slice(0,18)));
+          const subjPool=allQ.filter(x=>topicKey(learningCategory(x.subject))===topicKey(curMission.subject));
+          const topicMatches=subjPool.filter(x=>normalizeText(`${x.topic||''} ${x.statement||''}`).includes(normalizeText(curMission.name||'').slice(0,18)));
           const pool=topicMatches.length>=3?topicMatches:(subjPool.length?subjPool:allQ);
           if(pool.length){
             const targetCount=Math.min(20,pool.length);
             const chosen=typeof balancedQuestions==='function'?balancedQuestions(pool,targetCount):pool.slice(0,targetCount);
             activeQuestions={
               mode:'battle',
-              subject:mission.subject||'Missão Diária',
-              missionId:mission.id,
+              subject:curMission.subject||'Missão Diária',
+              missionId:curMission.id,
               questions:chosen.map(prepareQuestion),
               current:0,
               correct:0,
               answered:false
             };
-            q('#questionDialogTitle').textContent=`◎ Missão Diária: ${mission.name}`;
+            q('#questionDialogTitle').textContent=`◎ Missão Diária: ${curMission.name}`;
             q('#questionDialog').showModal();
             showQuestion();
             return;
@@ -106,11 +111,14 @@
           openView('report');
           const subjSel=q('#questionSubject');
           if(subjSel){
-            const match=[...subjSel.options].find(opt=>topicKey(opt.value)===topicKey(mission.subject));
+            const match=[...subjSel.options].find(opt=>topicKey(opt.value)===topicKey(curMission.subject));
             if(match){subjSel.value=match.value;populateTopicFilter();updateQuestionPool()}
           }
         };
-        q('#startSprint5MinBtn').onclick=startQuickSprintBattle;
+      }
+      const sprintBtn=q('#startSprint5MinBtn');
+      if(sprintBtn){
+        sprintBtn.onclick=startQuickSprintBattle;
       }
     }
   }
@@ -2549,17 +2557,49 @@
 
     const st=getEstudeiCycleState();
     const editalSubjects=getActiveEditalSubjectsList();
-    const missions=typeof missionPool==='function'?missionPool():[];
+    const missions=typeof orderedMissions==='function'?orderedMissions():(typeof missionPool==='function'?missionPool():[]);
     const currentDailyMission=missions.find(m=>m.id===state?.daily)||missions.find(m=>!state?.done?.[m.id])||missions[0]||null;
-    const missionSubject=currentDailyMission?canonicalSubjectName(currentDailyMission.subject):editalSubjects[0]||'Língua Portuguesa';
+    const missionSubject=currentDailyMission?canonicalSubjectName(currentDailyMission.subject):(editalSubjects[0]||'Língua Portuguesa');
 
-    // Garante que a matéria ativa do Ciclo seja sempre do Edital do aluno e sincronizada com a Missão Diária por padrão
-    let activeIdx=editalSubjects.findIndex(s=>subjectKey(s)===subjectKey(st.customSubject||missionSubject));
+    // Sincronia total: a Matéria em Foco do Ciclo Tático e do Cronômetro é SEMPRE a mesma da Missão Atual!
+    let activeIdx=editalSubjects.findIndex(s=>subjectKey(s)===subjectKey(missionSubject));
     if(activeIdx<0)activeIdx=0;
     const currSubject=editalSubjects[activeIdx]||missionSubject;
+    if(st.customSubject!==currSubject){st.customSubject=currSubject;saveEstudeiCycleState(st);}
     const nextSubject=editalSubjects[(activeIdx+1)%editalSubjects.length]||currSubject;
-    const currTopicObj=missions.find(m=>subjectKey(canonicalSubjectName(m.subject))===subjectKey(currSubject)&&!state?.done?.[m.id])||currentDailyMission;
+    const currTopicObj=currentDailyMission||missions.find(m=>subjectKey(canonicalSubjectName(m.subject))===subjectKey(currSubject)&&!state?.done?.[m.id]);
     const currTopicName=currTopicObj?.name||'Tópico prioritário do edital';
+
+    function switchDailyMissionToSubject(targetSubject){
+      const pool=typeof orderedMissions==='function'?orderedMissions():(typeof missionPool==='function'?missionPool():[]);
+      if(!pool.length||typeof state!=='object'||!state)return false;
+      const targetM=pool.find(m=>subjectKey(canonicalSubjectName(m.subject))===subjectKey(targetSubject)&&!state.done?.[m.id])
+        ||pool.find(m=>subjectKey(canonicalSubjectName(m.subject))===subjectKey(targetSubject));
+      if(!targetM)return false;
+      const today=typeof localDayKey==='function'?localDayKey():new Date().toISOString().slice(0,10);
+      const campaignId=state.activeCampaignId;
+      state.daily=targetM.id;
+      state.dailyDate=today;
+      state.dailySteps={};
+      state.dailyHistory=Array.isArray(state.dailyHistory)?state.dailyHistory:[];
+      const existingPending=state.dailyHistory.find(x=>(!x.campaignId||x.campaignId===campaignId)&&x.date===today&&!x.completedAt);
+      if(existingPending){
+        existingPending.missionId=targetM.id;
+        existingPending.name=targetM.name;
+        existingPending.subject=targetM.subject;
+        existingPending.selectedAt=new Date().toISOString();
+        existingPending.replacedAt=null;
+        state.currentDailyHistoryId=existingPending.id;
+      }else{
+        const entry={id:`daily-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,campaignId,date:today,missionId:targetM.id,name:targetM.name,subject:targetM.subject,selectedAt:new Date().toISOString(),completedAt:null};
+        state.dailyHistory.push(entry);
+        state.currentDailyHistoryId=entry.id;
+      }
+      if(typeof save==='function')save();
+      if(typeof renderDaily==='function')renderDaily();
+      if(typeof renderStreak==='function')renderStreak();
+      return true;
+    }
 
     // 1) No Cronômetro de Foco (.card.timer): coloca APENAS a barra compacta de Modalidade de Horas Líquidas (sem aumentar a altura nem criar buraco na coluna esquerda!)
     const timerHost=document.querySelector('.card.timer')||document.querySelector('#clock')?.closest('.card');
@@ -2636,7 +2676,8 @@
           const c=getEstudeiCycleState();
           c.customSubject=chosen;
           saveEstudeiCycleState(c);
-          renderEstudeiCycleWidget();
+          if(!switchDailyMissionToSubject(chosen))renderEstudeiCycleWidget();
+          if(typeof toast==='function')toast(`🎯 Missão Diária e Ciclo sincronizados em: ${chosen}`);
         });
       });
 
@@ -2676,8 +2717,8 @@
         c.categoryMinutes=c.categoryMinutes||{};
         c.categoryMinutes[cat]=(c.categoryMinutes[cat]||0)+50;
         saveEstudeiCycleState(c);
-        renderEstudeiCycleWidget();
-        if(typeof toast==='function')toast(`✓ Bloco de ${currSubject} concluído! Agora no Ciclo: ${nextSubject}`);
+        if(!switchDailyMissionToSubject(nextSubject))renderEstudeiCycleWidget();
+        if(typeof toast==='function')toast(`✓ Ciclo girado para ${nextSubject}! Missão Atual e Cronômetro sincronizados.`);
       });
     }
   }
@@ -11130,4 +11171,5 @@
     toast('📥 Imagem Story (9:16) baixada! Pronta para postar no Instagram/WhatsApp.');
   };
 
+  if(typeof window!=='undefined'){window.updateTodayCommand=updateTodayCommand;window.renderEstudeiCycleWidget=renderEstudeiCycleWidget;}
 })();
