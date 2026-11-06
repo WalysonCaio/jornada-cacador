@@ -1207,3 +1207,16 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
 
   console.log("OK: Marcação automática aos 10 min de foco e sincronia dos minutos da Modalidade do Cronômetro (r151) validadas.");
 }
+
+// ── Validação r152: Isolamento Estrito de Disciplina na Correção de Gargalos e Caderno de Erros (sem misturar matérias) ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+
+  assert.ok(htmlSrc.includes("function inferStrictQuestionSubject(") && htmlSrc.includes("window.inferStrictQuestionSubject=inferStrictQuestionSubject"), "Deve conter o classificador estrito por enunciado/tópico inferStrictQuestionSubject");
+  assert.ok(v77Src.includes("function sanitizeAllQuestionsAndErrorsSubjects(") && v77Src.includes("function buildSubjectAppropriateDistractors("), "Deve conter higienização automática de disciplinas em ALL_QUESTIONS/state.errors e distratores específicos por disciplina");
+  assert.ok(v77Src.includes("chosenPool=chosenPool.filter(item=>topicKey(resolveStrictQuestionDiscipline(item))===subjKey);"), "startSubjectTargetedFix (Correção de Gargalo) deve garantir que 100% das questões pertencem exclusivamente à disciplina selecionada");
+  assert.ok(!v77Src.includes("Alternativa incorreta conforme a literalidade da norma e jurisprudência aplicável."), "Não deve injetar distratores jurídicos genéricos em questões de Raciocínio Lógico, Português ou Informática");
+
+  console.log("OK: Isolamento estrito de disciplina na Correção de Gargalos e Caderno de Erros (r152) validado.");
+}

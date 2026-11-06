@@ -3001,20 +3001,127 @@
   function normalizedDifficulty(question){const value=String(question?.difficulty||'medio').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();return value.startsWith('fac')?'facil':value.startsWith('dif')?'dificil':'medio'}
   function topicKey(value){const s=String(value||'');if(!s)return'';const c=topicKey._c||(topicKey._c=new Map());if(s.length<=160){const hit=c.get(s);if(hit!==undefined)return hit}const out=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();if(s.length<=160){if(c.size>6000)c.clear();c.set(s,out)}return out}
 
+  function resolveStrictQuestionDiscipline(qOrStmt,topic='',fallbackSubj='',options=[]){
+    if(qOrStmt&&typeof qOrStmt==='object'){
+      const st=qOrStmt.statement||qOrStmt.question||'';
+      const tp=qOrStmt.topic||topic||'';
+      const fb=qOrStmt.subject||fallbackSubj||'';
+      const opts=Array.isArray(qOrStmt.options)?qOrStmt.options:options;
+      if(typeof window.inferStrictQuestionSubject==='function')return window.inferStrictQuestionSubject(st,tp,fb,opts);
+      return canonicalSubjectName(fb,`${tp} ${st}`);
+    }
+    if(typeof window.inferStrictQuestionSubject==='function')return window.inferStrictQuestionSubject(qOrStmt,topic,fallbackSubj,options);
+    return canonicalSubjectName(fallbackSubj,`${topic} ${qOrStmt}`);
+  }
+  window.resolveStrictQuestionDiscipline=resolveStrictQuestionDiscipline;
+
+  function buildSubjectAppropriateDistractors(subjectName,correctAnswer=''){
+    const sk=topicKey(canonicalSubjectName(subjectName||''));
+    let pool=[];
+    if(/raciocinio|logico|rlm|matematica/.test(sk)){
+      pool=[
+        'A proposição composta apresentada configura uma contradição lógica independentemente dos valores lógicos atribuídos às proposições simples.',
+        'O valor lógico da condicional (se... então) torna-se falso quando o antecedente é falso e o consequente é verdadeiro.',
+        'Pelas regras de equivalência lógica e pelas Leis de De Morgan, a conclusão depende da falsidade simultânea de todas as premissas.',
+        'Não é possível determinar o valor lógico da conclusão a partir das premissas fornecidas na estrutura argumentativa.'
+      ];
+    }else if(/portugues/.test(sk)){
+      pool=[
+        'A substituição proposta preservaria o sentido original, mas acarretaria prejuízo à correção gramatical por violar a regência verbal padrão.',
+        'O emprego do sinal indicativo de crase seria obrigatório mesmo diante de verbo no infinitivo ou pronome indefinido.',
+        'A forma verbal destacada deveria ser flexionada no plural para concordar com o termo preposicionado adjacente.',
+        'O conectivo empregado introduz relação semântica de proporção, não admitindo comutação sem alteração sintática.'
+      ];
+    }else if(/informatica/.test(sk)){
+      pool=[
+        'O recurso descrito executa a formatação física da partição do sistema operacional sem preservar cópias de segurança em nuvem.',
+        'O protocolo mencionado opera exclusivamente na camada física para criptografia assimétrica de planilhas locais.',
+        'O atalho de teclado indicado encerra imediatamente todos os processos em segundo plano do navegador sem confirmação.',
+        'A ferramenta atua como um malware do tipo ransomware ao bloquear portas de rede autorizadas pelo firewall.'
+      ];
+    }else if(/historia|geografia/.test(sk)){
+      pool=[
+        'O movimento teve caráter exclusivamente pacífico e contou com apoio irrestrito da Coroa Portuguesa desde sua origem.',
+        'O episódio ocorreu apenas no final do século XX, sem relação com as disputas políticas e econômicas do período colonial ou imperial.',
+        'A liderança do movimento defendia a manutenção integral do monopólio comercial europeu e a centralização absolutista.',
+        'O fenômeno restringiu-se às áreas metropolitanas do Sul do país, sem impacto histórico ou territorial em Pernambuco.'
+      ];
+    }else{
+      pool=[
+        'Alternativa incorreta conforme a literalidade da norma de regência e o entendimento consolidado sobre a matéria.',
+        'Hipótese vedada pelo ordenamento jurídico ou incompatível com os requisitos legais aplicáveis ao caso.',
+        'Conceito pertencente a instituto diverso, invertendo a regra geral e a exceção previstas no dispositivo legal.',
+        'A medida dependeria exclusivamente de autorização judicial prévia, sendo vedada sua aplicação imediata em qualquer hipótese.'
+      ];
+    }
+    return pool.filter(d=>topicKey(d)!==topicKey(correctAnswer));
+  }
+  window.buildSubjectAppropriateDistractors=buildSubjectAppropriateDistractors;
+
+  function sanitizeAllQuestionsAndErrorsSubjects(){
+    if(typeof ensureNativeQuestionBankLoaded==='function')ensureNativeQuestionBankLoaded();
+    const byStmt=new Map();
+    if(Array.isArray(ALL_QUESTIONS)){
+      for(const qItem of ALL_QUESTIONS){
+        if(!qItem||typeof qItem!=='object')continue;
+        const realSubj=resolveStrictQuestionDiscipline(qItem);
+        if(realSubj&&!isInvalidTrailSubject(realSubj)&&realSubj!==qItem.subject){
+          qItem.subject=realSubj;
+        }
+        const stKey=topicKey(qItem.statement||'');
+        if(stKey&&stKey.length>=15&&!byStmt.has(stKey))byStmt.set(stKey,qItem);
+      }
+    }
+    if(state?.customQuestionsByCampaign&&typeof state.customQuestionsByCampaign==='object'){
+      for(const list of Object.values(state.customQuestionsByCampaign)){
+        if(!Array.isArray(list))continue;
+        for(const qItem of list){
+          if(!qItem||typeof qItem!=='object')continue;
+          const realSubj=resolveStrictQuestionDiscipline(qItem);
+          if(realSubj&&!isInvalidTrailSubject(realSubj)&&realSubj!==qItem.subject)qItem.subject=realSubj;
+        }
+      }
+    }
+    if(state?.errors&&typeof state.errors==='object'){
+      for(const [,err] of Object.entries(state.errors)){
+        if(!err||typeof err!=='object')continue;
+        const stKey=topicKey(err.question||'');
+        const matchedQ=stKey?byStmt.get(stKey):null;
+        if(matchedQ){
+          err.subject=matchedQ.subject;
+          if(matchedQ.topic&&(!err.topic||/^(questao|item|correcao|ponto de atencao|geral)/i.test(err.topic)))err.topic=matchedQ.topic;
+          if(Array.isArray(matchedQ.options)&&matchedQ.options.length>=2){
+            err.options=[...matchedQ.options];
+            err.correct_index=matchedQ.correct_index;
+          }
+        }else if(err.question||err.topic){
+          const realErrSubj=resolveStrictQuestionDiscipline(err.question||'',err.topic||'',err.subject||'',err.options||[]);
+          if(realErrSubj&&!isInvalidTrailSubject(realErrSubj))err.subject=realErrSubj;
+        }
+      }
+    }
+  }
+  window.sanitizeAllQuestionsAndErrorsSubjects=sanitizeAllQuestionsAndErrorsSubjects;
+
   function activeCampaignErrors(){
+    sanitizeAllQuestionsAndErrorsSubjects();
     return Object.entries(state?.errors||{}).filter(([,e])=>!e?.campaignId||e.campaignId===state?.activeCampaignId);
   }
 
   function questionMatchesErrorPool(question,errorEntries){
     if(!errorEntries.length)return false;
-    const qSubj=topicKey(learningCategory(question?.subject));
+    const qSubj=topicKey(resolveStrictQuestionDiscipline(question));
     const qTopic=topicKey(question?.topic);
     const qStmt=topicKey(question?.statement);
+    const isGenericTopic=t=>!t||t.length<5||/^(geral|questao \d*|item \d*|simulado.*|correcao de erro|ponto de atencao|revisao.*|conteudo.*)$/.test(t);
     return errorEntries.some(([,err])=>{
-      const eTopic=topicKey(err?.topic);
-      const eSubj=topicKey(err?.subject);
+      const eSubj=topicKey(resolveStrictQuestionDiscipline(err?.question||'',err?.topic||'',err?.subject||'',err?.options||[]));
+      if(qSubj&&eSubj&&qSubj!==eSubj)return false;
       const eStmt=topicKey(err?.question);
-      return (eStmt&&eStmt===qStmt)||(eTopic&&qTopic&&(qTopic.includes(eTopic)||eTopic.includes(qTopic)))||(eSubj&&qSubj===eSubj);
+      if(eStmt&&qStmt&&eStmt===qStmt)return true;
+      const eTopic=topicKey(err?.topic);
+      if(!isGenericTopic(eTopic)&&!isGenericTopic(qTopic)&&(qTopic.includes(eTopic)||eTopic.includes(qTopic)))return true;
+      return Boolean(eSubj&&qSubj===eSubj&&!eStmt);
     });
   }
 
@@ -3231,6 +3338,7 @@
 
   function filteredQuestionPool(){
     ensureNativeQuestionBankLoaded();
+    sanitizeAllQuestionsAndErrorsSubjects();
     const subject=q('#questionSubject')?.value||'all',board=q('#questionBoardFilter')?.value||'all',topic=q('#questionTopic')?.value||'all',difficulty=q('#questionDifficulty')?.value||'all',origin=q('#questionOrigin')?.value||'all',battleMode=q('#questionBattleMode')?.value||'progressive',historyFilter=q('#questionHistoryFilter')?.value||'all';
     const baseSource=typeof questionsForMode==='function'?questionsForMode('battle',subject):(ALL_QUESTIONS||[]);
     const allMatchingSubject=(ALL_QUESTIONS||[]).filter(item=>subject==='all'||learningCategory(item.subject)===subject);
@@ -3326,10 +3434,24 @@
     let errQuestions=allPool.filter(item=>questionMatchesErrorPool(item,errEntries));
     if(!errQuestions.length){
       errQuestions=errEntries.filter(([,e])=>e?.question&&e?.correctAnswer).map(([,e])=>{
-        const distractors=['Interpretação restritiva incompatível com o texto legal','Exceção não prevista na norma de regência','Inversão entre regra geral e hipótese específica'].filter(d=>d!==e.correctAnswer);
-        const opts=[e.correctAnswer,...distractors.slice(0,3)];
+        const realSubj=resolveStrictQuestionDiscipline(e.question,e.topic,e.subject,e.options);
+        if(Array.isArray(e.options)&&e.options.length>=2&&Number.isInteger(Number(e.correct_index))){
+          return {
+            subject:realSubj||'Revisão de Erros',
+            topic:e.topic||'Ponto de Atenção',
+            statement:e.question,
+            options:[...e.options],
+            correct_index:Number(e.correct_index),
+            explanation:e.explanation||`Você marcou anteriormente: “${e.lastChosen||'outra opção'}”. O gabarito correto é: “${e.correctAnswer}”.`,
+            difficulty:'medio',
+            origin:'autoral'
+          };
+        }
+        const distractors=buildSubjectAppropriateDistractors(realSubj,e.correctAnswer);
+        const wrongChosen=e.lastChosen&&e.lastChosen!==e.correctAnswer?[e.lastChosen]:[];
+        const opts=[e.correctAnswer,...wrongChosen,...distractors].slice(0,4);
         return {
-          subject:e.subject||'Revisão de Erros',
+          subject:realSubj||'Revisão de Erros',
           topic:e.topic||'Ponto de Atenção',
           statement:e.question,
           options:opts,
@@ -3541,7 +3663,7 @@
     if(!Array.isArray(questions)||!questions.length)return 0;
     const validQuestion=item=>item?.statement&&Array.isArray(item?.options)&&item.options.length>=2&&item.options.length<=5&&item.correct_index!==null&&item.correct_index!==undefined&&item.correct_index!==''&&Number.isInteger(Number(item.correct_index))&&Number(item.correct_index)>=0&&Number(item.correct_index)<item.options.length;
     const normalized=questions.filter(validQuestion).map(item=>({
-      subject:canonicalSubjectName(item.subject||subject||'Conteúdo Geral'),
+      subject:resolveStrictQuestionDiscipline(item.statement,item.topic,item.subject||subject||'Conteúdo Geral',item.options),
       topic:String(item.topic||title||'Geral').trim(),
       board:String(item.board||sourceLabel).trim(),
       statement:String(item.statement).trim(),
@@ -4083,27 +4205,47 @@
   }
 
   function startSubjectTargetedFix(subjectName,preferErrors=true){
+    sanitizeAllQuestionsAndErrorsSubjects();
     const cleanSubj=canonicalSubjectName(subjectName);
     const subjKey=topicKey(cleanSubj);
     const allQ=ALL_QUESTIONS||[];
-    const subjPool=allQ.filter(item=>topicKey(learningCategory(item.subject))===subjKey);
-    const errEntries=activeCampaignErrors().filter(([,e])=>topicKey(canonicalSubjectName(e?.subject||''))===subjKey);
+    const subjPool=allQ.filter(item=>topicKey(resolveStrictQuestionDiscipline(item))===subjKey);
+    const subjStmtSet=new Set(subjPool.map(item=>topicKey(item.statement||'')));
+    const errEntries=activeCampaignErrors().filter(([,e])=>{
+      const realErrSubj=resolveStrictQuestionDiscipline(e?.question||'',e?.topic||'',e?.subject||'',e?.options||[]);
+      return topicKey(realErrSubj)===subjKey;
+    });
     let chosenPool=[];
     if(preferErrors&&errEntries.length){
       const errMatched=subjPool.filter(item=>questionMatchesErrorPool(item,errEntries));
-      const synthFromErrors=errEntries.filter(([,e])=>e?.question&&e?.correctAnswer).map(([,e])=>{
-        const distractors=['Alternativa incorreta conforme a literalidade da norma e jurisprudência aplicável.','Hipótese vedada ou incompatível com o instituto jurídico cobrado.','Conceito pertencente a outro dispositivo ou regra diversa na matéria.'];
-        const wrongChosen=e.lastChosen&&e.lastChosen!==e.correctAnswer?[e.lastChosen]:[];
-        const opts=[e.correctAnswer,...wrongChosen,...distractors].slice(0,4);
-        return{subject:cleanSubj,topic:e.topic||'Correção de Erro',statement:e.question,options:opts,correct_index:0,explanation:e.explanation||`Revisão de erro: a resposta correta é "${e.correctAnswer}".`,difficulty:'medio',origin:'adaptada_do_pdf'};
-      });
+      const synthFromErrors=errEntries
+        .filter(([,e])=>e?.question&&e?.correctAnswer&&!subjStmtSet.has(topicKey(e.question)))
+        .map(([,e])=>{
+          if(Array.isArray(e.options)&&e.options.length>=2&&Number.isInteger(Number(e.correct_index))){
+            return{subject:cleanSubj,topic:e.topic||'Correção de Erro',statement:e.question,options:[...e.options],correct_index:Number(e.correct_index),explanation:e.explanation||`Revisão de erro: a resposta correta é "${e.correctAnswer}".`,difficulty:'medio',origin:'adaptada_do_pdf'};
+          }
+          const distractors=buildSubjectAppropriateDistractors(cleanSubj,e.correctAnswer);
+          const wrongChosen=e.lastChosen&&e.lastChosen!==e.correctAnswer?[e.lastChosen]:[];
+          const opts=[e.correctAnswer,...wrongChosen,...distractors].slice(0,4);
+          return{subject:cleanSubj,topic:e.topic||'Correção de Erro',statement:e.question,options:opts,correct_index:0,explanation:e.explanation||`Revisão de erro: a resposta correta é "${e.correctAnswer}".`,difficulty:'medio',origin:'adaptada_do_pdf'};
+        });
       chosenPool=[...errMatched,...synthFromErrors,...subjPool];
     }else{
       chosenPool=subjPool;
     }
+    // Filtro final estrito: garante que 100% das questões da sessão pertencem exclusivamente à disciplina solicitada
+    chosenPool=chosenPool.filter(item=>topicKey(resolveStrictQuestionDiscipline(item))===subjKey);
     if(chosenPool.length){
       const seen=new Set();
-      const uniquePool=chosenPool.filter(item=>{const fp=questionFingerprint(item);if(seen.has(fp))return false;seen.add(fp);return true});
+      const seenStmt=new Set();
+      const uniquePool=chosenPool.filter(item=>{
+        const fp=questionFingerprint(item);
+        const stKey=topicKey(item.statement||'');
+        if(seen.has(fp)||(stKey&&seenStmt.has(stKey)))return false;
+        seen.add(fp);
+        if(stKey)seenStmt.add(stKey);
+        return true;
+      });
       const count=Math.min(8,uniquePool.length);
       const selected=typeof progressiveQuestions==='function'?progressiveQuestions(uniquePool,count):uniquePool.slice(0,count);
       activeQuestions={
@@ -4843,7 +4985,7 @@
             item.statement=`Texto-base: ${pendingBase}\n\n${item.statement}`;
           }
         }
-        const inferred=canonicalSubjectName(item.statement,defaultSubject);
+        const inferred=typeof resolveStrictQuestionDiscipline==='function'?resolveStrictQuestionDiscipline(item.statement,item.topic,defaultSubject,item.options):canonicalSubjectName(item.statement,defaultSubject);
         item.subject=inferred&&inferred!=='Conteúdo Geral'?inferred:canonicalSubjectName(defaultSubject);
         item.board=defaultBoard;
         item.origin=item.answer_unknown?'adaptada_do_pdf':'oficial';
@@ -5596,15 +5738,24 @@
       });
       actionBox.querySelectorAll('[data-cutoff-fix-topic-key]').forEach(btn=>{
         btn.onclick=()=>{
+          sanitizeAllQuestionsAndErrorsSubjects();
           const errKey=btn.dataset.cutoffFixTopicKey;
           const err=state?.errors?.[errKey];
           if(err&&err.question&&err.correctAnswer){
-            const cleanSubj=canonicalSubjectName(err.subject||'Geral');
-            const distractors=['Alternativa incorreta conforme a literalidade da norma e jurisprudência aplicável.','Hipótese vedada ou incompatível com o instituto jurídico cobrado.','Conceito pertencente a outro dispositivo ou regra diversa na matéria.'];
-            const wrongChosen=err.lastChosen&&err.lastChosen!==err.correctAnswer?[err.lastChosen]:[];
-            const opts=[err.correctAnswer,...wrongChosen,...distractors].slice(0,4);
-            const targetQ={subject:cleanSubj,topic:err.topic||'Correção de Erro',statement:err.question,options:opts,correct_index:0,explanation:err.explanation||`A alternativa correta é: ${err.correctAnswer}`,difficulty:'medio',origin:'adaptada_do_pdf'};
-            const extraPool=(ALL_QUESTIONS||[]).filter(qItem=>topicKey(learningCategory(qItem.subject))===topicKey(cleanSubj)).slice(0,4);
+            const cleanSubj=resolveStrictQuestionDiscipline(err.question,err.topic,err.subject,err.options);
+            const matchedReal=(ALL_QUESTIONS||[]).find(qItem=>topicKey(qItem.statement||'')===topicKey(err.question));
+            let targetQ;
+            if(matchedReal){
+              targetQ={...matchedReal,subject:cleanSubj};
+            }else if(Array.isArray(err.options)&&err.options.length>=2&&Number.isInteger(Number(err.correct_index))){
+              targetQ={subject:cleanSubj,topic:err.topic||'Correção de Erro',statement:err.question,options:[...err.options],correct_index:Number(err.correct_index),explanation:err.explanation||`A alternativa correta é: ${err.correctAnswer}`,difficulty:'medio',origin:'adaptada_do_pdf'};
+            }else{
+              const distractors=buildSubjectAppropriateDistractors(cleanSubj,err.correctAnswer);
+              const wrongChosen=err.lastChosen&&err.lastChosen!==err.correctAnswer?[err.lastChosen]:[];
+              const opts=[err.correctAnswer,...wrongChosen,...distractors].slice(0,4);
+              targetQ={subject:cleanSubj,topic:err.topic||'Correção de Erro',statement:err.question,options:opts,correct_index:0,explanation:err.explanation||`A alternativa correta é: ${err.correctAnswer}`,difficulty:'medio',origin:'adaptada_do_pdf'};
+            }
+            const extraPool=(ALL_QUESTIONS||[]).filter(qItem=>topicKey(resolveStrictQuestionDiscipline(qItem))===topicKey(cleanSubj)&&topicKey(qItem.statement||'')!==topicKey(err.question)).slice(0,4);
             activeQuestions={
               mode:'battle',
               subject:cleanSubj,
@@ -7345,8 +7496,9 @@
           const stText=sanitizePersonalWatermarks(qObj.statement||'');if(typeof window.isValidPedagogicalQuestion==='function'&&!window.isValidPedagogicalQuestion({...qObj,statement:stText}))continue;
           const qKey=`${topicKey(stText).slice(-90)}|${topicKey(qObj.options?.[0]||'')}`;
           if(stText&&!existingQKeys.has(qKey)){
+            const qSubj=resolveStrictQuestionDiscipline(stText,qObj.topic||cleanTitle,qObj.subject||cat,qObj.options);
             ALL_QUESTIONS.push({
-              subject:cat,
+              subject:qSubj||cat,
               topic:sanitizePersonalWatermarks(qObj.topic||cleanTitle),
               statement:stText,
               associated_text:sanitizePersonalWatermarks(qObj.associated_text||''),
@@ -10105,9 +10257,7 @@
       }
       for(const qItem of (ALL_QUESTIONS||[])){
         const doc=(qItem.documentId||qItem.sourceDocumentId)?(cloudDocuments||[]).find(d=>String(d.id)===String(qItem.documentId||qItem.sourceDocumentId)):null;
-        const nextCat=typeof window.resolveDocumentDiscipline==='function'
-          ?window.resolveDocumentDiscipline(doc,qItem.subject,`${doc?.title||''} ${qItem.topic||''} ${qItem.statement||''}`)
-          :canonicalSubjectName(qItem.subject,`${qItem.topic||''} ${qItem.statement||''}`);
+        const nextCat=resolveStrictQuestionDiscipline(qItem.statement,qItem.topic,qItem.subject||doc?.detected_subject||'',qItem.options);
         if(nextCat&&!window.isInvalidTrailSubject?.(nextCat,qItem.topic,'',doc)&&nextCat!==qItem.subject){qItem.subject=nextCat;changed=true}
         if(typeof window.inferQuestionPedagogicalTopic==='function'&&(qItem.topic?.startsWith('Questão ')||qItem.topic?.startsWith('Item ')||!qItem.topic)){
           const pTopic=window.inferQuestionPedagogicalTopic(qItem.statement,qItem.subject);
