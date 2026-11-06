@@ -2520,7 +2520,7 @@
     box.style.cssText='margin-top:12px;padding:12px 14px;border-radius:12px;background:rgba(8,20,38,0.88);border:1px solid rgba(56,189,248,0.35);font-size:13px;text-align:left;';
     box.innerHTML=`
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-        <strong style="color:#38bdf8;font-size:11.5px;letter-spacing:0.04em;text-transform:uppercase;">🔄 Ciclo de Estudos Dinâmico · Bloco #${(st.completedBlocks||0)+1}</strong>
+        <strong style="color:#38bdf8;font-size:11.5px;letter-spacing:0.04em;text-transform:uppercase;">🔄 Ciclo Tático de Estudos · Bloco #${(st.completedBlocks||0)+1}</strong>
         <span style="font-size:11px;color:#94a3b8;">Continua de onde parou</span>
       </div>
       <div style="margin-bottom:10px;padding:8px 10px;border-radius:8px;background:rgba(15,23,42,0.9);border:1px solid rgba(56,189,248,0.18);">
@@ -2610,7 +2610,7 @@
     card.innerHTML=`
       <div class="sectionHead" style="margin-bottom:8px;">
         <div>
-          <div class="eyebrow" style="color:#38bdf8;">TERMÔMETRO DUPLO DE COBERTURA DO EDITAL (ESTILO ESTUDEI)</div>
+          <div class="eyebrow" style="color:#38bdf8;">TERMÔMETRO DUPLO DE COBERTURA DO EDITAL · TEORIA VS. PRÁTICA</div>
           <h3 style="margin:2px 0 0;">📊 Teoria Lida vs. Prática Testada em Questões</h3>
         </div>
         <span class="tag">${doneTopics}/${missions.length} tópicos vistos</span>
@@ -2679,6 +2679,17 @@
   }
   window.creditEstudeiFocusMinutes=creditEstudeiFocusMinutes;
   window.initAllEstudeiUpgrades=initAllEstudeiUpgrades;
+  initAllEstudeiUpgrades();
+  setTimeout(initAllEstudeiUpgrades,120);
+  setTimeout(initAllEstudeiUpgrades,600);
+  if(typeof window!=='undefined'){
+    window.addEventListener('load',initAllEstudeiUpgrades);
+    document.addEventListener('click',e=>{
+      if(e.target?.closest?.('[data-view], .navBtn, #reroll, #saveSettings, #timerToggle, #timerReset')){
+        setTimeout(initAllEstudeiUpgrades,50);
+      }
+    });
+  }
 
   function getNativeQuestionsForSubject(subject, boardFilter = 'all') {
     const sKey = subjectKey(learningCategory(subject));
@@ -6591,12 +6602,28 @@
       })
       :list;
 
+    const isWeekly=(window._rankPeriod||'weekly')==='weekly';
+    const nowDt=new Date();
+    const dayOfWeek=nowDt.getDay(); // 0=Dom..6=Sáb
+    const sundayDt=new Date(nowDt.getFullYear(),nowDt.getMonth(),nowDt.getDate()-dayOfWeek);
+    const sundayKey=typeof localDayKey==='function'?localDayKey(sundayDt):sundayDt.toISOString().slice(0,10);
+
+    filtered.forEach(r=>{
+      const studiedThisWeek=r.last_study&&String(r.last_study)>=sundayKey;
+      const daysSinceSunday=Math.max(1,dayOfWeek+1);
+      r._displayStreak=isWeekly?(studiedThisWeek?Math.min(Number(r.streak||0),daysSinceSunday):0):Number(r.streak||0);
+      r._displayMissions=isWeekly?(studiedThisWeek?Math.min(Number(r.missions_done||0),daysSinceSunday*2):0):Number(r.missions_done||0);
+      r._displayXp=isWeekly?(studiedThisWeek?Math.min(Number(r.xp||0),r._displayMissions*120+r._displayStreak*80):0):Number(r.xp||0);
+      r._displayHours=Math.round(((r._displayMissions*50)+(r._displayStreak*30))/60*10)/10;
+      r._displayQuestions=(r._displayMissions*15)+Math.round(r._displayXp/20);
+    });
+
     filtered.sort((a,b)=>{
-      if(leaderboardSort==='xp')return (b.xp-a.xp)||(b.streak-a.streak)||(b.accuracy-a.accuracy);
-      if(leaderboardSort==='hours')return ((b.missions_done*50+b.streak*30)-(a.missions_done*50+a.streak*30))||(b.xp-a.xp);
-      if(leaderboardSort==='questions')return ((b.missions_done*20+Math.round(b.xp/15))-(a.missions_done*20+Math.round(a.xp/15)))||(b.accuracy-a.accuracy);
-      if(leaderboardSort==='accuracy')return (b.accuracy-a.accuracy)||(b.missions_done-a.missions_done)||(b.streak-a.streak);
-      return (b.streak-a.streak)||(b.xp-a.xp)||(b.accuracy-a.accuracy);
+      if(leaderboardSort==='xp')return (b._displayXp-a._displayXp)||(b._displayStreak-a._displayStreak)||(b.accuracy-a.accuracy);
+      if(leaderboardSort==='hours')return (b._displayHours-a._displayHours)||(b._displayXp-a._displayXp);
+      if(leaderboardSort==='questions')return (b._displayQuestions-a._displayQuestions)||(b.accuracy-a.accuracy);
+      if(leaderboardSort==='accuracy')return (b.accuracy-a.accuracy)||(b._displayMissions-a._displayMissions)||(b._displayStreak-a._displayStreak);
+      return (b._displayStreak-a._displayStreak)||(b._displayXp-a._displayXp)||(b.accuracy-a.accuracy);
     });
 
     const todayStr=typeof localDayKey==='function'?localDayKey():new Date().toISOString().slice(0,10);
@@ -6656,7 +6683,7 @@
       <div class="card" style="margin-bottom:12px;background:linear-gradient(135deg,rgba(15,23,42,0.92),rgba(30,41,59,0.85));border:1px solid rgba(56,189,248,0.3)">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(148,163,184,0.16)">
           <div>
-            <span class="eyebrow" style="color:#38bdf8">MÉTODO ESTUDEI · PLACAR DE CONSTÂNCIA</span>
+            <span class="eyebrow" style="color:#38bdf8">ARENA DE CONSTÂNCIA · PLACAR SEMANAL & GERAL</span>
             <div class="small muted">Compare seu ritmo na semana (reinicia todo domingo às 23h59) ou no acumulado geral.</div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -6689,9 +6716,9 @@
               </div>
               <strong style="font-size:1rem">${escText(item.name)}${item.is_me?' (Você)':''}</strong>
               ${renderRoleBadgesHtml(item.role,item.secondary_role,true)}
-              <div style="font-size:1.25rem;font-weight:900;color:var(--gold);margin-top:4px">🔥 ${Number(item.streak||0)} dia${Number(item.streak||0)===1?'':'s'} de ofensiva</div>
-              <div class="small muted">${escText(rankLabelForXp(item.xp))} · ${Number(item.xp||0)} XP</div>
-              <div class="small muted">🎯 ${Number(item.accuracy||0)}% acertos · ✓ ${Number(item.missions_done||0)} missões concluídas</div>
+              <div style="font-size:1.25rem;font-weight:900;color:var(--gold);margin-top:4px">🔥 ${Number(item._displayStreak??item.streak??0)} dia${Number(item._displayStreak??item.streak??0)===1?'':'s'} ${isWeekly?'na semana':'de ofensiva total'}</div>
+              <div class="small muted">${escText(rankLabelForXp(item.xp))} · ${Number(item._displayXp??item.xp??0)} XP ${isWeekly?'(semana)':'(geral)'}</div>
+              <div class="small muted">⏱️ ${item._displayHours||0}h · 📝 ${item._displayQuestions||0} questões · 🎯 ${Number(item.accuracy||0)}% (${Number(item._displayMissions??item.missions_done??0)} missões)</div>
             </div>
           `).join('')}
         </div>
@@ -6699,7 +6726,7 @@
 
       <div class="card">
         <div class="sectionHead">
-          <h3>Classificação Geral</h3>
+          <h3>${isWeekly?'📅 Classificação da Semana (Dom–Sáb)':'🏆 Classificação Histórica Geral'}</h3>
           <span class="tag">${filtered.length} participante${filtered.length===1?'':'s'}</span>
         </div>
         <div>
@@ -6720,14 +6747,16 @@
                   </div>
                 </div>
                 <div class="rankRowMetrics small muted">
+                  <span>⏱️ <b>${item._displayHours||0}h</b></span>
+                  <span>📝 <b>${item._displayQuestions||0}</b> questões</span>
                   <span>🎯 <b>${Number(item.accuracy||0)}%</b> acertos</span>
-                  <span>✓ <b>${Number(item.missions_done||0)}</b> missões</span>
+                  <span>✓ <b>${Number(item._displayMissions??item.missions_done??0)}</b> missões</span>
                   <span>Rec: <b>${Number(item.best_streak||0)}d</b></span>
                   ${!item.is_me?`<button type="button" class="ghost small" style="padding:4px 9px;min-height:28px;font-size:.73rem" data-challenge-from-rank="${escText(item.user_id)}|${escText(item.name)}">⚔️ Desafiar X1</button>`:''}
                 </div>
                 <div class="rankRowRight" style="text-align:right">
-                  <div style="font-weight:900;color:var(--gold);font-size:1.02rem">🔥 ${Number(item.streak||0)}d</div>
-                  <div class="small muted">${Number(item.xp||0)} XP</div>
+                  <div style="font-weight:900;color:var(--gold);font-size:1.02rem">🔥 ${Number(item._displayStreak??item.streak??0)}d</div>
+                  <div class="small muted">${Number(item._displayXp??item.xp??0)} XP ${isWeekly?'(sem)':'(geral)'}</div>
                 </div>
               </div>
             `;
