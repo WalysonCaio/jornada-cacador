@@ -2416,6 +2416,7 @@
   window.questionMatchesBoardFilter = questionMatchesBoardFilter;
 
   function ensureNativeQuestionBankLoaded() {
+    if (typeof ensureNativePedagogicalCouplingLoaded === 'function') ensureNativePedagogicalCouplingLoaded();
     if (typeof ALL_QUESTIONS === 'undefined' || !Array.isArray(ALL_QUESTIONS)) return;
     const existingFp = new Set(ALL_QUESTIONS.map(qItem => questionFingerprint(qItem)));
     let added = 0;
@@ -2437,6 +2438,123 @@
     }
   }
   window.ensureNativeQuestionBankLoaded = ensureNativeQuestionBankLoaded;
+
+  // ── r142: Acoplamento Pedagógico Nativo (Apostilas Base + Lei Seca + Bizus + Flashcards) + Ciclo Estudei ──
+  function ensureNativePedagogicalCouplingLoaded(){
+    try{
+      const baseList=[
+        ...(typeof window.BASIC_SUMMARIES!=='undefined'&&Array.isArray(window.BASIC_SUMMARIES)?window.BASIC_SUMMARIES:[]),
+        ...(typeof window.MATERIAL_DEEP_DIVES!=='undefined'&&Array.isArray(window.MATERIAL_DEEP_DIVES)?window.MATERIAL_DEEP_DIVES:[])
+      ];
+      if(typeof ALL_SUMMARIES!=='undefined'&&Array.isArray(ALL_SUMMARIES)&&baseList.length){
+        const existingIds=new Set(ALL_SUMMARIES.map(s=>String(s?.id||s?.title||'').toLowerCase()));
+        for(const item of baseList){
+          const key=String(item?.id||item?.title||'').toLowerCase();
+          if(key&&!existingIds.has(key)){
+            existingIds.add(key);
+            ALL_SUMMARIES.push({
+              ...item,
+              category:canonicalSubjectName(item.category||item.subject||'Conteúdo Geral'),
+              is_native_coupling:true
+            });
+          }
+        }
+      }
+      if(typeof ALL_FLASHCARDS!=='undefined'&&Array.isArray(ALL_FLASHCARDS)&&baseList.length){
+        const existingFronts=new Set(ALL_FLASHCARDS.map(c=>String(Array.isArray(c)?c[1]:c?.front||'').toLowerCase()));
+        for(const item of baseList){
+          const subj=canonicalSubjectName(item.category||item.subject||'Conteúdo Geral');
+          const front=`[${item.title}] Qual o bizu e a regra central cobrada pelas bancas?`;
+          const back=[item.bizu?`💡 Bizu: ${item.bizu}`:'',item.mnemonic?`🧠 Mnemônico: ${item.mnemonic}`:'',item.trap?`⚠️ Pegadinha: ${item.trap}`:'',item.points?.[0]||''].filter(Boolean).join(' | ');
+          if(back&&!existingFronts.has(front.toLowerCase())){
+            existingFronts.add(front.toLowerCase());
+            ALL_FLASHCARDS.push([subj,front,back,item.title,item.source||'Apostila Base & Lei Seca']);
+          }
+        }
+      }
+    }catch(_e){}
+  }
+  window.ensureNativePedagogicalCouplingLoaded=ensureNativePedagogicalCouplingLoaded;
+
+  const ESTUDEI_CYCLE_BLOCKS=[
+    {subject:'Língua Portuguesa',minutes:60,mode:'Teoria + Questões'},
+    {subject:'Direito Constitucional',minutes:60,mode:'Lei Seca + Questões'},
+    {subject:'Raciocínio Lógico-Matemático',minutes:45,mode:'Prática de Questões'},
+    {subject:'Direito Penal',minutes:60,mode:'Lei Seca + Questões'},
+    {subject:'Legislação Extravagante',minutes:60,mode:'Lei Seca + Flashcards'},
+    {subject:'Direito Processual Penal',minutes:50,mode:'Lei Seca + Questões'},
+    {subject:'Direito Administrativo',minutes:50,mode:'Resumo + Questões'},
+    {subject:'Informática',minutes:45,mode:'Teoria + Questões'},
+    {subject:'História de Pernambuco',minutes:45,mode:'Resumo + Flashcards'},
+    {subject:'Geografia de Pernambuco',minutes:45,mode:'Resumo + Questões'}
+  ];
+
+  function getEstudeiCycleState(){
+    try{
+      const raw=localStorage.getItem('jc_estudei_cycle_v1');
+      if(raw)return JSON.parse(raw);
+    }catch(_e){}
+    return {currentIndex:0,completedBlocks:0,activeCategory:'teoria',categoryMinutes:{teoria:0,lei_seca:0,questoes:0,revisao:0}};
+  }
+  function saveEstudeiCycleState(st){
+    try{localStorage.setItem('jc_estudei_cycle_v1',JSON.stringify(st));}catch(_e){}
+  }
+  function renderEstudeiCycleWidget(){
+    ensureNativePedagogicalCouplingLoaded();
+    if(typeof document==='undefined')return;
+    const host=document.querySelector('#timerDisplay')?.closest('.card, .panel, section, div');
+    if(!host)return;
+    const existing=document.querySelector('#estudeiCycleWidget');
+    if(existing)existing.remove();
+    const st=getEstudeiCycleState();
+    const curr=ESTUDEI_CYCLE_BLOCKS[st.currentIndex%ESTUDEI_CYCLE_BLOCKS.length];
+    const next=ESTUDEI_CYCLE_BLOCKS[(st.currentIndex+1)%ESTUDEI_CYCLE_BLOCKS.length];
+    const box=document.createElement('div');
+    box.id='estudeiCycleWidget';
+    box.style.cssText='margin-top:12px;padding:12px 14px;border-radius:12px;background:rgba(15,23,42,0.75);border:1px solid rgba(56,189,248,0.28);font-size:13px;';
+    box.innerHTML=`
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        <strong style="color:#38bdf8;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;">🔄 Ciclo de Estudos Dinâmico · Bloco #${(st.completedBlocks||0)+1}</strong>
+        <span style="font-size:11px;opacity:0.8;">Continua de onde parou</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <div>
+          <div style="font-weight:700;font-size:14px;color:#f8fafc;">🎯 Agora: ${curr.subject} (${curr.minutes} min · ${curr.mode})</div>
+          <div style="font-size:12px;opacity:0.75;">⏭️ Próximo da fila: ${next.subject} (${next.minutes} min)</div>
+        </div>
+        <button type="button" id="advanceEstudeiCycleBtn" class="ghost" style="padding:6px 12px;font-size:12px;border-color:rgba(56,189,248,0.45);">✓ Concluir Bloco e Girar Ciclo</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-top:8px;border-top:1px solid rgba(148,163,184,0.16);">
+        <span style="font-size:11px;opacity:0.8;margin-right:4px;">Horas líquidas:</span>
+        <button type="button" data-estudei-cat="teoria" class="ghost" style="padding:3px 9px;font-size:11px;${st.activeCategory==='teoria'?'border-color:#38bdf8;color:#38bdf8;font-weight:700;':''}">📖 Teoria (${st.categoryMinutes?.teoria||0}m)</button>
+        <button type="button" data-estudei-cat="lei_seca" class="ghost" style="padding:3px 9px;font-size:11px;${st.activeCategory==='lei_seca'?'border-color:#38bdf8;color:#38bdf8;font-weight:700;':''}">📜 Lei Seca (${st.categoryMinutes?.lei_seca||0}m)</button>
+        <button type="button" data-estudei-cat="questoes" class="ghost" style="padding:3px 9px;font-size:11px;${st.activeCategory==='questoes'?'border-color:#38bdf8;color:#38bdf8;font-weight:700;':''}">🎯 Questões (${st.categoryMinutes?.questoes||0}m)</button>
+        <button type="button" data-estudei-cat="revisao" class="ghost" style="padding:3px 9px;font-size:11px;${st.activeCategory==='revisao'?'border-color:#38bdf8;color:#38bdf8;font-weight:700;':''}">🔁 Revisão (${st.categoryMinutes?.revisao||0}m)</button>
+      </div>
+    `;
+    host.appendChild(box);
+    box.querySelector('#advanceEstudeiCycleBtn')?.addEventListener('click',()=>{
+      const c=getEstudeiCycleState();
+      const b=ESTUDEI_CYCLE_BLOCKS[c.currentIndex%ESTUDEI_CYCLE_BLOCKS.length];
+      c.currentIndex=(c.currentIndex+1)%ESTUDEI_CYCLE_BLOCKS.length;
+      c.completedBlocks=(c.completedBlocks||0)+1;
+      const cat=c.activeCategory||'teoria';
+      c.categoryMinutes=c.categoryMinutes||{};
+      c.categoryMinutes[cat]=(c.categoryMinutes[cat]||0)+b.minutes;
+      saveEstudeiCycleState(c);
+      renderEstudeiCycleWidget();
+      if(typeof toast==='function')toast(`✓ Bloco de ${b.subject} concluído! Próximo: ${ESTUDEI_CYCLE_BLOCKS[c.currentIndex].subject}`);
+    });
+    box.querySelectorAll('[data-estudei-cat]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const c=getEstudeiCycleState();
+        c.activeCategory=btn.getAttribute('data-estudei-cat')||'teoria';
+        saveEstudeiCycleState(c);
+        renderEstudeiCycleWidget();
+      });
+    });
+  }
+
 
   function getNativeQuestionsForSubject(subject, boardFilter = 'all') {
     const sKey = subjectKey(learningCategory(subject));

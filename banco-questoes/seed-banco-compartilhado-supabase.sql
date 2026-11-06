@@ -154,3 +154,193 @@ ON CONFLICT (fingerprint) DO UPDATE SET
 
 -- Conferência do total de questões por banca no catálogo compartilhado:
 SELECT board AS banca, subject AS disciplina, count(*) AS total_questoes FROM public.shared_question_bank GROUP BY board, subject ORDER BY board, subject;
+
+-- ============================================================================
+-- 2. PUBLICA AS APOSTILAS BASE + LEI SECA GRIFADA + BIZUS + FLASHCARDS NA BIBLIOTECA COMUNITÁRIA
+-- ============================================================================
+DO $$
+DECLARE
+  v_owner uuid;
+  v_camp uuid;
+  v_doc uuid;
+BEGIN
+  SELECT id INTO v_owner FROM auth.users ORDER BY created_at ASC LIMIT 1;
+  IF v_owner IS NULL THEN
+    RAISE NOTICE 'Nenhum usuário em auth.users ainda; apenas shared_question_bank foi populado.';
+    RETURN;
+  END IF;
+  SELECT id INTO v_camp FROM public.study_campaigns WHERE user_id = v_owner ORDER BY created_at ASC LIMIT 1;
+  IF v_camp IS NULL THEN
+    INSERT INTO public.study_campaigns (user_id, name, organization, is_active)
+    VALUES (v_owner, 'Acervo Oficial — Acoplamento Pedagógico & Lei Seca', 'PMPE / CBMPE / Polícias', true)
+    RETURNING id INTO v_camp;
+  END IF;
+
+  SELECT id INTO v_doc FROM public.study_documents WHERE title = '📘 Direito Administrativo — Organização Administrativa, Poderes e Atos Administrativos (CO-FI-FO-MO-OB / PATI)' LIMIT 1;
+  IF v_doc IS NULL THEN
+    INSERT INTO public.study_documents (
+      campaign_id, user_id, title, document_type, storage_path, detected_subject,
+      processing_status, page_count, share_with_community, server_verified
+    ) VALUES (
+      v_camp, v_owner, '📘 Direito Administrativo — Organização Administrativa, Poderes e Atos Administrativos (CO-FI-FO-MO-OB / PATI)', 'material', 'official/acoplamento/adm-atos-poderes.txt', 'Direito Administrativo',
+      'ready', 10, true, true
+    ) RETURNING id INTO v_doc;
+  ELSE
+    UPDATE public.study_documents
+       SET document_type = 'material', detected_subject = 'Direito Administrativo', processing_status = 'ready',
+           share_with_community = true, server_verified = true
+     WHERE id = v_doc;
+  END IF;
+
+  DELETE FROM public.generated_study_content WHERE source_document_id = v_doc;
+  INSERT INTO public.generated_study_content (
+    campaign_id, user_id, source_document_id, content_type, title, content, source_refs, approved, server_verified
+  ) VALUES (
+    v_camp, v_owner, v_doc, 'summary', '📘 Direito Administrativo — Organização Administrativa, Poderes e Atos Administrativos (CO-FI-FO-MO-OB / PATI)', '{"subject": "Direito Administrativo", "topic": "Organização Administrativa, Poderes e Atos Administrativos (CO-FI-FO-MO-OB / PATI)", "source": "Apostila Base & Lei Seca", "explanation": "A Administração Pública organiza-se por Desconcentração (cria órgãos públicos sem personalidade jurídica, com subordinação hierárquica, como PMPE, CBMPE e Secretarias) e por Descentralização (cria entidades da Administração Indireta — FASE: Fundações, Autarquias, Sociedades de Economia Mista e Empresas Públicas — com personalidade jurídica própria e controle finalístico/tutela). O ato administrativo possui 5 requisitos de validade (CO-FI-FO-MO-OB: Competência, Finalidade, Forma, Motivo e Objeto) e 4 atributos clássicos (PATI: Presunção de legitimidade, Autoexecutoriedade, Tipicidade e Imperatividade). Pela Súmula 473 do STF, a Administração pode ANULAR seus próprios atos quando eivados de vícios que os tornem ilegais (efeito ex tunc) ou REVOGÁ-LOS por motivo de conveniência ou oportunidade (efeito ex nunc), respeitados os direitos adquiridos.", "points": ["DesCOncentração = cria Órgãos (subordinação); DesCEntralização = cria Entidades FASE (vinculação/tutela).", "Requisitos do ato (CO-FI-FO-MO-OB): Competência, Finalidade e Forma são vinculados; Motivo e Objeto formam o mérito nos atos discricionários.", "Súmula 473 STF: Anulação = ilegalidade (Administração ou Judiciário, ex tunc); Revogação = conveniência/oportunidade (só Administração, ex nunc).", "Cobrança forçada de multa administrativa NÃO possui autoexecutoriedade (exige execução fiscal judicial)."], "example": "O Poder Judiciário nunca pode revogar um ato administrativo válido de outro Poder por mérito; só pode anulá-lo por ilegalidade.", "bizu": "Para nunca confundir: DesCOncentração tem ''O'' de Órgão; DesCEntralização tem ''E'' de Entidade.", "mnemonic": "CO-FI-FO-MO-OB (Requisitos) vs. PATI (Atributos) vs. FASE (Indireta).", "trap": "Afirmar que a Polícia Militar é uma autarquia da Administração Indireta (errado: é órgão da Administração Direta).", "flashcards": [["[Organização Administrativa, Poderes e Atos Administrativos (CO-FI-FO-MO-OB / PATI)] Qual o bizu e a regra central cobrada em prova?", "💡 Bizu: Para nunca confundir: DesCOncentração tem ''O'' de Órgão; DesCEntralização tem ''E'' de Entidade. | 🧠 Mnemônico: CO-FI-FO-MO-OB (Requisitos) vs. PATI (Atributos) vs. FASE (Indireta). | ⚠️ Pegadinha: Afirmar que a Polícia Militar é uma autarquia da Administração Indireta (errado: é órgão da Administração Direta)."]]}'::jsonb,
+    '[{"title": "📘 Direito Administrativo — Organização Administrativa, Poderes e Atos Administrativos (CO-FI-FO-MO-OB / PATI)"}]'::jsonb, true, true
+  );
+
+  SELECT id INTO v_doc FROM public.study_documents WHERE title = '📘 Direito Administrativo — Responsabilidade Civil do Estado (Art. 37, § 6º, CF) e Improbidade Administrativa (Lei 14.230/21)' LIMIT 1;
+  IF v_doc IS NULL THEN
+    INSERT INTO public.study_documents (
+      campaign_id, user_id, title, document_type, storage_path, detected_subject,
+      processing_status, page_count, share_with_community, server_verified
+    ) VALUES (
+      v_camp, v_owner, '📘 Direito Administrativo — Responsabilidade Civil do Estado (Art. 37, § 6º, CF) e Improbidade Administrativa (Lei 14.230/21)', 'material', 'official/acoplamento/adm-resp-improbidade.txt', 'Direito Administrativo',
+      'ready', 10, true, true
+    ) RETURNING id INTO v_doc;
+  ELSE
+    UPDATE public.study_documents
+       SET document_type = 'material', detected_subject = 'Direito Administrativo', processing_status = 'ready',
+           share_with_community = true, server_verified = true
+     WHERE id = v_doc;
+  END IF;
+
+  DELETE FROM public.generated_study_content WHERE source_document_id = v_doc;
+  INSERT INTO public.generated_study_content (
+    campaign_id, user_id, source_document_id, content_type, title, content, source_refs, approved, server_verified
+  ) VALUES (
+    v_camp, v_owner, v_doc, 'summary', '📘 Direito Administrativo — Responsabilidade Civil do Estado (Art. 37, § 6º, CF) e Improbidade Administrativa (Lei 14.230/21)', '{"subject": "Direito Administrativo", "topic": "Responsabilidade Civil do Estado (Art. 37, § 6º, CF) e Improbidade Administrativa (Lei 14.230/21)", "source": "Apostila Base & Lei Seca", "explanation": "Nos termos do art. 37, § 6º, da CF/88, as pessoas jurídicas de direito público e as de direito privado prestadoras de serviços públicos respondem OBJETIVAMENTE (Teoria do Risco Administrativo) pelos danos que seus agentes, nessa qualidade, causarem a terceiros, assegurado o direito de regresso contra o responsável nos casos de DOLO ou CULPA (responsabilidade subjetiva do agente). Pelo Tema 940 do STF (Dupla Garantia), a vítima deve acionar exclusivamente o Estado, não podendo processar diretamente o servidor. Já na Lei de Improbidade Administrativa (Lei 8.429/92 atualizada pela Lei 14.230/21), foi abolida a modalidade culposa: todos os atos (art. 9º enriquecimento ilícito, art. 10 lesão ao erário e art. 11 violação a princípios) exigem DOLO específico.", "points": ["Art. 37, § 6º, CF/88: Estado responde objetivamente (admite excludentes: culpa exclusiva da vítima, caso fortuito e força maior).", "Tema 940 STF (Dupla Garantia): A ação indenizatória da vítima deve ser proposta contra o Estado, e não contra o agente público.", "Lei 14.230/2021: Exige DOLO específico para qualquer ato de improbidade administrativa (fim da modalidade culposa) e tornou taxativo o rol do art. 11."], "example": "Se uma viatura em perseguição colide com carro de terceiro inocente, o Estado indeniza o particular objetivamente e só cobra do policial em regresso se comprovar dolo ou culpa.", "bizu": "Vítima -> Estado = Objetiva (sem discutir culpa). Estado -> Servidor = Subjetiva (exige dolo ou culpa).", "mnemonic": "Estado = O (Objetiva); Agente = S (Subjetiva). Improbidade = 100% DOLO.", "trap": "Dizer que o ato de improbidade que causa lesão ao erário (art. 10) ainda admite forma culposa.", "flashcards": [["[Responsabilidade Civil do Estado (Art. 37, § 6º, CF) e Improbidade Administrativa (Lei 14.230/21)] Qual o bizu e a regra central cobrada em prova?", "💡 Bizu: Vítima -> Estado = Objetiva (sem discutir culpa). Estado -> Servidor = Subjetiva (exige dolo ou culpa). | 🧠 Mnemônico: Estado = O (Objetiva); Agente = S (Subjetiva). Improbidade = 100% DOLO. | ⚠️ Pegadinha: Dizer que o ato de improbidade que causa lesão ao erário (art. 10) ainda admite forma culposa."]]}'::jsonb,
+    '[{"title": "📘 Direito Administrativo — Responsabilidade Civil do Estado (Art. 37, § 6º, CF) e Improbidade Administrativa (Lei 14.230/21)"}]'::jsonb, true, true
+  );
+
+  SELECT id INTO v_doc FROM public.study_documents WHERE title = '📘 Direito Penal — Aplicação da Lei Penal (LUTA), Excludentes de Ilicitude e Crimes contra a Administração Pública' LIMIT 1;
+  IF v_doc IS NULL THEN
+    INSERT INTO public.study_documents (
+      campaign_id, user_id, title, document_type, storage_path, detected_subject,
+      processing_status, page_count, share_with_community, server_verified
+    ) VALUES (
+      v_camp, v_owner, '📘 Direito Penal — Aplicação da Lei Penal (LUTA), Excludentes de Ilicitude e Crimes contra a Administração Pública', 'material', 'official/acoplamento/penal-teoria-adm.txt', 'Direito Penal',
+      'ready', 10, true, true
+    ) RETURNING id INTO v_doc;
+  ELSE
+    UPDATE public.study_documents
+       SET document_type = 'material', detected_subject = 'Direito Penal', processing_status = 'ready',
+           share_with_community = true, server_verified = true
+     WHERE id = v_doc;
+  END IF;
+
+  DELETE FROM public.generated_study_content WHERE source_document_id = v_doc;
+  INSERT INTO public.generated_study_content (
+    campaign_id, user_id, source_document_id, content_type, title, content, source_refs, approved, server_verified
+  ) VALUES (
+    v_camp, v_owner, v_doc, 'summary', '📘 Direito Penal — Aplicação da Lei Penal (LUTA), Excludentes de Ilicitude e Crimes contra a Administração Pública', '{"subject": "Direito Penal", "topic": "Aplicação da Lei Penal (LUTA), Excludentes de Ilicitude e Crimes contra a Administração Pública", "source": "Apostila Base & Lei Seca", "explanation": "O Código Penal adota a Teoria da Atividade para o tempo do crime (art. 4º) e a Teoria da Ubiquidade para o lugar do crime (art. 6º — mnemônico LUTA). São causas excludentes de ilicitude (art. 23): estado de necessidade, legítima defesa (incluindo a proteção de refém por agente de segurança pública — art. 25, parágrafo único), estrito cumprimento de dever legal e exercício regular de direito. Nos crimes contra a Administração Pública (arts. 312 a 333), o verbo nuclear define o delito: Apropriar-se/Desviar/Subtrair = Peculato (art. 312); EXIGIR vantagem indevida = Concussão (art. 316); SOLICITAR/RECEBER/ACEITAR promessa = Corrupção Passiva (art. 317); Retardar/Deixar de praticar ato de ofício por interesse/sentimento pessoal = Prevaricação (art. 319).", "points": ["Mnemônico LUTA: LUgar do crime = Ubiquidade (art. 6º CP); Tempo do crime = Atividade (art. 4º CP).", "Art. 28 do CP: Emoção, paixão e embriaguez voluntária ou culposa NÃO excluem a imputabilidade penal.", "Peculato Culposo (art. 312, § 3º): reparação do dano ANTES da sentença irrecorrível extingue a punibilidade; DEPOIS reduz a pena pela metade.", "Súmula 610 STF: Há latrocínio consumado quando o homicídio se consuma, ainda que o agente não realize a subtração de bens da vítima."], "example": "Exigir dinheiro de motorista para não aplicar multa é Concussão (art. 316); solicitar ou aceitar dinheiro oferecido é Corrupção Passiva (art. 317).", "bizu": "Sublinhe sempre o verbo da questão: EXIGIR = Concussão; SOLICITAR/RECEBER = Corrupção Passiva; OFERECER/PROMETER (particular) = Corrupção Ativa (art. 333).", "mnemonic": "LUTA (Lugar=Ubiquidade, Tempo=Atividade) e BRUCE LEE (Excludentes de Ilicitude).", "trap": "Afirmar que na tentativa de subtração com morte consumada há apenas tentativa de latrocínio (viola a Súmula 610 do STF).", "flashcards": [["[Aplicação da Lei Penal (LUTA), Excludentes de Ilicitude e Crimes contra a Administração Pública] Qual o bizu e a regra central cobrada em prova?", "💡 Bizu: Sublinhe sempre o verbo da questão: EXIGIR = Concussão; SOLICITAR/RECEBER = Corrupção Passiva; OFERECER/PROMETER (particular) = Corrupção Ativa (art. 333). | 🧠 Mnemônico: LUTA (Lugar=Ubiquidade, Tempo=Atividade) e BRUCE LEE (Excludentes de Ilicitude). | ⚠️ Pegadinha: Afirmar que na tentativa de subtração com morte consumada há apenas tentativa de latrocínio (viola a Súmula 610 do STF)."]]}'::jsonb,
+    '[{"title": "📘 Direito Penal — Aplicação da Lei Penal (LUTA), Excludentes de Ilicitude e Crimes contra a Administração Pública"}]'::jsonb, true, true
+  );
+
+  SELECT id INTO v_doc FROM public.study_documents WHERE title = '📘 Direito Processual Penal — Inquérito Policial, Cadeia de Custódia (Art. 158-A) e Prisões (Flagrante, Preventiva e Temporária)' LIMIT 1;
+  IF v_doc IS NULL THEN
+    INSERT INTO public.study_documents (
+      campaign_id, user_id, title, document_type, storage_path, detected_subject,
+      processing_status, page_count, share_with_community, server_verified
+    ) VALUES (
+      v_camp, v_owner, '📘 Direito Processual Penal — Inquérito Policial, Cadeia de Custódia (Art. 158-A) e Prisões (Flagrante, Preventiva e Temporária)', 'material', 'official/acoplamento/cpp-inquerito-prisoes.txt', 'Direito Processual Penal',
+      'ready', 10, true, true
+    ) RETURNING id INTO v_doc;
+  ELSE
+    UPDATE public.study_documents
+       SET document_type = 'material', detected_subject = 'Direito Processual Penal', processing_status = 'ready',
+           share_with_community = true, server_verified = true
+     WHERE id = v_doc;
+  END IF;
+
+  DELETE FROM public.generated_study_content WHERE source_document_id = v_doc;
+  INSERT INTO public.generated_study_content (
+    campaign_id, user_id, source_document_id, content_type, title, content, source_refs, approved, server_verified
+  ) VALUES (
+    v_camp, v_owner, v_doc, 'summary', '📘 Direito Processual Penal — Inquérito Policial, Cadeia de Custódia (Art. 158-A) e Prisões (Flagrante, Preventiva e Temporária)', '{"subject": "Direito Processual Penal", "topic": "Inquérito Policial, Cadeia de Custódia (Art. 158-A) e Prisões (Flagrante, Preventiva e Temporária)", "source": "Apostila Base & Lei Seca", "explanation": "O Inquérito Policial é procedimento administrativo escrito, sigiloso (respeitada a Súmula Vinculante 14 do STF para o advogado), inquisitivo, oficial, oficioso, INDISPONÍVEL (o delegado nunca pode arquivar — art. 17 do CPP) e DISPENSÁVEL (o MP pode oferecer denúncia sem inquérito se já tiver justa causa). A Cadeia de Custódia (art. 158-A) inicia-se com a preservação do local de crime ou detecção do vestígio. No art. 302 do CPP, o flagrante divide-se em Próprio (cometendo ou acaba de cometer), Impróprio/Quase-flagrante (perseguido LOGO APÓS) e Presumido/Ficto (encontrado LOGO DEPOIS com armas/objetos). A Prisão Preventiva (arts. 311 a 316) nunca pode ser decretada de ofício pelo juiz e exige revisão a cada 90 dias.", "points": ["Prazos do IP (Preso / Solto): CPP = 10d / 30d; Lei de Drogas = 30+30d / 90+90d; Justiça Federal = 15+15d / 30d; IPM (CPPM) = 20d / 40+20d.", "Art. 302 CPP: Perseguido LOGO APÓS = Flagrante Impróprio; Encontrado LOGO DEPOIS com instrumentos/armas = Flagrante Presumido.", "Art. 311 e 316 CPP: Juiz não decreta preventiva de ofício; manutenção deve ser revisada a cada 90 dias.", "Prisão Temporária (Lei 7.960/89): cabe apenas na fase de investigação (5+5 dias em crimes comuns; 30+30 dias em hediondos)."], "example": "Na regra geral do CPP (art. 25), a retratação da representação cabe até o OFERECIMENTO da denúncia; na Lei Maria da Penha (art. 16), cabe até o RECEBIMENTO da denúncia em audiência especial.", "bizu": "Perseguido LOGO APÓS = Impróprio (quase-flagrante); Encontrado LOGO DEPOIS = Presumido (ficto).", "mnemonic": "I-D-O-I-S-E: Indisponível, Dispensável, Oficial, Inquisitivo, Sigiloso e Escrito.", "trap": "Dizer que o juiz pode decretar prisão preventiva de ofício durante a instrução processual (foi proibido pelo Pacote Anticrime em 2019).", "flashcards": [["[Inquérito Policial, Cadeia de Custódia (Art. 158-A) e Prisões (Flagrante, Preventiva e Temporária)] Qual o bizu e a regra central cobrada em prova?", "💡 Bizu: Perseguido LOGO APÓS = Impróprio (quase-flagrante); Encontrado LOGO DEPOIS = Presumido (ficto). | 🧠 Mnemônico: I-D-O-I-S-E: Indisponível, Dispensável, Oficial, Inquisitivo, Sigiloso e Escrito. | ⚠️ Pegadinha: Dizer que o juiz pode decretar prisão preventiva de ofício durante a instrução processual (foi proibido pelo Pacote Anticrime em 2019)."]]}'::jsonb,
+    '[{"title": "📘 Direito Processual Penal — Inquérito Policial, Cadeia de Custódia (Art. 158-A) e Prisões (Flagrante, Preventiva e Temporária)"}]'::jsonb, true, true
+  );
+
+  SELECT id INTO v_doc FROM public.study_documents WHERE title = '📘 Legislação Extravagante — Tortura (9.455/97), Abuso de Autoridade (13.869/19), Maria da Penha, Drogas, Hediondos e Racismo' LIMIT 1;
+  IF v_doc IS NULL THEN
+    INSERT INTO public.study_documents (
+      campaign_id, user_id, title, document_type, storage_path, detected_subject,
+      processing_status, page_count, share_with_community, server_verified
+    ) VALUES (
+      v_camp, v_owner, '📘 Legislação Extravagante — Tortura (9.455/97), Abuso de Autoridade (13.869/19), Maria da Penha, Drogas, Hediondos e Racismo', 'material', 'official/acoplamento/extrav-pacote-policial.txt', 'Legislação Extravagante',
+      'ready', 10, true, true
+    ) RETURNING id INTO v_doc;
+  ELSE
+    UPDATE public.study_documents
+       SET document_type = 'material', detected_subject = 'Legislação Extravagante', processing_status = 'ready',
+           share_with_community = true, server_verified = true
+     WHERE id = v_doc;
+  END IF;
+
+  DELETE FROM public.generated_study_content WHERE source_document_id = v_doc;
+  INSERT INTO public.generated_study_content (
+    campaign_id, user_id, source_document_id, content_type, title, content, source_refs, approved, server_verified
+  ) VALUES (
+    v_camp, v_owner, v_doc, 'summary', '📘 Legislação Extravagante — Tortura (9.455/97), Abuso de Autoridade (13.869/19), Maria da Penha, Drogas, Hediondos e Racismo', '{"subject": "Legislação Extravagante", "topic": "Tortura (9.455/97), Abuso de Autoridade (13.869/19), Maria da Penha, Drogas, Hediondos e Racismo", "source": "Apostila Base & Lei Seca", "explanation": "Quadro comparativo das Leis Penais Especiais: (1) Lei de Tortura (9.455/97): crime comum em regra; tortura-omissão tem pena de detenção de 1 a 4 anos; a perda do cargo e a interdição pelo DOBRO do prazo da pena são efeitos AUTOMÁTICOS da condenação. (2) Lei de Abuso de Autoridade (13.869/19): exige dolo específico (prejudicar, beneficiar ou mero capricho); a perda do cargo e inabilitação de 1 a 5 anos NÃO são automáticas (exigem REINCIDÊNCIA específica e motivação na sentença). (3) Lei Maria da Penha (11.340/06): art. 12-C autoriza afastamento do agressor pelo Juiz, Delegado (fora de sede de comarca) ou Policial (fora de sede de comarca e sem delegado), comunicando o juiz em 24h; lesão corporal doméstica é de ação pública INCONDICIONADA (Súmula 542 STJ). (4) Lei 14.532/23: Injúria Racial (art. 2º-A da Lei 7.716/89) é crime inafiançável, imprescritível e de ação pública incondicionada.", "points": ["Perda do cargo: Tortura = AUTOMÁTICA (interdição pelo dobro da pena); Abuso de Autoridade = exige REINCIDÊNCIA específica (inabilitação de 1 a 5 anos).", "Lei de Drogas (11.343/06): art. 28 (consumo pessoal) nunca impõe prisão; tráfico privilegiado (art. 33, § 4º) NÃO é hediondo.", "Crimes Hediondos (8.072/90): Furto só é hediondo com EXPLOSIVO; Roubo só é hediondo com restrição de liberdade, ARMA DE FOGO ou lesão grave/morte (latrocínio).", "ECA (8.069/90): Criança (< 12 anos) que pratica ato infracional recebe apenas medida PROTETIVA (art. 101); medida socioeducativa (art. 112) é exclusiva de adolescente (12 a < 18 anos)."], "example": "Roubo praticado com faca (arma branca) é roubo majorado no CP, mas NÃO é crime hediondo na Lei 8.072/90.", "bizu": "Sempre que a prova comparar Tortura e Abuso de Autoridade, olhe para o efeito da condenação sobre o cargo público.", "mnemonic": "Tortura = Automática (Dobro); Abuso = Reincidência (1 a 5 anos).", "trap": "Afirmar que o porte de drogas para consumo pessoal (art. 28) admite pena de detenção em caso de reincidência.", "flashcards": [["[Tortura (9.455/97), Abuso de Autoridade (13.869/19), Maria da Penha, Drogas, Hediondos e Racismo] Qual o bizu e a regra central cobrada em prova?", "💡 Bizu: Sempre que a prova comparar Tortura e Abuso de Autoridade, olhe para o efeito da condenação sobre o cargo público. | 🧠 Mnemônico: Tortura = Automática (Dobro); Abuso = Reincidência (1 a 5 anos). | ⚠️ Pegadinha: Afirmar que o porte de drogas para consumo pessoal (art. 28) admite pena de detenção em caso de reincidência."]]}'::jsonb,
+    '[{"title": "📘 Legislação Extravagante — Tortura (9.455/97), Abuso de Autoridade (13.869/19), Maria da Penha, Drogas, Hediondos e Racismo"}]'::jsonb, true, true
+  );
+
+  SELECT id INTO v_doc FROM public.study_documents WHERE title = '📘 Geografia de Pernambuco — Mesorregiões, Clima, Relevo, Hidrografia e Polos Econômicos de Pernambuco' LIMIT 1;
+  IF v_doc IS NULL THEN
+    INSERT INTO public.study_documents (
+      campaign_id, user_id, title, document_type, storage_path, detected_subject,
+      processing_status, page_count, share_with_community, server_verified
+    ) VALUES (
+      v_camp, v_owner, '📘 Geografia de Pernambuco — Mesorregiões, Clima, Relevo, Hidrografia e Polos Econômicos de Pernambuco', 'material', 'official/acoplamento/geo-pe-mesorregioes.txt', 'Geografia de Pernambuco',
+      'ready', 10, true, true
+    ) RETURNING id INTO v_doc;
+  ELSE
+    UPDATE public.study_documents
+       SET document_type = 'material', detected_subject = 'Geografia de Pernambuco', processing_status = 'ready',
+           share_with_community = true, server_verified = true
+     WHERE id = v_doc;
+  END IF;
+
+  DELETE FROM public.generated_study_content WHERE source_document_id = v_doc;
+  INSERT INTO public.generated_study_content (
+    campaign_id, user_id, source_document_id, content_type, title, content, source_refs, approved, server_verified
+  ) VALUES (
+    v_camp, v_owner, v_doc, 'summary', '📘 Geografia de Pernambuco — Mesorregiões, Clima, Relevo, Hidrografia e Polos Econômicos de Pernambuco', '{"subject": "Geografia de Pernambuco", "topic": "Mesorregiões, Clima, Relevo, Hidrografia e Polos Econômicos de Pernambuco", "source": "Apostila Base & Lei Seca", "explanation": "Pernambuco organiza-se em 5 mesorregiões no sentido Leste–Oeste: (1) Região Metropolitana do Recife (RMR) e Litoral: clima tropical úmido (As'' — chuvas de outono/inverno), Complexo Industrial Portuário de Suape e Porto Digital; (2) Zona da Mata: dividida em Mata Norte (mais seca, policultura e cana) e Mata Sul (mais úmida e montanhosa, monocultura canavieira); (3) Agreste: zona de transição climática, marcada pelo Planalto da Borborema, pelos Brejos de Altitude (chuvas orográficas em Garanhuns, Triunfo e Brejo da Madre de Deus), pela Bacia Leiteira e pelo Polo de Confecções (Caruaru, Toritama e Santa Cruz do Capibaribe); (4) Sertão Pernambucano / Araripe: clima semiárido (BSh), vegetação de Caatinga e Polo Gesseiro do Araripe (Araripina, Trindade e Ipubi — 95% do gesso do país); (5) Sertão do São Francisco (Petrolina e Lagoa Grande): fruticultura irrigada voltada à exportação (uva e manga) e vitivinicultura tropical.", "points": ["Planalto da Borborema no Agreste: provoca chuvas orográficas a barlavento (brejos de altitude) e semiaridez a sotavento (Sertão).", "Rios de Pernambuco: na RMR/Mata são perenes (Capibaribe, Ipojuca, Una, Jaboatão); no Sertão são temporários/intermitentes (Pajeú, Moxotó, Brígida), salvo o Rio São Francisco (perene).", "Polos econômicos: Petrolina = Fruticultura irrigada; Araripe = Polo Gesseiro; Agreste Setentrional = Polo de Confecções; Ipojuca/Cabo = Suape."], "example": "A questão que associa Araripina e Trindade à produção de gipsita/gesso está correta (Polo Gesseiro do Araripe).", "bizu": "Caruaru/Toritama/Santa Cruz = Confecções (Agreste); Araripina/Trindade/Ipubi = Gesso (Araripe); Petrolina = Fruticultura (São Francisco).", "mnemonic": "Litoral -> Mata -> Agreste (Borborema/Transição) -> Sertão.", "trap": "Inverter o Polo Gesseiro do Araripe com o Polo de Confecções do Agreste ou dizer que o Rio Capibaribe nasce no Sertão (nasce no Agreste, em Poção/Jataúba).", "flashcards": [["[Mesorregiões, Clima, Relevo, Hidrografia e Polos Econômicos de Pernambuco] Qual o bizu e a regra central cobrada em prova?", "💡 Bizu: Caruaru/Toritama/Santa Cruz = Confecções (Agreste); Araripina/Trindade/Ipubi = Gesso (Araripe); Petrolina = Fruticultura (São Francisco). | 🧠 Mnemônico: Litoral -> Mata -> Agreste (Borborema/Transição) -> Sertão. | ⚠️ Pegadinha: Inverter o Polo Gesseiro do Araripe com o Polo de Confecções do Agreste ou dizer que o Rio Capibaribe nasce no Sertão (nasce no Agreste, em Poção/Jataúba)."]]}'::jsonb,
+    '[{"title": "📘 Geografia de Pernambuco — Mesorregiões, Clima, Relevo, Hidrografia e Polos Econômicos de Pernambuco"}]'::jsonb, true, true
+  );
+
+  SELECT id INTO v_doc FROM public.study_documents WHERE title = '📘 Física — Física e Biologia Aplicadas ao CBMPE (Termologia, Hidrostática, APH, RCP e Queimaduras)' LIMIT 1;
+  IF v_doc IS NULL THEN
+    INSERT INTO public.study_documents (
+      campaign_id, user_id, title, document_type, storage_path, detected_subject,
+      processing_status, page_count, share_with_community, server_verified
+    ) VALUES (
+      v_camp, v_owner, '📘 Física — Física e Biologia Aplicadas ao CBMPE (Termologia, Hidrostática, APH, RCP e Queimaduras)', 'material', 'official/acoplamento/fis-bio-cbmpe.txt', 'Física',
+      'ready', 10, true, true
+    ) RETURNING id INTO v_doc;
+  ELSE
+    UPDATE public.study_documents
+       SET document_type = 'material', detected_subject = 'Física', processing_status = 'ready',
+           share_with_community = true, server_verified = true
+     WHERE id = v_doc;
+  END IF;
+
+  DELETE FROM public.generated_study_content WHERE source_document_id = v_doc;
+  INSERT INTO public.generated_study_content (
+    campaign_id, user_id, source_document_id, content_type, title, content, source_refs, approved, server_verified
+  ) VALUES (
+    v_camp, v_owner, v_doc, 'summary', '📘 Física — Física e Biologia Aplicadas ao CBMPE (Termologia, Hidrostática, APH, RCP e Queimaduras)', '{"subject": "Física", "topic": "Física e Biologia Aplicadas ao CBMPE (Termologia, Hidrostática, APH, RCP e Queimaduras)", "source": "Apostila Base & Lei Seca", "explanation": "FÍSICA (Combate a Incêndio e Salvamento): (1) Transmissão de calor: Condução (sólidos, partícula a partícula), Convecção (fluidos líquidos e gases por diferença de densidade — fumaça quente subindo ao teto) e Irradiação (ondas eletromagnéticas, inclusive no vácuo). (2) Hidrostática (Teorema de Stevin): a cada 10 metros de profundidade em água doce, a pressão hidrostática aumenta 1 atm; logo, a pressão TOTAL a 20m é 1 atm (superfície) + 2 atm (água) = 3 atm. (3) Eletricidade: P = U · i e U = R · i (1ª Lei de Ohm). BIOLOGIA / APH: (1) Pequena circulação: Ventrículo Direito (sangue venoso) -> Artéria Pulmonar -> Pulmões (hematose) -> Veias Pulmonares (sangue arterial) -> Átrio Esquerdo. (2) RCP em adultos (SBV): 30 compressões para 2 ventilações (100 a 120/min). (3) Queimaduras: 1º grau (epiderme, eritema sem bolhas), 2º grau (epiderme + derme parcial, dor intensa e FLICTENAS/BOLHAS) e 3º grau (espessura total, placa coriácea/carbonizada).", "points": ["Incêndio em recinto fechado: fumaça e gases quentes sobem por CONVECÇÃO térmica.", "Teorema de Stevin no mergulho: Pressão Total = Pressão Atmosférica (1 atm) + (Profundidade / 10).", "Artéria Pulmonar: sai do ventrículo direito levando sangue VENOSO aos pulmões; Veias Pulmonares trazem sangue ARTERIAL ao átrio esquerdo.", "Queimadura de 2º grau: presença característica de flictenas (bolhas), que nunca devem ser rompidas no APH."], "example": "A 30 metros de profundidade em água doce, o mergulhador suporta 3 atm de pressão hidrostática + 1 atm atmosférica = 4 atm de pressão absoluta.", "bizu": "Flictena (bolha) = Queimadura de 2º Grau. Fumaça subindo = Convecção. 10m de água = +1 atm.", "mnemonic": "Classes de Incêndio: A (Sólidos/Brasa), B (Líquidos/Gases), C (Elétricos energizados), D (Metais pirofóricos), K (Cozinha/Óleos).", "trap": "Esquecer de somar 1 atm da pressão atmosférica quando a questão de mergulho pede a pressão TOTAL ou ABSOLUTA.", "flashcards": [["[Física e Biologia Aplicadas ao CBMPE (Termologia, Hidrostática, APH, RCP e Queimaduras)] Qual o bizu e a regra central cobrada em prova?", "💡 Bizu: Flictena (bolha) = Queimadura de 2º Grau. Fumaça subindo = Convecção. 10m de água = +1 atm. | 🧠 Mnemônico: Classes de Incêndio: A (Sólidos/Brasa), B (Líquidos/Gases), C (Elétricos energizados), D (Metais pirofóricos), K (Cozinha/Óleos). | ⚠️ Pegadinha: Esquecer de somar 1 atm da pressão atmosférica quando a questão de mergulho pede a pressão TOTAL ou ABSOLUTA."]]}'::jsonb,
+    '[{"title": "📘 Física — Física e Biologia Aplicadas ao CBMPE (Termologia, Hidrostática, APH, RCP e Queimaduras)"}]'::jsonb, true, true
+  );
+END $$;
