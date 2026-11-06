@@ -2572,7 +2572,7 @@
         const existingIds=new Set(ALL_SUMMARIES.map(s=>String(s?.id||s?.title||'').toLowerCase()));
         for(const item of baseList){
           const rawCat=item.category||item.subject||'Conteúdo Geral';
-          const isManual=/manuais do cacador/i.test(rawCat);
+          const isManual=/manuais do ca[cç]ador/i.test(rawCat);
           const normCat=isManual?'Manuais do Caçador (Método & Estratégia)':canonicalSubjectName(rawCat);
           const catKey=subjectKey(normCat);
           // Só injeta resumo nativo se a disciplina fizer parte do edital ativo (ou for Manual do Caçador)
@@ -2587,12 +2587,16 @@
             });
           }
         }
+        const sf=typeof document!=='undefined'?document.querySelector('#summaryFilter'):null;
+        if(sf&&![...sf.options].some(o=>/manuais do ca[cç]ador/i.test(o.value))){
+          sf.add(new Option('📚 Manuais do Caçador (Método & Estratégia)','Manuais do Caçador (Método & Estratégia)'));
+        }
       }
       if(typeof ALL_FLASHCARDS!=='undefined'&&Array.isArray(window.ALL_FLASHCARDS)&&baseList.length){
         const existingFronts=new Set(ALL_FLASHCARDS.map(c=>String(Array.isArray(c)?c[1]:c?.front||'').toLowerCase()));
         for(const item of baseList){
           const rawCat=item.category||item.subject||'Conteúdo Geral';
-          if(/manuais do cacador/i.test(rawCat))continue;
+          if(/manuais do ca[cç]ador/i.test(rawCat))continue;
           const subj=canonicalSubjectName(rawCat);
           if(allowedKeys.size&&!allowedKeys.has(subjectKey(subj)))continue;
           const front=`[${item.title}] Qual o bizu e a regra central cobrada pelas bancas?`;
@@ -2846,42 +2850,48 @@
     const doneTopics=missions.filter(m=>state?.done?.[m.id]).length;
     const theoryPct=Math.min(100,Math.round((doneTopics/totalTopics)*100));
 
-    const editalSubjects=[...new Set(missions.map(m=>subjectKey(m.subject)).filter(Boolean))];
-    const totalSubj=Math.max(1,editalSubjects.length||8);
-    const answeredFp=Object.keys(state?.answeredQuestionFingerprints||{}).length;
-    const scoreEntries=Array.isArray(state?.scores)?state.scores.length:0;
-    const testedCount=Math.min(totalSubj,Math.round((answeredFp/5)+scoreEntries));
-    const practicePct=Math.min(100,Math.round((testedCount/totalSubj)*100));
+    // Métricas 100% REAIS do progresso do usuário no edital ativo:
+    const missionIdSet=new Set(missions.map(m=>m.id));
+    const campScores=(Array.isArray(state?.scores)?state.scores:[]).filter(s=>!s.campaignId||s.campaignId===state?.activeCampaignId);
+    const testedTopicIds=new Set(campScores.filter(s=>Number(s.total||0)>0&&missionIdSet.has(s.id)).map(s=>s.id));
+    const scoreQuestionsTotal=campScores.reduce((sum,s)=>sum+Number(s.total||0),0);
+    const trackedQuestionsTotal=Number(state?.questionStatsByCampaign?.[state?.activeCampaignId]?.total||0);
+    const realQuestionsResolved=Math.max(scoreQuestionsTotal,trackedQuestionsTotal);
+    // Cada tópico do edital requer pelo menos 1 bateria vinculada ao tópico (ou 10 questões resolvidas no portal)
+    const effectiveTestedTopics=Math.min(missions.length,Math.max(testedTopicIds.size,Math.floor(realQuestionsResolved/10)));
+    const practicePct=missions.length>0?Math.min(100,Math.round((effectiveTestedTopics/totalTopics)*100)):0;
 
-    const diagMsg=theoryPct>practicePct+20
-      ?'⚠️ Você avançou mais na teoria do que nas questões. Use o próximo bloco do Ciclo para resolver questões!'
-      :practicePct>theoryPct+20
-        ?'💡 Excelente volume de questões! Marque no edital os tópicos cuja teoria e lei seca você já fechou.'
-        :'✅ Ritmo equilibrado entre Cobertura Teórica do Edital e Cobertura Prática em Questões!';
+    const diagMsg=doneTopics===0&&realQuestionsResolved===0
+      ?'📌 Métricas reais do seu portal: conclua missões e resolva baterias de questões para avançar as duas barras.'
+      :theoryPct>practicePct+15
+        ?`⚠️ Você concluiu ${doneTopics} tópico(s) na teoria, mas exercitou ${effectiveTestedTopics} em questões (${realQuestionsResolved} questões resolvidas). Faça uma bateria agora!`
+        :practicePct>theoryPct+15
+          ?`💡 Você já resolveu ${realQuestionsResolved} questões (${effectiveTestedTopics} tópico(s) exercitados). Marque no edital os tópicos cuja teoria você já fechou!`
+          :`✅ Ritmo equilibrado: ${doneTopics}/${missions.length} tópicos concluídos na teoria e ${realQuestionsResolved} questões resolvidas na prática.`;
 
     const card=document.createElement('div');
     card.id='estudeiEditalThermometer';
     card.className='card';
     card.style.cssText='margin-bottom:12px;border:1px solid rgba(56,189,248,0.32);background:linear-gradient(135deg,rgba(10,25,47,0.92),rgba(15,23,42,0.9));';
     card.innerHTML=`
-      <div class="sectionHead" style="margin-bottom:8px;">
+      <div class="sectionHead" style="margin-bottom:8px;flex-wrap:wrap;gap:6px;">
         <div>
-          <div class="eyebrow" style="color:#38bdf8;">TERMÔMETRO DUPLO DE COBERTURA DO EDITAL · TEORIA VS. PRÁTICA</div>
-          <h3 style="margin:2px 0 0;">📊 Teoria Lida vs. Prática Testada em Questões</h3>
+          <div class="eyebrow" style="color:#38bdf8;">TERMÔMETRO DUPLO DE COBERTURA DO EDITAL · DADOS 100% REAIS</div>
+          <h3 style="margin:2px 0 0;">📊 Teoria Concluída vs. Prática Real em Questões</h3>
         </div>
-        <span class="tag">${doneTopics}/${missions.length} tópicos vistos</span>
+        <span class="tag">${doneTopics}/${missions.length} tópicos · ${realQuestionsResolved} questões resolvidas</span>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:8px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:8px;">
         <div>
           <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
-            <b>📖 Cobertura Teórica (Tópicos Vistos)</b>
+            <b>📖 Cobertura Teórica (${doneTopics}/${missions.length} tópicos)</b>
             <span style="color:#38bdf8;font-weight:800;">${theoryPct}%</span>
           </div>
           <div class="bar"><div class="fill" style="width:${theoryPct}%;background:linear-gradient(90deg,#0284c7,#38bdf8);"></div></div>
         </div>
         <div>
           <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
-            <b>🎯 Cobertura Prática (Testado em Questões)</b>
+            <b>🎯 Cobertura Prática (${effectiveTestedTopics}/${missions.length} tópicos · ${realQuestionsResolved}q)</b>
             <span style="color:#34d399;font-weight:800;">${practicePct}%</span>
           </div>
           <div class="bar"><div class="fill" style="width:${practicePct}%;background:linear-gradient(90deg,#059669,#34d399);"></div></div>
@@ -2903,7 +2913,7 @@
       ensureNativePedagogicalCouplingLoaded();
       const sf=document.querySelector('#summaryFilter');
       if(sf){
-        let opt=[...sf.options].find(o=>/manuais do cacador/i.test(o.value));
+        let opt=[...sf.options].find(o=>/manuais do ca[cç]ador/i.test(o.value));
         if(!opt){
           opt=new Option('Manuais do Caçador (Método & Estratégia)','Manuais do Caçador (Método & Estratégia)');
           sf.add(opt);
@@ -3889,7 +3899,7 @@
       btn.insertAdjacentHTML('beforeend',`<span class="optStatPill ${pillCls}">${pillTxt}</span>`);
     });
     const trapLetter=optStats.trapIndex>=0?String.fromCharCode(65+optStats.trapIndex):'-';
-    const statSummaryHtml=`<div class="communityOptionStatsBar" style="margin-bottom:10px;padding:9px 12px;border-radius:10px;background:rgba(8,22,38,0.9);border:1px solid rgba(56,189,248,0.28);font-size:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><span>📊 <b>Raio-X da Concorrência (${optStats.totalSamples} respostas):</b> <strong style="color:#34d399;">${optStats.pcts[correct]}% acertaram (${String.fromCharCode(65+correct)})</strong></span>${optStats.trapIndex>=0?`<span style="color:#fbbf24;">⚠️ Pegadinha principal: <b>Alternativa ${trapLetter} (${optStats.pcts[optStats.trapIndex]}%)</b></span>`:''}</div>`;
+    const statSummaryHtml=`<div class="communityOptionStatsBar" style="margin-bottom:10px;padding:9px 12px;border-radius:10px;background:rgba(8,22,38,0.9);border:1px solid rgba(56,189,248,0.28);font-size:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><span>📊 <b>Histórico Real na Questão (${optStats.totalSamples} resposta${optStats.totalSamples===1?"":"s"} registrada${optStats.totalSamples===1?"":"s"}):</b> <strong style="color:#34d399;">${optStats.pcts[correct]}% no gabarito (${String.fromCharCode(65+correct)})</strong></span>${optStats.trapIndex>=0?`<span style="color:#fbbf24;">⚠️ Pegadinha principal: <b>Alternativa ${trapLetter} (${optStats.pcts[optStats.trapIndex]}%)</b></span>`:''}</div>`;
     q('#questionFeedback').innerHTML=statSummaryHtml+formatStepByStepResolution(item,chosen,ok,true);
     qa('[data-question-index],[data-scissor-index]').forEach(b=>b.disabled=true);
 
@@ -11343,12 +11353,16 @@
   };
 
 
-  // ── r149: Tema Claro/Escuro Real (em Menu/Planejamento sem mexer nas abas .tabs) + 6 Aprimoramentos Estratégicos (TEC, Caveira, Gran, Estudei) ──
+  // ── r150: Tema Claro Corrigido (Contraste 100%) + Ranking do Simulado com Usuários Reais do Banco + Termômetro e Métricas 100% Reais ──
 
   function injectFullLightAppThemeStyles() {
-    if (typeof document === 'undefined' || document.getElementById('globalLightAppThemeStyle')) return;
-    const st = document.createElement('style');
-    st.id = 'globalLightAppThemeStyle';
+    if (typeof document === 'undefined') return;
+    let st = document.getElementById('globalLightAppThemeStyle');
+    if (!st) {
+      st = document.createElement('style');
+      st.id = 'globalLightAppThemeStyle';
+      document.head.appendChild(st);
+    }
     st.textContent = `
       html.lightAppTheme, body.lightAppTheme {
         --bg: #f1f5f9 !important;
@@ -11362,7 +11376,54 @@
         background: #f1f5f9 !important;
         color: #0f172a !important;
       }
-      body.lightAppTheme .card,
+      /* Barra superior (.top) clara com título e seletores escuros perfeitamente legíveis */
+      body.lightAppTheme .top {
+        background: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06) !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .top h1,
+      body.lightAppTheme .top b,
+      body.lightAppTheme .top span,
+      body.lightAppTheme .top button:not(.install) {
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .top .eyebrow {
+        color: #0284c7 !important;
+      }
+      body.lightAppTheme .top #campaignBtn,
+      body.lightAppTheme .top #accountBtn,
+      body.lightAppTheme .top #notificationBtn {
+        background: #f8fafc !important;
+        border-color: #94a3b8 !important;
+        color: #0f172a !important;
+      }
+      /* Card de Patente (.hero) mantém arte Solo Leveling escura com caixas .metric escuras e números brancos bem visíveis */
+      body.lightAppTheme .hero {
+        color: #f8fafc !important;
+      }
+      body.lightAppTheme .hero .rank,
+      body.lightAppTheme .hero .xp strong,
+      body.lightAppTheme .hero b,
+      body.lightAppTheme .hero strong {
+        color: #ffffff !important;
+      }
+      body.lightAppTheme .hero .metric {
+        background: rgba(6, 17, 30, 0.84) !important;
+        border: 1px solid rgba(56, 189, 248, 0.35) !important;
+        color: #ffffff !important;
+      }
+      body.lightAppTheme .hero .metric b {
+        color: #ffffff !important;
+      }
+      body.lightAppTheme .hero .metric span,
+      body.lightAppTheme .hero .heroMeta,
+      body.lightAppTheme .hero .muted {
+        color: #cbd5e1 !important;
+      }
+      /* Cards gerais do aplicativo em Tema Claro */
+      body.lightAppTheme .card:not(.hero),
       body.lightAppTheme .subjectCard,
       body.lightAppTheme .summaryCard,
       body.lightAppTheme .docCard,
@@ -11370,19 +11431,80 @@
       body.lightAppTheme .learningInfo,
       body.lightAppTheme .lessonInfo,
       body.lightAppTheme .commandShortcut,
+      body.lightAppTheme .libraryFolder,
+      body.lightAppTheme .folderHead,
       body.lightAppTheme dialog {
         background: #ffffff !important;
         border-color: #cbd5e1 !important;
         color: #0f172a !important;
-        box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06) !important;
+        box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05) !important;
       }
+      /* Card "PRÓXIMA AÇÃO DO DIA" (.commandPrimary) claro e legível */
+      body.lightAppTheme .commandPrimary {
+        background: linear-gradient(135deg, #e0f2fe, #bae6fd) !important;
+        border: 1px solid #38bdf8 !important;
+        color: #0f172a !important;
+        box-shadow: 0 6px 18px rgba(2, 132, 199, 0.12) !important;
+      }
+      body.lightAppTheme .commandPrimary .eyebrow {
+        color: #0369a1 !important;
+      }
+      body.lightAppTheme .commandPrimary b {
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .commandPrimary span:not(.eyebrow) {
+        color: #1e293b !important;
+      }
+      /* Card "OFENSIVA DO CAÇADOR" (.streakCard, .streakDay e .motivation) claro e legível */
+      body.lightAppTheme .streakCard {
+        background: #ffffff !important;
+        border-color: #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .streakDay {
+        background: #f1f5f9 !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .streakDay span {
+        color: #475569 !important;
+      }
+      body.lightAppTheme .streakDay b {
+        background: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .streakDay.active b {
+        background: #fef3c7 !important;
+        border-color: #f59e0b !important;
+        color: #b45309 !important;
+      }
+      body.lightAppTheme .motivation {
+        background: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme #motivationText {
+        color: #0f172a !important;
+      }
+      body.lightAppTheme #motivationSource {
+        color: #475569 !important;
+      }
+      /* Missão Diária, Cronômetro, Ciclo Tático e Simulador da Guilda em Tema Claro */
       body.lightAppTheme .mission,
       body.lightAppTheme .timer,
       body.lightAppTheme #estudeiCycleWidget,
       body.lightAppTheme #timerLiquidCategoryBar,
-      body.lightAppTheme #guildOfficialSimuladoCard {
+      body.lightAppTheme #guildOfficialSimuladoCard,
+      body.lightAppTheme #estudeiEditalThermometer {
         background: linear-gradient(145deg, #ffffff, #f0f9ff) !important;
         border-color: #7dd3fc !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme #estudeiCycleWidget div,
+      body.lightAppTheme #estudeiCycleWidget b,
+      body.lightAppTheme #guildOfficialSimuladoCard h3,
+      body.lightAppTheme #estudeiEditalThermometer h3 {
         color: #0f172a !important;
       }
       body.lightAppTheme .check,
@@ -11390,7 +11512,7 @@
       body.lightAppTheme .planItem,
       body.lightAppTheme .summaryHead,
       body.lightAppTheme .lessonBox,
-      body.lightAppTheme .metric {
+      body.lightAppTheme .learningStat {
         background: #f8fafc !important;
         border-color: #cbd5e1 !important;
         color: #0f172a !important;
@@ -11421,20 +11543,12 @@
         border-color: #94a3b8 !important;
         color: #0f172a !important;
       }
-      body.lightAppTheme h1,
-      body.lightAppTheme h2,
-      body.lightAppTheme h3,
-      body.lightAppTheme b,
-      body.lightAppTheme strong {
+      body.lightAppTheme :not(.hero) > h1,
+      body.lightAppTheme :not(.hero) > h2,
+      body.lightAppTheme :not(.hero) > h3,
+      body.lightAppTheme .card:not(.hero) b,
+      body.lightAppTheme .card:not(.hero) strong {
         color: #0f172a !important;
-      }
-      body.lightAppTheme .hero h1,
-      body.lightAppTheme .hero h2,
-      body.lightAppTheme .hero h3,
-      body.lightAppTheme .hero b,
-      body.lightAppTheme .hero strong,
-      body.lightAppTheme .hero .rank {
-        color: #f8fafc !important;
       }
       .optStatPill {
         margin-left: auto;
@@ -11461,7 +11575,6 @@
         border: 1px solid rgba(148, 163, 184, 0.26);
       }
     `;
-    document.head.appendChild(st);
   }
 
   function applyGlobalAppTheme(mode) {
@@ -11484,45 +11597,14 @@
   }
   window.applyGlobalAppTheme = applyGlobalAppTheme;
 
-  // Aprimoramento 1: Estatística Comunitária por Alternativa ("Raio-X de Chute da Concorrência" — Estilo TEC & Gran)
+  // Aprimoramento 1: Estatística por Alternativa baseada nas respostas reais gravadas em state.optionChoiceTelemetry
   function computeQuestionOptionChoiceStats(item, chosenIndex) {
     const opts = Array.isArray(item?.options) ? item.options : [];
     const n = opts.length || 4;
     const correct = Number.isInteger(Number(item?.correct_index)) && Number(item.correct_index) >= 0 ? Number(item.correct_index) : 0;
     const fp = typeof questionFingerprint === 'function' ? questionFingerprint(item) : String(item?.statement || '').slice(0, 48);
-    const diff = typeof normalizedDifficulty === 'function' ? normalizedDifficulty(item) : 'medio';
 
-    // Semente determinística baseada no enunciado para simular a amostra histórica real da questão + telemetria do usuário
-    let h = 2166136261;
-    for (const ch of String(item?.statement || 'q')) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
-    const rand = () => { h = (h + 0x6D2B79F5) >>> 0; let x = Math.imul(h ^ (h >>> 15), 1 | h); x ^= x + Math.imul(x ^ (x >>> 7), 61 | x); return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
-
-    const baseTotal = 120 + Math.floor(rand() * 240);
-    const targetCorrectRate = diff === 'facil' ? (0.72 + rand() * 0.12) : diff === 'dificil' ? (0.41 + rand() * 0.14) : (0.56 + rand() * 0.14);
-    const weights = new Array(n).fill(0);
-    weights[correct] = targetCorrectRate;
-
-    // Escolhe a alternativa "pegadinha principal" (distrator que mais atrai candidatos)
-    const wrongIndices = opts.map((_, idx) => idx).filter(idx => idx !== correct);
-    const trapIndex = wrongIndices.length ? wrongIndices[Math.floor(rand() * wrongIndices.length)] : -1;
-    let rem = 1 - targetCorrectRate;
-    if (trapIndex >= 0) {
-      const trapShare = rem * (0.55 + rand() * 0.18);
-      weights[trapIndex] = trapShare;
-      rem -= trapShare;
-    }
-    const otherWrongs = wrongIndices.filter(idx => idx !== trapIndex);
-    otherWrongs.forEach((idx, k) => {
-      if (k === otherWrongs.length - 1) weights[idx] = Math.max(0.01, rem);
-      else {
-        const part = rem * (0.35 + rand() * 0.3);
-        weights[idx] = part;
-        rem = Math.max(0.01, rem - part);
-      }
-    });
-
-    // Soma telemetria salva em state.optionChoiceTelemetry
-    let counts = weights.map(w => Math.max(1, Math.round(w * baseTotal)));
+    const counts = new Array(n).fill(0);
     try {
       if (typeof state === 'object' && state) {
         state.optionChoiceTelemetry = state.optionChoiceTelemetry || {};
@@ -11532,36 +11614,39 @@
           state.optionChoiceTelemetry[fp] = rec;
         }
         for (let i = 0; i < n; i++) {
-          counts[i] += (Number(rec[i]) || 0) * 3;
+          counts[i] = Number(rec[i]) || 0;
         }
       }
     } catch (_e) {}
 
     const totalSamples = counts.reduce((a, b) => a + b, 0) || 1;
-    let pcts = counts.map(c => Math.round((c / totalSamples) * 100));
-    const sumPct = pcts.reduce((a, b) => a + b, 0);
-    if (sumPct !== 100 && pcts.length) pcts[correct] = Math.max(1, pcts[correct] + (100 - sumPct));
-
-    // Identifica qual alternativa errada ficou com o maior percentual
-    let actualTrapIdx = trapIndex;
-    let maxWrongPct = -1;
+    const pcts = counts.map(c => Math.round((c / totalSamples) * 100));
+    let actualTrapIdx = -1;
+    let maxWrongCount = 0;
     for (let i = 0; i < n; i++) {
-      if (i !== correct && pcts[i] > maxWrongPct) {
-        maxWrongPct = pcts[i];
+      if (i !== correct && counts[i] > maxWrongCount) {
+        maxWrongCount = counts[i];
         actualTrapIdx = i;
       }
     }
-    return { pcts, trapIndex: actualTrapIdx, correctIndex: correct, totalSamples };
+    return { pcts, counts, trapIndex: actualTrapIdx, correctIndex: correct, totalSamples };
   }
   window.computeQuestionOptionChoiceStats = computeQuestionOptionChoiceStats;
 
-  // Aprimoramento 2: Índice Real de Incidência por Assunto no Edital ("Termômetro Estatístico da Banca" — Estilo TEC Concursos)
+  // Aprimoramento 2: Índice Real de Incidência por Assunto (calculado estritamente sobre as questões reais do banco do usuário)
   function computeTopicBankIncidencePct(subject, topicName) {
+    if (typeof window.ensureNativeQuestionBankLoaded === 'function') window.ensureNativeQuestionBankLoaded();
     const subjCanon = typeof canonicalSubjectName === 'function' ? canonicalSubjectName(subject) : String(subject || '');
-    const pool = [...(typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS) ? ALL_QUESTIONS : []), ...(window.NATIVE_POLICE_QUESTION_BANK || [])];
+    const rawPool = [...(typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS) ? ALL_QUESTIONS : []), ...(window.NATIVE_POLICE_QUESTION_BANK || [])];
+    const seen = new Set();
+    const pool = [];
+    for (const qItem of rawPool) {
+      const k = String(qItem?.statement || '').slice(0, 80);
+      if (k && !seen.has(k)) { seen.add(k); pool.push(qItem); }
+    }
     const subjQuestions = pool.filter(q => subjectKey(typeof canonicalSubjectName === 'function' ? canonicalSubjectName(q.subject) : q.subject) === subjectKey(subjCanon));
     const cleanTopic = normalizeText(String(topicName || '').replace(/^\d+\.\s*/, ''));
-    const keywords = cleanTopic.split(/\s+/).filter(w => w.length >= 4 && !/^(para|como|sobre|entre|pelo|pela|seus|suas|noções|conceitos|estudo|aspectos)$/.test(w)).slice(0, 4);
+    const keywords = cleanTopic.split(/\s+/).filter(w => w.length >= 4 && !/^(para|como|sobre|entre|pelo|pela|seus|suas|nocoes|conceitos|estudo|aspectos|compreensao)$/.test(w)).slice(0, 5);
 
     let matched = 0;
     if (subjQuestions.length > 0 && keywords.length > 0) {
@@ -11570,64 +11655,64 @@
         if (keywords.some(kw => hay.includes(kw))) matched++;
       }
     }
-    let pct = subjQuestions.length >= 4 && matched > 0 ? Math.round((matched / subjQuestions.length) * 100) : 0;
-    if (pct < 6 || pct > 45) {
-      // Calibração determinística por incidência clássica de editais policiais quando o tópico específico tem poucas amostras locais
-      let h = 0;
-      for (const ch of (subjCanon + '|' + cleanTopic)) h = ((h << 5) - h + ch.charCodeAt(0)) | 0;
-      const isCore = /interpretac|concordanc|crase|pontuac|proposic|logica|tabela|seguranca|ransomware|redes|1817|1824|1848|guararapes|art\s*5|art\s*144|remedios|nacionalidade|poder\s*de\s*policia|atos|ilicitude|legitima|inquerito|flagrante|algemas|dudh|maria\s*da\s*penha|tortura|abuso/i.test(cleanTopic);
-      pct = isCore ? (18 + (Math.abs(h) % 15)) : (7 + (Math.abs(h) % 10));
-    }
-    const level = pct >= 20 ? 'alta' : pct >= 12 ? 'media' : 'normal';
-    return { pct, level };
+    const totalSubjQ = subjQuestions.length;
+    const pct = totalSubjQ > 0 ? Math.round((matched / totalSubjQ) * 100) : 0;
+    const level = pct >= 20 ? 'alta' : pct >= 10 ? 'media' : 'normal';
+    return { pct, matched, totalSubjQ, level };
   }
   window.computeTopicBankIncidencePct = computeTopicBankIncidencePct;
 
   function formatTopicIncidenceBadgeHtml(subject, topicName) {
     const info = computeTopicBankIncidencePct(subject, topicName);
+    if (!info.totalSubjQ) return '';
+    if (info.matched === 0) {
+      return `<span class="tag topicIncidenceBadge" style="background:rgba(148,163,184,0.12);color:#94a3b8;border:1px solid rgba(148,163,184,0.25);font-size:10.5px;padding:2px 8px;border-radius:999px;font-weight:700;">📊 ${info.totalSubjQ} questões da disciplina no banco</span>`;
+    }
     const isHigh = info.level === 'alta';
     const bg = isHigh ? 'rgba(245, 158, 11, 0.16)' : 'rgba(56, 189, 248, 0.13)';
     const col = isHigh ? '#fbbf24' : '#7dd3fc';
     const bdr = isHigh ? 'rgba(245, 158, 11, 0.4)' : 'rgba(56, 189, 248, 0.32)';
     const icon = isHigh ? '🔥' : '📊';
-    const label = isHigh ? `${icon} Cai em ${info.pct}% das provas da banca (Alta Incidência)` : `${icon} Incidência na banca: ${info.pct}%`;
+    const label = `${icon} ${info.matched}/${info.totalSubjQ} questões deste tema no banco (${info.pct}%)`;
     return `<span class="tag topicIncidenceBadge" style="background:${bg};color:${col};border:1px solid ${bdr};font-size:10.5px;padding:2px 8px;border-radius:999px;font-weight:800;">${label}</span>`;
   }
   window.formatTopicIncidenceBadgeHtml = formatTopicIncidenceBadgeHtml;
 
-  // Aprimoramento 4: Simulado Oficial de Domingo da Guilda com Ranking de Corte por Cargo (Estilo Projeto Caveira)
+  // Aprimoramento 4: Simulado Oficial da Guilda usando EXCLUSIVAMENTE os usuários reais cadastrados no banco (get_hunters_leaderboard)
   function renderGuildOfficialSimuladoBanner() {
     if (typeof document === 'undefined') return;
     const reportSection = document.querySelector('#report');
-    if (!reportSection || reportSection.querySelector('#guildOfficialSimuladoCard')) return;
+    if (!reportSection) return;
     const campName = (typeof activeCampaign === 'function' && activeCampaign()?.name) ? activeCampaign().name : 'PMPE — Soldado';
-    const card = document.createElement('div');
-    card.id = 'guildOfficialSimuladoCard';
-    card.className = 'card';
-    card.style.cssText = 'margin-bottom:12px;border:1px solid rgba(245,158,11,0.42);background:linear-gradient(135deg,rgba(24,18,10,0.94),rgba(10,22,38,0.95));';
+    let card = reportSection.querySelector('#guildOfficialSimuladoCard');
+    if (!card) {
+      card = document.createElement('div');
+      card.id = 'guildOfficialSimuladoCard';
+      card.className = 'card';
+      card.style.cssText = 'margin-bottom:12px;border:1px solid rgba(245,158,11,0.42);background:linear-gradient(135deg,rgba(24,18,10,0.94),rgba(10,22,38,0.95));';
+      const firstCard = reportSection.querySelector('.card');
+      if (firstCard) firstCard.insertAdjacentElement('beforebegin', card);
+      else reportSection.prepend(card);
+    }
     card.innerHTML = `
       <div class="sectionHead" style="margin-bottom:8px;flex-wrap:wrap;gap:8px;">
         <div>
-          <div class="eyebrow" style="color:#fbbf24;font-weight:900;">💀 SIMULADO OFICIAL DA GUILDA · RANKING &amp; NOTA DE CORTE POR CARGO</div>
+          <div class="eyebrow" style="color:#fbbf24;font-weight:900;">💀 SIMULADO OFICIAL DA GUILDA · RANKING REAL DO BANCO POR CARGO</div>
           <h3 style="margin:3px 0 0;font-size:1.05rem;">Campeonato Semanal — <span id="guildSimuladoCareerName">${escText(campName)}</span></h3>
-          <div class="small muted" style="margin-top:2px;">Todos os caçadores do cargo resolvem o mesmo caderno ponderado (com Nota Líquida e Lista de Classificação 1º ao Nº lugar).</div>
+          <div class="small muted" style="margin-top:2px;">Classificação alimentada diretamente pelos caçadores reais cadastrados no banco de dados (com filtro por concurso e nota de corte).</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button type="button" id="startGuildOfficialSimuladoBtn" class="action small" style="width:auto;padding:8px 14px;font-size:12px;background:linear-gradient(90deg,#d97706,#f59e0b);color:#050a12;">⚔️ Iniciar Simulado Oficial do Cargo</button>
-          <button type="button" id="openGuildSimuladoRankingBtn" class="ghost small" style="width:auto;padding:8px 12px;font-size:12px;border-color:rgba(251,191,36,0.45);color:#fde047;">🏆 Ver Classificação &amp; Corte da Turma</button>
+          <button type="button" id="openGuildSimuladoRankingBtn" class="ghost small" style="width:auto;padding:8px 12px;font-size:12px;border-color:rgba(251,191,36,0.45);color:#fde047;">🏆 Ver Classificação dos Caçadores Cadastrados</button>
         </div>
       </div>
       <div id="guildSimuladoRankingPanel" hidden style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(148,163,184,0.18);"></div>
     `;
-    const firstCard = reportSection.querySelector('.card');
-    if (firstCard) firstCard.insertAdjacentElement('beforebegin', card);
-    else reportSection.prepend(card);
 
     card.querySelector('#startGuildOfficialSimuladoBtn')?.addEventListener('click', () => {
       if (typeof window.ensureNativeQuestionBankLoaded === 'function') window.ensureNativeQuestionBankLoaded();
       const allQ = [...(typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS) ? ALL_QUESTIONS : []), ...(window.NATIVE_POLICE_QUESTION_BANK || [])];
       if (!allQ.length) return toast('Carregando banco de questões...');
-      // Semente semanal fixa para que todos os alunos façam exatamente o mesmo caderno oficial na semana
       const weekSeed = Math.floor(Date.now() / (7 * 86400000));
       const sorted = [...allQ].sort((a, b) => {
         const ha = String(a.statement || '').length * 31 + weekSeed;
@@ -11650,53 +11735,89 @@
       if (typeof window.showQuestion === 'function') window.showQuestion();
     });
 
-    card.querySelector('#openGuildSimuladoRankingBtn')?.addEventListener('click', () => {
+    card.querySelector('#openGuildSimuladoRankingBtn')?.addEventListener('click', async () => {
       const panel = card.querySelector('#guildSimuladoRankingPanel');
       if (!panel) return;
       panel.hidden = !panel.hidden;
       if (panel.hidden) return;
-      const myScores = (state?.scores || []).filter(s => !s.campaignId || s.campaignId === state?.activeCampaignId);
-      const totQ = myScores.reduce((n, s) => n + Number(s.total || 0), 0);
-      const corQ = myScores.reduce((n, s) => n + Number(s.correct || 0), 0);
-      const myPct = totQ > 0 ? Math.round((corQ / totQ) * 100) : 72;
-      const myName = state?.publicProfile?.displayName || 'Você (Caçador)';
-      const cohort = [
-        { name: 'Sd. Gabriel Rocha (PMPE)', pct: 88, liq: 84, status: 'Aprovado (Dentro das Vagas)' },
-        { name: 'Cb. Larissa Albuquerque (PMPE)', pct: 83, liq: 79, status: 'Aprovado (Dentro das Vagas)' },
-        { name: 'Caçador Matheus V. (PMPE/CBMPE)', pct: 78, liq: 75, status: 'Linha de Corte (75%)' },
-        { name: `⭐ ${myName}`, pct: myPct, liq: Math.max(0, myPct - 3), isMe: true, status: myPct >= 75 ? '✅ Acima da Meta de Corte!' : '⚠️ Em Evolução (Foco nos Gargalos)' },
-        { name: 'Caçador Lucas Ferraz (PMPE)', pct: 68, liq: 63, status: 'Cadastro de Reserva' }
-      ].sort((a, b) => b.pct - a.pct);
+      panel.innerHTML = '<div class="small muted">⏳ Carregando caçadores reais cadastrados no banco de dados...</div>';
+      try {
+        if (typeof loadHuntersLeaderboard === 'function' && (!leaderboardRows || leaderboardRows.length <= 1)) {
+          await loadHuntersLeaderboard(false);
+        }
+      } catch (_e) {}
+
+      const me = localHunterRow();
+      const allRealUsers = deduplicateHunterRows((leaderboardRows && leaderboardRows.length ? leaderboardRows : [me]).slice());
+      const mySlug = normalizeExamSlug(campName);
+      const filterMode = panel.dataset.roleFilter || 'all';
+      const filteredUsers = filterMode === 'same'
+        ? allRealUsers.filter(r => normalizeExamSlug(r.role) === mySlug || (r.secondary_role && normalizeExamSlug(r.secondary_role) === mySlug))
+        : allRealUsers;
+      const cohort = (filteredUsers.length ? filteredUsers : allRealUsers).slice().sort((a, b) => {
+        return (Number(b.accuracy || 0) - Number(a.accuracy || 0))
+          || (Number(b.xp || 0) - Number(a.xp || 0))
+          || (Number(b.missions_done || 0) - Number(a.missions_done || 0))
+          || (Number(b.streak || 0) - Number(a.streak || 0));
+      });
 
       panel.innerHTML = `
-        <div style="font-size:12px;color:#cbd5e1;margin-bottom:8px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
-          <span>🎯 <b>Nota de Corte Estimada do Cargo (${escText(campName)}):</b> <strong style="color:#fbbf24;">75% Líquido</strong></span>
-          <span>📊 Sua Precisão Atual: <strong style="color:#38bdf8;">${myPct}%</strong></span>
+        <div style="font-size:12px;color:#cbd5e1;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+          <span>👥 <b>Caçadores Reais Cadastrados no Banco:</b> <strong style="color:#38bdf8;">${cohort.length} participante(s)</strong> · Meta de Corte: <strong style="color:#fbbf24;">75%</strong></span>
+          <div style="display:flex;gap:6px;">
+            <button type="button" class="ghost small" data-guild-sim-filter="all" style="width:auto;min-height:26px;padding:3px 8px;font-size:11px;${filterMode==='all'?'border-color:#38bdf8;color:#38bdf8;font-weight:800;':''}">Todos (${allRealUsers.length})</button>
+            <button type="button" class="ghost small" data-guild-sim-filter="same" style="width:auto;min-height:26px;padding:3px 8px;font-size:11px;${filterMode==='same'?'border-color:#38bdf8;color:#38bdf8;font-weight:800;':''}">Só ${escText(campName)}</button>
+            <button type="button" class="ghost small" id="refreshGuildSimuladoRankBtn" style="width:auto;min-height:26px;padding:3px 8px;font-size:11px;">↻ Atualizar do Banco</button>
+          </div>
         </div>
         <div style="display:grid;gap:6px;">
-          ${cohort.map((row, idx) => `
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:10px;background:${row.isMe ? 'rgba(56,189,248,0.16)' : 'rgba(7,19,32,0.75)'};border:1px solid ${row.isMe ? '#38bdf8' : 'rgba(148,163,184,0.16)'};font-size:12px;">
-              <span><b>${idx + 1}º</b> · ${escText(row.name)}</span>
-              <span style="display:flex;gap:10px;align-items:center;">
-                <b style="color:#38bdf8;">${row.pct}% Bruto (${row.liq}% Líq.)</b>
-                <span class="tag" style="font-size:10px;">${escText(row.status)}</span>
-              </span>
-            </div>
-          `).join('')}
+          ${cohort.map((row, idx) => {
+            const acc = Number(row.accuracy || 0);
+            const xpVal = Number(row.xp || 0);
+            const mDone = Number(row.missions_done || 0);
+            const streakVal = Number(row.streak || 0);
+            const roleTxt = row.role || campName;
+            const secTxt = row.secondary_role ? ` + ${row.secondary_role}` : '';
+            const statusLabel = acc >= 75
+              ? '✅ Acima da Meta de Corte (75%+)'
+              : acc > 0
+                ? `📈 ${acc}% de precisão (${Math.max(1, 75 - acc)}% p/ a meta)`
+                : `🔥 ${streakVal}d ofensiva · ${xpVal} XP`;
+            return `
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:${row.is_me ? 'rgba(56,189,248,0.16)' : 'rgba(7,19,32,0.75)'};border:1px solid ${row.is_me ? '#38bdf8' : 'rgba(148,163,184,0.16)'};font-size:12px;flex-wrap:wrap;">
+                <span><b>${idx + 1}º</b> · <b>${escText(row.name || 'Caçador')}${row.is_me ? ' (Você)' : ''}</b> <span class="small muted">(${escText(roleTxt + secTxt)})</span></span>
+                <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                  <b style="color:#38bdf8;">🎯 ${acc}% acerto · ⚡ ${xpVal} XP · ✓ ${mDone} missões</b>
+                  <span class="tag" style="font-size:10px;">${escText(statusLabel)}</span>
+                </span>
+              </div>
+            `;
+          }).join('')}
         </div>
       `;
+
+      panel.querySelectorAll('[data-guild-sim-filter]').forEach(b => {
+        b.onclick = () => {
+          panel.dataset.roleFilter = b.dataset.guildSimFilter;
+          panel.hidden = true;
+          card.querySelector('#openGuildSimuladoRankingBtn')?.click();
+        };
+      });
+      panel.querySelector('#refreshGuildSimuladoRankBtn')?.addEventListener('click', async () => {
+        await loadHuntersLeaderboard(true);
+        panel.hidden = true;
+        card.querySelector('#openGuildSimuladoRankingBtn')?.click();
+      });
     });
   }
 
   function initThemeAndQuestionReporting() {
     if (typeof document === 'undefined') return;
-    // Remove qualquer botão antigo que tenha sido inserido dentro de .tabs por engano
     document.querySelectorAll('.tabs #globalThemeToggleBtn').forEach(el => el.remove());
 
     const savedTheme = localStorage.getItem('jc_theme_mode_v1') || 'dark';
     applyGlobalAppTheme(savedTheme);
 
-    // Vincula o botão #globalThemeToggleBtn dentro do menu ☰ Menu (#moreDialog)
     const menuThemeBtn = document.querySelector('#globalThemeToggleBtn');
     if (menuThemeBtn && !menuThemeBtn.dataset.boundTheme) {
       menuThemeBtn.dataset.boundTheme = '1';
@@ -11704,11 +11825,10 @@
         const nextMode = document.body.classList.contains('lightAppTheme') ? 'dark' : 'light';
         applyGlobalAppTheme(nextMode);
         document.querySelector('#moreDialog')?.close();
-        if (typeof toast === 'function') toast(nextMode === 'light' ? '☀️ Tema Claro ativado em todo o site!' : '🌙 Tema Escuro ativado!');
+        if (typeof toast === 'function') toast(nextMode === 'light' ? '☀️ Tema Claro ativado!' : '🌙 Tema Escuro ativado!');
       });
     }
 
-    // Adiciona também atalho de Tema Claro/Escuro dentro do modal Planejamento (#settingsDialog)
     const settingsDlg = document.querySelector('#settingsDialog');
     if (settingsDlg && !settingsDlg.querySelector('#settingsThemeToggleBtn')) {
       const sBtn = document.createElement('button');
@@ -11726,7 +11846,6 @@
       if (notifBtn) notifBtn.insertAdjacentElement('beforebegin', sBtn);
     }
 
-    // Injeta metadado de Norma-base + Data de Conferência e botão "⚠️ Reportar erro/desatualização" no modal de questões
     const qDialog = document.querySelector('#questionDialog');
     if (qDialog && !document.querySelector('#questionNormaReportBar')) {
       const bar = document.createElement('div');
@@ -11759,7 +11878,6 @@
     renderGuildOfficialSimuladoBanner();
   }
 
-  // Aprimoramento 6: Hidratação sob demanda (requestIdleCallback) para abas secundárias
   function scheduleLazyTabHydration(fn) {
     if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
       window.requestIdleCallback(() => { try { fn(); } catch (_e) {} }, { timeout: 1500 });
