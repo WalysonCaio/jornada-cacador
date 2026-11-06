@@ -1,319 +1,115 @@
-# Jornada do Caçador — Guia unificado
+# Jornada do Caçador — Guia Unificado e Manual Passo a Passo (r148)
 
-Última atualização documental: 21 de outubro de 2026  
-Versão da aplicação: 78 — Caderno Inteligente
+Última atualização documental: 06 de novembro de 2026  
+Versão da aplicação: **r148** (Ciclo Tático Sincronizado, Lei Seca Cronológica, Provas com Raio-X, Banco de Questões sem Viés, Duelo X1 60s e Conformidade LGPD/DPO)
 
-Este arquivo substitui os antigos tutoriais separados de instalação, correção e atualização. Os documentos anteriores são apenas histórico e não são necessários para o funcionamento da aplicação.
+Este documento reúne o **Manual Passo a Passo de Uso Pedagógico** (seções 1 a 6) e o **Guia Técnico de Manutenção, Banco de Dados e Publicação** (seções 7 a 21).
 
-## 1. Visão geral
+## 1. Primeiros Passos: Conta, Tema Claro/Escuro, Chave IA e Portais
 
-O Jornada do Caçador é uma plataforma pessoal de preparação para concursos públicos, especialmente carreiras de segurança pública. Um edital enviado pelo usuário é transformado em disciplinas, tópicos, missões, trilhas, revisões e acompanhamento de progresso.
+1. **Crie sua conta e sincronize entre dispositivos:** na tela de abertura, clique em **Criar conta** e informe seu nome, e-mail e senha. Ao usar a mesma conta no computador e no celular, todo o seu progresso é sincronizado automaticamente ao abrir/retornar ao aplicativo e a cada alteração salva.
+2. **Alternância entre Tema Claro e Tema Escuro:** no topo da tela, clique em **☀️ Claro / 🌙 Escuro** para alternar entre o visual escuro (Solo Leveling) e o Modo Papel de alto contraste para leitura prolongada de leis e PDFs.
+3. **Chave Gemini Pessoal (BYOK — Recomendado):** em **Minha Conta → Configurar minha IA**, cole sua chave gratuita do Google AI Studio. Ela fica criptografada no cofre do servidor (Supabase Vault) e libera cota ampliada para analisar editais extensos, apostilas e redações.
+4. **Portais Individuais e Conciliação de 2 Concursos (`🔗 Unificar editais`):** use o seletor de portal no topo da tela (ex.: `PMPE — Soldado ▾`) para criar portais por concurso (`PMPE`, `CBMPE`, `PPPE`, `PCPE`, `PRF`). Para estudar para até 2 provas ao mesmo tempo, clique em **🔗 Unificar editais** na aba **Portais** — os tópicos comuns avançam simultaneamente nos dois editais.
 
-Tecnologias principais:
+## 2. Como Enviar o Edital (Verticalizado ou Oficial) e Usar o Mapa
 
-- HTML, CSS e JavaScript puro na interface;
-- PWA e Service Worker para instalação e funcionamento parcial offline;
-- Supabase Auth, PostgreSQL e Storage;
-- Supabase Edge Functions em TypeScript/Deno;
-- Gemini para leitura e geração a partir de documentos;
-- DeepSeek e Groq no assistente, conforme configuração do servidor;
-- Cloudflare Workers para publicação da versão web;
-- Electron para o instalador Windows;
-- Android WebView para o aplicativo Android.
+1. Abra **Menu → Biblioteca**, escolha o arquivo PDF, selecione a categoria **Edital do concurso** e clique no botão **Enviar para esta campanha** (o edital é 100% individual e privado do seu perfil).
+2. O extrator processa tanto **Editais Verticalizados** (em tabela, com checkboxes ou numeração contínua) quanto **Editais Oficiais completos** (até 600 páginas em trechos), separando todas as disciplinas reais em ordem pedagógica (`1 → 2 → 3`).
+3. Na aba **Portais**, acompanhe o **Termômetro Duplo do Edital** (**Cobertura Teórica %** vs. **Cobertura Prática em Questões %**), o **Cronograma Reverso** até a data da prova e o **Chefe da Disciplina**.
 
-## 2. Pastas importantes
+## 3. Rotina Diária Sincronizada na Aba "Hoje": Missão, Ciclo Tático e Planejamento
+
+A aba **Hoje** mantém em sincronia total a **Missão Atual**, o **Ciclo Tático do seu Edital**, o **Cronômetro de Foco por Modalidade**, o **Plano Diário** e a **Missão Semanal**:
+
+| Etapa da Missão Diária | O que fazer no passo a passo | Como o sistema marca e sincroniza |
+|---|---|---|
+| **1. Estudar a teoria do tópico** | Selecione **📖 Teoria** no Cronômetro de Foco, dê o play e leia o resumo do tópico na Central de Estudo (ou clique em *1. Abrir Resumo* no Ciclo Tático). | Marca automaticamente ao estudar o resumo da disciplina ou concluir um bloco de foco. |
+| **2. Criar resumo ou revisar Flashcards** | Selecione **📜 Lei** no Cronômetro, leia os artigos vinculados e salve sua nota ou revise os cartões em *Estudar → Flashcards*. | Marca ao criar um resumo/nota ou revisar os flashcards. Ao completar **2 etapas (50%)**, sua **Ofensiva Diária** já é confirmada automaticamente! |
+| **3. Resolver questões da disciplina** | Clique no botão fixo **◎ Questões de [Disciplina da Missão]** ou em **⚡ Sprint Rápido (5 min)** abaixo da Missão Atual (ou em *Iniciar batalha de 5 questões* na aba Questões). | Acompanha a meta configurada no seu Planejamento (5, 10, 15 ou 20 questões/dia) e marca ao atingir o volume do dia. |
+| **4. Corrigir erros e revisão final** | Confira o diagnóstico passo a passo das questões erradas e revise as pendências de 24h, 7d e 30d na Central de Revisão. | Marca ao concluir a bateria comentada ou revisar erros. Clique em **Concluir missão e receber XP**. |
+
+- **Bônus de Maestria Pedagógica no XP:** cada missão concluída concede **+100 XP base** mais um **Bônus de Maestria (+15 XP para acerto $\ge$ 50%, +30 XP para $\ge$ 70% e +50 XP para $\ge$ 85%)** calculado sobre o seu desempenho real nas questões daquela matéria.
+- **Ciclo Tático do Edital e Planejamento:** ao clicar em **⏭️ Girar para Próxima Matéria** ou em qualquer disciplina numerada do Ciclo Tático, a Missão Atual, o Cronômetro e o Histórico Diário giram juntos (sem repetir missões concluídas em dias anteriores). No botão **Planejamento**, o resumo ao vivo mostra a soma exata do Plano Diário (ex.: `77m + 58m + 65m + 40m = 240m`) e da Meta Semanal (`20 questões/dia × 6 dias = 120 questões/semana`).
+
+## 4. Biblioteca Inteligente: Raio-X, Caderno de Prova, Gabarito Tardio e Estudo sem PDF
+
+1. **Raio-X Pré-Análise Instantâneo:** ao escolher qualquer PDF na Biblioteca, o sistema mostra na hora o número de páginas, se há texto digital (ou se precisa de OCR) e quantas questões foram detectadas antes do envio.
+2. **Provas com Escolha de Caderno e Gabarito Separado:** ao enviar uma *Prova anterior* ou *Simulado*, você pode anexar o **PDF do Gabarito Separado**, colar o gabarito em texto e indicar o **Caderno** (*Tipo 1, Tipo 2, Azul, Amarelo, Branco*).
+3. **Botão "🔑 Adicionar gabarito depois" (Blindado):** para provas importadas sem gabarito, clique em **🔑 Adicionar gabarito** quando tiver o gabarito em mãos. O sistema aplica estritamente pelo número da questão, recusa gabaritos ambíguos (dois cadernos colados juntos), nunca sobrescreve respostas já válidas e marca como `ANULADA` as questões anuladas pela banca.
+4. **Botão "📝 Criar Estudo por Texto ou Assunto" (Sem PDF):** cole artigos de Lei Seca ou anotações diretamente em texto para gerar resumos, flashcards e questões sem precisar de PDF.
+5. **Compartilhamento Comunitário Opt-In (LGPD):** a caixa de compartilhamento comunitário inicia **desmarcada por padrão**; ao marcá-la, apenas resumos e questões higienizados (sem CPF, e-mail ou nome real) são compartilhados, podendo alternar entre **🤝 Público** e **🔒 Privado** a qualquer momento.
+
+## 5. Central de Estudo em Ordem Cronológica, Banco de Questões e Bancas
+
+- **Ordem Didática e Cronológica Estrita (`Art. 1º → Art. 2º → Art. 5º`):** na aba **Estudar**, todos os resumos e artigos seguem ordem numérica e pedagógica, trazendo Explicação, Lei Seca em Destaque, Bizu de Prova, Mnemônico, Pegadinha da Banca e **Mapa Mental Tático**.
+- **Banco de Questões Balanceado e Bases Gratuitas:** na aba **Questões**, as 117 questões nativas são marcadas com honestidade como `autoral` (mantendo o filtro por estilo da banca: *Instituto AOCP, Cebraspe, FGV Conhecimento, UPENET/IAUPE, IBFC, IDECAN*), com alternativas embaralhadas de forma determinística (distribuição equilibrada A/B/C/D = 21%/32%/26%/20%), indicação de **Norma-Base e Data de Conferência (11/2026)** e botão **⚠️ Reportar erro ou lei atualizada**.
+- **Importação de Bases Gratuitas e Remoção de Duplicatas:** use o botão **📦 Importar JSON** para carregar `banco-questoes/lote-bases-gratuitas.json` (com deduplicação automática por *fingerprint*) ou execute `banco-questoes/limpar-questoes-repetidas-supabase.sql` no SQL Editor do Supabase.
+- **Simulador de Aprovação (Meta de Corte & Correção de Gargalos):** compara sua nota líquida com a meta de corte do concurso e aponta as disciplinas prioritárias para correção.
+
+## 6. Arena Duelo X1 (60s), Redação IA, TAF, Story 9:16 e Privacidade LGPD
+
+- **Arena Duelo X1 (60s por questão + Bots Examinadores):** desafie colegas online ou treine contra os Bots das Bancas (AOCP, Cebraspe, FGV, UPENET e Sombra Rank S) com 60 segundos por questão, suporte a 2–5 alternativas e placar validado no servidor.
+- **Card Story 9:16:** baixe ou compartilhe seu card vertical (1080×1920) ao final de cada bateria de questões.
+- **Redação IA, TAF e Ranking:** pratique redações com Textos Motivadores I e II, registre seus treinos no Painel TAF Policial e acompanhe o Ranking Geral (com opção de ocultar seu perfil).
+- **Canal Público do Encarregado (DPO — Art. 41, § 1º da LGPD):** `privacidade@jornadadocacador.com.br` (além de exportação JSON e exclusão definitiva de conta em *Minha Conta*).
+
+## 7. Estrutura Técnica de Pastas do Projeto
 
 ```text
-dist/                  site e PWA publicados
-supabase/functions/    funções executadas no servidor
-supabase/migrations/   alterações do banco de dados
-scripts/               validações locais
-desktop/               instalador Windows
-android/               projeto Android
-.openai/                configuração auxiliar de hospedagem
+dist/                  site e PWA publicados (inclui native-question-bank.json)
+supabase/functions/    7 Edge Functions executadas no servidor
+supabase/migrations/   31 migrações SQL do banco de dados (até v102)
+scripts/               11 suítes de validação e testes automatizados
+banco-questoes/        lotes JSON de questões abertas e scripts SQL de limpeza/seed
+desktop/               instalador Windows (Electron)
+android/               projeto Android (WebView)
 ```
 
-Não apague `dist`, `supabase`, `scripts`, `desktop`, `android`, `.git`, `.gitignore`, `build.gradle`, `gradle`, `gradlew` ou `gradlew.bat`.
+## 8. Validação Obrigatória Antes de Publicar
 
-## 3. Programas recomendados
-
-No Windows 10/11, instale:
-
-1. Visual Studio Code;
-2. Git for Windows;
-3. Node.js LTS;
-4. GitHub Desktop, opcional;
-5. Android Studio, somente para gerar o APK;
-6. Supabase CLI, somente para publicar Edge Functions e trabalhar com o banco.
-
-O Bloco de Notas não é recomendado para manutenção do projeto.
-
-## 4. Abrir o projeto
-
-Pasta normalmente utilizada:
-
-```text
-C:\Users\Walyson Caio\Documents\jornada-cacador
-```
-
-No Explorador de Arquivos, abra essa pasta, clique na barra de endereço, digite `cmd` e pressione Enter.
-
-Confirme:
-
-```cmd
-git status
-```
-
-## 5. Backup antes de atualizar
-
-Antes de copiar uma atualização:
-
-1. feche o Visual Studio Code e terminais que usam o projeto;
-2. copie a pasta `jornada-cacador`;
-3. renomeie a cópia para incluir a versão e a data;
-4. mantenha esse backup até concluir os testes em produção.
-
-Os PDFs, usuários e dados atuais do banco não ficam dentro desse backup. Eles permanecem no Supabase.
-
-## 6. Instalar uma atualização recebida em ZIP
-
-1. Extraia o ZIP.
-2. Abra a pasta extraída e confirme que contém `dist`, `scripts` e `supabase`.
-3. Copie todo o conteúdo extraído.
-4. Cole sobre `C:\Users\Walyson Caio\Documents\jornada-cacador`.
-5. Escolha **Substituir os arquivos no destino**.
-6. Não apague a pasta `.git` do repositório local.
-7. Execute as validações abaixo.
-
-## 7. Validação obrigatória
-
-Na raiz do projeto:
+Na raiz do projeto (`C:\Users\Walyson Caio\Documents\jornada-cacador`), execute:
 
 ```cmd
 node scripts\validate-project.mjs
+node scripts\test-question-bank.mjs
+node scripts\test-attach-answer-key.mjs
 node scripts\test-crud-contracts.mjs
-git diff --check
-git status
+node scripts\test-security-contracts.mjs
+node scripts\test-front-study.mjs
 ```
 
-Os dois primeiros comandos devem começar com `OK:`. Se houver erro, não publique.
+Todos os scripts devem exibir `OK:`.
 
-## 8. Testar localmente
-
-Execute:
+## 9. Publicação no GitHub e Cloudflare Pages
 
 ```cmd
-npx serve dist
-```
-
-Abra o endereço informado. Login, recuperação de senha e CORS podem exigir o domínio publicado ou a inclusão temporária do endereço local nas configurações autorizadas.
-
-Encerre o servidor com `Ctrl + C`.
-
-## 9. Enviar uma atualização ao GitHub
-
-Confira o repositório:
-
-```cmd
-git remote -v
-git branch --show-current
-```
-
-O branch esperado é `main`. Depois:
-
-```cmd
+cd "C:\Users\Walyson Caio\Documents\jornada-cacador"
 git add .
-git status
-git commit -m "Descreva resumidamente a atualizacao"
+git commit -m "feat(r148): manual oficial e video tutorial atualizados + sincronia completa"
 git push origin main
+npx wrangler pages deploy dist --project-name jornada-cacador --commit-dirty=true
 ```
 
-Antes do `git commit`, confira a lista em verde. Nunca envie `.env`, chaves privadas, certificados, arquivos de assinatura ou PDFs dos usuários.
+Após o deploy concluir, abra o site e pressione `Ctrl + Shift + R` para ativar o Service Worker `r148`.
 
-## 10. Publicação no Cloudflare
+## 10. Migração SQL v102 no Supabase (5 Alternativas no Banco Compartilhado)
 
-O projeto oficial publica:
+Caso ainda não tenha executado a migração `v102`, abra o **SQL Editor** no Supabase e execute `supabase/migrations/20261106120000_v102_shared_bank_five_options.sql`:
 
-```text
-https://jornada.wcaio.workers.dev
+```sql
+do $$
+begin
+  if to_regclass('public.shared_question_bank') is not null then
+    alter table public.shared_question_bank drop constraint if exists shared_question_bank_correct_index_check;
+    alter table public.shared_question_bank
+      add constraint shared_question_bank_correct_index_check
+      check (correct_index >= 0 and correct_index <= 4);
+  end if;
+end
+$$;
 ```
 
-Quando o Cloudflare está conectado ao GitHub, o `git push origin main` inicia a publicação. Em **Workers & Pages > jornada > Deployments**, aguarde `Success`.
+## 11. Autoria e Aviso Legal
 
-Depois, abra o site e pressione `Ctrl + Shift + R`. Se o Service Worker mantiver uma versão antiga:
-
-1. pressione `F12`;
-2. abra **Application > Service Workers**;
-3. clique em **Unregister**;
-4. abra **Storage**;
-5. use **Clear site data**;
-6. recarregue o endereço.
-
-## 11. Quando publicar funções do Supabase
-
-Não publique funções em atualizações apenas visuais. Publique somente quando arquivos dentro de `supabase/functions` tiverem sido alterados.
-
-Na raiz do projeto:
-
-```cmd
-npx supabase login
-npx supabase link --project-ref jybislbbblyjsrcdegjt
-npx supabase functions deploy material-gemini
-npx supabase functions deploy edital-gemini
-npx supabase functions deploy assistente-pmpe
-npx supabase functions deploy redacao-gemini
-npx supabase functions deploy account-security
-npx supabase functions deploy ai-key-manager
-npx supabase functions deploy system-diagnostics
-```
-
-Publique somente as funções realmente modificadas. Uma atualização de `dist` não exige esses comandos.
-
-## 12. Quando executar SQL
-
-Execute SQL somente quando a atualização indicar expressamente uma nova migração.
-
-1. Abra o projeto correto no Supabase.
-2. Entre em **SQL Editor > New query**.
-3. Abra o arquivo novo dentro de `supabase/migrations`.
-4. Cole o conteúdo completo.
-5. Revise o projeto selecionado.
-6. Clique em **Run** uma única vez.
-
-Não execute novamente todas as migrações antigas sem necessidade.
-
-## 13. Secrets do Supabase
-
-As chaves secretas devem ficar em **Edge Functions > Secrets**, nunca no frontend ou GitHub. Entre elas podem existir:
-
-```text
-SUPABASE_URL
-SUPABASE_SERVICE_ROLE_KEY
-GEMINI_API_KEY
-GROQ_API_KEY
-DEEPSEEK_API_KEY
-```
-
-A chave pública/publishable do Supabase pode aparecer no frontend; a `service_role` nunca pode.
-
-## 14. Manutenção da interface
-
-Arquivos principais:
-
-```text
-dist/index.html
-dist/ui-v75.css
-dist/ui-v77.css
-dist/ui-v78.css
-dist/v59-enhancements.js
-dist/v77-experience.js
-dist/v78-smart-notebook.js
-dist/sw.js
-```
-
-Ao criar ou alterar um arquivo público:
-
-1. inclua-o em `dist/index.html` quando aplicável;
-2. adicione-o à lista `ASSETS` de `dist/sw.js`;
-3. altere o nome da constante `CACHE` em `dist/sw.js`;
-4. execute os validadores;
-5. teste em computador e celular.
-
-## 15. Instalar como PWA
-
-### Computador
-
-Abra o site no Chrome ou Edge e use **Instalar Jornada do Caçador** na barra de endereço ou no menu do navegador.
-
-### iPad
-
-Abra no Safari e selecione **Compartilhar > Adicionar à Tela de Início**.
-
-### Android
-
-Abra no Chrome e selecione **Adicionar à tela inicial**. A PWA normalmente recebe atualizações com mais facilidade do que um APK separado.
-
-## 16. Gerar o instalador Windows
-
-```cmd
-cd desktop
-npm install
-npm run build:windows
-```
-
-O resultado fica em `desktop\release`. O instalador apenas abre o domínio oficial e utiliza os mesmos dados da versão web.
-
-## 17. Gerar o APK Android
-
-Abra a pasta Android no Android Studio e confirme que a URL aponta para:
-
-```text
-https://jornada.wcaio.workers.dev/
-```
-
-Use **Build > Generate Signed Bundle / APK > APK**. Guarde o arquivo `.jks`, o alias e as senhas em local privado. Para atualizar um APK instalado, use sempre a mesma assinatura e um `versionCode` maior.
-
-## 18. Backup dos dados
-
-O GitHub protege o código, mas não substitui o backup do Supabase. Faça cópias separadas de:
-
-- banco PostgreSQL;
-- bucket `study-documents`;
-- configurações de autenticação;
-- nomes dos Secrets;
-- chave de assinatura Android;
-- configurações do Cloudflare.
-
-Dentro do aplicativo, use **Menu > Diagnóstico e backup** para exportar o estado permitido do usuário.
-
-## 19. Diagnóstico rápido
-
-### Site não atualiza
-
-- confirme o último commit no GitHub;
-- confirme `Success` no Cloudflare;
-- limpe o Service Worker;
-- teste em janela anônima.
-
-### `Failed to fetch`
-
-- confirme a internet;
-- confira se a Edge Function está publicada;
-- confira CORS e domínio autorizado;
-- abra os logs da função no Supabase.
-
-### Erro 429
-
-A cota do provedor foi atingida. Aguarde a renovação ou utilize outra chave/provedor configurado. Tentativas que falham antes da conclusão não devem consumir a cota interna de análises concluídas.
-
-### PDF não é analisado
-
-- confirme se é PDF textual;
-- PDFs escaneados dependem de OCR/visão e consomem mais recursos;
-- confira tamanho, status e logs de `material-gemini`;
-- não envie novamente o mesmo arquivo enquanto estiver `processing`.
-
-### Dados diferentes entre aparelhos
-
-- use a mesma conta;
-- clique em sincronizar;
-- confirme internet e sessão válida;
-- evite manter uma versão antiga da PWA em cache.
-
-## 20. Segurança
-
-- nunca publique chaves secretas;
-- mantenha exclusões protegidas por senha;
-- não desative RLS do Supabase;
-- não coloque `service_role` em `dist`;
-- use dependências oficiais e atualizadas;
-- faça backup antes de migrations;
-- teste redefinição de perfil e exclusões em uma conta de teste;
-- mantenha o repositório privado se não quiser expor o código-fonte.
-
-## 21. Autoria e uso
-
-Projeto idealizado por **Walyson Caio**. É independente e não possui vínculo oficial com órgãos públicos, bancas ou cursos preparatórios.
-
-Leis, editais, respostas de IA, gabaritos e datas devem ser conferidos nas fontes oficiais. A IA é uma ferramenta de apoio e não substitui a validação humana.
-
+Projeto idealizado por **Walyson Caio**. Plataforma independente, sem vínculo oficial com órgãos públicos, bancas examinadoras ou cursos preparatórios. Leis, editais e gabaritos devem ser conferidos nas publicações oficiais.

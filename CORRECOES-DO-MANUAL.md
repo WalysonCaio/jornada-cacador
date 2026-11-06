@@ -1,7 +1,10 @@
-# Correções sugeridas ao Manual Oficial
+# Histórico de Correções Aplicadas ao Manual Oficial e Vídeo Tutorial (r148)
 
-1. **Seção 2 (Como enviar o edital):** o botão se chama **"Enviar para esta campanha"**, não "Enviar PDF para a biblioteca".
-2. **Seção 3 (tabela, etapa 3):** o botão da bateria é **"Iniciar batalha de 5 questões"** (aba Questões), não "Questões de hoje".
-3. **Figura 1 / Seção 1:** o app **não** sincroniza em tempo real. Ele sincroniza ao abrir/voltar ao app e a cada alteração salva. Sugestão: "sincronização automática entre computador e celular".
-4. **Seção 5 (Ranking):** acrescentar que o perfil aparece no ranking para os outros caçadores e que dá para **desativar em Minha Conta → "Ocultar meu perfil para outros usuários"**.
-5. (Opcional) **Arena X1:** acrescentar que o placar é calculado pelo servidor e que cada duelo só aceita uma rodada por jogador.
+Todas as correções e novas funcionalidades abaixo foram incorporadas em `manual-oficial-jornada-do-cacador.pdf`, `tutorial-jornada-do-cacador.mp4` e `GUIA-UNIFICADO.md`:
+
+1. **Seção 1 (Conta, Tema e Conciliação):** sincronização automática ao abrir/retornar ao app e a cada alteração salva; alternador **☀️ Claro / 🌙 Escuro** no topo; botão **🔗 Unificar editais** para conciliar até 2 concursos.
+2. **Seção 2 (Envio do Edital e Termômetro Duplo):** nome exato do botão **"Enviar para esta campanha"** e explicação do Termômetro Duplo (**Cobertura Teórica %** vs. **Cobertura Prática em Questões %**).
+3. **Seção 3 (Sincronia na Aba Hoje e Maestria XP):** explicação passo a passo da sincronia entre **Planejamento**, **Missão Atual**, **Ciclo Tático do seu Edital**, **Cronômetro de Horas Líquidas por Modalidade** (`📖 Teoria`, `📜 Lei Seca`, `🎯 Questões`, `🔁 Revisão`), botões fixos **◎ Questões de [Disciplina da Missão]** e **⚡ Sprint Rápido (5 min)**, **Plano Diário de 240m** (`77m + 58m + 65m + 40m`), **Meta Semanal** (`20q/dia × 6d = 120q/sem`), **Ofensiva de 50% (2 etapas)** e **Bônus de Maestria Pedagógica (+15 a +50 XP)**.
+4. **Seção 4 (Provas em PDF, Raio-X, Gabarito Tardio e Estudo sem PDF):** documentados o **Raio-X Pré-Análise**, escolha de **Caderno** (Tipo 1/2/Azul/Branco), **Gabarito em PDF Separado**, botão **"🔑 Adicionar gabarito depois"** (com recusa de ambiguidade e marcação de questões `ANULADAS`), botão **"📝 Criar Estudo por Texto ou Assunto"** e consentimento *opt-in* LGPD desmarcado por padrão.
+5. **Seção 5 (Ordem Didática Art. 1º → Art. 5º e Banco sem Viés):** documentada a ordenação cronológica de artigos e aulas, `Norma-Base` + `Data de Conferência (11/2026)`, botão **⚠️ Reportar erro ou lei atualizada**, importação JSON de bases gratuitas e **Simulador de Aprovação**.
+6. **Seção 6 (Arena Duelo X1 de 60s, Bots, Story 9:16 e LGPD/DPO):** atualizado o tempo do Duelo X1 para **60 segundos por questão**, incluídos os **Bots Examinadores das Bancas**, o gerador de **Card Story 9:16**, a opção de ocultar o perfil no Ranking e o canal público do Encarregado DPO (`privacidade@jornadadocacador.com.br`).
