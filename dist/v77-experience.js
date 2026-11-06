@@ -2221,13 +2221,87 @@
       explanation: "Conceito-chave: Classificação das queimaduras quanto à profundidade: (1) 1º Grau = apenas epiderme (eritema/vermelhidão e dor local, SEM bolhas); (2) 2º Grau = epiderme + derme parcial (dor intensa + FLICTENAS/BOLHAS); (3) 3º Grau = espessura total (epiderme + derme + tecidos profundos, aspecto coriáceo/esbranquiçado ou carbonizado, pouca ou nenhuma dor local pela destruição das terminações nervosas). | ✅ Alternativa correta: B) Segundo grau (presença de flictenas/bolhas). | ❌ Análise das alternativas: A) 1º grau não forma bolhas; C) 3º grau destrói a derme inteira e as terminações nervosas; D) Radiação solar leve causa queimadura de 1º grau. | ⚠️ Pegadinha da banca: No APH de queimados, NUNCA se deve furar ou romper as bolhas (flictenas) no local da ocorrência, nem aplicar pomadas, pasta de dente ou gelo direto na lesão!"
     }
   ];
+  // O banco nativo é AUTORAL (escrito no estilo das bancas), não prova oficial: o rótulo precisa dizer isso.
+  // O campo "board" continua indicando o estilo (usado pelos filtros por banca).
+  // As alternativas são embaralhadas de forma determinística (mesma ordem em toda sessão) para a resposta certa
+  // não ficar quase sempre em B; questões cujas alternativas dependem da ordem não são tocadas.
+  function inferLegalNormaBase(q) {
+    const raw = `${q?.topic || ''} ${q?.statement || ''} ${q?.explanation || ''}`;
+    const mSumVinc = raw.match(/S[úu]mula\s+Vinculante\s+n?[º°]?\s*\d+/i);
+    if (mSumVinc) return `${mSumVinc[0]} do STF`;
+    const mSum = raw.match(/S[úu]mula\s+n?[º°]?\s*\d+\s+do\s+(?:STF|STJ)/i);
+    if (mSum) return mSum[0];
+    const mLei = raw.match(/Lei\s+(?:Complementar\s+)?n?[º°]?\s*[\d.]+\/\d{4}/i);
+    const mArt = raw.match(/art(?:igo)?\.?\s*\d+[º°]?(?:-[A-Z])?(?:,\s*(?:inciso\s+)?[IVXLCDM]+|\s*,\s*§\s*\d+[º°]?)?/i);
+    if (mLei && mArt) return `${mLei[0]} (${mArt[0]})`;
+    if (mLei) return mLei[0];
+    if (/Constitui[çc][ãa]o\s+Federal|CF\/88/i.test(raw) && mArt) return `CF/88 (${mArt[0]})`;
+    if (/C[óo]digo\s+Penal|\bCP\b/i.test(raw) && mArt) return `Código Penal (${mArt[0]})`;
+    if (/C[óo]digo\s+de\s+Processo\s+Penal|\bCPP\b/i.test(raw) && mArt) return `CPP (${mArt[0]})`;
+    if (/Declara[çc][ãa]o\s+Universal\s+dos\s+Direitos\s+Humanos|DUDH/i.test(raw)) return 'DUDH (ONU/1948)';
+    const subj = String(q?.subject || '');
+    if (/Portugu[êe]s/i.test(subj)) return 'Gramática Normativa / Interpretação Textual';
+    if (/Racioc[íi]nio|Matem[áa]tica/i.test(subj)) return 'Lógica Proposicional e Quantitativa';
+    if (/Inform[áa]tica/i.test(subj)) return 'Segurança da Informação (CERT.br) e Redes TCP/IP';
+    if (/Hist[óo]ria/i.test(subj)) return 'Historiografia Oficial de Pernambuco';
+    return 'Bibliografia Oficial de Concursos Policiais';
+  }
+  function normalizeNativeQuestionBank(list) {
+    const orderDependent = /\b(todas|nenhuma|ambas|anterior(?:es)?|acima|abaixo)\b|\balternativas?\s+[a-e]\b|\b[a-e]\s+e\s+[a-e]\b/i;
+    const numeralOnly = /^\s*(?:[IVX]+|\d+)(?:\s*(?:,|e|ou)\s*(?:[IVX]+|\d+))*\s*(?:apenas|somente)?\.?\s*$/i;
+    const letters = 'ABCDE';
+    for (const q of list) {
+      q.origin = 'autoral';
+      q.norma_base = q.norma_base || inferLegalNormaBase(q);
+      q.verified_at = q.verified_at || '2026-11';
+      const opts = q.options;
+      if (!Array.isArray(opts) || opts.length < 3 || opts.length > 5 || !Number.isInteger(q.correct_index)) continue;
+      if (opts.some(o => orderDependent.test(String(o))) || opts.every(o => numeralOnly.test(String(o).trim()))) continue;
+      const expl = String(q.explanation || '');
+      const stripped = expl.replace(/Alternativa correta:\s*[A-E]\)[^|]*/g, '').replace(/An[aá]lise das alternativas:[^|]*/g, '');
+      if (/\b[A-E]\)/.test(stripped) || /\b(?:alternativa|letra)\s+[A-E]\b/i.test(stripped)) continue;
+      let h = 2166136261;
+      for (const ch of String(q.statement)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+      const rand = () => { h = (h + 0x6D2B79F5) >>> 0; let x = Math.imul(h ^ (h >>> 15), 1 | h); x ^= x + Math.imul(x ^ (x >>> 7), 61 | x); return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
+      const order = opts.map((_, i) => i);
+      for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+      const newPos = order.map((_, oldIdx) => order.indexOf(oldIdx));
+      q.options = order.map(i => opts[i]);
+      q.correct_index = newPos[q.correct_index];
+      const remap = letter => letters[newPos[letters.indexOf(letter)]];
+      let next = expl.replace(/(Alternativa correta:\s*)([A-E])\)/, (_, lead, l) => `${lead}${remap(l)})`);
+      next = next.replace(/(An[aá]lise das alternativas:\s*)([^|]*)/, (_, lead, body) => {
+        const items = body.trim().split(/;\s*(?=[A-E]\)\s)/).map(item => item.replace(/^([A-E])\)/, (__, l) => `${remap(l)})`));
+        items.sort((a, b) => a.charAt(0).localeCompare(b.charAt(0)));
+        return `${lead}${items.join('; ')} `;
+      });
+      q.explanation = next;
+    }
+    return list;
+  }
+  normalizeNativeQuestionBank(NATIVE_POLICE_QUESTION_BANK);
   window.NATIVE_POLICE_QUESTION_BANK = NATIVE_POLICE_QUESTION_BANK;
+
+  // Carregamento sob demanda de banco externo JSON (permite corrigir ou atualizar questões sem novo deploy de JS)
+  async function syncExternalNativeQuestionBank() {
+    if (typeof fetch !== 'function') return;
+    try {
+      const res = await fetch('./native-question-bank.json', { cache: 'no-cache' });
+      if (!res.ok) return;
+      const extList = await res.json();
+      if (Array.isArray(extList) && extList.length >= NATIVE_POLICE_QUESTION_BANK.length) {
+        NATIVE_POLICE_QUESTION_BANK.length = 0;
+        extList.forEach(item => NATIVE_POLICE_QUESTION_BANK.push(item));
+      }
+    } catch (_e) {}
+  }
+  if (typeof window !== 'undefined') setTimeout(syncExternalNativeQuestionBank, 1200);
 
   function questionMatchesBoardFilter(item, boardFilter) {
     if (!boardFilter || boardFilter === 'all') return true;
     const target = String(boardFilter).toLocaleLowerCase('pt-BR').trim();
     const hay = `${item?.board || ''} ${item?.statement || ''} ${item?.explanation || ''} ${item?.topic || ''}`.toLocaleLowerCase('pt-BR');
-    if (target.includes('aocp')) return /aocp/.test(hay) || item?.origin === 'oficial' || !item?.board || item?.board === 'Prova Oficial' || /\b105\s*quest/i.test(String(item?.board||''));
+    if (target.includes('aocp')) return /aocp/.test(hay) || !item?.board || item?.board === 'Prova Oficial' || /\b105\s*quest/i.test(String(item?.board||''));
     if (target.includes('cebraspe') || target.includes('cespe')) return /cebraspe|cespe/.test(hay);
     if (target.includes('fgv')) return /\bfgv\b|fundacao getulio vargas/.test(hay);
     if (target.includes('upenet') || target.includes('iaupe')) return /upenet|iaupe/.test(hay);
@@ -10933,6 +11007,10 @@
     if(!keyMap||keyMap.size===0){
       return toast('Não foi possível identificar pares número-resposta (ex.: 1-A 2-B 3-C...). Verifique o formato colado.');
     }
+    if(keyMap.ambiguous){
+      // Dois cadernos (Tipo 1/2) ou numeração repetida: aplicar um deles em silêncio corrigiria o aluno com o gabarito errado.
+      return toast(`${keyMap.reason||'O gabarito colado tem mais de um gabarito para o mesmo número.'} Cole apenas o gabarito do seu caderno.`);
+    }
     try{
       toast('Aplicando gabarito oficial às questões do caderno...');
       const session=await validSession();
@@ -10950,10 +11028,21 @@
         for(let i=0;i<qs.length;i++){
           qCounter++;
           const qItem=qs[i];
+          // Só completa o que está sem gabarito: nunca sobrescreve uma resposta que já veio do documento.
+          if(!(qItem.answer_unknown||!Number.isInteger(Number(qItem.correct_index))||Number(qItem.correct_index)<0))continue;
           const numMatch=String(qItem.topic||'').match(/\b(\d{1,3})\b/);
           const qNum=Number(qItem.exam_order)||(numMatch?Number(numMatch[1]):qCounter);
-          const ansLetter=keyMap.get(qNum)||keyMap.get(i+1);
-          if(ansLetter&&ansLetter!=='ANULADA'){
+          // Procura pelo NÚMERO da questão; se ele não está no gabarito, a questão continua sem gabarito
+          // (usar a posição na lista poderia atribuir a resposta de outra questão).
+          const ansLetter=keyMap.get(qNum);
+          if(ansLetter==='ANULADA'){
+            qItem.annulled=true;
+            qItem.correct_index=-1;
+            delete qItem.answer_unknown;
+            qItem.origin='oficial';
+            qItem.explanation='Questão ANULADA oficialmente pela banca examinadora.';
+            updatedCount++;
+          }else if(ansLetter){
             const opts=Array.isArray(qItem.options)?qItem.options:[];
             const isCE=opts.length===2&&/^certo$/i.test(String(opts[0]||''));
             const newIdx=isCE?(ansLetter==='E'?1:0):'ABCDE'.indexOf(ansLetter);
@@ -11170,6 +11259,70 @@
     setTimeout(()=>URL.revokeObjectURL(url),2500);
     toast('📥 Imagem Story (9:16) baixada! Pronta para postar no Instagram/WhatsApp.');
   };
+
+
+  // ── r147: Alternador de Tema Claro/Escuro, Botão Reportar Erro na Questão (com Norma-base) e Onboarding Guiado ──
+  function initThemeAndQuestionReporting() {
+    if (typeof document === 'undefined') return;
+    const savedTheme = localStorage.getItem('jc_theme_mode_v1');
+    if (savedTheme === 'light') document.body.classList.add('lightPaperMode');
+
+    const topActions = document.querySelector('.topActions') || document.querySelector('header .actions') || document.querySelector('#moreBtn')?.parentElement;
+    if (topActions && !document.querySelector('#globalThemeToggleBtn')) {
+      const tBtn = document.createElement('button');
+      tBtn.type = 'button';
+      tBtn.id = 'globalThemeToggleBtn';
+      tBtn.className = 'ghost small';
+      tBtn.style.cssText = 'width:auto;padding:6px 10px;font-size:12px;';
+      const updateThemeLabel = () => {
+        const isLight = document.body.classList.contains('lightPaperMode');
+        tBtn.textContent = isLight ? '🌙 Escuro' : '☀️ Claro';
+        tBtn.title = isLight ? 'Voltar para o Tema Escuro' : 'Ativar Tema Claro de Leitura';
+      };
+      updateThemeLabel();
+      tBtn.addEventListener('click', () => {
+        const isLight = document.body.classList.toggle('lightPaperMode');
+        localStorage.setItem('jc_theme_mode_v1', isLight ? 'light' : 'dark');
+        updateThemeLabel();
+        if (typeof toast === 'function') toast(isLight ? '☀️ Tema Claro ativado!' : '🌙 Tema Escuro ativado!');
+      });
+      topActions.insertBefore(tBtn, topActions.firstChild);
+    }
+
+    // Injeta metadado de Norma-base + Data de Conferência e botão "⚠️ Reportar erro/desatualização" no modal de questões
+    const qDialog = document.querySelector('#questionDialog');
+    if (qDialog && !document.querySelector('#questionNormaReportBar')) {
+      const bar = document.createElement('div');
+      bar.id = 'questionNormaReportBar';
+      bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:8px;border-top:1px solid rgba(148,163,184,0.18);font-size:11.5px;color:#94a3b8;';
+      bar.innerHTML = `
+        <span id="questionNormaBaseMeta">⚖️ Norma-base: Bibliografia Oficial · Conferido: 11/2026</span>
+        <button type="button" id="reportQuestionIssueBtn" class="ghost small" style="width:auto;min-height:28px;padding:4px 10px;font-size:11px;color:#fbbf24;border-color:rgba(251,191,36,0.35);">⚠️ Reportar erro ou lei atualizada</button>
+      `;
+      const actionsRow = qDialog.querySelector('.modalActions') || qDialog.querySelector('#nextQuestion')?.parentElement;
+      if (actionsRow) actionsRow.insertAdjacentElement('beforebegin', bar);
+      else qDialog.appendChild(bar);
+
+      bar.querySelector('#reportQuestionIssueBtn')?.addEventListener('click', () => {
+        const curQ = (typeof activeQuestions === 'object' && activeQuestions?.questions) ? activeQuestions.questions[activeQuestions.current] : null;
+        const reason = typeof prompt === 'function' ? prompt('Descreva o erro ou atualização legislativa encontrada nesta questão (ex.: artigo alterado, gabarito divergente):') : 'Revisão solicitada';
+        if (!reason || !reason.trim()) return;
+        try {
+          if (typeof state === 'object' && state) {
+            state.contentIssues = state.contentIssues || {};
+            const qKey = curQ?.topic || curQ?.statement?.slice(0, 60) || ('q-' + Date.now());
+            state.contentIssues[qKey] = { reason: reason.trim(), norma_base: curQ?.norma_base || '', reportedAt: new Date().toISOString() };
+            if (typeof save === 'function') save();
+          }
+        } catch (_e) {}
+        if (typeof toast === 'function') toast('✅ Reporte salvo para revisão jurídica! Obrigado por aprimorar o banco.');
+      });
+    }
+  }
+  if (typeof window !== 'undefined') {
+    window.addEventListener('DOMContentLoaded', () => setTimeout(initThemeAndQuestionReporting, 350));
+    setTimeout(initThemeAndQuestionReporting, 600);
+  }
 
   if(typeof window!=='undefined'){window.updateTodayCommand=updateTodayCommand;window.renderEstudeiCycleWidget=renderEstudeiCycleWidget;}
 })();

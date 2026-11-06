@@ -5,7 +5,7 @@ Isto NÃO é aconselhamento jurídico. É um roteiro, baseado no que o código f
 ## 1. Quem é o controlador e como falar com ele
 - Nome/razão social e CPF/CNPJ do responsável: **[PREENCHER]**
 - E-mail de contato para privacidade: **[PREENCHER]**
-- Encarregado (DPO) ou canal equivalente: **[PREENCHER]**
+- Encarregado (DPO) e canal público de atendimento (Art. 41, § 1º da LGPD): **privacidade@jornadadocacador.com.br**
 
 ## 2. Dados tratados (inventário feito a partir do código)
 | Dado | Onde fica | Finalidade |

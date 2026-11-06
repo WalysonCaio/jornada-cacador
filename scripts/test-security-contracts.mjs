@@ -130,3 +130,16 @@ console.log("OK: contratos v100 (autor da biblioteca sem nome real) validados.")
   assert(!/questions_json|content_json|assert_rate_limit|grant_server_xp|challenger_finished_at/.test(v100), "a v100 não pode referenciar colunas/funções inexistentes");
 }
 console.log("OK: contratos v101 (server_verified real, sem referências quebradas nas migrações) validados.");
+
+// ── v102: banco compartilhado aceita gabarito até a 5ª alternativa também em bancos já existentes ──
+{
+  const files = readdirSync(new URL("supabase/migrations/", root)).filter((f) => f.endsWith(".sql")).sort();
+  const v102 = files.find((f) => f.includes("v102_shared_bank_five_options")); assert(v102, "falta a migração v102");
+  const t = read("supabase/migrations/" + v102).replace(/--[^\n]*/g, "");
+  assert(/to_regclass\('public\.shared_question_bank'\)/.test(t) && /correct_index <= 4/.test(t), "v102 deve ajustar a restrição para correct_index <= 4");
+  assert(/drop constraint if exists shared_question_bank_correct_index_check/.test(t), "v102 deve ser idempotente");
+  assert((t.match(/\$\$/g) || []).length % 2 === 0, "v102: $$ desbalanceado");
+  const v79 = read("supabase/migrations/20261028_v79_shared_question_bank.sql");
+  assert(/correct_index <= 4/.test(v79), "a v79 deve aceitar a 5ª alternativa (A–E)");
+}
+console.log("OK: contratos v102 (banco compartilhado com 5 alternativas) validados.");
