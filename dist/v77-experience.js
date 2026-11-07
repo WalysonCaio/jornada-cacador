@@ -74,7 +74,7 @@
     if(meta)meta.textContent=mission?`${mission.subject||'Disciplina'} · ${completed}/4 etapas concluídas`:'Insira um edital para criar seu plano.';
     const errors=Object.values(state?.errors||{}).filter(e=>!e?.campaignId||e.campaignId===state?.activeCampaignId).reduce((sum,item)=>sum+Number(item?.misses||0),0);
     if(q('#urgentReviewMeta'))q('#urgentReviewMeta').textContent=errors?`${errors} erro${errors===1?'':'s'} pedindo atenção`:'Nenhum erro urgente no momento';
-    if(q('#questionShortcutMeta'))q('#questionShortcutMeta').textContent=`${ALL_QUESTIONS?.length||0} questão${ALL_QUESTIONS?.length===1?'':'ões'} disponíveis`;
+    if(q('#questionShortcutMeta'))q('#questionShortcutMeta').textContent=`${ALL_QUESTIONS?.length||0} ${(ALL_QUESTIONS?.length||0)===1?'questão':'questões'} disponíveis`;
 
     const dailyBox=q('#dailyMission');
     if(dailyBox&&mission){
@@ -86,11 +86,15 @@
       if(practiceBtn){
         practiceBtn.innerHTML=`◎ Questões de ${escText(mission.subject||'hoje')}`;
         practiceBtn.onclick=()=>{
+          sanitizeAllQuestionsAndErrorsSubjects();
           const curMission=(typeof missionPool==='function'?missionPool():[]).find(item=>item.id===state?.daily)||mission;
           const allQ=ALL_QUESTIONS||[];
-          const subjPool=allQ.filter(x=>topicKey(learningCategory(x.subject))===topicKey(curMission.subject));
-          const topicMatches=subjPool.filter(x=>normalizeText(`${x.topic||''} ${x.statement||''}`).includes(normalizeText(curMission.name||'').slice(0,18)));
-          const pool=topicMatches.length>=3?topicMatches:(subjPool.length?subjPool:allQ);
+          const cleanMissionSubj=canonicalSubjectName(curMission.subject||'');
+          const subjKey=topicKey(cleanMissionSubj);
+          const subjPool=allQ.filter(x=>topicKey(resolveStrictQuestionDiscipline(x))===subjKey);
+          const topicMatches=subjPool.filter(x=>questionMatchesTopicFilter(x,topicKey(curMission.name||''),cleanMissionSubj,curMission.name||''));
+          const otherSameSubj=subjPool.filter(x=>!topicMatches.includes(x));
+          const pool=topicMatches.length>=3?topicMatches:[...topicMatches,...otherSameSubj];
           if(pool.length){
             const targetCount=Math.min(20,pool.length);
             const chosen=typeof balancedQuestions==='function'?balancedQuestions(pool,targetCount):pool.slice(0,targetCount);
@@ -3058,50 +3062,118 @@
   }
   window.buildSubjectAppropriateDistractors=buildSubjectAppropriateDistractors;
 
+  function isTopicContaminatedByWrongSubject(topicStr,realSubj){
+    const t=String(topicStr||'').trim();
+    if(!t)return true;
+    if(/^(?:direito constitucional geral|direito penal geral|direito processual penal|lingua portuguesa|raciocinio logico|geral|edital|regras do edital|quest[aã]o\s*\d+|item\s*\d+|simulado.*|corre[cç][aã]o de erro|ponto de aten[cç][aã]o|conte[uú]do.*)$/i.test(t)){
+      const tSubj=canonicalSubjectName(t);
+      if(tSubj&&tSubj!=='Conteúdo Geral'&&topicKey(tSubj)!==topicKey(realSubj))return true;
+      if(/^(?:geral|edital|regras do edital|quest[aã]o\s*\d+|item\s*\d+|simulado.*)$/i.test(t))return true;
+    }
+    return false;
+  }
+
   function sanitizeAllQuestionsAndErrorsSubjects(){
     if(typeof ensureNativeQuestionBankLoaded==='function')ensureNativeQuestionBankLoaded();
+    const isValidFn=typeof window.isValidPedagogicalQuestion==='function'?window.isValidPedagogicalQuestion:(()=>true);
     const byStmt=new Map();
     if(Array.isArray(ALL_QUESTIONS)){
-      for(const qItem of ALL_QUESTIONS){
-        if(!qItem||typeof qItem!=='object')continue;
+      for(let i=ALL_QUESTIONS.length-1;i>=0;i--){
+        const qItem=ALL_QUESTIONS[i];
+        if(!qItem||typeof qItem!=='object'||!isValidFn(qItem)){
+          ALL_QUESTIONS.splice(i,1);
+          continue;
+        }
         const realSubj=resolveStrictQuestionDiscipline(qItem);
         if(realSubj&&!isInvalidTrailSubject(realSubj)&&realSubj!==qItem.subject){
           qItem.subject=realSubj;
+        }
+        if(isTopicContaminatedByWrongSubject(qItem.topic,qItem.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
+          qItem.topic=inferQuestionPedagogicalTopic(qItem.statement,qItem.subject);
         }
         const stKey=topicKey(qItem.statement||'');
         if(stKey&&stKey.length>=15&&!byStmt.has(stKey))byStmt.set(stKey,qItem);
       }
     }
     if(state?.customQuestionsByCampaign&&typeof state.customQuestionsByCampaign==='object'){
-      for(const list of Object.values(state.customQuestionsByCampaign)){
+      for(const [cId,list] of Object.entries(state.customQuestionsByCampaign)){
         if(!Array.isArray(list))continue;
-        for(const qItem of list){
-          if(!qItem||typeof qItem!=='object')continue;
+        state.customQuestionsByCampaign[cId]=list.filter(qItem=>qItem&&typeof qItem==='object'&&isValidFn(qItem)).map(qItem=>{
           const realSubj=resolveStrictQuestionDiscipline(qItem);
-          if(realSubj&&!isInvalidTrailSubject(realSubj)&&realSubj!==qItem.subject)qItem.subject=realSubj;
-        }
+          if(realSubj&&!isInvalidTrailSubject(realSubj))qItem.subject=realSubj;
+          if(isTopicContaminatedByWrongSubject(qItem.topic,qItem.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
+            qItem.topic=inferQuestionPedagogicalTopic(qItem.statement,qItem.subject);
+          }
+          return qItem;
+        });
       }
     }
     if(state?.errors&&typeof state.errors==='object'){
-      for(const [,err] of Object.entries(state.errors)){
-        if(!err||typeof err!=='object')continue;
+      let errChanged=false;
+      for(const [errKey,err] of Object.entries(state.errors)){
+        if(!err||typeof err!=='object'){
+          delete state.errors[errKey];
+          errChanged=true;
+          continue;
+        }
+        if(err.question){
+          const testObj={statement:err.question,options:Array.isArray(err.options)&&err.options.length>=2?err.options:['Opção A','Opção B'],topic:err.topic||'',associated_text:err.associated_text||''};
+          if(!isValidFn(testObj)){
+            delete state.errors[errKey];
+            errChanged=true;
+            continue;
+          }
+        }
+        if(/^(?:edital|regras do edital|instru[cç][oõ]es da prova|converg[eê]ncia lingu[ií]stica)$/i.test(String(err.topic||'').trim())&&!err.associated_text&&String(err.question||'').length<220){
+          delete state.errors[errKey];
+          errChanged=true;
+          continue;
+        }
         const stKey=topicKey(err.question||'');
         const matchedQ=stKey?byStmt.get(stKey):null;
         if(matchedQ){
-          err.subject=matchedQ.subject;
-          if(matchedQ.topic&&(!err.topic||/^(questao|item|correcao|ponto de atencao|geral)/i.test(err.topic)))err.topic=matchedQ.topic;
+          if(err.subject!==matchedQ.subject){err.subject=matchedQ.subject;errChanged=true;}
+          if(matchedQ.topic&&(isTopicContaminatedByWrongSubject(err.topic,matchedQ.subject)||err.topic!==matchedQ.topic)){err.topic=matchedQ.topic;errChanged=true;}
           if(Array.isArray(matchedQ.options)&&matchedQ.options.length>=2){
             err.options=[...matchedQ.options];
             err.correct_index=matchedQ.correct_index;
           }
         }else if(err.question||err.topic){
           const realErrSubj=resolveStrictQuestionDiscipline(err.question||'',err.topic||'',err.subject||'',err.options||[]);
-          if(realErrSubj&&!isInvalidTrailSubject(realErrSubj))err.subject=realErrSubj;
+          if(realErrSubj&&!isInvalidTrailSubject(realErrSubj)&&err.subject!==realErrSubj){
+            err.subject=realErrSubj;
+            errChanged=true;
+          }
+          if(isTopicContaminatedByWrongSubject(err.topic,err.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
+            err.topic=inferQuestionPedagogicalTopic(err.question||'',err.subject);
+            errChanged=true;
+          }
         }
       }
+      if(errChanged&&typeof save==='function')save();
     }
   }
   window.sanitizeAllQuestionsAndErrorsSubjects=sanitizeAllQuestionsAndErrorsSubjects;
+
+  function questionMatchesTopicFilter(item,topicVal,subject='all',rawTopicLabel=''){
+    if(!topicVal||topicVal==='all')return true;
+    if(subject&&subject!=='all'&&topicKey(resolveStrictQuestionDiscipline(item))!==topicKey(subject))return false;
+    const qTopicKey=topicKey(item?.topic||'');
+    if(qTopicKey===topicVal||qTopicKey.includes(topicVal)||topicVal.includes(qTopicKey))return true;
+    const hay=topicKey(`${item?.topic||''} ${item?.statement||''}`);
+    const refText=topicKey(`${rawTopicLabel||''} ${topicVal}`).replace(/^\d+\s*/,'').trim();
+    // Verifica artigos específicos (ex.: art 1 a 4, art 5, art 144, lei 9455)
+    if(/\bart\s*1\b.*\b4\b|\bprincipios fundamentais\b/.test(refText)&&/\b(principios fundamentais|fundamentos da republica|soberania|dignidade da pessoa|pluralismo politico|autodeterminacao|art 1|art 2|art 3|art 4)\b/.test(hay))return true;
+    if(/\bart\s*5\b|\bdireitos e deveres individuais\b|\bdireitos e garantias\b/.test(refText)&&/\b(art 5|direitos individuais|inviolabilidade|habeas|mandado de seguranca|liberdade|propriedade)\b/.test(hay))return true;
+    if(/\bart\s*144\b|\bseguranca publica\b/.test(refText)&&/\b(art 144|seguranca publica|policia militar|policia civil|policia federal|policia penal|bombeiro)\b/.test(hay))return true;
+    if(/\bproposic|\bconectiv|\bestruturas logicas/.test(refText)&&/\b(proposic|conectiv|bicondicional|condicional|disjuncao|conjuncao|tabela verdade|tautologia|negacao|equivalencia|logicamente)\b/.test(hay))return true;
+    const stopWords=new Set(['para','como','sobre','entre','pelo','pela','seus','suas','nocoes','conceitos','estudo','aspectos','compreensao','estruturas','disposicoes','gerais','preliminares','capitulo','titulo','secao','artigo','artigos','republica','federativa','brasil']);
+    const keywords=refText.split(/\s+/).filter(w=>w.length>=4&&!stopWords.has(w));
+    if(!keywords.length)return false;
+    const hits=keywords.filter(kw=>hay.includes(kw)).length;
+    return hits>=Math.min(2,keywords.length)||Boolean(keywords.length===1&&hits===1);
+  }
+  window.questionMatchesTopicFilter=questionMatchesTopicFilter;
 
   function activeCampaignErrors(){
     sanitizeAllQuestionsAndErrorsSubjects();
@@ -3316,23 +3388,55 @@
 
   function populateTopicFilter(){
     ensureTopicFilterSelect();
+    sanitizeAllQuestionsAndErrorsSubjects();
     const topicSelect=q('#questionTopic');
     if(!topicSelect)return;
     const subject=q('#questionSubject')?.value||'all';
     const board=q('#questionBoardFilter')?.value||'all';
     const currentTopic=topicSelect.value||'all';
-    const baseSource=typeof questionsForMode==='function'?questionsForMode('battle',subject):(ALL_QUESTIONS||[]);
-    const allForSubject=(ALL_QUESTIONS||[]).filter(item=>(subject==='all'||learningCategory(item.subject)===subject)&&questionMatchesBoardFilter(item,board));
-    const pool=allForSubject.length?allForSubject:baseSource;
-    const topicsMap=new Map();
-    for(const item of pool){
+    const subjKey=subject==='all'?'all':topicKey(canonicalSubjectName(subject));
+    const allForSubject=(ALL_QUESTIONS||[]).filter(item=>(subjKey==='all'||topicKey(resolveStrictQuestionDiscipline(item))===subjKey)&&questionMatchesBoardFilter(item,board));
+    const editalMissions=(typeof orderedMissions==='function'?orderedMissions():(typeof missionPool==='function'?missionPool():[])).filter(m=>m&&m.name&&!String(m.id||'').startsWith('setup-')&&(subjKey==='all'||topicKey(canonicalSubjectName(m.subject))===subjKey));
+    const entries=[];
+    const seenKeys=new Set();
+    // 1) Tópicos do Edital em Ordem Cronológica Estrita (1 -> 2 -> 3...)
+    editalMissions.forEach((m,idx)=>{
+      const rawName=String(m.name||'').trim();
+      const numPrefix=/^\d+[.)\s-]/.test(rawName)?'':`${idx+1}. `;
+      const displayLabel=`${numPrefix}${rawName}`;
+      const k=topicKey(rawName);
+      if(!k||seenKeys.has(k))return;
+      seenKeys.add(k);
+      const matchCnt=allForSubject.filter(qItem=>questionMatchesTopicFilter(qItem,k,subject,rawName)).length;
+      entries.push([k,`${shortLabel(displayLabel,48)} (${matchCnt||allForSubject.length}q)`]);
+    });
+    // 2) Subtópicos das questões que pertencem estritamente à disciplina selecionada (ordenados cronologicamente por número/artigo)
+    const extraTopicsMap=new Map();
+    for(const item of allForSubject){
+      if(subjKey!=='all'&&topicKey(resolveStrictQuestionDiscipline(item))!==subjKey)continue;
       const label=String(item?.topic||'').trim();
       const key=topicKey(label);
-      if(label&&key&&!topicsMap.has(key))topicsMap.set(key,label);
+      if(!label||!key||seenKeys.has(key)||isTopicContaminatedByWrongSubject(label,subject==='all'?item.subject:subject))continue;
+      // Não exibe tópico se já estiver coberto por um tópico do edital acima
+      if(editalMissions.some(m=>questionMatchesTopicFilter(item,topicKey(m.name),subject,m.name)))continue;
+      if(!extraTopicsMap.has(key))extraTopicsMap.set(key,label);
     }
-    const sorted=[...topicsMap.entries()].sort((a,b)=>a[1].localeCompare(b[1],'pt-BR'));
-    topicSelect.innerHTML='<option value="all">Todos os assuntos</option>'+sorted.map(([key,label])=>`<option value="${escText(key)}" title="${escText(label)}">${escText(shortLabel(label,52))}</option>`).join('');
-    topicSelect.value=topicsMap.has(currentTopic)?currentTopic:'all';
+    const extractOrderNum=str=>{
+      const m=String(str||'').match(/(?:^|\b(?:art(?:igo)?s?|lei)\.?\s*)(\d{1,4})/i);
+      return m?Number(m[1]):9999;
+    };
+    const sortedExtras=[...extraTopicsMap.entries()].sort((a,b)=>{
+      const na=extractOrderNum(a[1]),nb=extractOrderNum(b[1]);
+      if(na!==nb)return na-nb;
+      return a[1].localeCompare(b[1],'pt-BR');
+    });
+    for(const [k,label] of sortedExtras){
+      seenKeys.add(k);
+      const cnt=allForSubject.filter(qItem=>topicKey(qItem.topic)===k).length;
+      entries.push([k,`${shortLabel(label,48)} (${cnt}q)`]);
+    }
+    topicSelect.innerHTML='<option value="all">Todos os assuntos da disciplina (Ordem Cronológica)</option>'+entries.map(([key,label])=>`<option value="${escText(key)}" title="${escText(label)}">${escText(label)}</option>`).join('');
+    topicSelect.value=seenKeys.has(currentTopic)?currentTopic:'all';
     populateExamHubSelects();
   }
 
@@ -3340,10 +3444,18 @@
     ensureNativeQuestionBankLoaded();
     sanitizeAllQuestionsAndErrorsSubjects();
     const subject=q('#questionSubject')?.value||'all',board=q('#questionBoardFilter')?.value||'all',topic=q('#questionTopic')?.value||'all',difficulty=q('#questionDifficulty')?.value||'all',origin=q('#questionOrigin')?.value||'all',battleMode=q('#questionBattleMode')?.value||'progressive',historyFilter=q('#questionHistoryFilter')?.value||'all';
-    const baseSource=typeof questionsForMode==='function'?questionsForMode('battle',subject):(ALL_QUESTIONS||[]);
-    const allMatchingSubject=(ALL_QUESTIONS||[]).filter(item=>subject==='all'||learningCategory(item.subject)===subject);
+    const subjKey=subject==='all'?'all':topicKey(canonicalSubjectName(subject));
+    const allMatchingSubject=(ALL_QUESTIONS||[]).filter(item=>subjKey==='all'||topicKey(resolveStrictQuestionDiscipline(item))===subjKey);
+    const baseSource=typeof questionsForMode==='function'?questionsForMode('battle',subject).filter(item=>subjKey==='all'||topicKey(resolveStrictQuestionDiscipline(item))===subjKey):[];
     const source=allMatchingSubject.length?allMatchingSubject:baseSource;
-    let filtered=source.filter(item=>questionMatchesBoardFilter(item,board)&&(topic==='all'||topicKey(item?.topic)===topic)&&(difficulty==='all'||normalizedDifficulty(item)===difficulty)&&(origin==='all'||normalizedOrigin(item)===origin));
+    const topicSel=q('#questionTopic');
+    const selectedTopicLabel=topicSel&&topicSel.selectedIndex>=0?topicSel.options[topicSel.selectedIndex]?.text||'':'';
+    let byTopic=source.filter(item=>questionMatchesBoardFilter(item,board)&&(topic==='all'||questionMatchesTopicFilter(item,topic,subject,selectedTopicLabel))&&(difficulty==='all'||normalizedDifficulty(item)===difficulty)&&(origin==='all'||normalizedOrigin(item)===origin));
+    // Se o usuário selecionou um tópico do Edital ainda sem questões diretas por palavra-chave, usa as questões da própria disciplina para nunca travar o estudo da missão
+    if(!byTopic.length&&topic!=='all'&&source.length){
+      byTopic=source.filter(item=>questionMatchesBoardFilter(item,board)&&(difficulty==='all'||normalizedDifficulty(item)===difficulty)&&(origin==='all'||normalizedOrigin(item)===origin));
+    }
+    let filtered=byTopic;
     if(historyFilter==='unanswered'){
       const unanswered=filtered.filter(item=>!isQuestionAnsweredBefore(item));
       if(unanswered.length)filtered=unanswered;
@@ -4283,6 +4395,7 @@
   window.startSubjectTargetedFix=startSubjectTargetedFix;
 
   function renderPerformanceChart(){
+    sanitizeAllQuestionsAndErrorsSubjects();
     const root=q('#performanceChart');if(!root)return;
     const scores=(state?.scores||[]).filter(item=>!item.campaignId||item.campaignId===state.activeCampaignId),groups={};
     for(const item of scores){
@@ -4294,12 +4407,15 @@
       groups[name].correct+=Number(item.correct||0);
     }
     for(const [,err] of activeCampaignErrors()){
-      const name=canonicalSubjectName(err?.subject||'Conteúdo geral', `${err?.topic||''} ${err?.question||''}`);
+      const name=resolveStrictQuestionDiscipline(err?.question||'',err?.topic||'',err?.subject||'',err?.options||[]);
       if(isInvalidTrailSubject(name))continue;
       groups[name]??={total:0,correct:0,misses:0};
       groups[name].misses+=Number(err?.misses||1);
     }
+    const editalOrder=(typeof orderedMissions==='function'?orderedMissions():[]).map(m=>subjectKey(canonicalSubjectName(m?.subject||''))).filter(Boolean);
     const rows=Object.entries(groups).filter(([,data])=>data.total>0||data.misses>0).sort((a,b)=>{
+      const ia=editalOrder.indexOf(subjectKey(a[0])),ib=editalOrder.indexOf(subjectKey(b[0]));
+      if(ia!==-1&&ib!==-1&&ia!==ib)return ia-ib;
       const ra=a[1].total?a[1].correct/a[1].total:0;
       const rb=b[1].total?b[1].correct/b[1].total:0;
       return ra-rb||(b[1].misses-a[1].misses);
@@ -4323,12 +4439,34 @@
         </div>
         <div class="perfBarFoot">
           <small class="muted">${statusLabel}</small>
-          <button type="button" class="ghost small perfTrainBtn" data-perf-train-subject="${escText(name)}">${rate<72||data.misses?'🔧 Corrigir →':'Treinar →'}</button>
+          <div style="display:flex;gap:6px;align-items:center">
+            ${data.misses?`<button type="button" class="ghost small" data-perf-clear-errors="${escText(name)}" style="width:auto;padding:4px 8px;font-size:.72rem;opacity:.85" title="Zerar erros acumulados de ${escText(name)}">🗑️ Limpar erros</button>`:''}
+            <button type="button" class="ghost small perfTrainBtn" data-perf-train-subject="${escText(name)}">${rate<72||data.misses?'🔧 Corrigir →':'Treinar →'}</button>
+          </div>
         </div>
       </div>`;
     }).join(''):'<div class="empty">Resolva questões para visualizar sua precisão por disciplina e distância para o corte de 72%.</div>';
     root.querySelectorAll('[data-perf-train-subject]').forEach(btn=>{
       btn.onclick=()=>startSubjectTargetedFix(btn.dataset.perfTrainSubject,true);
+    });
+    root.querySelectorAll('[data-perf-clear-errors]').forEach(btn=>{
+      btn.onclick=()=>{
+        const targetSubj=btn.dataset.perfClearErrors;
+        const targetKey=topicKey(canonicalSubjectName(targetSubj));
+        let removed=0;
+        for(const [k,e] of Object.entries(state?.errors||{})){
+          const eSubj=resolveStrictQuestionDiscipline(e?.question||'',e?.topic||'',e?.subject||'',e?.options||[]);
+          if(topicKey(eSubj)===targetKey||topicKey(canonicalSubjectName(e?.subject||''))===targetKey){
+            delete state.errors[k];
+            removed++;
+          }
+        }
+        if(typeof save==='function')save();
+        renderPerformanceChart();
+        if(typeof renderErrorNotebook==='function')renderErrorNotebook();
+        updateQuestionPool();
+        toast(`✓ ${removed} registro(s) de erro de ${targetSubj} limpo(s)!`);
+      };
     });
     renderTacticalDiagnosis();
     renderCutoffThermometer();
@@ -4462,12 +4600,13 @@
   }
 
   function populateGenBankTopics(){
+    sanitizeAllQuestionsAndErrorsSubjects();
     const genSubj=q('#genBankSubject')?.value||'';
     const genTopic=q('#genBankTopic');
     if(!genTopic)return;
-    const missions=(typeof missionPool==='function'?missionPool():[]).filter(m=>topicKey(canonicalSubjectName(m.subject))===topicKey(genSubj));
-    const qTopics=(ALL_QUESTIONS||[]).filter(item=>topicKey(canonicalSubjectName(item.subject))===topicKey(genSubj)).map(item=>item.topic).filter(Boolean);
-    const topics=[...new Set([...missions.map(m=>m.name),...qTopics])].slice(0,60);
+    const missions=(typeof orderedMissions==='function'?orderedMissions():(typeof missionPool==='function'?missionPool():[])).filter(m=>topicKey(canonicalSubjectName(m.subject))===topicKey(genSubj));
+    const qTopics=(ALL_QUESTIONS||[]).filter(item=>topicKey(resolveStrictQuestionDiscipline(item))===topicKey(genSubj)&&!isTopicContaminatedByWrongSubject(item.topic,genSubj)).map(item=>item.topic).filter(Boolean);
+    const topics=[...new Set([...missions.map((m,i)=>/^\d+[.)\s-]/.test(String(m.name||''))?m.name:`${i+1}. ${m.name}`),...qTopics])].slice(0,60);
     genTopic.innerHTML=`<option value="Tópicos essenciais de ${escText(genSubj)}">Todos os tópicos de ${escText(shortLabel(genSubj,32))}</option>`+topics.map(t=>{
       const cleanVal=String(t||'').replace(/\s+/g,' ').trim().slice(0,180);
       return `<option value="${escText(cleanVal)}" title="${escText(cleanVal)}">${escText(shortLabel(cleanVal,52))}</option>`;
@@ -4783,13 +4922,17 @@
     }
 
     if (/logico|rlm|matematica/.test(sub)) {
-      if (/tabela verdade|conjuncao|disjuncao|bicondicional|condicional|conectiv/.test(s)) return "Tabela Verdade e Conectivos";
+      if (/casa dos pombos|gavetas|dirichlet/.test(s)) return "Princípio da Casa dos Pombos (Gavetas)";
+      if (/tabela verdade|conjuncao|disjuncao|bicondicional|condicional|conectiv|se e somente se/.test(s)) return "Proposições e Conectivos Lógicos";
       if (/tautologia|contradicao|contingencia/.test(s)) return "Tautologia, Contradição e Contingência";
       if (/equivalencia logica|leis de de morgan|negacao/.test(s)) return "Equivalências e Negações Lógicas";
-      if (/combinatoria|arranjo|permutacao|combinacao/.test(s)) return "Análise Combinatória";
+      if (/combinatoria|arranjo|permutacao|combinacao|contagem/.test(s)) return "Análise Combinatória e Contagem";
       if (/probabilidade/.test(s)) return "Probabilidade";
-      if (/conjuntos|diagrama de venn/.test(s)) return "Conjuntos e Diagramas Lógicos";
-      return "Raciocínio Lógico";
+      if (/conjuntos|diagrama de venn|diagramas logicos/.test(s)) return "Conjuntos e Diagramas Lógicos";
+      if (/dobro|triplo|idade|idades|equacao|razao|proporcao|regra de tres|soma/.test(s)) return "Problemas Algébricos, Idades e Proporções";
+      if (/porcentagem|juros|desconto|acrescimo/.test(s)) return "Porcentagem e Matemática Financeira";
+      if (/sequencia|progressao/.test(s)) return "Sequências e Progressões (PA e PG)";
+      return "Estruturas Lógicas e Raciocínio Matemático";
     }
 
     if (/penal/.test(sub) && !/processual/.test(sub)) {
@@ -5245,7 +5388,7 @@
     q('#simuladoResultStage').hidden=true;
     q('#simuladoResultStage').innerHTML='';
     q('#simuladoMetaLabel').textContent=scoringMode==='liquid'?'SIMULADO CAVEIRA / CEBRASPE (1 ERRADA ANULA 1 CERTA)':'SIMULADO CRONOMETRADO TRADICIONAL';
-    q('#simuladoTitle').textContent=`Caderno com ${questions.length} questão${questions.length===1?'':'ões'}`;
+    q('#simuladoTitle').textContent=`Caderno com ${questions.length} ${questions.length===1?'questão':'questões'}`;
     q('#simuladoClock').textContent=formatSimuladoClock(activeSimulado.remainingSeconds);
     q('#simuladoClock').classList.remove('warnText');
     renderSimuladoQuestion();
@@ -5329,7 +5472,7 @@
     if(!activeSimulado||activeSimulado.finished)return;
     const unanswered=activeSimulado.answers.filter(a=>a===null).length;
     const msg=unanswered>0
-      ? `Você deixou ${unanswered} questão${unanswered===1?'':'ões'} em branco${activeSimulado.scoringMode==='liquid'?' (sem penalidade na regra líquida)':''}. Deseja entregar o simulado agora?`
+      ? `Você deixou ${unanswered} ${unanswered===1?'questão':'questões'} em branco${activeSimulado.scoringMode==='liquid'?' (sem penalidade na regra líquida)':''}. Deseja entregar o simulado agora?`
       : 'Deseja finalizar e corrigir sua Folha de Respostas agora?';
     if(!confirm(msg))return;
     finishTimedSimulado(false);

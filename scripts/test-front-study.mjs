@@ -1220,3 +1220,63 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
 
   console.log("OK: Isolamento estrito de disciplina na Correção de Gargalos e Caderno de Erros (r152) validado.");
 }
+
+// ── Validação r153: Classificação Estrita (Casa dos Pombos / Idades / Porte de Arma), Bloqueio de Instruções de Capa e Ordem Cronológica do Edital ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+
+  const sliceHtml = (start, end) => {
+    const s = htmlSrc.indexOf(start);
+    const e = htmlSrc.indexOf(end, s);
+    return htmlSrc.slice(s, e);
+  };
+  const ctx = { window: {}, state: { customCampaign: { missions: [] } } };
+  vm.createContext(ctx);
+  vm.runInContext([
+    sliceHtml("function normalizeText(", "function missionForQuestion("),
+    sliceHtml("function isMetaDocumentNoiseText(", "function extractFlashcardsFromUserNotes("),
+  ].join("\n"), ctx);
+
+  // 1) "Princípio da Casa dos Pombos" e problema de idades ("João tem o dobro da idade de Ana...") NUNCA podem ficar em Direito Constitucional
+  assert.equal(
+    ctx.inferStrictQuestionSubject("Quantas pessoas são necessárias para garantir duas no mesmo mês pelo Princípio da Casa dos Pombos (Princípio das Gavetas)?", "Princípio da Casa dos Pombos", "Direito Constitucional"),
+    "Raciocínio Lógico-Matemático",
+    "Princípio da Casa dos Pombos deve ser classificado como Raciocínio Lógico-Matemático"
+  );
+  assert.equal(
+    ctx.inferStrictQuestionSubject("João tem o dobro da idade de Ana. Daqui a 5 anos, a idade de João será o triplo da idade que Ana tinha há 5 anos. Calcule a soma das idades atuais de João e Ana.", "Direito Constitucional Geral", "Direito Constitucional", ["72", "60", "64", "68"]),
+    "Raciocínio Lógico-Matemático",
+    "Problema algébrico de idades contaminado com 'Direito Constitucional Geral' deve ser reclassificado como Raciocínio Lógico-Matemático"
+  );
+  assert.equal(
+    ctx.inferStrictQuestionSubject("Acerca do porte de arma e posse irregular de arma de fogo de uso permitido, assinale a correta:", "Porte de arma", "Direito Constitucional"),
+    "Legislação Extravagante",
+    "Porte de arma / Posse irregular deve ser classificado como Legislação Extravagante"
+  );
+
+  // 2) Questões de capa de prova ("Usar caneta esferográfica azul ou preta...") e questões órfãs de texto ("está correta em relação ao texto?") devem ser barradas
+  assert.equal(
+    ctx.isValidPedagogicalQuestion({
+      topic: "Edital",
+      statement: "Qual das alternativas abaixo NÃO é exigida pelo edital para a prova da PMPE?",
+      options: ["Conferir nome e número de inscrição na folha de respostas.", "Usar caneta esferográfica azul ou preta em tinta transparente.", "Levar o caderno de questões para a prova.", "Entregar a folha de respostas e a versão definitiva da redação ao fiscal."]
+    }),
+    false,
+    "Regras de capa de prova (caneta esferográfica / folha de respostas) devem ser bloqueadas por isValidPedagogicalQuestion"
+  );
+  assert.equal(
+    ctx.isValidPedagogicalQuestion({
+      topic: "Convergência Linguística",
+      statement: "A frase 'A imitação do sotaque é um ato inconsciente, já a adoção da estrutura e do léxico do interlocutor é uma escolha consciente.' está correta em relação ao texto?",
+      options: ["Sim, exatamente como no texto.", "Não, o texto diz que a adoção é inconsciente.", "Não, o texto diz que a imitação é consciente.", "Não, o texto não menciona a adoção."]
+    }),
+    false,
+    "Questão órfã que pergunta 'está correta em relação ao texto?' sem texto-base deve ser bloqueada"
+  );
+
+  // 3) Verifica ordenação cronológica do Edital e filtro inteligente de tópicos (questionMatchesTopicFilter)
+  assert.ok(v77Src.includes("function questionMatchesTopicFilter(") && v77Src.includes("Todos os assuntos da disciplina (Ordem Cronológica)"), "Filtro de tópicos deve seguir a ordem cronológica do Edital e fazer correspondência semântica por artigo/assunto");
+
+  console.log("OK: Classificação estrita (Casa dos Pombos/Idades/Porte de Arma), bloqueio de capa/texto órfão e ordem cronológica do Edital (r153) validados.");
+}
