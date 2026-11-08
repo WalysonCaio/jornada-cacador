@@ -1179,7 +1179,19 @@ function isValidFlashcardContent(question: string, answer: string): boolean {
   return true;
 }
 
-function sanitizeMnemonic(value: unknown): string {
+function fixCanonicalMnemonicsInText(text: string, title = ""): string {
+  if (!text) return "";
+  let out = text.replace(/\bSOCID(?:DAPRF|IVAP|IVA|DAPR|APRF|[A-Z]{2,8})\b/gi, "SO-CI-DI-VA-PLU")
+    .replace(/\bCONGARPRO\b/gi, "CON-GAR-ERR-PRO")
+    .replace(/\bLIMPPE\b/gi, "LIMPE")
+    .replace(/\bCOFIFOMOOB\b/gi, "CO-FI-FO-MO-OB");
+  if (/art\.?\s*1\b|fundamentos da rep[uú]blica/i.test(title + " " + out)) {
+    out = out.replace(/(\bpela\s+sigla|\bmnem[oô]nico|\bsigla)\s+([A-Z]{6,15})(?=[,\s.);:!])/gi, "$1 SO-CI-DI-VA-PLU");
+  }
+  return out;
+}
+
+function sanitizeMnemonic(value: unknown, title = ""): string {
   const m = normalizeLegalNotation(value, 600).trim();
   if (!m || m.length < 4 || m.length > 320) return "";
   if (/^(?:n[aã]o h[aá]|nenhum|sem mnem[oô]nico|n\/a|n[aã]o consta|n[aã]o informado|n[aã]o se aplica|inexistente|null|undefined|-|\.)$/i.test(m)) {
@@ -1188,7 +1200,7 @@ function sanitizeMnemonic(value: unknown): string {
   if (/\b(?:n[aã]o h[aá] mnem[oô]nico|sem mnem[oô]nico espec[ií]fico|n[aã]o foi apresentado mnem[oô]nico|o material n[aã]o traz mnem[oô]nico)\b/i.test(m)) {
     return "";
   }
-  return m;
+  return fixCanonicalMnemonicsInText(m, title);
 }
 
 function sanitizeSummary(value: any, knownSubjects: string[], documentType = "material") {
@@ -1208,11 +1220,11 @@ function sanitizeSummary(value: any, knownSubjects: string[], documentType = "ma
     title,
     page_start: Math.max(0, Math.floor(Number(value?.page_start) || 0)),
     page_end: Math.max(0, Math.floor(Number(value?.page_end) || 0)),
-    explanation: normalizeLegalNotation(value?.explanation || (rawPoints.length ? rawPoints.join(". ") : ""), 18000),
+    explanation: fixCanonicalMnemonicsInText(normalizeLegalNotation(value?.explanation || (rawPoints.length ? rawPoints.join(". ") : ""), 18000), title),
     points: [...new Set(rawPoints.map((item: unknown) => normalizeLegalNotation(item, 1200)).filter(Boolean))].slice(0, 15),
     example: normalizeLegalNotation(value?.example, 6000),
     bizu: normalizeLegalNotation(value?.bizu, 3000),
-    mnemonic: sanitizeMnemonic(value?.mnemonic),
+    mnemonic: sanitizeMnemonic(value?.mnemonic, title),
     trap: normalizeLegalNotation(value?.trap, 3000),
     flashcards,
     questions: sanitizeQuestions(value?.questions, title),

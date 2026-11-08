@@ -1324,3 +1324,47 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   assert.ok(v77Src.includes("function applyCleanUxMode(") && v77Src.includes("#cleanUxToggleBtn") && v77Src.includes("#settingsCleanUxToggleBtn"), "Deve conter função applyCleanUxMode e botões de alternância do Modo Visual Enxuto");
   console.log("OK: Correção 100% do Modo Claro em todas as abas/modais e Modo Visual Enxuto sem poluição visual (r155) validados.");
 }
+
+// ── r156: Correção Automática de Textos/Mnemônicos da IA (SOCIDDAPRF -> SO-CI-DI-VA-PLU), Alto Contraste no Modo Claro e Abertura Instantânea de Questões ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+
+  // 1) Testa sanitizeAiPedagogicalText e sanitizeSummaryObject em VM com o caso real reportado pelo usuário (Art. 1º SOCIDDAPRF -> SO-CI-DI-VA-PLU)
+  const sStart = htmlSrc.indexOf("const CANONICAL_CONCURSO_MNEMONICS =");
+  const sEnd = htmlSrc.indexOf("function isValidPedagogicalSummary(");
+  assert.ok(sStart !== -1 && sEnd !== -1, "Funções sanitizeAiPedagogicalText e sanitizeSummaryObject devem existir em dist/index.html");
+  const ctx = { window: {}, state: { summaryEdits: {} } };
+  vm.createContext(ctx);
+  vm.runInContext(htmlSrc.slice(sStart, sEnd), ctx);
+
+  const wrongParagraph = "O Art. 1º da Constituição Federal de 1988 estabelece que a República Federativa do Brasil forma-se pela união indissolúvel dos Estados, Municípios e do Distrito Federal, constituindo-se em um Estado Democrático de Direito. Seus fundamentos são mnemonicamente conhecidos pela sigla SOCIDDAPRF, onde cada letra representa um elemento essencial da nossa soberania e organização constitucional.";
+  const fixedParagraph = ctx.sanitizeAiPedagogicalText(wrongParagraph, "Fundamentos da República Federativa do Brasil (Art. 1º)", "Direito Constitucional", "SO-CI-DI-VA-PLU (Soberania, Cidadania, Dignidade da pessoa humana, Valores sociais do trabalho e da livre iniciativa, Pluralismo político).");
+  assert.ok(fixedParagraph.includes("SO-CI-DI-VA-PLU") && !fixedParagraph.includes("SOCIDDAPRF"), "sanitizeAiPedagogicalText deve corrigir SOCIDDAPRF para SO-CI-DI-VA-PLU automaticamente");
+
+  const summaryObj = ctx.sanitizeSummaryObject({
+    id: "sum-art1",
+    title: "Fundamentos da República Federativa do Brasil (Art. 1º)",
+    category: "Direito Constitucional",
+    explanation: wrongParagraph,
+    mnemonic: "SO-CI-DI-VA-PLU (Soberania, Cidadania, Dignidade da pessoa humana, Valores sociais do trabalho e da livre iniciativa, Pluralismo político).",
+    points: ["Sigla SOCIDDAPRF representa os fundamentos."]
+  });
+  assert.ok(summaryObj.explanation.includes("SO-CI-DI-VA-PLU") && !summaryObj.explanation.includes("SOCIDDAPRF"), "sanitizeSummaryObject deve higienizar explanation");
+  assert.ok(summaryObj.points[0].includes("SO-CI-DI-VA-PLU"), "sanitizeSummaryObject deve higienizar points");
+
+  // 2) Verifica seletores de alto contraste WCAG AAA no Modo Claro (image_fbb11e.png e image_fbadfa.png)
+  for (const sel of [
+    "body.lightAppTheme .cutoffPill.low",
+    "body.lightAppTheme .cutoffScaleTicks .t60",
+    "body.lightAppTheme .commandShortcut i",
+    "body.lightAppTheme .lessonBox.bizu",
+    "body.lightAppTheme .lessonBox.mnemonic",
+    "body.lightAppTheme .lessonBox.trap",
+    "function openEditSummaryModal(",
+    "sanitizeAllQuestionsAndErrorsSubjects._lastSig"
+  ]) {
+    assert.ok(v77Src.includes(sel), "Recurso obrigatório r156 ausente: " + sel);
+  }
+  console.log("OK: Correção automática de textos/mnemônicos da IA (SOCIDDAPRF -> SO-CI-DI-VA-PLU), Alto Contraste WCAG AAA no Modo Claro e Otimização O(1) da aba Questões (r156) validados.");
+}

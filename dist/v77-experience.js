@@ -3003,16 +3003,25 @@
   // 2. Filtros Avançados (Tópico, Modo Progressivo, Inéditas/Favoritas estilo TEC/Qconcursos)
   function normalizedOrigin(question){const origin=String(question?.origin||'autoral').toLocaleLowerCase('pt-BR');return /oficial|importad|prova/.test(origin)&&!/adaptada/.test(origin)?'oficial':'autoral'}
   function normalizedDifficulty(question){const value=String(question?.difficulty||'medio').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();return value.startsWith('fac')?'facil':value.startsWith('dif')?'dificil':'medio'}
-  function topicKey(value){const s=String(value||'');if(!s)return'';const c=topicKey._c||(topicKey._c=new Map());if(s.length<=160){const hit=c.get(s);if(hit!==undefined)return hit}const out=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();if(s.length<=160){if(c.size>6000)c.clear();c.set(s,out)}return out}
+  function topicKey(value){const s=String(value||'');if(!s)return'';const c=topicKey._c||(topicKey._c=new Map());if(s.length<=600){const hit=c.get(s);if(hit!==undefined)return hit}const out=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();if(s.length<=600){if(c.size>15000)c.clear();c.set(s,out)}return out}
 
   function resolveStrictQuestionDiscipline(qOrStmt,topic='',fallbackSubj='',options=[]){
     if(qOrStmt&&typeof qOrStmt==='object'){
       const st=qOrStmt.statement||qOrStmt.question||'';
       const tp=qOrStmt.topic||topic||'';
       const fb=qOrStmt.subject||fallbackSubj||'';
+      if(qOrStmt._resolvedSubjCache&&qOrStmt._resolvedSubjFb===fb&&qOrStmt._resolvedSubjTp===tp&&qOrStmt._resolvedSubjStLen===st.length){
+        return qOrStmt._resolvedSubjCache;
+      }
       const opts=Array.isArray(qOrStmt.options)?qOrStmt.options:options;
-      if(typeof window.inferStrictQuestionSubject==='function')return window.inferStrictQuestionSubject(st,tp,fb,opts);
-      return canonicalSubjectName(fb,`${tp} ${st}`);
+      const res=(typeof window.inferStrictQuestionSubject==='function')
+        ?window.inferStrictQuestionSubject(st,tp,fb,opts)
+        :canonicalSubjectName(fb,`${tp} ${st}`);
+      qOrStmt._resolvedSubjCache=res;
+      qOrStmt._resolvedSubjFb=fb;
+      qOrStmt._resolvedSubjTp=tp;
+      qOrStmt._resolvedSubjStLen=st.length;
+      return res;
     }
     if(typeof window.inferStrictQuestionSubject==='function')return window.inferStrictQuestionSubject(qOrStmt,topic,fallbackSubj,options);
     return canonicalSubjectName(fallbackSubj,`${topic} ${qOrStmt}`);
@@ -3073,8 +3082,14 @@
     return false;
   }
 
-  function sanitizeAllQuestionsAndErrorsSubjects(){
+  function sanitizeAllQuestionsAndErrorsSubjects(force=false){
     if(typeof ensureNativeQuestionBankLoaded==='function')ensureNativeQuestionBankLoaded();
+    const qArr=Array.isArray(ALL_QUESTIONS)?ALL_QUESTIONS:[];
+    const errObj=(typeof state==='object'&&state?.errors&&typeof state.errors==='object')?state.errors:null;
+    const campId=(typeof state==='object'&&state?.activeCampaignId)||'default';
+    const missionsLen=(typeof state==='object'&&Array.isArray(state?.customCampaign?.missions))?state.customCampaign.missions.length:0;
+    const sig=`${qArr.length}|${errObj?Object.keys(errObj).length:0}|${campId}|${missionsLen}|${qArr[0]?.statement?.slice(0,20)||''}|${qArr[qArr.length-1]?.statement?.slice(0,20)||''}`;
+    if(!force&&sanitizeAllQuestionsAndErrorsSubjects._lastSig===sig)return;
     const isValidFn=typeof window.isValidPedagogicalQuestion==='function'?window.isValidPedagogicalQuestion:(()=>true);
     const byStmt=new Map();
     if(Array.isArray(ALL_QUESTIONS)){
@@ -3093,7 +3108,14 @@
         }
         qItem.subject_canonical=subjectKey(qItem.subject||'');
         qItem.topic_canonical=topicKey(qItem.topic||'');
-        qItem.learning_order=computeQuestionEditalLearningOrder(qItem);
+        if(!qItem._hayKey||qItem._hayTopicSrc!==qItem.topic){
+          qItem._hayKey=topicKey(`${qItem.topic||''} ${qItem.statement||''}`);
+          qItem._hayTopicSrc=qItem.topic;
+        }
+        if(qItem.learning_order===undefined||qItem._loCampId!==campId){
+          qItem.learning_order=computeQuestionEditalLearningOrder(qItem);
+          qItem._loCampId=campId;
+        }
         const stKey=topicKey(qItem.statement||'');
         if(stKey&&stKey.length>=15&&!byStmt.has(stKey))byStmt.set(stKey,qItem);
       }
@@ -3156,6 +3178,8 @@
       }
       if(errChanged&&typeof save==='function')save();
     }
+    const afterArr=Array.isArray(ALL_QUESTIONS)?ALL_QUESTIONS:[];
+    sanitizeAllQuestionsAndErrorsSubjects._lastSig=`${afterArr.length}|${errObj?Object.keys(errObj).length:0}|${campId}|${missionsLen}|${afterArr[0]?.statement?.slice(0,20)||''}|${afterArr[afterArr.length-1]?.statement?.slice(0,20)||''}`;
   }
   window.sanitizeAllQuestionsAndErrorsSubjects=sanitizeAllQuestionsAndErrorsSubjects;
 
@@ -3375,23 +3399,49 @@
     return String(text||'').trim();
   };
 
+  const _TOPIC_STOP_WORDS=new Set(['para','como','sobre','entre','pelo','pela','seus','suas','nocoes','conceitos','estudo','aspectos','compreensao','estruturas','disposicoes','gerais','preliminares','capitulo','titulo','secao','artigo','artigos','republica','federativa','brasil']);
+  const _TOPIC_REF_CACHE=new Map();
+  function _getParsedTopicRef(topicVal,rawTopicLabel){
+    const ck=`${topicVal}|${rawTopicLabel}`;
+    let cached=_TOPIC_REF_CACHE.get(ck);
+    if(cached)return cached;
+    const refText=topicKey(`${rawTopicLabel||''} ${topicVal}`).replace(/^\d+\s*/,'').trim();
+    const isArt1=/\bart\s*1\b.*\b4\b|\bprincipios fundamentais\b/.test(refText);
+    const isArt5=/\bart\s*5\b|\bdireitos e deveres individuais\b|\bdireitos e garantias\b/.test(refText);
+    const isArt144=/\bart\s*144\b|\bseguranca publica\b/.test(refText);
+    const isRlm=/\bproposic|\bconectiv|\bestruturas logicas/.test(refText);
+    const keywords=refText.split(/\s+/).filter(w=>w.length>=4&&!_TOPIC_STOP_WORDS.has(w));
+    cached={refText,isArt1,isArt5,isArt144,isRlm,keywords};
+    if(_TOPIC_REF_CACHE.size>2000)_TOPIC_REF_CACHE.clear();
+    _TOPIC_REF_CACHE.set(ck,cached);
+    return cached;
+  }
+
   function questionMatchesTopicFilter(item,topicVal,subject='all',rawTopicLabel=''){
     if(!topicVal||topicVal==='all')return true;
-    if(subject&&subject!=='all'&&topicKey(resolveStrictQuestionDiscipline(item))!==topicKey(subject))return false;
-    const qTopicKey=topicKey(item?.topic||'');
-    if(qTopicKey===topicVal||qTopicKey.includes(topicVal)||topicVal.includes(qTopicKey))return true;
-    const hay=topicKey(`${item?.topic||''} ${item?.statement||''}`);
-    const refText=topicKey(`${rawTopicLabel||''} ${topicVal}`).replace(/^\d+\s*/,'').trim();
-    // Verifica artigos específicos (ex.: art 1 a 4, art 5, art 144, lei 9455)
-    if(/\bart\s*1\b.*\b4\b|\bprincipios fundamentais\b/.test(refText)&&/\b(principios fundamentais|fundamentos da republica|soberania|dignidade da pessoa|pluralismo politico|autodeterminacao|art 1|art 2|art 3|art 4)\b/.test(hay))return true;
-    if(/\bart\s*5\b|\bdireitos e deveres individuais\b|\bdireitos e garantias\b/.test(refText)&&/\b(art 5|direitos individuais|inviolabilidade|habeas|mandado de seguranca|liberdade|propriedade)\b/.test(hay))return true;
-    if(/\bart\s*144\b|\bseguranca publica\b/.test(refText)&&/\b(art 144|seguranca publica|policia militar|policia civil|policia federal|policia penal|bombeiro)\b/.test(hay))return true;
-    if(/\bproposic|\bconectiv|\bestruturas logicas/.test(refText)&&/\b(proposic|conectiv|bicondicional|condicional|disjuncao|conjuncao|tabela verdade|tautologia|negacao|equivalencia|logicamente)\b/.test(hay))return true;
-    const stopWords=new Set(['para','como','sobre','entre','pelo','pela','seus','suas','nocoes','conceitos','estudo','aspectos','compreensao','estruturas','disposicoes','gerais','preliminares','capitulo','titulo','secao','artigo','artigos','republica','federativa','brasil']);
-    const keywords=refText.split(/\s+/).filter(w=>w.length>=4&&!stopWords.has(w));
+    if(subject&&subject!=='all'){
+      const itemSubjKey=item?.subject_canonical||topicKey(resolveStrictQuestionDiscipline(item));
+      if(itemSubjKey!==topicKey(subject))return false;
+    }
+    const qTopicKey=item?.topic_canonical||topicKey(item?.topic||'');
+    if(qTopicKey&&(qTopicKey===topicVal||qTopicKey.includes(topicVal)||topicVal.includes(qTopicKey)))return true;
+    const hay=item?._hayKey||(item&&typeof item==='object'?(item._hayKey=topicKey(`${item.topic||''} ${item.statement||''}`)):topicKey(`${item?.topic||''} ${item?.statement||''}`));
+    const parsed=_getParsedTopicRef(topicVal,rawTopicLabel);
+    if(parsed.isArt1&&/\b(principios fundamentais|fundamentos da republica|soberania|dignidade da pessoa|pluralismo politico|autodeterminacao|art 1|art 2|art 3|art 4)\b/.test(hay))return true;
+    if(parsed.isArt5&&/\b(art 5|direitos individuais|inviolabilidade|habeas|mandado de seguranca|liberdade|propriedade)\b/.test(hay))return true;
+    if(parsed.isArt144&&/\b(art 144|seguranca publica|policia militar|policia civil|policia federal|policia penal|bombeiro)\b/.test(hay))return true;
+    if(parsed.isRlm&&/\b(proposic|conectiv|bicondicional|condicional|disjuncao|conjuncao|tabela verdade|tautologia|negacao|equivalencia|logicamente)\b/.test(hay))return true;
+    const keywords=parsed.keywords;
     if(!keywords.length)return false;
-    const hits=keywords.filter(kw=>hay.includes(kw)).length;
-    return hits>=Math.min(2,keywords.length)||Boolean(keywords.length===1&&hits===1);
+    const minHits=Math.min(2,keywords.length);
+    let hits=0;
+    for(let i=0;i<keywords.length;i++){
+      if(hay.includes(keywords[i])){
+        hits++;
+        if(hits>=minHits)return true;
+      }
+    }
+    return false;
   }
   window.questionMatchesTopicFilter=questionMatchesTopicFilter;
 
@@ -3617,11 +3667,28 @@
     const board=q('#questionBoardFilter')?.value||'all';
     const currentTopic=topicSelect.value||'all';
     const subjKey=subject==='all'?'all':topicKey(canonicalSubjectName(subject));
-    const allForSubject=(ALL_QUESTIONS||[]).filter(item=>(subjKey==='all'||topicKey(resolveStrictQuestionDiscipline(item))===subjKey)&&questionMatchesBoardFilter(item,board));
+    const bySubjBucket=new Map();
+    const byTopicCount=new Map();
+    const byTopicSample=new Map();
+    const allForSubject=[];
+    for(const item of (ALL_QUESTIONS||[])){
+      const itemSubjKey=item.subject_canonical||topicKey(resolveStrictQuestionDiscipline(item));
+      if(subjKey!=='all'&&itemSubjKey!==subjKey)continue;
+      if(!questionMatchesBoardFilter(item,board))continue;
+      allForSubject.push(item);
+      let sArr=bySubjBucket.get(itemSubjKey);
+      if(!sArr){sArr=[];bySubjBucket.set(itemSubjKey,sArr);}
+      sArr.push(item);
+      const tKey=item.topic_canonical||topicKey(item.topic||'');
+      if(tKey){
+        byTopicCount.set(tKey,(byTopicCount.get(tKey)||0)+1);
+        if(!byTopicSample.has(tKey))byTopicSample.set(tKey,item);
+      }
+    }
     const editalMissions=(typeof orderedMissions==='function'?orderedMissions():(typeof missionPool==='function'?missionPool():[])).filter(m=>m&&m.name&&!String(m.id||'').startsWith('setup-')&&(subjKey==='all'||topicKey(canonicalSubjectName(m.subject))===subjKey));
     const entries=[];
     const seenKeys=new Set();
-    // 1) Tópicos do Edital em Ordem Cronológica Estrita (1 -> 2 -> 3...)
+    // 1) Tópicos do Edital em Ordem Cronológica Estrita (1 -> 2 -> 3...) comparando apenas com questões da própria disciplina (O(1) bucket)
     editalMissions.forEach((m,idx)=>{
       const rawName=String(m.name||'').trim();
       const numPrefix=/^\d+[.)\s-]/.test(rawName)?'':`${idx+1}. `;
@@ -3629,19 +3696,24 @@
       const k=topicKey(rawName);
       if(!k||seenKeys.has(k))return;
       seenKeys.add(k);
-      const matchCnt=allForSubject.filter(qItem=>questionMatchesTopicFilter(qItem,k,subject,rawName)).length;
-      entries.push([k,`${shortLabel(displayLabel,48)} (${matchCnt||allForSubject.length}q)`]);
+      const mSubjKey=topicKey(canonicalSubjectName(m.subject||''));
+      const candidateQs=subjKey==='all'?(bySubjBucket.get(mSubjKey)||[]):allForSubject;
+      let matchCnt=0;
+      for(let i=0;i<candidateQs.length;i++){
+        if(questionMatchesTopicFilter(candidateQs[i],k,m.subject||subject,rawName))matchCnt++;
+      }
+      entries.push([k,`${shortLabel(displayLabel,48)} (${matchCnt||candidateQs.length||allForSubject.length}q)`]);
     });
-    // 2) Subtópicos das questões que pertencem estritamente à disciplina selecionada (ordenados cronologicamente por número/artigo)
+    // 2) Subtópicos únicos das questões (itera apenas sobre os ~35 tópicos únicos em byTopicSample, nunca sobre 1.070 questões)
     const extraTopicsMap=new Map();
-    for(const item of allForSubject){
-      if(subjKey!=='all'&&topicKey(resolveStrictQuestionDiscipline(item))!==subjKey)continue;
-      const label=String(item?.topic||'').trim();
-      const key=topicKey(label);
-      if(!label||!key||seenKeys.has(key)||isTopicContaminatedByWrongSubject(label,subject==='all'?item.subject:subject))continue;
-      // Não exibe tópico se já estiver coberto por um tópico do edital acima
-      if(editalMissions.some(m=>questionMatchesTopicFilter(item,topicKey(m.name),subject,m.name)))continue;
-      if(!extraTopicsMap.has(key))extraTopicsMap.set(key,label);
+    for(const [key,sampleItem] of byTopicSample.entries()){
+      if(seenKeys.has(key))continue;
+      const label=String(sampleItem?.topic||'').trim();
+      if(!label||isTopicContaminatedByWrongSubject(label,subject==='all'?sampleItem.subject:subject))continue;
+      const sampleSubjKey=sampleItem.subject_canonical||topicKey(sampleItem.subject||'');
+      const covered=editalMissions.some(m=>topicKey(canonicalSubjectName(m.subject||''))===sampleSubjKey&&questionMatchesTopicFilter(sampleItem,topicKey(m.name),sampleItem.subject,m.name));
+      if(covered)continue;
+      extraTopicsMap.set(key,label);
     }
     const extractOrderNum=str=>{
       const m=String(str||'').match(/(?:^|\b(?:art(?:igo)?s?|lei)\.?\s*)(\d{1,4})/i);
@@ -3654,7 +3726,7 @@
     });
     for(const [k,label] of sortedExtras){
       seenKeys.add(k);
-      const cnt=allForSubject.filter(qItem=>topicKey(qItem.topic)===k).length;
+      const cnt=byTopicCount.get(k)||0;
       entries.push([k,`${shortLabel(label,48)} (${cnt}q)`]);
     }
     topicSelect.innerHTML='<option value="all">Todos os assuntos da disciplina (Ordem Cronológica)</option>'+entries.map(([key,label])=>`<option value="${escText(key)}" title="${escText(label)}">${escText(label)}</option>`).join('');
@@ -3667,9 +3739,8 @@
     sanitizeAllQuestionsAndErrorsSubjects();
     const subject=q('#questionSubject')?.value||'all',board=q('#questionBoardFilter')?.value||'all',topic=q('#questionTopic')?.value||'all',difficulty=q('#questionDifficulty')?.value||'all',origin=q('#questionOrigin')?.value||'all',battleMode=q('#questionBattleMode')?.value||'progressive',historyFilter=q('#questionHistoryFilter')?.value||'all';
     const subjKey=subject==='all'?'all':topicKey(canonicalSubjectName(subject));
-    const allMatchingSubject=(ALL_QUESTIONS||[]).filter(item=>subjKey==='all'||topicKey(resolveStrictQuestionDiscipline(item))===subjKey);
-    const baseSource=typeof questionsForMode==='function'?questionsForMode('battle',subject).filter(item=>subjKey==='all'||topicKey(resolveStrictQuestionDiscipline(item))===subjKey):[];
-    const source=allMatchingSubject.length?allMatchingSubject:baseSource;
+    const allMatchingSubject=(ALL_QUESTIONS||[]).filter(item=>subjKey==='all'||(item.subject_canonical||topicKey(resolveStrictQuestionDiscipline(item)))===subjKey);
+    const source=allMatchingSubject.length?allMatchingSubject:(typeof questionsForMode==='function'?questionsForMode('battle',subject).filter(item=>subjKey==='all'||topicKey(resolveStrictQuestionDiscipline(item))===subjKey):[]);
     const topicSel=q('#questionTopic');
     const selectedTopicLabel=topicSel&&topicSel.selectedIndex>=0?topicSel.options[topicSel.selectedIndex]?.text||'':'';
     let byTopic=source.filter(item=>questionMatchesBoardFilter(item,board)&&(topic==='all'||questionMatchesTopicFilter(item,topic,subject,selectedTopicLabel))&&(difficulty==='all'||normalizedDifficulty(item)===difficulty)&&(origin==='all'||normalizedOrigin(item)===origin));
@@ -7961,7 +8032,7 @@
         const isValidSum=typeof window.isValidPedagogicalSummary==='function'?window.isValidPedagogicalSummary(row):true;
         if(!isQuestionPackRow&&isValidSum&&!existingSumKeys.has(sumKey)){
           const rawMnem=sanitizePersonalWatermarks(row.content?.mnemonic||'');
-          ALL_SUMMARIES.push({
+          const _commSumObj={
             id:row.id,
             documentId:row.source_document_id,
             title:cleanTitle,
@@ -7974,7 +8045,8 @@
             mnemonic:typeof window.cleanPedagogicalMnemonic==='function'?window.cleanPedagogicalMnemonic(rawMnem):rawMnem,
             trap:sanitizePersonalWatermarks(row.content?.trap||''),
             is_community:true
-          });
+          };
+          ALL_SUMMARIES.push(typeof window.sanitizeSummaryObject==='function'?window.sanitizeSummaryObject(_commSumObj):_commSumObj);
           existingSumKeys.add(sumKey);
         }
 
@@ -10488,7 +10560,7 @@
     runV77ViewEnhancements(activeId,true);
   };
   const baseRenderReport=renderReport;
-  renderReport=function(){baseRenderReport();populateTopicFilter();updateQuestionPool();renderPerformanceChart();renderExamBankHub()};
+  renderReport=function(){baseRenderReport();if(Date.now()-(window._lastQuestionFilterSyncTs||0)>30){populateTopicFilter();updateQuestionPool();}renderPerformanceChart();renderExamBankHub()};
 
   window.renderNotifications=renderNotifications=renderInteractiveNotifications;if(q('#notificationBtn'))q('#notificationBtn').onclick=()=>{renderInteractiveNotifications();q('#notificationDialog').showModal()};enableBackdropClickToCloseDialogs();enhanceSoloLevelingVisuals();hookAutomaticDailyStepTracking();addTodayCommand();ensureReverseSchedulePanel();bindQuestionCenter();updateTodayCommand();decorateDailyStepProgressLabels();renderReverseSchedule();
   qa('[data-menu-view]').forEach(button=>button.onclick=()=>{q('#moreDialog')?.close();openView(button.dataset.menuView)});
@@ -12058,50 +12130,96 @@
     }
     st.textContent = `
       html.lightAppTheme, body.lightAppTheme {
-        --bg: #f1f5f9 !important;
+        --bg: #dce5f0 !important;
         --panel: #ffffff !important;
-        --panel2: #f8fafc !important;
-        --line: #cbd5e1 !important;
-        --text: #0f172a !important;
-        --muted: #475569 !important;
+        --panel2: #f1f5f9 !important;
+        --line: #94a3b8 !important;
+        --text: #090d16 !important;
+        --muted: #1e293b !important;
         --blue: #0284c7 !important;
         --cyan: #0369a1 !important;
-        --gold: #d97706 !important;
-        --green: #059669 !important;
-        --red: #dc2626 !important;
-        background: #f1f5f9 !important;
-        color: #0f172a !important;
+        --gold: #b45309 !important;
+        --green: #047857 !important;
+        --red: #b91c1c !important;
+        background: #dce5f0 !important;
+        color: #090d16 !important;
+      }
+      /* Textos secundários (.muted, .small) sempre nítidos em ardósia escura (#1e293b), nunca cinza apagado */
+      body.lightAppTheme :not(.hero) .muted,
+      body.lightAppTheme :not(.hero) .small.muted,
+      body.lightAppTheme :not(.hero) p.small,
+      body.lightAppTheme :not(.hero) span.small {
+        color: #1e293b !important;
+        opacity: 1 !important;
+      }
+      /* Eyebrows e títulos de seção com alto contraste */
+      body.lightAppTheme :not(.hero) .eyebrow {
+        color: #0369a1 !important;
+        font-weight: 800 !important;
+      }
+      body.lightAppTheme #guildOfficialSimuladoCard .eyebrow {
+        color: #92400e !important;
+      }
+      /* Conversão automática de cores inline pastel (amarelo, ciano, verde-água, rosa, cinza claro) para tons escuros WCAG AAA no Modo Claro */
+      body.lightAppTheme :not(.hero) [style*="color:#38bdf8"],
+      body.lightAppTheme :not(.hero) [style*="color: #38bdf8"],
+      body.lightAppTheme :not(.hero) [style*="color:#7dd3fc"],
+      body.lightAppTheme :not(.hero) [style*="color:#63e7ff"] {
+        color: #0369a1 !important;
+      }
+      body.lightAppTheme :not(.hero) [style*="color:#fbbf24"],
+      body.lightAppTheme :not(.hero) [style*="color:#fcd34d"],
+      body.lightAppTheme :not(.hero) [style*="color:#fde047"],
+      body.lightAppTheme :not(.hero) [style*="color:#facc15"] {
+        color: #92400e !important;
+      }
+      body.lightAppTheme :not(.hero) [style*="color:#34d399"],
+      body.lightAppTheme :not(.hero) [style*="color:#6ee7b7"],
+      body.lightAppTheme :not(.hero) [style*="color:#4ade80"] {
+        color: #065f46 !important;
+      }
+      body.lightAppTheme :not(.hero) [style*="color:#fca5a5"],
+      body.lightAppTheme :not(.hero) [style*="color:#ff8fa3"] {
+        color: #991b1b !important;
+      }
+      body.lightAppTheme :not(.hero) [style*="color:#cbd5e1"],
+      body.lightAppTheme :not(.hero) [style*="color:#94a3b8"],
+      body.lightAppTheme :not(.hero) [style*="color:#e2e8f0"] {
+        color: #1e293b !important;
       }
       /* 1. Barra superior (.top) e Abas (.tabs) */
       body.lightAppTheme .top {
         background: #ffffff !important;
-        border: 1px solid #cbd5e1 !important;
-        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06) !important;
-        color: #0f172a !important;
+        border: 1.5px solid #94a3b8 !important;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08) !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .top h1,
       body.lightAppTheme .top b,
       body.lightAppTheme .top span,
       body.lightAppTheme .top button:not(.install) {
-        color: #0f172a !important;
-      }
-      body.lightAppTheme .top .eyebrow {
-        color: #0284c7 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .top #campaignBtn,
       body.lightAppTheme .top #accountBtn,
       body.lightAppTheme .top #notificationBtn {
-        background: #f8fafc !important;
-        border-color: #94a3b8 !important;
-        color: #0f172a !important;
+        background: #f1f5f9 !important;
+        border: 1.5px solid #64748b !important;
+        color: #090d16 !important;
+        font-weight: 700 !important;
       }
       body.lightAppTheme .tabs {
-        background: rgba(255, 255, 255, 0.96) !important;
-        border-color: #cbd5e1 !important;
-        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08) !important;
+        background: #ffffff !important;
+        border: 1.5px solid #94a3b8 !important;
+        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1) !important;
       }
       body.lightAppTheme .tab {
-        color: #475569 !important;
+        color: #0f172a !important;
+        font-weight: 700 !important;
+      }
+      body.lightAppTheme .tab:hover:not(.active) {
+        background: #e0f2fe !important;
+        color: #0369a1 !important;
       }
       body.lightAppTheme .tab.active {
         background: #0284c7 !important;
@@ -12110,6 +12228,7 @@
       /* 2. Card de Patente (.hero) preserva arte Solo Leveling escura com contraste nítido */
       body.lightAppTheme .hero {
         color: #f8fafc !important;
+        border: 1.5px solid #1e293b !important;
       }
       body.lightAppTheme .hero .rank,
       body.lightAppTheme .hero .xp strong,
@@ -12118,8 +12237,8 @@
         color: #ffffff !important;
       }
       body.lightAppTheme .hero .metric {
-        background: rgba(6, 17, 30, 0.84) !important;
-        border: 1px solid rgba(56, 189, 248, 0.35) !important;
+        background: rgba(6, 17, 30, 0.88) !important;
+        border: 1px solid rgba(56, 189, 248, 0.45) !important;
         color: #ffffff !important;
       }
       body.lightAppTheme .hero .metric b {
@@ -12128,9 +12247,9 @@
       body.lightAppTheme .hero .metric span,
       body.lightAppTheme .hero .heroMeta,
       body.lightAppTheme .hero .muted {
-        color: #cbd5e1 !important;
+        color: #e2e8f0 !important;
       }
-      /* 3. Cards principais, painéis e modais em Tema Claro */
+      /* 3. Cards principais, painéis e modais em Tema Claro com borda firme (#94a3b8) */
       body.lightAppTheme .card:not(.hero),
       body.lightAppTheme .subjectCard,
       body.lightAppTheme .summaryCard,
@@ -12164,9 +12283,32 @@
       body.lightAppTheme dialog.slGuildChatDialog,
       body.lightAppTheme .slGuildLobbyCard {
         background: #ffffff !important;
-        border-color: #cbd5e1 !important;
-        color: #0f172a !important;
-        box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05) !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08) !important;
+      }
+      /* Ícones dos atalhos da aba Hoje (.commandShortcut i) e badges (.tag, .cmdPill, #cutoffTierBadge) */
+      body.lightAppTheme .commandShortcut i {
+        background: #dbeafe !important;
+        border: 1px solid #60a5fa !important;
+        color: #1d4ed8 !important;
+      }
+      body.lightAppTheme .commandShortcut b {
+        color: #090d16 !important;
+        font-weight: 800 !important;
+      }
+      body.lightAppTheme .commandShortcut span:not(.cmdPill) {
+        color: #334155 !important;
+        font-weight: 600 !important;
+      }
+      body.lightAppTheme .tag,
+      body.lightAppTheme .cmdPill,
+      body.lightAppTheme #cutoffTierBadge,
+      body.lightAppTheme .slGateTag {
+        background: #dbeafe !important;
+        color: #1e3a8a !important;
+        border: 1px solid #60a5fa !important;
+        font-weight: 800 !important;
       }
       /* 4. Caixas de métricas e sub-blocos (Hoje, Portais, Questões, Estudar, TAF) */
       body.lightAppTheme .weeklyMetric,
@@ -12179,9 +12321,9 @@
       body.lightAppTheme .tafMetricInnerBox,
       body.lightAppTheme .syncCheck div,
       body.lightAppTheme .accountInfo {
-        background: #f8fafc !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        background: #f1f5f9 !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
         box-shadow: none !important;
       }
       body.lightAppTheme .weeklyMetric b,
@@ -12190,89 +12332,97 @@
       body.lightAppTheme .learningStat b,
       body.lightAppTheme .reviewStatBox b,
       body.lightAppTheme .smartMetric b {
-        color: #0284c7 !important;
+        color: #0369a1 !important;
       }
       body.lightAppTheme .weeklyMetric span,
       body.lightAppTheme .performanceMetric span,
       body.lightAppTheme .reverseMetric span,
       body.lightAppTheme .learningStat span,
       body.lightAppTheme .reviewStatBox span {
-        color: #475569 !important;
+        color: #1e293b !important;
+        font-weight: 600 !important;
       }
       body.lightAppTheme .cycleBlockCard,
       body.lightAppTheme .reviewDayChip {
-        background: #f8fafc !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        background: #f1f5f9 !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .cycleBlockCard.priorityHigh,
       body.lightAppTheme .reviewDayChip.hasDue {
-        background: #fffbeb !important;
-        border-color: #f59e0b !important;
-        color: #0f172a !important;
+        background: #fef3c7 !important;
+        border-color: #d97706 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .cycleBlockCard.completed {
-        background: #ecfdf5 !important;
-        border-color: #10b981 !important;
-        color: #0f172a !important;
+        background: #d1fae5 !important;
+        border-color: #059669 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .cycleBlockCard b,
       body.lightAppTheme .cycleBlockCard strong {
-        color: #0f172a !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .cycleBlockCard span,
       body.lightAppTheme .cycleBlockCard small {
-        color: #475569 !important;
+        color: #1e293b !important;
       }
       /* 5. Card "PRÓXIMA AÇÃO DO DIA" (.commandPrimary) e Ofensiva (.streakCard) */
       body.lightAppTheme .commandPrimary {
-        background: linear-gradient(135deg, #e0f2fe, #bae6fd) !important;
-        border: 1px solid #38bdf8 !important;
-        color: #0f172a !important;
-        box-shadow: 0 6px 18px rgba(2, 132, 199, 0.12) !important;
+        background: linear-gradient(135deg, #dbeafe, #bae6fd) !important;
+        border: 2px solid #0284c7 !important;
+        color: #090d16 !important;
+        box-shadow: 0 6px 18px rgba(2, 132, 199, 0.16) !important;
       }
       body.lightAppTheme .commandPrimary .eyebrow {
         color: #0369a1 !important;
       }
       body.lightAppTheme .commandPrimary b {
-        color: #0f172a !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .commandPrimary span:not(.eyebrow) {
-        color: #1e293b !important;
+        color: #0f172a !important;
+        font-weight: 600 !important;
       }
       body.lightAppTheme .streakCard {
         background: #ffffff !important;
-        border-color: #cbd5e1 !important;
-        color: #0f172a !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .streakDay {
-        background: #f1f5f9 !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        background: #e2e8f0 !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .streakDay span {
-        color: #475569 !important;
+        color: #1e293b !important;
+        font-weight: 700 !important;
       }
       body.lightAppTheme .streakDay b {
         background: #ffffff !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        border: 1.5px solid #64748b !important;
+        color: #090d16 !important;
+      }
+      body.lightAppTheme .streakDay.active {
+        background: #fef3c7 !important;
+        border-color: #d97706 !important;
       }
       body.lightAppTheme .streakDay.active b {
-        background: #fef3c7 !important;
-        border-color: #f59e0b !important;
-        color: #b45309 !important;
+        background: #f59e0b !important;
+        border-color: #b45309 !important;
+        color: #ffffff !important;
       }
       body.lightAppTheme .motivation {
-        background: #f8fafc !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        background: #f1f5f9 !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme #motivationText {
-        color: #0f172a !important;
+        color: #090d16 !important;
+        font-weight: 700 !important;
       }
       body.lightAppTheme #motivationSource {
-        color: #475569 !important;
+        color: #334155 !important;
       }
       /* 6. Missão Diária, Cronômetro, Ciclo Tático, Unificação de Editais e Termômetros */
       body.lightAppTheme .mission,
@@ -12284,9 +12434,9 @@
       body.lightAppTheme #topicMasteryRadarCard,
       body.lightAppTheme .unifiedPortalControlCard,
       body.lightAppTheme .localDbBar {
-        background: linear-gradient(145deg, #ffffff, #f0f9ff) !important;
-        border: 1px solid #7dd3fc !important;
-        color: #0f172a !important;
+        background: linear-gradient(145deg, #ffffff, #e0f2fe) !important;
+        border: 1.5px solid #0284c7 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme #estudeiCycleWidget div,
       body.lightAppTheme #estudeiCycleWidget b,
@@ -12299,47 +12449,83 @@
       body.lightAppTheme .localDbBar span,
       body.lightAppTheme .localDbBar b,
       body.lightAppTheme .localDbBar strong {
-        color: #0f172a !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme #estudeiCycleWidget [data-cycle-pick-subj] {
         background: #ffffff !important;
-        border-color: #cbd5e1 !important;
-        color: #0f172a !important;
+        border: 1.5px solid #64748b !important;
+        color: #090d16 !important;
+        font-weight: 700 !important;
       }
       body.lightAppTheme #openGuildSimuladoRankingBtn,
       body.lightAppTheme #balanceEstudeiCycleByWeightBtn,
       body.lightAppTheme #openManuaisCacadorBtn,
       body.lightAppTheme #reportQuestionIssueBtn {
-        background: #fffbeb !important;
-        border-color: #f59e0b !important;
-        color: #b45309 !important;
+        background: #fef3c7 !important;
+        border: 1.5px solid #d97706 !important;
+        color: #78350f !important;
+        font-weight: 800 !important;
       }
       body.lightAppTheme #practiceEstudeiBlockBtn,
       body.lightAppTheme #runAutoDedupeAndCleanBtn {
-        background: #ecfdf5 !important;
-        border-color: #10b981 !important;
-        color: #047857 !important;
+        background: #d1fae5 !important;
+        border: 1.5px solid #059669 !important;
+        color: #064e3b !important;
+        font-weight: 800 !important;
       }
       body.lightAppTheme .guildSimRankRow {
-        background: #f8fafc !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        background: #f1f5f9 !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .guildSimRankRow.isMe {
-        background: #e0f2fe !important;
+        background: #dbeafe !important;
         border-color: #0284c7 !important;
       }
-      /* 7. Simulador de Aprovação & Termômetro de Corte + Montar Batalha + Treino Rápido 1-Clique */
+      /* 7. Simulador de Aprovação & Termômetro de Corte (corrige pílulas críticas escuras e escala apagada de image_fbadfa.png) */
       body.lightAppTheme .cutoffBar,
       body.lightAppTheme .performanceBar,
       body.lightAppTheme .bar:not(.hero .bar) {
-        background: #e2e8f0 !important;
-        border-color: #cbd5e1 !important;
+        background: #cbd5e1 !important;
+        border: 1px solid #94a3b8 !important;
       }
       body.lightAppTheme .cutoffCurrentPin {
-        background: #0284c7 !important;
+        background: #0369a1 !important;
         color: #ffffff !important;
-        border-color: #ffffff !important;
+        border: 2px solid #ffffff !important;
+        font-weight: 900 !important;
+      }
+      body.lightAppTheme .cutoffScaleTicks span,
+      body.lightAppTheme .cutoffScaleTicks .t0,
+      body.lightAppTheme .cutoffScaleTicks .t60 {
+        color: #1e293b !important;
+        font-weight: 800 !important;
+      }
+      body.lightAppTheme .cutoffScaleTicks .t72 {
+        color: #92400e !important;
+        font-weight: 800 !important;
+      }
+      body.lightAppTheme .cutoffScaleTicks .t80 {
+        color: #1e3a8a !important;
+        font-weight: 800 !important;
+      }
+      body.lightAppTheme .cutoffPill.low {
+        background: #fee2e2 !important;
+        color: #991b1b !important;
+        border: 1.5px solid #ef4444 !important;
+        font-weight: 800 !important;
+      }
+      body.lightAppTheme .cutoffPill.mid {
+        background: #fef3c7 !important;
+        color: #92400e !important;
+        border: 1.5px solid #f59e0b !important;
+        font-weight: 800 !important;
+      }
+      body.lightAppTheme .cutoffPill.high {
+        background: #d1fae5 !important;
+        color: #065f46 !important;
+        border: 1.5px solid #10b981 !important;
+        font-weight: 800 !important;
       }
       body.lightAppTheme .cutoffStageCard,
       body.lightAppTheme .cutoffBottleneckRow,
@@ -12350,38 +12536,38 @@
       body.lightAppTheme .examEmptyState,
       body.lightAppTheme .examImportBox,
       body.lightAppTheme .examGeneratorBox {
-        background: #f8fafc !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        background: #f1f5f9 !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .cutoffStageCard.target {
-        background: #f0f9ff !important;
-        border-color: #38bdf8 !important;
+        background: #e0f2fe !important;
+        border: 1.5px solid #0284c7 !important;
       }
       body.lightAppTheme .cutoffStageCard.passed {
-        background: #ecfdf5 !important;
-        border-color: #10b981 !important;
+        background: #d1fae5 !important;
+        border: 1.5px solid #059669 !important;
       }
       body.lightAppTheme .cutoffStageCard span,
       body.lightAppTheme .cutoffStageCard b,
       body.lightAppTheme .cutoffStageCard small,
       body.lightAppTheme .cutoffStageCard .stageStatus,
       body.lightAppTheme .cutoffBottleneckRow b,
-      body.lightAppTheme .cutoffBottleneckRow span {
-        color: #0f172a !important;
+      body.lightAppTheme .cutoffBottleneckRow span:not(.cutoffPill) {
+        color: #090d16 !important;
       }
       body.lightAppTheme .cutoffErrorTopicCard {
-        background: #fff1f2 !important;
-        border: 1px solid #fecdd3 !important;
-        color: #0f172a !important;
+        background: #ffe4e6 !important;
+        border: 1.5px solid #f43f5e !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .cutoffErrorTopicCard .eyebrow {
-        color: #be123c !important;
+        color: #9f1239 !important;
       }
       body.lightAppTheme #cutoffUnifiedExamSwitchBar > div {
-        background: #f0f9ff !important;
-        border-color: #7dd3fc !important;
-        color: #0f172a !important;
+        background: #e0f2fe !important;
+        border: 1.5px solid #0284c7 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .quickBoaRespostaBox,
       body.lightAppTheme #quickBoaRespostaBar,
@@ -12392,52 +12578,54 @@
       body.lightAppTheme .trailControlToolbar,
       body.lightAppTheme .notifBulkBar,
       body.lightAppTheme .readerTools {
-        background: #f8fafc !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        background: #f1f5f9 !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .quickBoardPill {
         background: #ffffff !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #334155 !important;
+        border: 1.5px solid #64748b !important;
+        color: #0f172a !important;
+        font-weight: 700 !important;
       }
       body.lightAppTheme .quickBoardPill.active {
         background: #0284c7 !important;
-        border-color: #0284c7 !important;
+        border-color: #0369a1 !important;
         color: #ffffff !important;
       }
       body.lightAppTheme .quickSubjectChip {
         background: #ffffff !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
-        box-shadow: 0 2px 5px rgba(15, 23, 42, 0.04) !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
+        box-shadow: 0 2px 5px rgba(15, 23, 42, 0.06) !important;
       }
       body.lightAppTheme .quickSubjectChip:hover {
-        background: #f0f9ff !important;
+        background: #e0f2fe !important;
         border-color: #0284c7 !important;
       }
       body.lightAppTheme .quickSubjectChip b,
       body.lightAppTheme .quickSubjText b {
-        color: #0f172a !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .quickSubjectChip small,
       body.lightAppTheme .quickSubjSub {
-        color: #475569 !important;
+        color: #334155 !important;
       }
       body.lightAppTheme .quickSubjCount {
-        background: #e0f2fe !important;
-        color: #0369a1 !important;
-        border-color: #7dd3fc !important;
+        background: #dbeafe !important;
+        color: #1e3a8a !important;
+        border: 1px solid #60a5fa !important;
+        font-weight: 800 !important;
       }
       body.lightAppTheme .caveiraSprintBanner {
-        background: linear-gradient(135deg, #fffbeb, #fef3c7) !important;
-        border: 1px solid #f59e0b !important;
-        color: #0f172a !important;
+        background: linear-gradient(135deg, #fef3c7, #fde68a) !important;
+        border: 1.5px solid #d97706 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .caveiraSprintBanner b,
       body.lightAppTheme .caveiraSprintBanner strong,
       body.lightAppTheme .caveiraSprintBanner span {
-        color: #0f172a !important;
+        color: #090d16 !important;
       }
       /* 8. Modal de Questões (#questionDialog), Simulado e Resolução Comentada */
       body.lightAppTheme #questionDialog > .sectionHead,
@@ -12447,25 +12635,27 @@
       body.lightAppTheme .lessonHud,
       body.lightAppTheme .simuladoTopBar,
       body.lightAppTheme .simuladoSheetBar {
-        background: #f8fafc !important;
-        border-color: #cbd5e1 !important;
-        color: #0f172a !important;
+        background: #f1f5f9 !important;
+        border-color: #94a3b8 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .qMetaPill {
-        background: #e0f2fe !important;
-        border-color: #7dd3fc !important;
-        color: #0369a1 !important;
+        background: #dbeafe !important;
+        border: 1px solid #60a5fa !important;
+        color: #1e3a8a !important;
+        font-weight: 800 !important;
       }
       body.lightAppTheme .qCounterPill,
       body.lightAppTheme .simuladoClock,
       body.lightAppTheme .sheetBubble {
         background: #ffffff !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        border: 1.5px solid #64748b !important;
+        color: #090d16 !important;
+        font-weight: 700 !important;
       }
       body.lightAppTheme .sheetBubble.answered {
         background: #0284c7 !important;
-        border-color: #0284c7 !important;
+        border-color: #0369a1 !important;
         color: #ffffff !important;
       }
       body.lightAppTheme .qStatementCard,
@@ -12476,8 +12666,8 @@
       body.lightAppTheme .questionBox,
       body.lightAppTheme .reviewQuestionBox {
         background: #f8fafc !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .optionMainBtn,
       body.lightAppTheme .lessonOption,
@@ -12485,40 +12675,41 @@
       body.lightAppTheme .duelOptBtn,
       body.lightAppTheme .reviewChoiceBox {
         background: #ffffff !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .optionMainBtn:hover:not(:disabled),
       body.lightAppTheme .lessonOption.modernOptCard:hover:not(:disabled),
       body.lightAppTheme .duelOptBtn:hover:not(:disabled) {
-        background: #f0f9ff !important;
+        background: #e0f2fe !important;
         border-color: #0284c7 !important;
       }
       body.lightAppTheme .optLetterBadge,
       body.lightAppTheme .duelOptBtn b {
-        background: #e0f2fe !important;
-        border-color: #7dd3fc !important;
-        color: #0369a1 !important;
+        background: #dbeafe !important;
+        border: 1px solid #60a5fa !important;
+        color: #1e3a8a !important;
+        font-weight: 800 !important;
       }
       body.lightAppTheme .optionMainBtn.correct,
       body.lightAppTheme .lessonOption.correct,
       body.lightAppTheme .duelOptBtn.correct,
       body.lightAppTheme .reviewChoiceBox.right {
-        background: #ecfdf5 !important;
-        border-color: #10b981 !important;
-        color: #065f46 !important;
+        background: #d1fae5 !important;
+        border: 2px solid #059669 !important;
+        color: #064e3b !important;
       }
       body.lightAppTheme .optionMainBtn.wrong,
       body.lightAppTheme .lessonOption.wrong,
       body.lightAppTheme .duelOptBtn.wrong {
-        background: #fff1f2 !important;
-        border-color: #f43f5e !important;
-        color: #9f1239 !important;
+        background: #ffe4e6 !important;
+        border: 2px solid #e11d48 !important;
+        color: #881337 !important;
       }
       body.lightAppTheme .scissorBtn {
-        background: #f8fafc !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #475569 !important;
+        background: #f1f5f9 !important;
+        border: 1.5px solid #64748b !important;
+        color: #0f172a !important;
       }
       body.lightAppTheme .granAssocWrapper,
       body.lightAppTheme .granAssocHeader,
@@ -12533,23 +12724,24 @@
       body.lightAppTheme .communityOptionStatsBar,
       body.lightAppTheme .choiceCompareCard {
         background: #f8fafc !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
       }
-      /* 9. Estudar (Resumos, Flashcards, Anotações, Caderno IA), Biblioteca, Duelo X1, Ranking e Redação */
+      /* 9. Estudar (Resumos, Caixas Bizu/Mnemônico/Pegadinha, Flashcards, Caderno IA), Biblioteca, Duelo X1, Ranking e Redação */
       body.lightAppTheme .studyTabs,
       body.lightAppTheme .examHubTabs,
       body.lightAppTheme .slGuildChannelTabs,
       body.lightAppTheme .loginMode {
-        background: #f1f5f9 !important;
-        border: 1px solid #cbd5e1 !important;
+        background: #e2e8f0 !important;
+        border: 1.5px solid #94a3b8 !important;
       }
       body.lightAppTheme .studyTab,
       body.lightAppTheme .examHubTab,
       body.lightAppTheme .notifTabBtn,
       body.lightAppTheme .loginMode button {
         background: transparent !important;
-        color: #475569 !important;
+        color: #0f172a !important;
+        font-weight: 700 !important;
         border-color: transparent !important;
       }
       body.lightAppTheme .studyTab.active,
@@ -12558,18 +12750,18 @@
       body.lightAppTheme .loginMode button.active {
         background: #0284c7 !important;
         color: #ffffff !important;
-        border-color: #0284c7 !important;
+        border-color: #0369a1 !important;
       }
       body.lightAppTheme .flashcard,
       body.lightAppTheme #flashcard {
-        background: linear-gradient(155deg, #ffffff, #f0f9ff) !important;
-        border: 2px solid #7dd3fc !important;
-        color: #0f172a !important;
-        box-shadow: 0 8px 24px rgba(2, 132, 199, 0.08) !important;
+        background: linear-gradient(155deg, #ffffff, #e0f2fe) !important;
+        border: 2px solid #0284c7 !important;
+        color: #090d16 !important;
+        box-shadow: 0 8px 24px rgba(2, 132, 199, 0.12) !important;
       }
       body.lightAppTheme .flashcard *,
       body.lightAppTheme #flashcard * {
-        color: #0f172a !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .check,
       body.lightAppTheme .topic,
@@ -12598,14 +12790,41 @@
       body.lightAppTheme .essaySupportBox,
       body.lightAppTheme .essayCommandBox,
       body.lightAppTheme #typedEssayBox {
-        background: #f8fafc !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        background: #f1f5f9 !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
+      }
+      body.lightAppTheme .lessonBox b {
+        color: #0369a1 !important;
+      }
+      body.lightAppTheme .lessonBox.bizu {
+        background: #ecfdf5 !important;
+        border: 1.5px solid #10b981 !important;
+        color: #064e3b !important;
+      }
+      body.lightAppTheme .lessonBox.bizu b {
+        color: #047857 !important;
+      }
+      body.lightAppTheme .lessonBox.mnemonic {
+        background: #fffbeb !important;
+        border: 1.5px solid #f59e0b !important;
+        color: #78350f !important;
+      }
+      body.lightAppTheme .lessonBox.mnemonic b {
+        color: #b45309 !important;
+      }
+      body.lightAppTheme .lessonBox.trap {
+        background: #fff1f2 !important;
+        border: 1.5px solid #f43f5e !important;
+        color: #881337 !important;
+      }
+      body.lightAppTheme .lessonBox.trap b {
+        color: #be123c !important;
       }
       body.lightAppTheme .uploadZone {
         background: #f8fafc !important;
-        border: 2px dashed #7dd3fc !important;
-        color: #0f172a !important;
+        border: 2px dashed #0284c7 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme #pdfPreScanBox,
       body.lightAppTheme #documentAnswerKeyRow,
@@ -12613,13 +12832,14 @@
       body.lightAppTheme .communityBanner,
       body.lightAppTheme #communityCoopBanner,
       body.lightAppTheme .communityDocCard {
-        background: #f0f9ff !important;
-        border: 1px solid #7dd3fc !important;
-        color: #0f172a !important;
+        background: #e0f2fe !important;
+        border: 1.5px solid #0284c7 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme #docTitleHintBox code {
-        background: #e0f2fe !important;
+        background: #ffffff !important;
         color: #0369a1 !important;
+        border: 1px solid #7dd3fc !important;
         padding: 1px 5px !important;
         border-radius: 4px !important;
       }
@@ -12627,44 +12847,45 @@
       body.lightAppTheme .duelPlayerCard,
       body.lightAppTheme .duelPlayStage,
       body.lightAppTheme .duelQuickBotsBar {
-        background: #f8fafc !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        background: #f1f5f9 !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .duelQuickBotBtn,
       body.lightAppTheme .duelCatChip {
         background: #ffffff !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        border: 1.5px solid #64748b !important;
+        color: #090d16 !important;
+        font-weight: 700 !important;
       }
       body.lightAppTheme .duelQuickBotBtn:hover {
-        background: #f0f9ff !important;
+        background: #e0f2fe !important;
         border-color: #0284c7 !important;
       }
       body.lightAppTheme .podiumCard,
       body.lightAppTheme .rankRow {
-        background: #f8fafc !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #0f172a !important;
+        background: #f1f5f9 !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .podiumCard.first {
-        background: #fffbeb !important;
-        border-color: #f59e0b !important;
+        background: #fef3c7 !important;
+        border-color: #d97706 !important;
       }
       body.lightAppTheme .rankRow.isMe {
-        background: #f0f9ff !important;
+        background: #dbeafe !important;
         border-color: #0284c7 !important;
       }
       body.lightAppTheme .appLegalFooter,
       body.lightAppTheme footer,
       body.lightAppTheme .cookieConsentBanner {
         background: #ffffff !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #334155 !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #1e293b !important;
       }
       body.lightAppTheme .appLegalFooter b,
       body.lightAppTheme footer b {
-        color: #0f172a !important;
+        color: #090d16 !important;
       }
       body.lightAppTheme .ghost,
       body.lightAppTheme .menuItem,
@@ -12678,15 +12899,22 @@
       body.lightAppTheme input[type="file"],
       body.lightAppTheme textarea {
         background: #ffffff !important;
-        border-color: #94a3b8 !important;
-        color: #0f172a !important;
+        border: 1.5px solid #64748b !important;
+        color: #090d16 !important;
+        font-weight: 600 !important;
+      }
+      body.lightAppTheme .ghost:hover,
+      body.lightAppTheme .menuItem:hover {
+        background: #e0f2fe !important;
+        border-color: #0284c7 !important;
+        color: #0369a1 !important;
       }
       body.lightAppTheme :not(.hero) > h1,
       body.lightAppTheme :not(.hero) > h2,
       body.lightAppTheme :not(.hero) > h3,
       body.lightAppTheme .card:not(.hero) b,
       body.lightAppTheme .card:not(.hero) strong {
-        color: #0f172a !important;
+        color: #090d16 !important;
       }
       /* 10. Modo Visual Limpo / Direto (body.compactCleanUx — elimina poluição visual e excesso de textos explicativos longos) */
       body.compactCleanUx .questionTrust,
@@ -12710,7 +12938,7 @@
         line-height: 1.35 !important;
         margin-top: 2px !important;
         margin-bottom: 6px !important;
-        opacity: 0.85;
+        opacity: 0.9;
       }
       .optStatPill {
         margin-left: auto;
@@ -13228,5 +13456,144 @@
     if(!dlg.open)dlg.showModal();
   }
   window.openQuestionReviewQueueModal=openQuestionReviewQueueModal;
+
+  // ── r156: Auditoria Automática de Resumos/Mnemônicos da IA (SOCIDDAPRF -> SO-CI-DI-VA-PLU) + Editor Manual de Resumos ──
+  function sanitizeAllSummariesAndFlashcards(){
+    if(Array.isArray(ALL_SUMMARIES)&&typeof window.sanitizeSummaryObject==='function'){
+      for(let i=0;i<ALL_SUMMARIES.length;i++){
+        const s=ALL_SUMMARIES[i];
+        const beforeExp=s?.explanation||'';
+        const beforeMnem=s?.mnemonic||'';
+        window.sanitizeSummaryObject(s);
+        if((s?.explanation!==beforeExp||s?.mnemonic!==beforeMnem)&&s?.id&&!s._cloudPatchedOnce&&typeof cloudSession==='object'&&cloudSession?.access_token&&navigator.onLine){
+          s._cloudPatchedOnce=true;
+          cloudFetch(`generated_study_content?id=eq.${encodeURIComponent(s.id)}`,{
+            method:'PATCH',
+            body:JSON.stringify({
+              content:{
+                subject:s.category,
+                source:s.source,
+                page_start:s.pageStart||0,
+                page_end:s.pageEnd||0,
+                explanation:s.explanation,
+                points:s.points||[],
+                example:s.example||'',
+                bizu:s.bizu||'',
+                mnemonic:s.mnemonic||'',
+                trap:s.trap||''
+              }
+            })
+          }).catch(()=>undefined);
+        }
+      }
+    }
+    if(Array.isArray(ALL_FLASHCARDS)&&typeof window.sanitizeAiPedagogicalText==='function'){
+      for(let i=0;i<ALL_FLASHCARDS.length;i++){
+        const card=ALL_FLASHCARDS[i];
+        if(Array.isArray(card)&&card.length>=3){
+          card[1]=window.sanitizeAiPedagogicalText(card[1],card[0],card[0]);
+          card[2]=window.sanitizeAiPedagogicalText(card[2],card[1],card[0]);
+        }
+      }
+    }
+  }
+  window.sanitizeAllSummariesAndFlashcards=sanitizeAllSummariesAndFlashcards;
+
+  function openEditSummaryModal(summaryId){
+    const s=(ALL_SUMMARIES||[]).find(item=>String(item.id)===String(summaryId));
+    if(!s)return toast('Resumo não encontrado.');
+    let dlg=document.querySelector('#editSummaryDialog');
+    if(!dlg){
+      dlg=document.createElement('dialog');
+      dlg.id='editSummaryDialog';
+      dlg.style.cssText='width:min(95vw,680px);max-height:92dvh;overflow-y:auto;padding:20px;border-radius:18px;';
+      document.body.appendChild(dlg);
+    }
+    dlg.innerHTML=`
+      <div class="sectionHead" style="margin-bottom:10px;">
+        <div>
+          <div class="eyebrow">REVISÃO E CORREÇÃO DE CONTEÚDO GERADO POR IA</div>
+          <h3 style="margin:2px 0 0;">✏️ Editar Resumo: ${escText(s.title||'Tópico')}</h3>
+        </div>
+        <button type="button" class="ghost small" id="closeEditSummaryModalBtn" style="width:auto;">Fechar ✕</button>
+      </div>
+      <div style="display:grid;gap:10px;">
+        <label class="field">Título do Tópico
+          <input type="text" id="editSumTitleInput" value="${escText(s.title||'')}">
+        </label>
+        <label class="field">Explicação Principal (Aula Escrita)
+          <textarea id="editSumExpInput" rows="4">${escText(s.explanation||'')}</textarea>
+        </label>
+        <label class="field">Pontos Essenciais (1 por linha)
+          <textarea id="editSumPointsInput" rows="4">${escText((s.points||[]).join('\n'))}</textarea>
+        </label>
+        <label class="field">Exemplo Explicado
+          <textarea id="editSumExampleInput" rows="2">${escText(s.example||'')}</textarea>
+        </label>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+          <label class="field">✓ Bizu de Prova
+            <textarea id="editSumBizuInput" rows="2">${escText(s.bizu||'')}</textarea>
+          </label>
+          <label class="field">◆ Mnemônico (ex.: SO-CI-DI-VA-PLU)
+            <textarea id="editSumMnemonicInput" rows="2">${escText(s.mnemonic||'')}</textarea>
+          </label>
+        </div>
+        <label class="field">⚠ Pegadinha Frequente
+          <textarea id="editSumTrapInput" rows="2">${escText(s.trap||'')}</textarea>
+        </label>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px;">
+          <button type="button" class="ghost" id="cancelEditSummaryBtn" style="width:auto;">Cancelar</button>
+          <button type="button" class="action" id="saveEditSummaryBtn" style="width:auto;">💾 Salvar Correção no Resumo</button>
+        </div>
+      </div>
+    `;
+    dlg.querySelector('#closeEditSummaryModalBtn').onclick=()=>dlg.close();
+    dlg.querySelector('#cancelEditSummaryBtn').onclick=()=>dlg.close();
+    dlg.querySelector('#saveEditSummaryBtn').onclick=async()=>{
+      s.title=dlg.querySelector('#editSumTitleInput').value.trim()||s.title;
+      s.explanation=dlg.querySelector('#editSumExpInput').value.trim();
+      s.points=dlg.querySelector('#editSumPointsInput').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+      s.example=dlg.querySelector('#editSumExampleInput').value.trim();
+      s.bizu=dlg.querySelector('#editSumBizuInput').value.trim();
+      s.mnemonic=dlg.querySelector('#editSumMnemonicInput').value.trim();
+      s.trap=dlg.querySelector('#editSumTrapInput').value.trim();
+      delete s._hay;
+      if(typeof state==='object'&&state){
+        state.summaryEdits=state.summaryEdits||{};
+        state.summaryEdits[s.id]={title:s.title,explanation:s.explanation,points:s.points,example:s.example,bizu:s.bizu,mnemonic:s.mnemonic,trap:s.trap,updatedAt:new Date().toISOString()};
+        if(typeof save==='function')save();
+      }
+      window.persistToLocalDatabase?.(state?.activeCampaignId);
+      if(s.id&&typeof cloudSession==='object'&&cloudSession?.access_token&&navigator.onLine){
+        try{
+          await cloudFetch(`generated_study_content?id=eq.${encodeURIComponent(s.id)}`,{
+            method:'PATCH',
+            body:JSON.stringify({
+              title:s.title,
+              approved:true,
+              content:{
+                subject:s.category,
+                source:s.source,
+                page_start:s.pageStart||0,
+                page_end:s.pageEnd||0,
+                explanation:s.explanation,
+                points:s.points||[],
+                example:s.example,
+                bizu:s.bizu,
+                mnemonic:s.mnemonic,
+                trap:s.trap
+              }
+            })
+          });
+        }catch(_e){}
+      }
+      dlg.close();
+      if(typeof renderSummaries==='function')renderSummaries(document.querySelector('#summarySearch')?.value||'');
+      toast('✅ Resumo corrigido e salvo (no aparelho e na nuvem)!');
+    };
+    if(!dlg.open)dlg.showModal();
+  }
+  window.openEditSummaryModal=openEditSummaryModal;
+  try{sanitizeAllSummariesAndFlashcards();}catch(_e){}
 
 })();

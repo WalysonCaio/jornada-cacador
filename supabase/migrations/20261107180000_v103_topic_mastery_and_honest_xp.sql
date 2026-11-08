@@ -208,3 +208,8 @@ from public.topic_mastery
 group by user_id, campaign_id, subject_key;
 
 grant select on public.v_subject_mastery to authenticated;
+
+-- 4. Correção automática no banco de siglas de mnemônicos geradas incorretamente pela IA (ex.: SOCIDDAPRF -> SO-CI-DI-VA-PLU)
+update public.generated_study_content
+set content = regexp_replace(content::text, 'SOCID(?:DAPRF|IVAP|IVA|DAPR|APRF)', 'SO-CI-DI-VA-PLU', 'gi')::jsonb
+where content::text ~* 'SOCID(?:DAPRF|IVAP|IVA|DAPR|APRF)';
