@@ -3091,9 +3091,13 @@
         if(isTopicContaminatedByWrongSubject(qItem.topic,qItem.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
           qItem.topic=inferQuestionPedagogicalTopic(qItem.statement,qItem.subject);
         }
+        qItem.subject_canonical=subjectKey(qItem.subject||'');
+        qItem.topic_canonical=topicKey(qItem.topic||'');
+        qItem.learning_order=computeQuestionEditalLearningOrder(qItem);
         const stKey=topicKey(qItem.statement||'');
         if(stKey&&stKey.length>=15&&!byStmt.has(stKey))byStmt.set(stKey,qItem);
       }
+      dedupeAllQuestionsInMemory();
     }
     if(state?.customQuestionsByCampaign&&typeof state.customQuestionsByCampaign==='object'){
       for(const [cId,list] of Object.entries(state.customQuestionsByCampaign)){
@@ -3154,6 +3158,222 @@
     }
   }
   window.sanitizeAllQuestionsAndErrorsSubjects=sanitizeAllQuestionsAndErrorsSubjects;
+
+  function strictSubjectMatch(questionSubject,filterSubject){
+    if(!filterSubject||filterSubject==='all')return true;
+    const q=canonicalSubjectName(questionSubject||'');
+    const f=canonicalSubjectName(filterSubject||'');
+    if(!q||q==='Conteúdo Geral'||isInvalidTrailSubject(q))return false;
+    return subjectKey(q)===subjectKey(f);
+  }
+  window.strictSubjectMatch=strictSubjectMatch;
+
+  function computeQuestionEditalLearningOrder(qItem){
+    const missions=typeof orderedMissions==='function'?orderedMissions():(typeof missionPool==='function'?missionPool():[]);
+    if(!missions.length)return Number(qItem?.learning_order??9999);
+    const qSubjKey=subjectKey(qItem?.subject||'');
+    const subjMissions=missions.filter(m=>subjectKey(canonicalSubjectName(m?.subject||''))===qSubjKey);
+    for(let i=0;i<subjMissions.length;i++){
+      const m=subjMissions[i];
+      if(questionMatchesTopicFilter(qItem,topicKey(m.name||''),qItem.subject,m.name||'')){
+        return Number(m.learningOrder??m.editalOrder??i);
+      }
+    }
+    if(subjMissions.length){
+      return Number(subjMissions[0].learningOrder??subjMissions[0].editalOrder??500)+50;
+    }
+    return Number(qItem?.learning_order??9999);
+  }
+  window.computeQuestionEditalLearningOrder=computeQuestionEditalLearningOrder;
+
+  function findDuplicateQuestions(list=ALL_QUESTIONS||[]){
+    const seen=new Map();
+    const dups=[];
+    list.forEach((qItem,idx)=>{
+      if(!qItem)return;
+      qItem.subject_canonical=subjectKey(qItem.subject||'');
+      qItem.topic_canonical=topicKey(qItem.topic||'');
+      if(qItem.learning_order===undefined||qItem.learning_order===9999){
+        qItem.learning_order=computeQuestionEditalLearningOrder(qItem);
+      }
+      const stKey=topicKey(qItem.statement||'');
+      const fp=questionFingerprint(qItem);
+      const dedupKey=stKey.length>=24?`${qItem.subject_canonical}|${stKey}`:fp;
+      if(seen.has(dedupKey)){
+        dups.push({idx,firstIdx:seen.get(dedupKey),fp,preview:String(qItem.statement||'').slice(0,80)});
+      }else{
+        seen.set(dedupKey,idx);
+      }
+    });
+    return dups;
+  }
+  window.findDuplicateQuestions=findDuplicateQuestions;
+
+  function dedupeAllQuestionsInMemory(){
+    if(!Array.isArray(ALL_QUESTIONS)||!ALL_QUESTIONS.length)return 0;
+    const dups=findDuplicateQuestions(ALL_QUESTIONS);
+    if(!dups.length)return 0;
+    const removeSet=new Set(dups.map(d=>d.idx));
+    for(let i=ALL_QUESTIONS.length-1;i>=0;i--){
+      if(removeSet.has(i))ALL_QUESTIONS.splice(i,1);
+    }
+    return removeSet.size;
+  }
+  window.dedupeAllQuestionsInMemory=dedupeAllQuestionsInMemory;
+
+  // === Maestria por Tópico + XP Honesto (v103 Server RPC + Fallback Local) ===
+  function updateLocalTopicMastery(subject,topic,isCorrect){
+    if(typeof state!=='object'||!state)return null;
+    state.topicMastery=state.topicMastery||{};
+    const campId=state.activeCampaignId||'default';
+    const sKey=subjectKey(canonicalSubjectName(subject||'geral'))||'geral';
+    const tKey=topicKey(topic||'geral')||'geral';
+    const mKey=`${campId}|${sKey}|${tKey}`;
+    const prev=state.topicMastery[mKey]||{attempts:0,correct:0,mastery:0};
+    const attempts=Number(prev.attempts||0)+1;
+    const correct=Number(prev.correct||0)+(isCorrect?1:0);
+    const mastery=attempts<5
+      ?Number(((correct/Math.max(1,attempts))*100*(attempts/5)).toFixed(2))
+      :Number(((correct/attempts)*100).toFixed(2));
+    state.topicMastery[mKey]={attempts,correct,mastery,subjectKey:sKey,topicKey:tKey,lastAttemptAt:new Date().toISOString()};
+    let masteryBonus=0;
+    if(isCorrect&&attempts>=8){
+      if(mastery>=85)masteryBonus=15;
+      else if(mastery>=70)masteryBonus=8;
+    }
+    return {mastery,attempts,correct,mastery_bonus:masteryBonus,subject_key:sKey,topic_key:tKey};
+  }
+  window.updateLocalTopicMastery=updateLocalTopicMastery;
+
+  function applyXpLocal(amount,reason=''){
+    if(!amount||amount<=0||typeof state!=='object'||!state)return;
+    state.learning=state.learning||{};
+    state.learning.xp=(Number(state.learning.xp)||0)+amount;
+    if(reason){
+      state.learning.xpLog=Array.isArray(state.learning.xpLog)?state.learning.xpLog:[];
+      state.learning.xpLog.push({at:new Date().toISOString(),amount,reason});
+      if(state.learning.xpLog.length>50)state.learning.xpLog.shift();
+    }
+    if(typeof save==='function')save();
+    if(typeof renderHero==='function')renderHero();
+  }
+  window.applyXpLocal=applyXpLocal;
+
+  async function recordQuestionAttemptServer(subject,topic,isCorrect,source='practice'){
+    const localRes=updateLocalTopicMastery(subject,topic,isCorrect);
+    if(!cloudSession?.access_token||!navigator.onLine)return localRes;
+    const campaignId=(typeof activeCampaign==='function'&&activeCampaign()?.id)||state?.activeCampaignId||'default';
+    try{
+      const res=await fetch(`${SUPABASE_URL}/rest/v1/rpc/record_question_attempt`,{
+        method:'POST',
+        headers:{
+          ...authHeaders(cloudSession.access_token),
+          'Content-Type':'application/json',
+          Prefer:'return=representation'
+        },
+        body:JSON.stringify({
+          p_campaign_id:String(campaignId),
+          p_subject_key:subjectKey(canonicalSubjectName(subject||'geral'))||'geral',
+          p_topic_key:topicKey(topic||'geral')||'geral',
+          p_is_correct:Boolean(isCorrect),
+          p_source:String(source||'practice')
+        })
+      });
+      if(!res.ok)return localRes;
+      const serverData=await res.json();
+      return serverData||localRes;
+    }catch(_e){
+      return localRes;
+    }
+  }
+  window.recordQuestionAttemptServer=recordQuestionAttemptServer;
+
+  async function completeMissionHonestServer(missionId,subject,correct,total,isBoss=false){
+    const safeTotal=Math.max(1,Number(total)||1);
+    const safeCorrect=Math.max(0,Math.min(safeTotal,Number(correct)||0));
+    const localScore=Number(((safeCorrect/safeTotal)*100).toFixed(1));
+    const localPerfXp=Math.min(60,Math.floor(localScore*0.6));
+    const fallbackObj={base_xp:40,performance_xp:localPerfXp,mastery_bonus:localScore>=70?20:0,boss_bonus:(isBoss&&localScore>=70)?200:0,total_xp:40+localPerfXp+(localScore>=70?20:0)+((isBoss&&localScore>=70)?200:0),score:localScore};
+    if(!cloudSession?.access_token||!navigator.onLine)return fallbackObj;
+    const campaignId=(typeof activeCampaign==='function'&&activeCampaign()?.id)||state?.activeCampaignId||'default';
+    try{
+      const res=await fetch(`${SUPABASE_URL}/rest/v1/rpc/complete_mission_honest`,{
+        method:'POST',
+        headers:{
+          ...authHeaders(cloudSession.access_token),
+          'Content-Type':'application/json'
+        },
+        body:JSON.stringify({
+          p_campaign_id:String(campaignId),
+          p_mission_id:String(missionId||''),
+          p_subject_key:subjectKey(canonicalSubjectName(subject||'geral'))||'geral',
+          p_correct:safeCorrect,
+          p_total:safeTotal,
+          p_is_boss:Boolean(isBoss)
+        })
+      });
+      if(!res.ok)return fallbackObj;
+      return (await res.json())||fallbackObj;
+    }catch(_e){
+      return fallbackObj;
+    }
+  }
+  window.completeMissionHonestServer=completeMissionHonestServer;
+
+  async function finalizeDailyMissionWithHonestXp(){
+    const missionId=state?.daily;
+    if(!missionId)return;
+    const mission=(typeof missionPool==='function'?missionPool():[]).find(m=>m.id===missionId);
+    const subject=mission?.subject||'geral';
+    const tracker=state?.dailyTracker||{};
+    const total=Math.max(Number(tracker.questionsAnswered||0),1);
+    const correct=Math.min(total,Number(tracker.questionsCorrect??Math.round(total*0.75)));
+    const isBoss=Boolean(state?.bosses?.[missionId]);
+    if(typeof complete==='function')complete(missionId);
+    const server=await completeMissionHonestServer(missionId,subject,correct,total,isBoss);
+    const bonus=Math.max(0,(Number(server?.performance_xp)||0)+(Number(server?.mastery_bonus)||0));
+    if(bonus>0)applyXpLocal(bonus,'bonus_desempenho_missao');
+    const detail=server?` (desempenho +${server.performance_xp||0} XP${server.mastery_bonus?` · domínio +${server.mastery_bonus} XP`:''})`:'';
+    toast(`🏆 Missão concluída! +${100+bonus} XP${detail}`);
+    if(typeof renderHero==='function')renderHero();
+    if(cloudSession&&navigator.onLine&&typeof pushCloudState==='function')pushCloudState();
+  }
+  window.finalizeDailyMissionWithHonestXp=finalizeDailyMissionWithHonestXp;
+
+  window.loadNativeBank=async function(){
+    if(window.__NATIVE_BANK_LOADED&&Array.isArray(window.NATIVE_POLICE_QUESTION_BANK)&&window.NATIVE_POLICE_QUESTION_BANK.length){
+      return window.NATIVE_POLICE_QUESTION_BANK;
+    }
+    try{
+      const res=await fetch('./native-question-bank.json',{cache:'force-cache'});
+      if(res.ok){
+        const data=await res.json();
+        if(Array.isArray(data)&&data.length){
+          window.NATIVE_POLICE_QUESTION_BANK=data;
+          window.__NATIVE_BANK_LOADED=true;
+          ensureNativeQuestionBankLoaded();
+          return data;
+        }
+      }
+    }catch(_e){}
+    window.__NATIVE_BANK_LOADED=true;
+    return window.NATIVE_POLICE_QUESTION_BANK||[];
+  };
+  window.getNativeBank=async function(){
+    if(Array.isArray(window.NATIVE_POLICE_QUESTION_BANK)&&window.NATIVE_POLICE_QUESTION_BANK.length)return window.NATIVE_POLICE_QUESTION_BANK;
+    return window.loadNativeBank();
+  };
+
+  window.runOcrOnImage=async function(fileOrBlob,onProgress){
+    const {createWorker}=await import('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.esm.min.js');
+    const worker=await createWorker('por');
+    if(typeof onProgress==='function'){
+      worker.setProgressHandler(p=>onProgress(Math.round((p.progress||0)*100)));
+    }
+    const {data:{text}}=await worker.recognize(fileOrBlob);
+    await worker.terminate();
+    return String(text||'').trim();
+  };
 
   function questionMatchesTopicFilter(item,topicVal,subject='all',rawTopicLabel=''){
     if(!topicVal||topicVal==='all')return true;
@@ -3373,13 +3593,15 @@
     if(trainer&&!q('#trainerQuickActions')){
       const startBtn=q('#startQuestions');
       if(startBtn){
-        startBtn.insertAdjacentHTML('afterend',`<div class="trainerQuickActions" id="trainerQuickActions"><button type="button" class="ghost" id="startProgressiveChallengeBtn">⚡ Desafio Progressivo</button><button type="button" class="ghost" id="startErrorReinforcementBtn">🔥 Reforçar meus erros (0)</button><button type="button" class="ghost" id="printQuestionBookletBtn">🖨️ Imprimir Caderno (PDF)</button></div>`);
+        startBtn.insertAdjacentHTML('afterend',`<div class="trainerQuickActions" id="trainerQuickActions"><button type="button" class="ghost" id="startProgressiveChallengeBtn">⚡ Desafio Progressivo</button><button type="button" class="ghost" id="startErrorReinforcementBtn">🔥 Reforçar meus erros (0)</button><button type="button" class="ghost" id="openQuestionReviewQueueBtn">🔍 Revisar / Editar Questões</button><button type="button" class="ghost" id="printQuestionBookletBtn">🖨️ Imprimir Caderno (PDF)</button></div><div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><label class="small muted" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="followEditalOrderToggle" checked> <span>📋 <b>Seguir ordem cronológica do edital</b> (Tópico 1 → 2 → 3...)</span></label></div>`);
         q('#startProgressiveChallengeBtn').onclick=()=>{
           if(q('#questionBattleMode'))q('#questionBattleMode').value='progressive';
           updateQuestionPool();
           startFilteredBattle();
         };
         q('#startErrorReinforcementBtn').onclick=startErrorReinforcementBattle;
+        if(q('#openQuestionReviewQueueBtn'))q('#openQuestionReviewQueueBtn').onclick=()=>openQuestionReviewQueueModal();
+        if(q('#followEditalOrderToggle'))q('#followEditalOrderToggle').onchange=updateQuestionPool;
         q('#printQuestionBookletBtn').onclick=exportPrintableQuestionBooklet;
       }
     }
@@ -3472,6 +3694,23 @@
       const errEntries=activeCampaignErrors();
       const errPool=filtered.filter(item=>questionMatchesErrorPool(item,errEntries));
       if(errPool.length)filtered=errPool;
+    }
+    // Filtro estrito quando disciplina específica está selecionada
+    if(subject!=='all'){
+      filtered=filtered.filter(item=>strictSubjectMatch(resolveStrictQuestionDiscipline(item),subject)&&!item.needs_review);
+    }
+    // Ordenação pedagógica cronológica do edital (learning_order -> topic_canonical -> origem)
+    const followOrder=q('#followEditalOrderToggle')?q('#followEditalOrderToggle').checked:true;
+    if(followOrder){
+      filtered=[...filtered].sort((a,b)=>{
+        const loA=Number(a.learning_order??computeQuestionEditalLearningOrder(a));
+        const loB=Number(b.learning_order??computeQuestionEditalLearningOrder(b));
+        if(loA!==loB)return loA-loB;
+        const tA=topicKey(a.topic_canonical||a.topic||'');
+        const tB=topicKey(b.topic_canonical||b.topic||'');
+        if(tA!==tB)return tA.localeCompare(tB,'pt-BR');
+        return difficultyWeight(normalizedDifficulty(a))-difficultyWeight(normalizedDifficulty(b));
+      });
     }
     return filtered;
   }
@@ -3711,6 +3950,7 @@
       <div class="resolutionActionBar">
         <button type="button" class="ghost small" id="spawnTwinQuestionBtn">⚡ Gerar questão gêmea</button>
         <button type="button" class="ghost small" id="explainEasyAnalogyBtn">🧠 Explicar fácil (analogia)</button>
+        <button type="button" class="ghost small" id="createConceptFlashcardBtn">🃏 Criar flashcard do conceito</button>
         <button type="button" class="ghost small" id="toggleFavoriteQuestionBtn">${isFav?'⭐ Favorita (salva)':'☆ Favoritar questão'}</button>
         <button type="button" class="ghost small" id="saveQuestionNoteBtn">📌 Salvar no Caderno</button>
         <button type="button" class="ghost small" id="askQapInstructorBtn">🦅 QAP Instrutor IA</button>
@@ -4018,9 +4258,95 @@
   }
 
   function createFlashcardFromQuestion(item,btnEl){
-    if(btnEl){btnEl.disabled=true;btnEl.hidden=true}
-    toast('Flashcards são extraídos exclusivamente de Materiais de estudo, Anotações e Textos de Lei.');
+    if(!item)return false;
+    if(btnEl)btnEl.disabled=true;
+    const subject=resolveStrictQuestionDiscipline(item)||learningCategory(item.subject)||'Geral';
+    const topic=String(item.topic||subject).trim();
+    const explanation=String(item.explanation||'').trim();
+    const correctIdx=Number(item.correct_index);
+    const correctText=String(item.options?.[correctIdx]||'').trim();
+
+    let concept='';
+    const conceptMatch=explanation.match(/conceito[- ]chave\s*[:：]?\s*([^\n.]+(?:\.[^\n]*)?)/i);
+    if(conceptMatch){
+      concept=conceptMatch[1].trim();
+    }
+    if(!concept&&explanation){
+      const clean=explanation
+        .split(/❌|✅|⚠️|Alternativa correta|An[aá]lise das/i)[0]
+        .replace(/^conceito[- ]chave\s*[:：]?\s*/i,'')
+        .trim();
+      concept=clean.split(/(?<=\.)\s+/).slice(0,2).join(' ').slice(0,220);
+    }
+    if(!concept||concept.length<25){
+      if(correctText.length>=25){
+        concept=`Regra aplicável sobre ${topic}: ${correctText}`;
+      }else{
+        if(btnEl){btnEl.disabled=false;toast('Esta questão não tem explicação suficiente para gerar um flashcard conceitual.');}
+        return false;
+      }
+    }
+
+    const front=topic
+      ?`O que você precisa lembrar sobre: ${topic}?`
+      :`Conceito essencial – ${subject}`;
+    const backParts=[concept];
+    if(correctText&&!concept.includes(correctText)){
+      backParts.push(`\n\nRegra-modelo: ${correctText}`);
+    }
+    const back=backParts.join('');
+
+    if(typeof window.isValidFlashcardItem==='function'&&!window.isValidFlashcardItem(front,back)){
+      if(btnEl){btnEl.disabled=false;toast('Flashcard gerado não passou na validação pedagógica.');}
+      return false;
+    }
+
+    const key=typeof fcKey==='function'?fcKey([subject,front,back]):`${subject}|${front}`.toLowerCase();
+    const already=(ALL_FLASHCARDS||[]).some(c=>{
+      const k=typeof fcKey==='function'?fcKey(c):`${c[0]}|${c[1]}`.toLowerCase();
+      return k===key||String(c[1]||'').toLowerCase()===front.toLowerCase();
+    });
+    if(already){
+      if(btnEl){btnEl.disabled=false;btnEl.textContent='✓ Já na fila';toast('Já existe um flashcard deste conceito na sua fila.');}
+      return false;
+    }
+
+    ALL_FLASHCARDS=ALL_FLASHCARDS||[];
+    ALL_FLASHCARDS.unshift([subject,front,back]);
+    state.userNotes=Array.isArray(state.userNotes)?state.userNotes:[];
+    state.userNotes.unshift({
+      id:`fc-concept-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+      title:front,
+      content:back,
+      subject,
+      campaignId:state.activeCampaignId,
+      updated:new Date().toISOString()
+    });
+    if(typeof save==='function')save();
+    if(typeof updateFlashcardSpacedStats==='function')updateFlashcardSpacedStats();
+    if(typeof renderCard==='function')renderCard();
+    if(btnEl){
+      btnEl.disabled=false;
+      btnEl.textContent='✓ Conceito salvo nos Flashcards';
+      toast('🃏 Flashcard criado a partir do conceito da questão e adicionado à fila de revisão!');
+    }
+    return true;
   }
+  window.createFlashcardFromQuestion=createFlashcardFromQuestion;
+
+  function generateFlashcardsFromNativeBank(limit=30){
+    const bank=(typeof NATIVE_POLICE_QUESTION_BANK!=='undefined'?NATIVE_POLICE_QUESTION_BANK:ALL_QUESTIONS||[]).filter(qItem=>
+      (qItem.origin==='autoral'||qItem.origin==='nativo')&&String(qItem.explanation||'').length>80
+    );
+    let created=0;
+    for(const qItem of bank){
+      if(created>=limit)break;
+      if(createFlashcardFromQuestion(qItem,null))created++;
+    }
+    toast(`🃏 ${created} flashcards conceituais gerados a partir do banco nativo.`);
+    return created;
+  }
+  window.generateFlashcardsFromNativeBank=generateFlashcardsFromNativeBank;
 
   function saveCurrentQuestionToNotes(item){
     const correctIdx=Number(item.correct_index)||0;
@@ -4133,11 +4459,28 @@
       battle.correct++;
       battle.streak=(battle.streak||0)+1;
       button.classList.add('correct');
-      state.learning.xp=(state.learning.xp||0)+25;
+      applyXpLocal(25,'acerto_questao');
+      recordQuestionAttemptServer(
+        item.subject||battle.subject,
+        item.topic||'geral',
+        true,
+        battle.mode||'practice'
+      ).then(serverRes=>{
+        if(serverRes?.mastery_bonus>0){
+          applyXpLocal(serverRes.mastery_bonus,'bonus_maestria');
+          toast(`🎯 Bônus de domínio +${serverRes.mastery_bonus} XP (maestria ${Math.round(serverRes.mastery||0)}% no tópico)!`);
+        }
+      });
     }else{
       battle.streak=0;
       button.classList.add('wrong');
       qa('[data-question-index]').find(b=>Number(b.dataset.questionIndex)===correct)?.classList.add('correct');
+      recordQuestionAttemptServer(
+        item.subject||battle.subject,
+        item.topic||'geral',
+        false,
+        battle.mode||'practice'
+      );
     }
     const optStats=computeQuestionOptionChoiceStats(item,chosen);
     qa('[data-question-index]').forEach(btn=>{
@@ -4163,6 +4506,8 @@
     if(reportBtn)reportBtn.onclick=()=>reportOrFixCurrentQuestion(item,reportBtn);
     const analogyBtn=q('#explainEasyAnalogyBtn');
     if(analogyBtn)analogyBtn.onclick=()=>explainQuestionWithEasyAnalogy(item,analogyBtn);
+    const conceptFcBtn=q('#createConceptFlashcardBtn');
+    if(conceptFcBtn)conceptFcBtn.onclick=()=>createFlashcardFromQuestion(item,conceptFcBtn);
     const flashBtn=q('#createFlashcardFromQuestionBtn');
     if(flashBtn)flashBtn.onclick=()=>createFlashcardFromQuestion(item,flashBtn);
     const favBtn=q('#toggleFavoriteQuestionBtn');
@@ -4847,8 +5192,22 @@
     return {text:cleaned,rangeStart,rangeEnd};
   }
 
+  function isValidExtractedQuestion(qItem){
+    if(!qItem?.statement||String(qItem.statement).trim().length<12)return false;
+    const opts=(qItem.options||[]).map(o=>String(o||'').trim()).filter(Boolean);
+    if(opts.length<2||opts.length>5)return false;
+    if(!qItem.answer_unknown){
+      const idx=Number(qItem.correct_index);
+      if(!Number.isInteger(idx)||idx<0||idx>=opts.length)return false;
+      if(!opts[idx]||opts[idx].length<1)return false;
+    }
+    if(/^[\d\s.A-E\-:]+$/i.test(String(qItem.statement).trim()))return false;
+    return true;
+  }
+  window.isValidExtractedQuestion=isValidExtractedQuestion;
+
   function cleanExamPages(rawTextOrPages){
-    const pages=Array.isArray(rawTextOrPages)?rawTextOrPages.map(p=>String(p?.text||'')):[String(rawTextOrPages||'')];
+    const pages=Array.isArray(rawTextOrPages)?rawTextOrPages.map(p=>String(p?.text||'').replace(/\u00a0/g,' ').replace(/(\p{L})-\n(\p{L})/gu,'$1$2')):[String(rawTextOrPages||'').replace(/\u00a0/g,' ').replace(/(\p{L})-\n(\p{L})/gu,'$1$2')];
     const norm=l=>l.trim().replace(/\s+/g,' ').toLowerCase();
     const pageNumberOnly=/^\s*(?:p[áa]g(?:ina)?\.?\s*\d+(?:\s*(?:de|\/)\s*\d+)?|\d+\s*\/\s*\d+|\d{1,3})\s*$/i;
     const trailingPageNumber=/\s+p[áa]g(?:ina)?\.?\s*\d+(?:\s*(?:de|\/)\s*\d+)?\s*$/i;
@@ -5145,6 +5504,8 @@
     return finish(results);
   }
   window.extractStructuredExamQuestions=extractStructuredExamQuestions;
+  window.cleanExamPages=cleanExamPages;
+  window.parseExamAnswerKeyTable=parseExamAnswerKeyTable;
 
   function tryParseLocalQuestionText(rawText,defaultSubject,defaultBoard){
     return extractStructuredExamQuestions(rawText,{defaultSubject,defaultBoard});
@@ -9483,6 +9844,7 @@
         const res=baseRecordQ(qItem,ok,chosen);
         const tracker=ensureDailyTracker();
         tracker.questionsAnswered=(Number(tracker.questionsAnswered)||0)+1;
+        if(ok)tracker.questionsCorrect=(Number(tracker.questionsCorrect)||0)+1;
         save();
         evaluateAndAutoCheckDailySteps('question_answered');
         return res;
@@ -12224,4 +12586,124 @@
     window.updateTodayCommand = updateTodayCommand;
     window.renderEstudeiCycleWidget = renderEstudeiCycleWidget;
   }
+
+  // Fila de Revisão e Auditoria de Questões (Grok Phase 2: Aprovar / Corrigir e Salvar / Descartar)
+  function openQuestionReviewQueueModal(filterSubj='all'){
+    sanitizeAllQuestionsAndErrorsSubjects();
+    let dlg=document.querySelector('#questionReviewQueueDialog');
+    if(!dlg){
+      dlg=document.createElement('dialog');
+      dlg.id='questionReviewQueueDialog';
+      dlg.style.cssText='max-width:780px;width:95vw;border-radius:16px;background:#071322;border:1px solid #244b70;color:#f8fafc;padding:18px;';
+      document.body.appendChild(dlg);
+    }
+    const editalSubjects=getActiveEditalSubjectsList();
+    const renderList=(curSubj)=>{
+      const pool=(ALL_QUESTIONS||[]).map((qItem,idx)=>({qItem,idx})).filter(({qItem})=>curSubj==='all'||strictSubjectMatch(qItem.subject,curSubj));
+      const listHtml=pool.slice(0,40).map(({qItem,idx})=>{
+        const opts=Array.isArray(qItem.options)?qItem.options:[];
+        const curSubjCanon=canonicalSubjectName(qItem.subject||'');
+        return `
+          <div class="card" data-rev-q-idx="${idx}" style="margin-bottom:10px;padding:12px;background:#0a192c;border:1px solid rgba(56,189,248,0.25);">
+            <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:8px;">
+              <label class="field" style="margin:0;font-size:11px;">Disciplina Canônica
+                <select data-edit-q-subj="${idx}" style="padding:6px;border-radius:8px;background:#06101d;color:#fff;border:1px solid #234769;">
+                  ${[...new Set([...editalSubjects,curSubjCanon])].map(s=>`<option value="${escText(s)}" ${subjectKey(s)===subjectKey(curSubjCanon)?'selected':''}>${escText(s)}</option>`).join('')}
+                </select>
+              </label>
+              <label class="field" style="margin:0;font-size:11px;">Tópico do Edital
+                <input type="text" data-edit-q-topic="${idx}" value="${escText(qItem.topic||'')}" style="padding:6px;border-radius:8px;background:#06101d;color:#fff;border:1px solid #234769;">
+              </label>
+              <label class="field" style="margin:0;font-size:11px;">Gabarito
+                <select data-edit-q-ans="${idx}" style="padding:6px;border-radius:8px;background:#06101d;color:#34d399;border:1px solid #234769;font-weight:800;">
+                  ${opts.map((_,oi)=>`<option value="${oi}" ${Number(qItem.correct_index)===oi?'selected':''}>Letra ${String.fromCharCode(65+oi)}</option>`).join('')}
+                </select>
+              </label>
+            </div>
+            <textarea data-edit-q-stmt="${idx}" rows="2" style="width:100%;padding:8px;border-radius:8px;background:#06101d;color:#e2e8f0;border:1px solid #1e3a5f;font-size:12px;margin-bottom:6px;">${escText(qItem.statement||'')}</textarea>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span class="small muted">Origem: <b>${escText(qItem.origin||'autoral')}</b> · Ordem no Edital: #${Number(qItem.learning_order??0)+1}</span>
+              <div style="display:flex;gap:6px;">
+                <button type="button" class="action small" data-save-rev-q="${idx}" style="width:auto;padding:5px 12px;font-size:11.5px;">✅ Aprovar & Salvar</button>
+                <button type="button" class="ghost danger small" data-del-rev-q="${idx}" style="width:auto;padding:5px 10px;font-size:11.5px;">🗑️ Descartar</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('')||'<div class="empty">Nenhuma questão encontrada neste filtro.</div>';
+
+      dlg.innerHTML=`
+        <div class="sectionHead" style="margin-bottom:10px;">
+          <div>
+            <div class="eyebrow" style="color:#38bdf8;">AUDITORIA PEDAGÓGICA & SEPARAÇÃO POR DISCIPLINA</div>
+            <h3 style="margin:2px 0 0;">🔍 Revisar, Reclassificar ou Descartar Questões (${pool.length})</h3>
+          </div>
+          <button type="button" class="ghost small" id="closeQuestionReviewQueueBtn" style="width:auto;">Fechar ✕</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+          <label class="small muted">Filtrar por disciplina:</label>
+          <select id="reviewQueueSubjSelect" style="padding:7px 10px;border-radius:8px;background:#0b1d33;color:#fff;border:1px solid #244b70;">
+            <option value="all">Todas as disciplinas (${(ALL_QUESTIONS||[]).length})</option>
+            ${editalSubjects.map(s=>`<option value="${escText(s)}" ${s===curSubj?'selected':''}>${escText(s)}</option>`).join('')}
+          </select>
+          <button type="button" class="ghost small" id="runAutoDedupeAndCleanBtn" style="width:auto;border-color:rgba(52,211,153,0.4);color:#6ee7b7;">🧹 Auto-Higienizar & Remover Duplicatas Agora</button>
+        </div>
+        <div style="max-height:62vh;overflow-y:auto;padding-right:4px;">${listHtml}</div>
+      `;
+      dlg.querySelector('#closeQuestionReviewQueueBtn').onclick=()=>dlg.close();
+      dlg.querySelector('#reviewQueueSubjSelect').onchange=e=>renderList(e.target.value);
+      dlg.querySelector('#runAutoDedupeAndCleanBtn').onclick=()=>{
+        const removed=dedupeAllQuestionsInMemory();
+        sanitizeAllQuestionsAndErrorsSubjects();
+        if(typeof save==='function')save();
+        window.persistToLocalDatabase?.(state?.activeCampaignId);
+        renderQuestionFilters();
+        populateTopicFilter();
+        updateQuestionPool();
+        renderList(dlg.querySelector('#reviewQueueSubjSelect').value);
+        toast(`✓ Banco higienizado e reordenado! ${removed} duplicata(s) removida(s).`);
+      };
+      dlg.querySelectorAll('[data-save-rev-q]').forEach(btn=>{
+        btn.onclick=()=>{
+          const i=Number(btn.dataset.saveRevQ);
+          const item=ALL_QUESTIONS[i];
+          if(!item)return;
+          item.subject=canonicalSubjectName(dlg.querySelector(`[data-edit-q-subj="${i}"]`)?.value||item.subject);
+          item.topic=String(dlg.querySelector(`[data-edit-q-topic="${i}"]`)?.value||item.topic).trim();
+          item.correct_index=Number(dlg.querySelector(`[data-edit-q-ans="${i}"]`)?.value??item.correct_index);
+          item.statement=String(dlg.querySelector(`[data-edit-q-stmt="${i}"]`)?.value||item.statement).trim();
+          item.needs_review=false;
+          item.subject_canonical=subjectKey(item.subject);
+          item.topic_canonical=topicKey(item.topic);
+          item.learning_order=computeQuestionEditalLearningOrder(item);
+          if(typeof save==='function')save();
+          window.persistToLocalDatabase?.(state?.activeCampaignId);
+          renderQuestionFilters();
+          populateTopicFilter();
+          updateQuestionPool();
+          btn.textContent='✓ Salva!';
+          toast('✓ Questão aprovada e atualizada no banco!');
+        };
+      });
+      dlg.querySelectorAll('[data-del-rev-q]').forEach(btn=>{
+        btn.onclick=()=>{
+          const i=Number(btn.dataset.delRevQ);
+          if(ALL_QUESTIONS[i]){
+            ALL_QUESTIONS.splice(i,1);
+            if(typeof save==='function')save();
+            window.persistToLocalDatabase?.(state?.activeCampaignId);
+            renderQuestionFilters();
+            populateTopicFilter();
+            updateQuestionPool();
+            renderList(dlg.querySelector('#reviewQueueSubjSelect').value);
+            toast('🗑️ Questão descartada do banco.');
+          }
+        };
+      });
+    };
+    renderList(filterSubj);
+    if(!dlg.open)dlg.showModal();
+  }
+  window.openQuestionReviewQueueModal=openQuestionReviewQueueModal;
+
 })();

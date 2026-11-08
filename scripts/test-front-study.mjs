@@ -1280,3 +1280,18 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
 
   console.log("OK: Classificação estrita (Casa dos Pombos/Idades/Porte de Arma), bloqueio de capa/texto órfão e ordem cronológica do Edital (r153) validados.");
 }
+
+// ── Validação r154: Revisão Completa Grok (Migração v103 Topic Mastery + XP Honesto, Shingles/MinHash/LSH, Flashcards do Conceito, Revisão de Questões e Ordem do Edital) ──
+{
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const sqlV103 = readFileSync(new URL("../supabase/migrations/20261107180000_v103_topic_mastery_and_honest_xp.sql", import.meta.url), "utf8");
+  const simLib = readFileSync(new URL("./lib/text-similarity.mjs", import.meta.url), "utf8");
+
+  assert.ok(sqlV103.includes("create table if not exists public.topic_mastery") && sqlV103.includes("public.record_question_attempt") && sqlV103.includes("public.complete_mission_honest"), "Migração v103 deve criar topic_mastery, record_question_attempt e complete_mission_honest");
+  assert.ok(v77Src.includes("function recordQuestionAttemptServer(") && v77Src.includes("function completeMissionHonestServer(") && v77Src.includes("function applyXpLocal("), "Front-end deve integrar Maestria por Tópico e XP honesto (local + servidor)");
+  assert.ok(v77Src.includes("function strictSubjectMatch(") && v77Src.includes("followEditalOrderToggle") && v77Src.includes("openQuestionReviewQueueModal"), "Deve conter strictSubjectMatch, checkbox Seguir ordem cronológica do edital e Fila de Revisão/Edição de Questões");
+  assert.ok(v77Src.includes("function generateFlashcardsFromNativeBank(") && v77Src.includes("createConceptFlashcardBtn"), "Deve permitir gerar Flashcards Conceituais a partir da explicação da questão (sem copiar enunciado bruto)");
+  assert.ok(simLib.includes("findNearDuplicatesMinHashBySubject") && simLib.includes("charShingleJaccard") && simLib.includes("wordShingles"), "Biblioteca text-similarity.mjs deve conter Jaccard, Word/Char Shingles e MinHash+LSH sharded por disciplina");
+
+  console.log("OK: Pacote completo da revisão Grok (v103 Maestria/XP, MinHash/LSH, Flashcards do Conceito, Fila de Revisão e Ordem do Edital - r154) validado.");
+}

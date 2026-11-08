@@ -1,0 +1,43 @@
+[
+  {
+    "id": "q1",
+    "subject": "Direito Constitucional",
+    "topic": "Direitos e Garantias Fundamentais",
+    "statement": "Segundo o art. 5º, XVI, da Constituição Federal, todos podem reunir-se pacificamente, sem armas, em locais abertos ao público, independentemente de autorização, exigindo-se apenas prévio aviso à autoridade competente.",
+    "options": ["Certo", "Errado"],
+    "correct_index": 0,
+    "explanation": "Literalidade do art. 5º, XVI, CF/88."
+  },
+  {
+    "id": "q2-dup",
+    "subject": "Direito Constitucional",
+    "topic": "Direitos e Garantias Fundamentais",
+    "statement": "Segundo o art. 5º, XVI, da Constituição Federal, todos podem reunir-se pacificamente, sem armas, em locais abertos ao público, independentemente de autorização, exigindo-se apenas prévio aviso à autoridade competente.",
+    "options": ["Certo", "Errado"],
+    "correct_index": 0,
+    "explanation": "Duplicata exata para teste."
+  },
+  {
+    "id": "q3-near",
+    "subject": "Direito Constitucional",
+    "topic": "Direitos e Garantias Fundamentais",
+    "statement": "Pelo art. 5º, XVI, da Constituição Federal, todos podem reunir-se pacificamente, sem armas, em locais abertos ao público, independentemente de autorização, bastando prévio aviso à autoridade competente.",
+    "options": ["Certo", "Errado"],
+    "correct_index": 0,
+    "explanation": "Quase-duplicata para teste de shingle/MinHash."
+  },
+  {
+    "id": "q4-rlm",
+    "subject": "Raciocínio Lógico-Matemático",
+    "topic": "Proposições e Conectivos",
+    "statement": "A negação lógica da proposição composta 'O soldado fez a ronda e o portão foi trancado' é logicamente equivalente a:",
+    "options": [
+      "O soldado não fez a ronda ou o portão não foi trancado.",
+      "O soldado não fez a ronda e o portão não foi trancado.",
+      "Se o soldado fez a ronda, então o portão não foi trancado.",
+      "O soldado fez a ronda ou o portão foi trancado."
+    ],
+    "correct_index": 0,
+    "explanation": "Primeira Lei de De Morgan: ~(P ^ Q) <=> ~P v ~Q."
+  }
+]
