@@ -2777,7 +2777,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
           <div>
             <span class="eyebrow" style="color:#38bdf8;">🔄 CICLO TÁTICO DO SEU EDITAL · BLOCO #${(st.completedBlocks||0)+1}</span>
-            <div style="font-weight:800;font-size:14.5px;color:#f8fafc;margin-top:2px;">🎯 Matéria em Foco: <span style="color:#38bdf8;">${escText(currSubject)}</span></div>
+            <div style="font-weight:800;font-size:14.5px;color:var(--text,#f8fafc);margin-top:2px;">🎯 Matéria em Foco: <span style="color:#38bdf8;">${escText(currSubject)}</span></div>
             <div class="small muted" style="margin-top:2px;">Assunto da vez: <b>${escText(currTopicName)}</b> · ⏭️ Próxima da fila: <b>${escText(nextSubject)}</b></div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -7151,9 +7151,9 @@
               </div>
               <div class="small"><b>${escText(tafRuleLabel(t))}</b></div>
               <div class="small muted">${escText(t.rules||'')}</div>
-              <div style="background:#06111d;padding:9px 11px;border-radius:10px;border:1px solid #1a334a">
+              <div class="tafMetricInnerBox" style="background:#06111d;padding:9px 11px;border-radius:10px;border:1px solid #1a334a">
                 <div class="small muted">Último resultado (${escText(t.result?.date?new Date(`${t.result.date}T12:00:00`).toLocaleDateString('pt-BR'):'—')})</div>
-                <strong style="font-size:1.05rem;color:#f8fafc">${escText(tafResultLabel(t))}</strong>
+                <strong style="font-size:1.05rem;color:var(--text,#f8fafc)">${escText(tafResultLabel(t))}</strong>
                 <div class="bar" style="margin-top:6px;height:7px"><div class="fill" style="width:${pct}%"></div></div>
               </div>
               <div class="small muted">${escText(tafGapAdvice(t,weeksLeft))}</div>
@@ -12049,11 +12049,11 @@
   // ── r150: Tema Claro Corrigido (Contraste 100%) + Ranking do Simulado com Usuários Reais do Banco + Termômetro e Métricas 100% Reais ──
 
   function injectFullLightAppThemeStyles() {
-    if (typeof document === 'undefined') return;
-    let st = document.getElementById('globalLightAppThemeStyle');
+    if (typeof document === "undefined") return;
+    let st = document.getElementById("globalLightAppThemeStyle");
     if (!st) {
-      st = document.createElement('style');
-      st.id = 'globalLightAppThemeStyle';
+      st = document.createElement("style");
+      st.id = "globalLightAppThemeStyle";
       document.head.appendChild(st);
     }
     st.textContent = `
@@ -12066,10 +12066,13 @@
         --muted: #475569 !important;
         --blue: #0284c7 !important;
         --cyan: #0369a1 !important;
+        --gold: #d97706 !important;
+        --green: #059669 !important;
+        --red: #dc2626 !important;
         background: #f1f5f9 !important;
         color: #0f172a !important;
       }
-      /* Barra superior (.top) clara com título e seletores escuros perfeitamente legíveis */
+      /* 1. Barra superior (.top) e Abas (.tabs) */
       body.lightAppTheme .top {
         background: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
@@ -12092,7 +12095,19 @@
         border-color: #94a3b8 !important;
         color: #0f172a !important;
       }
-      /* Card de Patente (.hero) mantém arte Solo Leveling escura com caixas .metric escuras e números brancos bem visíveis */
+      body.lightAppTheme .tabs {
+        background: rgba(255, 255, 255, 0.96) !important;
+        border-color: #cbd5e1 !important;
+        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08) !important;
+      }
+      body.lightAppTheme .tab {
+        color: #475569 !important;
+      }
+      body.lightAppTheme .tab.active {
+        background: #0284c7 !important;
+        color: #ffffff !important;
+      }
+      /* 2. Card de Patente (.hero) preserva arte Solo Leveling escura com contraste nítido */
       body.lightAppTheme .hero {
         color: #f8fafc !important;
       }
@@ -12115,7 +12130,7 @@
       body.lightAppTheme .hero .muted {
         color: #cbd5e1 !important;
       }
-      /* Cards gerais do aplicativo em Tema Claro */
+      /* 3. Cards principais, painéis e modais em Tema Claro */
       body.lightAppTheme .card:not(.hero),
       body.lightAppTheme .subjectCard,
       body.lightAppTheme .summaryCard,
@@ -12126,13 +12141,90 @@
       body.lightAppTheme .commandShortcut,
       body.lightAppTheme .libraryFolder,
       body.lightAppTheme .folderHead,
-      body.lightAppTheme dialog {
+      body.lightAppTheme .reverseScheduleCard,
+      body.lightAppTheme .studyCycleCard,
+      body.lightAppTheme .questionTrainer,
+      body.lightAppTheme .performanceTrack,
+      body.lightAppTheme .simuladoLauncher,
+      body.lightAppTheme .tacticalDiagnosisCard,
+      body.lightAppTheme .examBankHubCard,
+      body.lightAppTheme .cutoffThermometerCard,
+      body.lightAppTheme .reviewHubCard,
+      body.lightAppTheme .tafCard,
+      body.lightAppTheme dialog,
+      body.lightAppTheme #questionDialog,
+      body.lightAppTheme #questionDialog.modernQuestionDialog,
+      body.lightAppTheme .lessonDialog,
+      body.lightAppTheme #textStudyModalDialog,
+      body.lightAppTheme #questionReviewQueueDialog,
+      body.lightAppTheme #duelPostMatchDialog,
+      body.lightAppTheme #confirmExitDuelDialog,
+      body.lightAppTheme .confirmExitDuelModal,
+      body.lightAppTheme dialog.slInviteDialog,
+      body.lightAppTheme dialog.slGuildChatDialog,
+      body.lightAppTheme .slGuildLobbyCard {
         background: #ffffff !important;
         border-color: #cbd5e1 !important;
         color: #0f172a !important;
         box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05) !important;
       }
-      /* Card "PRÓXIMA AÇÃO DO DIA" (.commandPrimary) claro e legível */
+      /* 4. Caixas de métricas e sub-blocos (Hoje, Portais, Questões, Estudar, TAF) */
+      body.lightAppTheme .weeklyMetric,
+      body.lightAppTheme .performanceMetric,
+      body.lightAppTheme .reverseMetric,
+      body.lightAppTheme .learningStat,
+      body.lightAppTheme .reviewStatBox,
+      body.lightAppTheme .smartMetric,
+      body.lightAppTheme .tafStopwatch,
+      body.lightAppTheme .tafMetricInnerBox,
+      body.lightAppTheme .syncCheck div,
+      body.lightAppTheme .accountInfo {
+        background: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+        box-shadow: none !important;
+      }
+      body.lightAppTheme .weeklyMetric b,
+      body.lightAppTheme .performanceMetric b,
+      body.lightAppTheme .reverseMetric b,
+      body.lightAppTheme .learningStat b,
+      body.lightAppTheme .reviewStatBox b,
+      body.lightAppTheme .smartMetric b {
+        color: #0284c7 !important;
+      }
+      body.lightAppTheme .weeklyMetric span,
+      body.lightAppTheme .performanceMetric span,
+      body.lightAppTheme .reverseMetric span,
+      body.lightAppTheme .learningStat span,
+      body.lightAppTheme .reviewStatBox span {
+        color: #475569 !important;
+      }
+      body.lightAppTheme .cycleBlockCard,
+      body.lightAppTheme .reviewDayChip {
+        background: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .cycleBlockCard.priorityHigh,
+      body.lightAppTheme .reviewDayChip.hasDue {
+        background: #fffbeb !important;
+        border-color: #f59e0b !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .cycleBlockCard.completed {
+        background: #ecfdf5 !important;
+        border-color: #10b981 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .cycleBlockCard b,
+      body.lightAppTheme .cycleBlockCard strong {
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .cycleBlockCard span,
+      body.lightAppTheme .cycleBlockCard small {
+        color: #475569 !important;
+      }
+      /* 5. Card "PRÓXIMA AÇÃO DO DIA" (.commandPrimary) e Ofensiva (.streakCard) */
       body.lightAppTheme .commandPrimary {
         background: linear-gradient(135deg, #e0f2fe, #bae6fd) !important;
         border: 1px solid #38bdf8 !important;
@@ -12148,7 +12240,6 @@
       body.lightAppTheme .commandPrimary span:not(.eyebrow) {
         color: #1e293b !important;
       }
-      /* Card "OFENSIVA DO CAÇADOR" (.streakCard, .streakDay e .motivation) claro e legível */
       body.lightAppTheme .streakCard {
         background: #ffffff !important;
         border-color: #cbd5e1 !important;
@@ -12183,21 +12274,301 @@
       body.lightAppTheme #motivationSource {
         color: #475569 !important;
       }
-      /* Missão Diária, Cronômetro, Ciclo Tático e Simulador da Guilda em Tema Claro */
+      /* 6. Missão Diária, Cronômetro, Ciclo Tático, Unificação de Editais e Termômetros */
       body.lightAppTheme .mission,
       body.lightAppTheme .timer,
       body.lightAppTheme #estudeiCycleWidget,
       body.lightAppTheme #timerLiquidCategoryBar,
       body.lightAppTheme #guildOfficialSimuladoCard,
-      body.lightAppTheme #estudeiEditalThermometer {
+      body.lightAppTheme #estudeiEditalThermometer,
+      body.lightAppTheme #topicMasteryRadarCard,
+      body.lightAppTheme .unifiedPortalControlCard,
+      body.lightAppTheme .localDbBar {
         background: linear-gradient(145deg, #ffffff, #f0f9ff) !important;
-        border-color: #7dd3fc !important;
+        border: 1px solid #7dd3fc !important;
         color: #0f172a !important;
       }
       body.lightAppTheme #estudeiCycleWidget div,
       body.lightAppTheme #estudeiCycleWidget b,
+      body.lightAppTheme #estudeiCycleWidget strong,
       body.lightAppTheme #guildOfficialSimuladoCard h3,
-      body.lightAppTheme #estudeiEditalThermometer h3 {
+      body.lightAppTheme #estudeiEditalThermometer h3,
+      body.lightAppTheme .unifiedPortalControlCard h3,
+      body.lightAppTheme .unifiedPortalControlCard b,
+      body.lightAppTheme .localDbBar,
+      body.lightAppTheme .localDbBar span,
+      body.lightAppTheme .localDbBar b,
+      body.lightAppTheme .localDbBar strong {
+        color: #0f172a !important;
+      }
+      body.lightAppTheme #estudeiCycleWidget [data-cycle-pick-subj] {
+        background: #ffffff !important;
+        border-color: #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme #openGuildSimuladoRankingBtn,
+      body.lightAppTheme #balanceEstudeiCycleByWeightBtn,
+      body.lightAppTheme #openManuaisCacadorBtn,
+      body.lightAppTheme #reportQuestionIssueBtn {
+        background: #fffbeb !important;
+        border-color: #f59e0b !important;
+        color: #b45309 !important;
+      }
+      body.lightAppTheme #practiceEstudeiBlockBtn,
+      body.lightAppTheme #runAutoDedupeAndCleanBtn {
+        background: #ecfdf5 !important;
+        border-color: #10b981 !important;
+        color: #047857 !important;
+      }
+      body.lightAppTheme .guildSimRankRow {
+        background: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .guildSimRankRow.isMe {
+        background: #e0f2fe !important;
+        border-color: #0284c7 !important;
+      }
+      /* 7. Simulador de Aprovação & Termômetro de Corte + Montar Batalha + Treino Rápido 1-Clique */
+      body.lightAppTheme .cutoffBar,
+      body.lightAppTheme .performanceBar,
+      body.lightAppTheme .bar:not(.hero .bar) {
+        background: #e2e8f0 !important;
+        border-color: #cbd5e1 !important;
+      }
+      body.lightAppTheme .cutoffCurrentPin {
+        background: #0284c7 !important;
+        color: #ffffff !important;
+        border-color: #ffffff !important;
+      }
+      body.lightAppTheme .cutoffStageCard,
+      body.lightAppTheme .cutoffBottleneckRow,
+      body.lightAppTheme .diagnosisCol,
+      body.lightAppTheme .diagnosisItem,
+      body.lightAppTheme .sharedBankBanner,
+      body.lightAppTheme .examDocRow,
+      body.lightAppTheme .examEmptyState,
+      body.lightAppTheme .examImportBox,
+      body.lightAppTheme .examGeneratorBox {
+        background: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .cutoffStageCard.target {
+        background: #f0f9ff !important;
+        border-color: #38bdf8 !important;
+      }
+      body.lightAppTheme .cutoffStageCard.passed {
+        background: #ecfdf5 !important;
+        border-color: #10b981 !important;
+      }
+      body.lightAppTheme .cutoffStageCard span,
+      body.lightAppTheme .cutoffStageCard b,
+      body.lightAppTheme .cutoffStageCard small,
+      body.lightAppTheme .cutoffStageCard .stageStatus,
+      body.lightAppTheme .cutoffBottleneckRow b,
+      body.lightAppTheme .cutoffBottleneckRow span {
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .cutoffErrorTopicCard {
+        background: #fff1f2 !important;
+        border: 1px solid #fecdd3 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .cutoffErrorTopicCard .eyebrow {
+        color: #be123c !important;
+      }
+      body.lightAppTheme #cutoffUnifiedExamSwitchBar > div {
+        background: #f0f9ff !important;
+        border-color: #7dd3fc !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .quickBoaRespostaBox,
+      body.lightAppTheme #quickBoaRespostaBar,
+      body.lightAppTheme .questionFilters,
+      body.lightAppTheme .searchBox,
+      body.lightAppTheme .summaryFilters,
+      body.lightAppTheme .flashSpacedBar,
+      body.lightAppTheme .trailControlToolbar,
+      body.lightAppTheme .notifBulkBar,
+      body.lightAppTheme .readerTools {
+        background: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .quickBoardPill {
+        background: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #334155 !important;
+      }
+      body.lightAppTheme .quickBoardPill.active {
+        background: #0284c7 !important;
+        border-color: #0284c7 !important;
+        color: #ffffff !important;
+      }
+      body.lightAppTheme .quickSubjectChip {
+        background: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+        box-shadow: 0 2px 5px rgba(15, 23, 42, 0.04) !important;
+      }
+      body.lightAppTheme .quickSubjectChip:hover {
+        background: #f0f9ff !important;
+        border-color: #0284c7 !important;
+      }
+      body.lightAppTheme .quickSubjectChip b,
+      body.lightAppTheme .quickSubjText b {
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .quickSubjectChip small,
+      body.lightAppTheme .quickSubjSub {
+        color: #475569 !important;
+      }
+      body.lightAppTheme .quickSubjCount {
+        background: #e0f2fe !important;
+        color: #0369a1 !important;
+        border-color: #7dd3fc !important;
+      }
+      body.lightAppTheme .caveiraSprintBanner {
+        background: linear-gradient(135deg, #fffbeb, #fef3c7) !important;
+        border: 1px solid #f59e0b !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .caveiraSprintBanner b,
+      body.lightAppTheme .caveiraSprintBanner strong,
+      body.lightAppTheme .caveiraSprintBanner span {
+        color: #0f172a !important;
+      }
+      /* 8. Modal de Questões (#questionDialog), Simulado e Resolução Comentada */
+      body.lightAppTheme #questionDialog > .sectionHead,
+      body.lightAppTheme dialog > .sectionHead:first-child,
+      body.lightAppTheme .qModalTopHeader,
+      body.lightAppTheme .qModalFooterBar,
+      body.lightAppTheme .lessonHud,
+      body.lightAppTheme .simuladoTopBar,
+      body.lightAppTheme .simuladoSheetBar {
+        background: #f8fafc !important;
+        border-color: #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .qMetaPill {
+        background: #e0f2fe !important;
+        border-color: #7dd3fc !important;
+        color: #0369a1 !important;
+      }
+      body.lightAppTheme .qCounterPill,
+      body.lightAppTheme .simuladoClock,
+      body.lightAppTheme .sheetBubble {
+        background: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .sheetBubble.answered {
+        background: #0284c7 !important;
+        border-color: #0284c7 !important;
+        color: #ffffff !important;
+      }
+      body.lightAppTheme .qStatementCard,
+      body.lightAppTheme #questionText,
+      body.lightAppTheme #simuladoQuestionStatement,
+      body.lightAppTheme .lessonQuestion,
+      body.lightAppTheme #duelQuestionStatement,
+      body.lightAppTheme .questionBox,
+      body.lightAppTheme .reviewQuestionBox {
+        background: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .optionMainBtn,
+      body.lightAppTheme .lessonOption,
+      body.lightAppTheme .lessonOption.modernOptCard,
+      body.lightAppTheme .duelOptBtn,
+      body.lightAppTheme .reviewChoiceBox {
+        background: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .optionMainBtn:hover:not(:disabled),
+      body.lightAppTheme .lessonOption.modernOptCard:hover:not(:disabled),
+      body.lightAppTheme .duelOptBtn:hover:not(:disabled) {
+        background: #f0f9ff !important;
+        border-color: #0284c7 !important;
+      }
+      body.lightAppTheme .optLetterBadge,
+      body.lightAppTheme .duelOptBtn b {
+        background: #e0f2fe !important;
+        border-color: #7dd3fc !important;
+        color: #0369a1 !important;
+      }
+      body.lightAppTheme .optionMainBtn.correct,
+      body.lightAppTheme .lessonOption.correct,
+      body.lightAppTheme .duelOptBtn.correct,
+      body.lightAppTheme .reviewChoiceBox.right {
+        background: #ecfdf5 !important;
+        border-color: #10b981 !important;
+        color: #065f46 !important;
+      }
+      body.lightAppTheme .optionMainBtn.wrong,
+      body.lightAppTheme .lessonOption.wrong,
+      body.lightAppTheme .duelOptBtn.wrong {
+        background: #fff1f2 !important;
+        border-color: #f43f5e !important;
+        color: #9f1239 !important;
+      }
+      body.lightAppTheme .scissorBtn {
+        background: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #475569 !important;
+      }
+      body.lightAppTheme .granAssocWrapper,
+      body.lightAppTheme .granAssocHeader,
+      body.lightAppTheme .granAssocBody,
+      body.lightAppTheme .questionExplanation:not(:empty),
+      body.lightAppTheme .stepResolutionBlock,
+      body.lightAppTheme .resolutionOptionsDetails,
+      body.lightAppTheme .stepOptionItem,
+      body.lightAppTheme .personalQuestionBizuBox,
+      body.lightAppTheme .reviewExplainBox,
+      body.lightAppTheme .questionFigureBox,
+      body.lightAppTheme .communityOptionStatsBar,
+      body.lightAppTheme .choiceCompareCard {
+        background: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      /* 9. Estudar (Resumos, Flashcards, Anotações, Caderno IA), Biblioteca, Duelo X1, Ranking e Redação */
+      body.lightAppTheme .studyTabs,
+      body.lightAppTheme .examHubTabs,
+      body.lightAppTheme .slGuildChannelTabs,
+      body.lightAppTheme .loginMode {
+        background: #f1f5f9 !important;
+        border: 1px solid #cbd5e1 !important;
+      }
+      body.lightAppTheme .studyTab,
+      body.lightAppTheme .examHubTab,
+      body.lightAppTheme .notifTabBtn,
+      body.lightAppTheme .loginMode button {
+        background: transparent !important;
+        color: #475569 !important;
+        border-color: transparent !important;
+      }
+      body.lightAppTheme .studyTab.active,
+      body.lightAppTheme .examHubTab.active,
+      body.lightAppTheme .notifTabBtn.active,
+      body.lightAppTheme .loginMode button.active {
+        background: #0284c7 !important;
+        color: #ffffff !important;
+        border-color: #0284c7 !important;
+      }
+      body.lightAppTheme .flashcard,
+      body.lightAppTheme #flashcard {
+        background: linear-gradient(155deg, #ffffff, #f0f9ff) !important;
+        border: 2px solid #7dd3fc !important;
+        color: #0f172a !important;
+        box-shadow: 0 8px 24px rgba(2, 132, 199, 0.08) !important;
+      }
+      body.lightAppTheme .flashcard *,
+      body.lightAppTheme #flashcard * {
         color: #0f172a !important;
       }
       body.lightAppTheme .check,
@@ -12205,22 +12576,95 @@
       body.lightAppTheme .planItem,
       body.lightAppTheme .summaryHead,
       body.lightAppTheme .lessonBox,
-      body.lightAppTheme .learningStat {
+      body.lightAppTheme .notebookItem,
+      body.lightAppTheme .aiHero,
+      body.lightAppTheme .aiLibrary,
+      body.lightAppTheme .aiTurn,
+      body.lightAppTheme .aiQuestion,
+      body.lightAppTheme .drawBook,
+      body.lightAppTheme .smartHero,
+      body.lightAppTheme .smartSource,
+      body.lightAppTheme .smartEstimate,
+      body.lightAppTheme .smartAction,
+      body.lightAppTheme .smartResult,
+      body.lightAppTheme .smartResultHead,
+      body.lightAppTheme .gapItem,
+      body.lightAppTheme .score,
+      body.lightAppTheme .achievement,
+      body.lightAppTheme .sourceLink,
+      body.lightAppTheme .sourceTile,
+      body.lightAppTheme .notificationItem,
+      body.lightAppTheme .essayMotivatingCard,
+      body.lightAppTheme .essaySupportBox,
+      body.lightAppTheme .essayCommandBox,
+      body.lightAppTheme #typedEssayBox {
         background: #f8fafc !important;
-        border-color: #cbd5e1 !important;
+        border: 1px solid #cbd5e1 !important;
         color: #0f172a !important;
       }
-      body.lightAppTheme .tabs {
-        background: rgba(255, 255, 255, 0.96) !important;
-        border-color: #cbd5e1 !important;
-        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08) !important;
+      body.lightAppTheme .uploadZone {
+        background: #f8fafc !important;
+        border: 2px dashed #7dd3fc !important;
+        color: #0f172a !important;
       }
-      body.lightAppTheme .tab {
-        color: #475569 !important;
+      body.lightAppTheme #pdfPreScanBox,
+      body.lightAppTheme #documentAnswerKeyRow,
+      body.lightAppTheme #docTitleHintBox,
+      body.lightAppTheme .communityBanner,
+      body.lightAppTheme #communityCoopBanner,
+      body.lightAppTheme .communityDocCard {
+        background: #f0f9ff !important;
+        border: 1px solid #7dd3fc !important;
+        color: #0f172a !important;
       }
-      body.lightAppTheme .tab.active {
-        background: #0284c7 !important;
-        color: #ffffff !important;
+      body.lightAppTheme #docTitleHintBox code {
+        background: #e0f2fe !important;
+        color: #0369a1 !important;
+        padding: 1px 5px !important;
+        border-radius: 4px !important;
+      }
+      body.lightAppTheme .duelHero,
+      body.lightAppTheme .duelPlayerCard,
+      body.lightAppTheme .duelPlayStage,
+      body.lightAppTheme .duelQuickBotsBar {
+        background: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .duelQuickBotBtn,
+      body.lightAppTheme .duelCatChip {
+        background: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .duelQuickBotBtn:hover {
+        background: #f0f9ff !important;
+        border-color: #0284c7 !important;
+      }
+      body.lightAppTheme .podiumCard,
+      body.lightAppTheme .rankRow {
+        background: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .podiumCard.first {
+        background: #fffbeb !important;
+        border-color: #f59e0b !important;
+      }
+      body.lightAppTheme .rankRow.isMe {
+        background: #f0f9ff !important;
+        border-color: #0284c7 !important;
+      }
+      body.lightAppTheme .appLegalFooter,
+      body.lightAppTheme footer,
+      body.lightAppTheme .cookieConsentBanner {
+        background: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #334155 !important;
+      }
+      body.lightAppTheme .appLegalFooter b,
+      body.lightAppTheme footer b {
+        color: #0f172a !important;
       }
       body.lightAppTheme .ghost,
       body.lightAppTheme .menuItem,
@@ -12231,8 +12675,9 @@
       body.lightAppTheme input[type="number"],
       body.lightAppTheme input[type="date"],
       body.lightAppTheme input[type="time"],
+      body.lightAppTheme input[type="file"],
       body.lightAppTheme textarea {
-        background: #f8fafc !important;
+        background: #ffffff !important;
         border-color: #94a3b8 !important;
         color: #0f172a !important;
       }
@@ -12242,6 +12687,30 @@
       body.lightAppTheme .card:not(.hero) b,
       body.lightAppTheme .card:not(.hero) strong {
         color: #0f172a !important;
+      }
+      /* 10. Modo Visual Limpo / Direto (body.compactCleanUx — elimina poluição visual e excesso de textos explicativos longos) */
+      body.compactCleanUx .questionTrust,
+      body.compactCleanUx #docTitleHintBox,
+      body.compactCleanUx .appLegalFooter .small.muted,
+      body.compactCleanUx #guildOfficialSimuladoCard .sectionHead .small.muted,
+      body.compactCleanUx #estudeiEditalThermometer > .small.muted,
+      body.compactCleanUx #communityCoopBanner .small.muted,
+      body.compactCleanUx .reverseScheduleCard > p.small.muted,
+      body.compactCleanUx .studyCycleCard .sectionHead p.small.muted,
+      body.compactCleanUx .tacticalDiagnosisCard > p.small.muted,
+      body.compactCleanUx .examBankHubCard .sectionHead p.small.muted,
+      body.compactCleanUx .simuladoLauncher .sectionHead p.small.muted,
+      body.compactCleanUx #topicMasteryRadarCard > p.small.muted,
+      body.compactCleanUx #cutoffAdviceText {
+        display: none !important;
+      }
+      body.compactCleanUx .sectionHead p.small.muted,
+      body.compactCleanUx .card > p.small.muted {
+        font-size: 11.5px !important;
+        line-height: 1.35 !important;
+        margin-top: 2px !important;
+        margin-bottom: 6px !important;
+        opacity: 0.85;
       }
       .optStatPill {
         margin-left: auto;
@@ -12269,6 +12738,24 @@
       }
     `;
   }
+
+  function applyCleanUxMode(mode) {
+    if (typeof document === "undefined") return;
+    injectFullLightAppThemeStyles();
+    const isClean = mode !== "detailed";
+    document.body.classList.toggle("compactCleanUx", isClean);
+    try { localStorage.setItem("jc_clean_ux_v1", isClean ? "clean" : "detailed"); } catch (_e) {}
+    const btn = document.querySelector("#cleanUxToggleBtn");
+    if (btn) {
+      btn.innerHTML = isClean ? "📖<span>Textos Detalhados</span>" : "✨<span>Visual Enxuto</span>";
+      btn.title = isClean ? "Mostrar todas as descrições e textos explicativos" : "Ativar Modo Visual Enxuto (sem excesso de textos)";
+    }
+    const sBtn = document.querySelector("#settingsCleanUxToggleBtn");
+    if (sBtn) {
+      sBtn.textContent = isClean ? "📖 Alternar para Modo Detalhado (Mostrar textos explicativos)" : "✨ Alternar para Visual Enxuto (Sem poluição visual)";
+    }
+  }
+  window.applyCleanUxMode = applyCleanUxMode;
 
   function applyGlobalAppTheme(mode) {
     if (typeof document === 'undefined') return;
@@ -12477,7 +12964,7 @@
                 ? `📈 ${acc}% de precisão (${Math.max(1, 75 - acc)}% p/ a meta)`
                 : `🔥 ${streakVal}d ofensiva · ${xpVal} XP`;
             return `
-              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:${row.is_me ? 'rgba(56,189,248,0.16)' : 'rgba(7,19,32,0.75)'};border:1px solid ${row.is_me ? '#38bdf8' : 'rgba(148,163,184,0.16)'};font-size:12px;flex-wrap:wrap;">
+              <div class="guildSimRankRow ${row.is_me ? 'isMe' : ''}" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:${row.is_me ? 'rgba(56,189,248,0.16)' : 'rgba(7,19,32,0.75)'};border:1px solid ${row.is_me ? '#38bdf8' : 'rgba(148,163,184,0.16)'};font-size:12px;flex-wrap:wrap;">
                 <span><b>${idx + 1}º</b> · <b>${escText(row.name || 'Caçador')}${row.is_me ? ' (Você)' : ''}</b> <span class="small muted">(${escText(roleTxt + secTxt)})</span></span>
                 <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                   <b style="color:#38bdf8;">🎯 ${acc}% acerto · ⚡ ${xpVal} XP · ✓ ${mDone} missões</b>
@@ -12510,6 +12997,8 @@
 
     const savedTheme = localStorage.getItem('jc_theme_mode_v1') || 'dark';
     applyGlobalAppTheme(savedTheme);
+    const savedUx = localStorage.getItem('jc_clean_ux_v1') || 'clean';
+    applyCleanUxMode(savedUx);
 
     const menuThemeBtn = document.querySelector('#globalThemeToggleBtn');
     if (menuThemeBtn && !menuThemeBtn.dataset.boundTheme) {
@@ -12537,6 +13026,37 @@
       });
       const notifBtn = settingsDlg.querySelector('#enableNotifications');
       if (notifBtn) notifBtn.insertAdjacentElement('beforebegin', sBtn);
+    }
+    if (settingsDlg && !settingsDlg.querySelector('#settingsCleanUxToggleBtn')) {
+      const uxBtn = document.createElement('button');
+      uxBtn.type = 'button';
+      uxBtn.id = 'settingsCleanUxToggleBtn';
+      uxBtn.className = 'ghost';
+      uxBtn.style.cssText = 'width:100%;margin-bottom:8px;';
+      uxBtn.textContent = document.body.classList.contains('compactCleanUx') ? '📖 Alternar para Modo Detalhado (Mostrar textos explicativos)' : '✨ Alternar para Visual Enxuto (Sem poluição visual)';
+      uxBtn.addEventListener('click', () => {
+        const nextUx = document.body.classList.contains('compactCleanUx') ? 'detailed' : 'clean';
+        applyCleanUxMode(nextUx);
+        if (typeof toast === 'function') toast(nextUx === 'clean' ? '✨ Visual Enxuto ativado (menos textos, foco direto)!' : '📖 Modo Detalhado ativado!');
+      });
+      const notifBtn = settingsDlg.querySelector('#enableNotifications');
+      if (notifBtn) notifBtn.insertAdjacentElement('beforebegin', uxBtn);
+    }
+    const menuGrid = document.querySelector('#moreDialog .menuGrid');
+    if (menuGrid && !menuGrid.querySelector('#cleanUxToggleBtn')) {
+      const mUxBtn = document.createElement('button');
+      mUxBtn.type = 'button';
+      mUxBtn.className = 'menuItem';
+      mUxBtn.id = 'cleanUxToggleBtn';
+      const isClean = document.body.classList.contains('compactCleanUx');
+      mUxBtn.innerHTML = isClean ? '📖<span>Textos Detalhados</span>' : '✨<span>Visual Enxuto</span>';
+      mUxBtn.addEventListener('click', () => {
+        const nextUx = document.body.classList.contains('compactCleanUx') ? 'detailed' : 'clean';
+        applyCleanUxMode(nextUx);
+        document.querySelector('#moreDialog')?.close();
+        if (typeof toast === 'function') toast(nextUx === 'clean' ? '✨ Visual Enxuto ativado!' : '📖 Modo Detalhado ativado!');
+      });
+      menuGrid.appendChild(mUxBtn);
     }
 
     const qDialog = document.querySelector('#questionDialog');
@@ -12581,7 +13101,10 @@
   window.scheduleLazyTabHydration = scheduleLazyTabHydration;
 
   if (typeof window !== 'undefined') {
-    window.addEventListener('DOMContentLoaded', () => scheduleLazyTabHydration(initThemeAndQuestionReporting));
+    window.applyGlobalAppTheme = applyGlobalAppTheme;
+    window.initThemeAndQuestionReporting = initThemeAndQuestionReporting;
+    try { initThemeAndQuestionReporting(); } catch (_e) {}
+    window.addEventListener('DOMContentLoaded', () => { try { initThemeAndQuestionReporting(); } catch (_e) {} scheduleLazyTabHydration(initThemeAndQuestionReporting); });
     scheduleLazyTabHydration(initThemeAndQuestionReporting);
     window.updateTodayCommand = updateTodayCommand;
     window.renderEstudeiCycleWidget = renderEstudeiCycleWidget;

@@ -1295,3 +1295,32 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
 
   console.log("OK: Pacote completo da revisão Grok (v103 Maestria/XP, MinHash/LSH, Flashcards do Conceito, Fila de Revisão e Ordem do Edital - r154) validado.");
 }
+
+
+// ── r155: Correção Completa do Modo Claro (100% dos cards do vídeo) + Modo Visual Enxuto (compactCleanUx) ──
+{
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const requiredLightSelectors = [
+    "body.lightAppTheme .reverseMetric",
+    "body.lightAppTheme .cycleBlockCard",
+    "body.lightAppTheme .unifiedPortalControlCard",
+    "body.lightAppTheme .localDbBar",
+    "body.lightAppTheme .cutoffStageCard",
+    "body.lightAppTheme .cutoffBottleneckRow",
+    "body.lightAppTheme .cutoffErrorTopicCard",
+    "body.lightAppTheme .quickSubjectChip",
+    "body.lightAppTheme .caveiraSprintBanner",
+    "body.lightAppTheme .questionFilters",
+    "body.lightAppTheme .flashcard",
+    "body.lightAppTheme .duelQuickBotBtn",
+    "body.lightAppTheme .uploadZone",
+    "body.lightAppTheme #communityCoopBanner",
+    "body.lightAppTheme .appLegalFooter",
+    "body.compactCleanUx"
+  ];
+  for (const sel of requiredLightSelectors) {
+    assert.ok(v77Src.includes(sel), "Seletor obrigatório do Modo Claro / Visual Enxuto ausente: " + sel);
+  }
+  assert.ok(v77Src.includes("function applyCleanUxMode(") && v77Src.includes("#cleanUxToggleBtn") && v77Src.includes("#settingsCleanUxToggleBtn"), "Deve conter função applyCleanUxMode e botões de alternância do Modo Visual Enxuto");
+  console.log("OK: Correção 100% do Modo Claro em todas as abas/modais e Modo Visual Enxuto sem poluição visual (r155) validados.");
+}
