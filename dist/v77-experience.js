@@ -2870,6 +2870,7 @@
     const missions=typeof missionPool==='function'?missionPool().filter(m=>!String(m.id||'').startsWith('setup-')):[];
     const totalTopics=Math.max(1,missions.length);
     const doneTopics=missions.filter(m=>state?.done?.[m.id]).length;
+    const masteredTopics=missions.filter(m=>state?.done?.[m.id]&&(typeof window.getTopicMasteryStats==="function"?window.getTopicMasteryStats(m).isMastered:false)).length;
     const theoryPct=Math.min(100,Math.round((doneTopics/totalTopics)*100));
 
     // Métricas 100% REAIS do progresso do usuário no edital ativo:
@@ -2901,12 +2902,12 @@
           <div class="eyebrow" style="color:#38bdf8;">TERMÔMETRO DUPLO DE COBERTURA DO EDITAL · DADOS 100% REAIS</div>
           <h3 style="margin:2px 0 0;">📊 Teoria Concluída vs. Prática Real em Questões</h3>
         </div>
-        <span class="tag">${doneTopics}/${missions.length} tópicos · ${realQuestionsResolved} questões resolvidas</span>
+        <span class="tag">📖 ${doneTopics}/${missions.length} estudados · 🏆 ${masteredTopics} dominados · 🎯 ${realQuestionsResolved}q</span>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:8px;">
         <div>
           <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
-            <b>📖 Cobertura Teórica (${doneTopics}/${missions.length} tópicos)</b>
+            <b>📖 Teoria Estudada (${doneTopics}/${missions.length}) · 🏆 Dominados (${masteredTopics})</b>
             <span style="color:#38bdf8;font-weight:800;">${theoryPct}%</span>
           </div>
           <div class="bar"><div class="fill" style="width:${theoryPct}%;background:linear-gradient(90deg,#0284c7,#38bdf8);"></div></div>
@@ -7086,6 +7087,17 @@
     return `Para bater o índice: ${parts.join(' e ')}.`;
   }
 
+  function computeAuditedHunterXpCeiling(missionsDone=0,missionsMastered=0,questionsTotal=0,bossesDone=0,streakDays=0){
+    const mDone=Math.max(0,Number(missionsDone||0));
+    const mMast=Math.max(0,Math.min(mDone,Number(missionsMastered||0)));
+    const qTot=Math.max(0,Number(questionsTotal||0));
+    const bDone=Math.max(0,Number(bossesDone||0));
+    const sDays=Math.max(0,Number(streakDays||0));
+    // Teto auditável: 40 XP por tópico estudado + 60 XP por tópico dominado + 300 XP por Boss + até 15 XP por questão + 40 XP por dia de ofensiva + margem de trilha (800)
+    return (mDone*40)+(mMast*60)+(bDone*300)+(qTot*15)+(sDays*40)+800;
+  }
+  window.computeAuditedHunterXpCeiling=computeAuditedHunterXpCeiling;
+
   function syncHunterStatsSnapshot(){
     try{
       const taf=ensureTafState();
@@ -7093,10 +7105,14 @@
       const readyCount=tests.filter(t=>tafMetTarget(t)===true).length;
       const pool=typeof missionPool==='function'?missionPool():[];
       const doneCount=pool.filter(m=>state?.done?.[m.id]).length;
+      const masteredCount=pool.filter(m=>state?.done?.[m.id]&&(typeof window.getTopicMasteryStats==='function'?window.getTopicMasteryStats(m).isMastered:false)).length;
       const editalComplete=pool.length>0&&doneCount===pool.length;
-      const curXp=typeof xp==='function'?xp():0;
-      const curRank=typeof level==='function'?level(curXp,editalComplete)?.label||'E III - Caçador Iniciante':'E III - Caçador Iniciante';
       const totalQ=(state?.scores||[]).reduce((a,s)=>a+Number(s.total||0),0);
+      const bossesDone=Object.keys(state?.bosses||{}).length;
+      const rawXp=typeof xp==='function'?xp():0;
+      const maxAuditedXp=computeAuditedHunterXpCeiling(doneCount,masteredCount,totalQ,bossesDone,Number(state?.streak||0));
+      const curXp=Math.max(0,Math.min(rawXp,maxAuditedXp));
+      const curRank=typeof level==='function'?level(curXp,editalComplete)?.label||'E III - Caçador Iniciante':'E III - Caçador Iniciante';
       const corrQ=(state?.scores||[]).reduce((a,s)=>a+Number(s.correct||0),0);
       const acc=totalQ?Math.round((corrQ/totalQ)*100):0;
       const user=cloudSession?.user;
@@ -7111,6 +7127,7 @@
         streak:Number(state?.streak||0),
         bestStreak:Math.max(Number(state?.bestStreak||0),Number(state?.streak||0)),
         missionsDone:doneCount,
+        missionsMastered:masteredCount,
         accuracy:acc,
         tafReady:readyCount,
         tafTotal:tests.length||5,
@@ -7607,17 +7624,31 @@
       if(Array.isArray(rows)&&rows.length){
         leaderboardSqlMissing=false;
         const meLocal=localHunterRow();
-        leaderboardRows=rows.map(r=>r.is_me?{
-          ...r,
-          name:meLocal.name||r.name,
-          role:meLocal.role||r.role,
-          secondary_role:meLocal.secondary_role||(r.secondary_role||''),
-          streak:Math.max(Number(r.streak||0),meLocal.streak),
-          best_streak:Math.max(Number(r.best_streak||0),meLocal.best_streak),
-          missions_done:Math.max(Number(r.missions_done||0),meLocal.missions_done),
-          accuracy:meLocal.accuracy||Number(r.accuracy||0),
-          xp:Math.max(Number(r.xp||0),meLocal.xp)
-        }:r);
+        leaderboardRows=rows.map(r=>{
+          if(!r.is_me)return r;
+          const activeDaysCount=state?.studyByDay?Object.keys(state.studyByDay).length:0;
+          const maxHonestStreak=Math.max(1,activeDaysCount+2,Number(r.streak||0));
+          const serverXp=Number(r.xp||0);
+          const ceilingXp=computeAuditedHunterXpCeiling(
+            Math.max(Number(r.missions_done||0),meLocal.missions_done),
+            Number(state?.hunterStats?.missionsMastered||0),
+            Math.max(Number(r.questions_total||0),(state?.scores||[]).reduce((a,s)=>a+Number(s.total||0),0)),
+            Object.keys(state?.bosses||{}).length,
+            maxHonestStreak
+          );
+          const safeXp=serverXp>0?Math.min(Math.max(serverXp,meLocal.xp),ceilingXp):Math.min(meLocal.xp,ceilingXp);
+          return {
+            ...r,
+            name:meLocal.name||r.name,
+            role:meLocal.role||r.role,
+            secondary_role:meLocal.secondary_role||(r.secondary_role||''),
+            streak:Math.min(Math.max(Number(r.streak||0),meLocal.streak),maxHonestStreak),
+            best_streak:Math.min(Math.max(Number(r.best_streak||0),meLocal.best_streak),maxHonestStreak+3),
+            missions_done:Math.max(Number(r.missions_done||0),meLocal.missions_done),
+            accuracy:meLocal.accuracy||Number(r.accuracy||0),
+            xp:safeXp
+          };
+        });
         if(forceToast)toast(`Ranking atualizado: ${leaderboardRows.length} caçador(es) na disputa!`);
       }else{
         leaderboardRows=[localHunterRow()];

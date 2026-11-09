@@ -1368,3 +1368,59 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   }
   console.log("OK: Correção automática de textos/mnemônicos da IA (SOCIDDAPRF -> SO-CI-DI-VA-PLU), Alto Contraste WCAG AAA no Modo Claro e Otimização O(1) da aba Questões (r156) validados.");
 }
+
+// ── r157 & r158: IA Honesta (Contexto 18k por assunto + Erros Claros + Aviso Oficial), Estudado vs. Dominado (40 XP vs 100 XP) e Anti-Inflação de Ranking ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const assistFnSrc = readFileSync(new URL("../supabase/functions/assistente-pmpe/index.ts", import.meta.url), "utf8");
+
+  // 1) Verifica IA Honesta no backend e front-end
+  assert.ok(assistFnSrc.includes("HONESTIDADE DOCUMENTAL E LEGAL (ZERO INVENÇÃO)") && assistFnSrc.includes(".slice(0, 18000)") && assistFnSrc.includes("EMPTY_RESPONSE"), "assistente-pmpe deve exigir honestidade documental, limitar contexto a 18.000 caracteres e tratar resposta vazia");
+  assert.ok(htmlSrc.includes("const MAX_CONTEXT_CHARS=18000;") && htmlSrc.includes("function classifyAssistantErrorMessage(") && htmlSrc.includes("aiVerifyNotice"), "Front-end deve priorizar biblioteca em 18k chars, traduzir erros do instrutor em português claro e exibir aviso de fonte oficial");
+
+  // 2) Testa Estudado (40 XP) vs Dominado (100 XP com >= 5 questões e >= 70% de acerto) em VM
+  const mStart = htmlSrc.indexOf("function getTopicMasteryStats(");
+  const mEnd = htmlSrc.indexOf("function activeCampaign(){");
+  assert.ok(mStart !== -1 && mEnd !== -1, "getTopicMasteryStats, getTopicPedagogicalStatus e xp() devem existir em dist/index.html");
+
+  const vmCtx = {
+    window: {},
+    state: {
+      activeCampaignId: "camp-1",
+      done: { "m1": "2026-11-09T10:00:00Z", "m2": "2026-11-09T10:05:00Z" },
+      bosses: {},
+      scores: [
+        { id: "m2", total: 6, correct: 5, campaignId: "camp-1", subject: "Direito Constitucional" }
+      ],
+      topicMastery: {},
+      learning: { completed: {}, xp: 0 },
+      streak: 1
+    },
+    missionPool: () => [
+      { id: "m1", name: "1. Tópico Apenas Estudado", subject: "Português" },
+      { id: "m2", name: "2. Tópico Dominado na Prática", subject: "Direito Constitucional" },
+      { id: "m3", name: "3. Tópico Pendente", subject: "Informática" }
+    ],
+    normalizeText: (s) => String(s || "").toLowerCase(),
+    subjectKey: (s) => String(s || "").toLowerCase(),
+    canonicalSubjectName: (s) => String(s || "")
+  };
+  vm.createContext(vmCtx);
+  vm.runInContext(htmlSrc.slice(mStart, mEnd), vmCtx);
+
+  assert.equal(vmCtx.getTopicPedagogicalStatus({ id: "m1", name: "1. Tópico Apenas Estudado", subject: "Português" }), "studied", "Tópico clicado sem 5 questões e 70% de acerto deve ficar como studied (Estudado)");
+  assert.equal(vmCtx.getTopicPedagogicalStatus({ id: "m2", name: "2. Tópico Dominado na Prática", subject: "Direito Constitucional" }), "mastered", "Tópico estudado com 5/6 acertos (83%) deve ficar como mastered (Dominado)");
+  assert.equal(vmCtx.getTopicPedagogicalStatus({ id: "m3", name: "3. Tópico Pendente", subject: "Informática" }), "pending", "Tópico não marcado deve ficar como pending");
+
+  // m1 (estudado = 40 XP) + m2 (dominado = 100 XP) + scoreXp de 5/6 (33 XP) = 173 XP
+  const calcXp = vmCtx.xp();
+  assert.equal(calcXp, 40 + 100 + Math.floor((5 / 6) * 40), "XP deve pagar 40 XP para tópico apenas Estudado e 100 XP para tópico Dominado");
+
+  // Verifica trava contra inflação artificial de learning.xp no console
+  vmCtx.state.learning.xp = 999999;
+  assert.ok(vmCtx.xp() < 2000, "capHonestLearningXp deve impedir que edição manual de learning.xp infle o XP total");
+  assert.ok(v77Src.includes("function computeAuditedHunterXpCeiling(") && v77Src.includes("const safeXp=serverXp>0?Math.min(Math.max(serverXp,meLocal.xp),ceilingXp)"), "Ranking deve limitar o XP do próprio aparelho pelo teto auditável");
+
+  console.log("OK: IA Honesta (r157), Separação Estudado vs. Dominado (40 XP vs 100 XP) e Proteção Anti-Inflação de Ranking (r158) validados.");
+}

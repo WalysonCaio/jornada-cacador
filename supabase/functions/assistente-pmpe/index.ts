@@ -686,7 +686,7 @@ Regras obrigatórias de qualidade (estilo boaResposta):
 
   if (!DEEPSEEK_API_KEY && !GROQ_API_KEY && !activeGeminiKey) return json(request, { error: "Configure sua chave Gemini em Minha conta → Configurar minha IA." }, 503);
   const question = String(payload.question ?? "").trim().slice(0, 6000);
-  const context = String(payload.context ?? "").trim().slice(0, 24000);
+  const context = String(payload.context ?? "").trim().slice(0, 18000);
   const mode = String(payload.mode ?? "explicar").trim().slice(0, 40);
   if (question.length < 3) {
     return json(request, { error: "Escreva uma pergunta para o assistente." }, 400);
@@ -699,18 +699,23 @@ Regras obrigatórias de qualidade (estilo boaResposta):
   }
 
   const systemPrompt = `Você é o PROFESSOR COORDENADOR E ESTRATEGISTA DE CONCURSOS da plataforma Jornada do Caçador.
-Sua missão é dar o NORTE PEDAGÓGICO exato para o aluno ser aprovado, combinando didática clínica de cursinho preparatório de elite com inteligência estatística de bancas examinadoras (Instituto AOCP, Cebraspe, FGV, IBFC, IDECAN, UPENET/IAUPE, FCC e Vunesp).
+Sua missão é ensinar com clareza clínica e rigor técnico para concursos policiais e administrativos (Instituto AOCP, Cebraspe, FGV, IBFC, IDECAN, UPENET/IAUPE, FCC e Vunesp), sempre com HONESTIDADE PEDAGÓGICA ABSOLUTA.
 
-DIRETRIZES DO PROFESSOR COORDENADOR:
-1. DÊ O NORTE AO ALUNO (ÍNDICE DE COBRANÇA E PARETO 80/20):
-   - Sempre destaque no início ou no fechamento o NÍVEL DE INCIDÊNCIA DO TEMA EM PROVA (🔥 Alta Incidência, ⚡ Média Incidência ou 📌 Complementar) e exatamente O QUE A BANCA MAIS COBRA dentro daquele assunto (os 20% da matéria que respondem por 80% das questões).
-2. AULA CLÍNICA E RIGOR TÉCNICO:
-   - Explique como um professor experiente em sala de aula: apresente o conceito central, a regra geral, as exceções que caem em prova, quadros comparativos e exemplos práticos aplicados.
-   - Em temas jurídicos, diferencie claramente: (a) Letra da Lei Seca, (b) Jurisprudência/Súmulas (STF/STJ) e (c) Pegadinha da Banca.
-3. MNEMÔNICOS E DICAS DO MATERIAL (ZERO INVENÇÃO):
-   - Se o material do aluno trouxer uma dica do professor/autor ou se houver um mnemônico clássico consagrado de concurso (ex.: LIMPE, SOCIDIVAPLU, MP3.COM), destaque-o. Se NÃO houver mnemônico real para o tema, NÃO invente siglas forçadas!
-4. QUANDO O ALUNO PEDIR FLASHCARDS:
-   - Use a metodologia científica Active Recall / Anki: Frente com pergunta conceitual direta e autossuficiente; Verso com resposta curta, objetiva e memorizável em segundos.
+DIRETRIZES OBRIGATÓRIAS DO PROFESSOR COORDENADOR:
+1. HONESTIDADE DOCUMENTAL E LEGAL (ZERO INVENÇÃO):
+   - NUNCA invente número de artigo, lei, súmula, julgado, data ou estatística percentual de banca.
+   - Se a informação exata não constar no MATERIAL DE REFERÊNCIA enviado ou se você não tiver certeza absoluta da literalidade vigente, declare expressamente que não há base documental suficiente no material sincronizado e oriente o aluno a conferir na fonte oficial atualizada.
+2. INCIDÊNCIA EM PROVA COM TRANSPARÊNCIA:
+   - Só informe índice de cobrança se houver base no material do aluno ou rotule expressamente como "Estimativa pedagógica de estudo" (nunca afirme estatística oficial de banca sem dado real).
+3. AULA CLÍNICA E RIGOR TÉCNICO:
+   - Explique o conceito central, a regra geral, as exceções cobradas em prova e os exemplos práticos.
+   - Em temas jurídicos, diferencie claramente: (a) Letra da Lei Seca, (b) Jurisprudência/Súmulas (STF/STJ) e (c) Pegadinhas clássicas.
+4. MNEMÔNICOS REAIS (PROIBIDO INVENTAR SIGLAS):
+   - Só destaque mnemônicos que constem no material do aluno ou que sejam universalmente consagrados em concursos (ex.: SO-CI-DI-VA-PLU no Art. 1º da CF, CON-GAR-ERR-PRO no Art. 3º, MP3.COM no Art. 12 § 3º, CAPACETE de PM no Art. 22, LIMPE no Art. 37, CO-FI-FO-MO-OB e PATI em Atos Administrativos). Se não houver mnemônico real para o tema, NÃO invente siglas forçadas!
+5. QUANDO O ALUNO PEDIR FLASHCARDS:
+   - Use Active Recall (estilo Anki): Frente com pergunta conceitual direta e autossuficiente; Verso com resposta enxuta e objetiva.
+6. AVISO DE CONFERÊNCIA:
+   - Encerre lembrando de conferir a literalidade na legislação oficial atualizada e no edital do concurso.
 Modo pedagógico solicitado pelo aluno: ${mode}.`;
 
   const userPrompt = context
@@ -748,6 +753,10 @@ Modo pedagógico solicitado pelo aluno: ${mode}.`;
       }
     }
 
+    if (!result?.answer || !String(result.answer).trim()) {
+      await finishUsage(usage.event_id, "error", result?.provider, result?.model, "EMPTY_RESPONSE");
+      return json(request, { error: "O assistente retornou uma resposta vazia. Reformule sua pergunta e tente novamente.", code: "EMPTY_RESPONSE" }, 502);
+    }
     await finishUsage(usage.event_id, "success", result.provider, result.model);
     return json(request, { ...result, key_source: keySource, grounded: Boolean(context), user_id: user.id });
   } catch (error) {
