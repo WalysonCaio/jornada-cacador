@@ -4002,34 +4002,9 @@
     const isFav=isQuestionFavorited(item);
     const savedComment=state?.questionPersonalNotes?.[fp]||'';
 
-    const lines=rawExp.split(/\n+|\s*\|\s*/).map(l=>l.trim()).filter(Boolean);
-    const conceptLine=lines.find(l=>/^conceito[- ]?chave\s*:/i.test(l));
-    const whyCorrectLine=lines.find(l=>/^(✅|\s*alternativa correta|\s*por que a correta|\s*correta\s*:)/i.test(l));
-    const whyWrongLine=lines.find(l=>/^(❌|\s*an[aá]lise das alternativas|\s*por que as outras|\s*demais alternativas)/i.test(l));
-    const trapLine=lines.find(l=>/^(⚠️|⚠|\s*pegadinha)/i.test(l));
-
-    const hasStructured=Boolean(conceptLine||whyCorrectLine||whyWrongLine||trapLine);
-    let stepsHtml='';
-
-    if(hasStructured){
-      const cleanPrefix=txt=>escText(txt.replace(/^(?:conceito[- ]?chave|✅|❌|⚠️|⚠|alternativa correta|por que a correta est[aá] certa|an[aá]lise das alternativas|por que as outras est[aá]o erradas|demais alternativas|pegadinha(?: da banca)?(?:\s*\([^)]*\))?)\s*:?\s*/i,''));
-      if(conceptLine)stepsHtml+=`<div class="stepResolutionBlock concept"><b>💡 Conceito-chave cobrado</b><p>${cleanPrefix(conceptLine)}</p></div>`;
-      if(whyCorrectLine)stepsHtml+=`<div class="stepResolutionBlock right"><b>✅ Por que a alternativa ${correctLetter} está correta</b><p>${cleanPrefix(whyCorrectLine)}</p></div>`;
-      if(whyWrongLine)stepsHtml+=`<div class="stepResolutionBlock wrongAnalysis"><b>❌ Análise das demais alternativas</b><p>${cleanPrefix(whyWrongLine)}</p></div>`;
-      if(trapLine)stepsHtml+=`<div class="stepResolutionBlock trap"><b>⚠️ Pegadinha de prova</b><p>${cleanPrefix(trapLine)}</p></div>`;
-      const extraLines=lines.filter(l=>![conceptLine,whyCorrectLine,whyWrongLine,trapLine].includes(l));
-      if(extraLines.length&&!whyCorrectLine){
-        stepsHtml+=`<div class="stepResolutionBlock right"><b>✅ Resolução comentada</b><p>${escText(extraLines.join(' '))}</p></div>`;
-      }
-    } else {
-      stepsHtml+=`<div class="stepResolutionBlock right"><b>✅ Passo a passo do raciocínio</b><p>${escText(rawExp||`A alternativa ${correctLetter} reproduz corretamente o entendimento aplicável ao tema “${item.topic||item.subject}”.`)}</p></div>`;
-      if(related?.bizu){
-        stepsHtml+=`<div class="stepResolutionBlock concept"><b>💡 Bizu do material (${escText(related.title)})</b><p>${escText(related.bizu)}</p></div>`;
-      }
-      if(related?.trap){
-        stepsHtml+=`<div class="stepResolutionBlock trap"><b>⚠️ Pegadinha frequente neste tema</b><p>${escText(related.trap)}</p></div>`;
-      }
-    }
+    let stepsHtml = typeof window.buildFormattedResolutionStepsHtml === 'function'
+      ? window.buildFormattedResolutionStepsHtml(rawExp, item, correctIndex, correctLetter, isCE, related)
+      : `<div class="stepResolutionBlock right"><b>✅ Passo a passo do raciocínio</b><p>${escText(rawExp)}</p></div>`;
 
     const optionsBreakdown=(item.options||[]).map((opt,idx)=>{
       const letter=String.fromCharCode(65+idx);
@@ -4522,7 +4497,19 @@
     q('#nextQuestion').hidden=true;
     battle.answered=false;
     if(q('#closeQuestionsTopBtn')){
-      q('#closeQuestionsTopBtn').onclick=()=>{activeQuestions=null;q('#questionDialog')?.close()};
+      q('#closeQuestionsTopBtn').onclick=()=>{
+        if(typeof window.requestExitQuestionSession==='function')return window.requestExitQuestionSession();
+        activeQuestions=null;q('#questionDialog')?.close();
+      };
+    }
+    if(q('#closeQuestions')){
+      q('#closeQuestions').onclick=()=>{
+        if(typeof window.requestExitQuestionSession==='function')return window.requestExitQuestionSession();
+        activeQuestions=null;q('#questionDialog')?.close();
+      };
+    }
+    if(typeof window.syncQuestionPrevAndRestoreState==='function'){
+      window.syncQuestionPrevAndRestoreState(battle, item);
     }
     qa('[data-question-index]').forEach(b=>b.onclick=()=>window.answerQuestion(b,item));
     if(q('#skipQuestionBlankBtn'))q('#skipQuestionBlankBtn').onclick=()=>window.skipQuestionBlank(item);
@@ -6398,12 +6385,12 @@
     if(!w)return toast('Permita a abertura de pop-up para gerar o PDF de impressão.');
     const questionsHtml=selected.map((item,idx)=>{
       const diff={facil:'Fácil',medio:'Média',dificil:'Difícil'}[normalizedDifficulty(item)]||'Média';
-      const opts=(item.options||[]).map((o,i)=>`<div class="opt"><b>(${String.fromCharCode(65+i)})</b> ${escText(o)}</div>`).join('');
+      const cleanItem=typeof window.prepareQuestionConsistent==='function'?window.prepareQuestionConsistent({...item,origin:'oficial'}):item;const opts=(cleanItem.options||[]).map((o,i)=>`<div class="opt"><b>(${String.fromCharCode(65+i)})</b> ${escText(typeof window.stripOptionLetterPrefixClean==='function'?window.stripOptionLetterPrefixClean(o):o)}</div>`).join('');
       return `<article class="qItem"><div class="qHead"><b>QUESTÃO ${String(idx+1).padStart(2,'0')}</b><span>${escText(learningCategory(item.subject))} · ${escText(item.topic||'Geral')} · ${diff}</span></div><p class="qStmt">${escText(item.statement)}</p><div class="qOpts">${opts}</div></article>`;
     }).join('');
     const answerKeyHtml=selected.map((item,idx)=>{
       const letter=String.fromCharCode(65+(Number(item.correct_index)||0));
-      return `<div class="ansItem"><b>${String(idx+1).padStart(2,'0')}: ${letter}</b> — <span>${escText(item.explanation||item.options?.[item.correct_index]||'')}</span></div>`;
+      const expLines=typeof window.splitInlineOptionExplanations==='function'?window.splitInlineOptionExplanations(item.explanation||item.options?.[item.correct_index]||''):[String(item.explanation||'')];return `<div class="ansItem"><b>${String(idx+1).padStart(2,'0')}: ${letter}</b> — <span>${expLines.map(l=>escText(l)).join('<br>')}</span></div>`;
     }).join('');
     w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Caderno de Questões — ${escText(campaignName)}</title><style>body{font:13.5px/1.5 Inter,Arial,sans-serif;color:#111d2c;max-width:840px;margin:28px auto;padding:0 16px}header{border-bottom:2px solid #0f2942;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-end}h1{font-size:1.25rem;margin:0}.meta{font-size:.8rem;color:#4a6075}.qItem{break-inside:avoid;border:1px solid #d4e0ec;border-radius:8px;padding:12px 14px;margin-bottom:12px}.qHead{display:flex;justify-content:space-between;font-size:.78rem;color:#1d4f7a;border-bottom:1px solid #e6eef5;padding-bottom:5px;margin-bottom:8px}.qStmt{margin:0 0 9px;font-weight:600}.qOpts{display:grid;gap:5px}.opt{font-size:.92rem}.pageBreak{page-break-before:always;margin-top:32px;padding-top:16px;border-top:2px solid #0f2942}.ansItem{margin-bottom:8px;font-size:.86rem;break-inside:avoid}@media print{body{margin:12mm;max-width:none}.noPrint{display:none}}</style></head><body><div class="noPrint" style="margin-bottom:16px;padding:10px;background:#eef6fc;border-radius:8px;display:flex;justify-content:space-between;align-items:center"><span><b>Pronto para impressão ou Salvar como PDF</b> (${selected.length} questões + gabarito comentado)</span><button onclick="window.print()" style="padding:8px 16px;font-weight:bold;cursor:pointer">🖨️ Imprimir / Salvar PDF</button></div><header><div><h1>${escText(campaignName)} — Caderno de Prova</h1><div class="meta">Filtro: ${escText(subjectLabel)} · ${selected.length} questões</div></div><div class="meta">Data: ${new Date().toLocaleDateString('pt-BR')}</div></header>${questionsHtml}<section class="pageBreak"><h2>Gabarito Oficial e Resolução Passo a Passo</h2>${answerKeyHtml}</section></body></html>`);
     w.document.close();
@@ -10503,6 +10490,8 @@
     document.addEventListener('mousedown',e=>{
       const dlg=e.target;
       if(!dlg||dlg.tagName!=='DIALOG'||!dlg.open)return;
+      // NUNCA fecha o simulado/treino de questões, trilha ou duelo ao clicar fora (evita perda acidental de progresso)
+      if(['questionDialog','lessonDialog','timedSimuladoDialog','duelArenaDialog','confirmExitDuelDialog','confirmExitSimuladoDialog'].includes(dlg.id))return;
       // Verifica se o clique ocorreu fora da caixa interna do modal (no backdrop escuro)
       const rect=dlg.getBoundingClientRect();
       const clickedInside=(
@@ -14446,5 +14435,595 @@
       toast(`🤖 Instrutor IA pronto para aprofundar "${shortLabel(tp, 36)}"!`);
     }
   });
+
+
+  // ── r161: 1) Quebra de linha entre todas as alternativas nas explicações (mobile e desktop)
+  //          2) Proteção contra fechamento acidental ao clicar fora + Confirmação "Deseja realmente sair do simulado?"
+  //          3) Sincronização das letras das alternativas após embaralhamento (sem prefixo duplicado "A) B)") + Correção de questões defeituosas
+  //          4) Persistência de progresso da bateria (sessionStorage) + Botão "← Questão anterior" + Atalhos de Teclado ──
+
+  const ACTIVE_QUESTION_SESSION_KEY = 'jornada-active-question-session-v161';
+
+  function stripOptionLetterPrefixClean(rawText) {
+    let s = String(rawText || '').trim();
+    // Remove prefixos repetidos como "B) ", "A) B) ", "(C) ", "[D] ", "Alternativa A: "
+    for (let i = 0; i < 2; i++) {
+      const next = s.replace(/^\s*(?:alternativa\s+|letra\s+|item\s+)?(?:\([A-Ea-e]\)|\[[A-Ea-e]\]|[A-Ea-e]\s*[\)\.\-–—:])\s*/i, '').trim();
+      if (next === s) break;
+      s = next;
+    }
+    return s;
+  }
+  window.stripOptionLetterPrefixClean = stripOptionLetterPrefixClean;
+
+  function detectOriginalOptionLetter(rawText, fallbackIdx) {
+    const m = String(rawText || '').trim().match(/^\s*(?:alternativa\s+|letra\s+|item\s+)?(?:\(([A-Ea-e])\)|\[([A-Ea-e])\]|([A-Ea-e])\s*[\)\.\-–—:])\s*/i);
+    if (m) return (m[1] || m[2] || m[3]).toUpperCase();
+    return String.fromCharCode(65 + fallbackIdx);
+  }
+
+  // Corrige automaticamente questões geradas por IA com defeito lógico conhecido (ex.: "Qual frase NÃO é uma proposição?" com 4 proposições declarativas)
+  function healPedagogicalQuestionDefects(q) {
+    if (!q || typeof q !== 'object') return q;
+    const st = String(q.statement || '').trim();
+    const opts = Array.isArray(q.options) ? q.options.map(o => stripOptionLetterPrefixClean(o)) : [];
+    if (!opts.length) return q;
+
+    if (/qual\s+(?:frase|senten[cç]a|alternativa|item|op[cç][aã]o)\s+n[aã]o\s+[eé]\s+(?:uma\s+)?proposi[cç][aã]o/i.test(st)) {
+      const hasTrueNonProposition = opts.some(o => /\?|!|\b(que horas|quantos|estude|fa[cç]a|pare|sil[eê]ncio|tomara|oxalá|x\s*[+\-=<>]|ele\s+foi)\b/i.test(o));
+      if (!hasTrueNonProposition) {
+        const cIdx = (Number.isInteger(Number(q.correct_index)) && Number(q.correct_index) >= 0 && Number(q.correct_index) < opts.length)
+          ? Number(q.correct_index)
+          : 0;
+        const fixedOpts = [...opts];
+        fixedOpts[cIdx] = 'Que horas começa o plantão policial?';
+        const cLetter = String.fromCharCode(65 + cIdx);
+        const otherLines = fixedOpts.map((optTxt, idx) => {
+          const l = String.fromCharCode(65 + idx);
+          if (idx === cIdx) return `- ✅ Correta: ${l}) "${optTxt}" é uma frase interrogativa (pergunta), portanto não admite valor lógico Verdadeiro ou Falso e NÃO é uma proposição.`;
+          const isComp = /\b(se\s+.*ent[aã]o|\s+ou\s+|\s+e\s+|se e somente se)\b/i.test(optTxt);
+          return `- ❌ ${l}) "${optTxt}" é uma proposição lógica ${isComp ? 'composta' : 'simples'} (toda frase declarativa fechada, mesmo que matematicamente falsa como "2 + 2 = 5", possui valor lógico V ou F e é uma proposição).`;
+        });
+        return {
+          ...q,
+          options: fixedOpts,
+          correct_index: cIdx,
+          explanation: `Conceito-chave: Proposição lógica é toda sentença declarativa fechada que pode ser julgada como Verdadeira (V) ou Falsa (F). Frases interrogativas (?), exclamativas (!), imperativas (ordens) e sentenças abertas (com variáveis sem valor definido) NÃO são proposições (mnemônico NESPEI).\n${otherLines.join('\n')}`
+        };
+      }
+    }
+    return q;
+  }
+  window.healPedagogicalQuestionDefects = healPedagogicalQuestionDefects;
+
+  // Atualiza todas as referências de letras (A, B, C, D, E) na explicação quando as alternativas são reordenadas
+  function remapExplanationOptionLetters(rawExp, letterMap, finalOptions, finalCorrectIndex) {
+    let exp = String(rawExp || '').trim();
+    if (!exp) return exp;
+    const isCE = Array.isArray(finalOptions) && finalOptions.length === 2 && /^certo$/i.test(String(finalOptions[0] || '').trim());
+    if (isCE) return exp;
+
+    const newCorrectLetter = String.fromCharCode(65 + (Number(finalCorrectIndex) || 0));
+
+    // Se houver mapa de permutação de letras (ex.: A->C, C->A), aplica substituição simultânea nas marcações de alternativas
+    if (letterMap && letterMap.size > 0) {
+      exp = exp.replace(
+        /((?:^|\n|[•\-✅✓❌✗]|\bCorreta\s*:\s*|\bAlternativa\s+|\bLetra\s+|\bItem\s+|\bOp[cç][aã]o\s+|\.\s+|;\s+)\s*)\(?([A-E])([\)\.\-–—:]|\b)/g,
+        (full, prefix, letter, suffix) => {
+          const mapped = letterMap.get(String(letter).toUpperCase());
+          return mapped ? `${prefix}${mapped}${suffix}` : full;
+        }
+      );
+    }
+
+    // Garante que "✅ Correta: X)" sempre exiba exatamente a letra do gabarito atual (newCorrectLetter)
+    exp = exp.replace(/(✅\s*Correta\s*:\s*)([A-E])(\s*[\)\.\-–—:])/gi, `$1${newCorrectLetter}$3`);
+    exp = exp.replace(/(\b(?:Alternativa|Letra)\s+correta\s*:\s*)([A-E])\b/gi, `$1${newCorrectLetter}`);
+
+    return exp;
+  }
+  window.remapExplanationOptionLetters = remapExplanationOptionLetters;
+
+  function prepareQuestionConsistent(rawQ) {
+    if (!rawQ || typeof rawQ !== 'object') return rawQ;
+    const q = healPedagogicalQuestionDefects(rawQ);
+    const rawOpts = Array.isArray(q.options) ? q.options : [];
+    let originalIdx = Number.isInteger(Number(q.correct_index)) ? Number(q.correct_index) : 0;
+    if (originalIdx < 0 || originalIdx >= Math.max(1, rawOpts.length)) originalIdx = 0;
+
+    // Verifica se a explicação aponta explicitamente o texto da alternativa correta (ex.: "✅ Correta: C) P → Q.")
+    // e reconcilia caso as opções salvas anteriormente estivessem com letras trocadas
+    const expStr = String(q.explanation || '');
+    const explicitCorrMatch = expStr.match(/✅\s*(?:Alternativa\s+)?Correta\s*:\s*([A-E])\s*[\)\.\-–—:]\s*([^\n❌⚠️]+?)(?:\.\s*(?:❌|$)|\n|$)/i);
+    const items = rawOpts.map((rawText, idx) => {
+      const origLetter = detectOriginalOptionLetter(rawText, idx);
+      const cleanText = normalizeLegalText(stripOptionLetterPrefixClean(rawText));
+      return { text: cleanText, index: idx, origLetter };
+    });
+
+    if (explicitCorrMatch) {
+      const expCorrLetter = explicitCorrMatch[1].toUpperCase();
+      const expCorrSnippet = stripOptionLetterPrefixClean(explicitCorrMatch[2]).replace(/\.$/, '').trim().toLowerCase();
+      if (expCorrSnippet.length >= 2) {
+        const textMatchIdx = items.findIndex(it => it.text.toLowerCase().replace(/\.$/, '').trim() === expCorrSnippet || it.text.toLowerCase().includes(expCorrSnippet));
+        if (textMatchIdx >= 0) {
+          originalIdx = textMatchIdx;
+          items[textMatchIdx].origLetter = expCorrLetter;
+        }
+      }
+    }
+
+    const isCE = items.length === 2 && /^certo$/i.test(items[0]?.text || '');
+    const keepOrder = items.length <= 2 || isCE || q?.origin === 'oficial' || Boolean(q?._alreadyPreparedConsistent);
+    const mixed = keepOrder ? [...items] : shuffle(items);
+
+    const newCorrectIdx = Math.max(0, mixed.findIndex(it => it.index === originalIdx));
+    const letterMap = new Map();
+    mixed.forEach((it, newIdx) => {
+      const newLetter = String.fromCharCode(65 + newIdx);
+      letterMap.set(it.origLetter, newLetter);
+      letterMap.set(String.fromCharCode(65 + it.index), newLetter);
+    });
+
+    const cleanOptions = mixed.map(it => it.text);
+    const updatedExplanation = remapExplanationOptionLetters(normalizeLegalText(q.explanation || ''), letterMap, cleanOptions, newCorrectIdx);
+
+    return {
+      ...q,
+      topic: normalizeLegalText(q.topic || ''),
+      statement: normalizeLegalText(q.statement || ''),
+      explanation: updatedExplanation,
+      options: cleanOptions,
+      correct_index: newCorrectIdx,
+      fingerprint: typeof questionFingerprint === 'function' ? questionFingerprint(q) : (q.fingerprint || ''),
+      _alreadyPreparedConsistent: true
+    };
+  }
+  window.prepareQuestionConsistent = prepareQuestionConsistent;
+  window.prepareQuestion = prepareQuestionConsistent;
+
+  // Formata qualquer explicação garantindo que CADA alternativa fique em uma linha separada com espaçamento adequado
+  function splitInlineOptionExplanations(text) {
+    if (!text) return [];
+    let normalized = String(text)
+      // Insere quebra de linha antes de marcadores ✅, ❌, ⚠️
+      .replace(/\s+(?=[✅✓❌✗⚠️⚠])/g, '\n')
+      // Insere quebra de linha antes de "- ✅" ou "- ❌"
+      .replace(/\s+-\s*(?=[✅✓❌✗])/g, '\n- ')
+      // Insere quebra de linha quando alternativas A), B), C), D), E) aparecem na mesma linha após ponto ou ponto-e-vírgula
+      .replace(/([.;])\s+(?=(?:[-•]\s*)?(?:[✅✓❌✗]\s*)?(?:Alternativa\s+|Letra\s+)?[A-E]\)\s)/g, '$1\n')
+      .trim();
+
+    return normalized
+      .split(/\n+/)
+      .map(l => l.trim())
+      .filter(Boolean);
+  }
+  window.splitInlineOptionExplanations = splitInlineOptionExplanations;
+
+  function buildFormattedResolutionStepsHtml(rawExp, item, correctIndex, correctLetter, isCE, related) {
+    const cleanExp = String(rawExp || '').trim();
+    const rawSegments = splitInlineOptionExplanations(cleanExp);
+
+    let conceptParts = [];
+    let optionLines = [];
+    let generalRightParts = [];
+    let generalWrongParts = [];
+    let trapParts = [];
+
+    for (const seg of rawSegments) {
+      const strippedDash = seg.replace(/^[-•]\s*/, '').trim();
+      if (/^(?:⚠️|⚠|pegadinha)/i.test(strippedDash)) {
+        trapParts.push(strippedDash.replace(/^(?:⚠️|⚠|\s*pegadinha(?:\s+da\s+banca)?(?:\s*\([^)]*\))?)\s*:?\s*/i, '').trim());
+      } else if (/^(?:✅|✓)\s*(?:Correta\s*:\s*)?[A-E]\)/i.test(strippedDash) || /^Correta\s*:\s*[A-E]\)/i.test(strippedDash)) {
+        const cleanOpt = strippedDash.replace(/^(?:✅|✓)?\s*Correta\s*:\s*/i, '').trim();
+        optionLines.push({ kind: 'correct', letter: (cleanOpt.match(/^([A-E])\)/i)?.[1] || correctLetter).toUpperCase(), text: cleanOpt });
+      } else if (/^(?:❌|✗)\s*(?:Incorreta\s*:\s*)?[A-E]\)/i.test(strippedDash) || /^[A-E]\)\s+\S/i.test(strippedDash)) {
+        const cleanOpt = strippedDash.replace(/^(?:❌|✗)\s*(?:Incorreta\s*:\s*)?/i, '').trim();
+        const letM = cleanOpt.match(/^([A-E])\)/i);
+        const letChar = (letM ? letM[1] : 'X').toUpperCase();
+        optionLines.push({ kind: letChar === correctLetter ? 'correct' : 'wrong', letter: letChar, text: cleanOpt });
+      } else if (/^conceito[- ]?chave\s*:/i.test(strippedDash)) {
+        const body = strippedDash.replace(/^conceito[- ]?chave\s*:\s*/i, '').trim();
+        if (body) conceptParts.push(body.charAt(0).toUpperCase() + body.slice(1));
+      } else if (/^(?:✅|✓|alternativa correta|por que a correta)/i.test(strippedDash)) {
+        const body = strippedDash.replace(/^(?:✅|✓|alternativa correta|por que a correta(?:\s+est[aá]\s+certa)?)\s*:?\s*/i, '').trim();
+        // Verifica se dentro de "Análise/Correta" há sub-itens A), B), C)
+        const subParts = splitInlineOptionExplanations(body);
+        if (subParts.length > 1) {
+          subParts.forEach(sp => generalRightParts.push(sp));
+        } else if (body) {
+          generalRightParts.push(body);
+        }
+      } else if (/^(?:❌|✗|an[aá]lise das alternativas|por que as outras|demais alternativas)/i.test(strippedDash)) {
+        const body = strippedDash.replace(/^(?:❌|✗|an[aá]lise das alternativas|por que as outras(?:\s+est[aá]o\s+erradas)?|demais alternativas)\s*:?\s*/i, '').trim();
+        const subOpts = body.split(/(?:;\s*|\.\s+)(?=(?:[❌✗]\s*)?(?:Alternativa\s+|Letra\s+)?[A-E][\)\.:\-–])/g).map(s => s.trim()).filter(Boolean);
+        if (subOpts.length >= 2) {
+          subOpts.forEach(so => {
+            const cleanSo = so.replace(/^(?:❌|✗)\s*/, '').replace(/^(?:Alternativa|Letra)\s+([A-E])\s*[\)\.:\-–]\s*/i, '$1) ').trim();
+            const lm = cleanSo.match(/^([A-E])\)/i);
+            optionLines.push({ kind: 'wrong', letter: lm ? lm[1].toUpperCase() : 'X', text: cleanSo });
+          });
+        } else if (body) {
+          generalWrongParts.push(body);
+        }
+      } else {
+        if (!conceptParts.length && !generalRightParts.length) {
+          conceptParts.push(strippedDash.charAt(0).toUpperCase() + strippedDash.slice(1));
+        } else {
+          generalRightParts.push(strippedDash);
+        }
+      }
+    }
+
+    // Ordena optionLines colocando a correta primeiro (como no exemplo do usuário: "- ✅ Correta: C) ...") e depois as erradas em ordem A, B, C, D, E
+    const correctOptLines = optionLines.filter(o => o.kind === 'correct');
+    const wrongOptLines = optionLines.filter(o => o.kind !== 'correct').sort((a, b) => a.letter.localeCompare(b.letter));
+    const orderedOptionLines = [...correctOptLines, ...wrongOptLines];
+
+    const optionLinesHtml = orderedOptionLines.length
+      ? `<div class="expPerOptionList" style="display:grid;gap:7px;margin-top:10px">${orderedOptionLines.map(o => {
+          const isCorr = o.kind === 'correct';
+          const prefixLabel = isCorr ? `✅ <b>Correta: ${escText(o.text)}</b>` : `❌ ${escText(o.text)}`;
+          return `<div class="expAltLine ${isCorr ? 'isCorrectLine' : 'isWrongLine'}" style="display:block;padding:8px 11px;border-radius:8px;line-height:1.5;font-size:.88rem;background:${isCorr ? 'rgba(16,185,129,0.12)' : 'rgba(244,63,94,0.09)'};border-left:3px solid ${isCorr ? '#10b981' : '#f43f5e'}">- ${prefixLabel}</div>`;
+        }).join('')}</div>`
+      : '';
+
+    let htmlOut = '';
+    const mainConcept = conceptParts.join(' ') || (generalRightParts.length ? generalRightParts.shift() : '') || `A alternativa ${correctLetter} reproduz corretamente o entendimento aplicável ao tema “${item?.topic || item?.subject || 'Concurso'}”.`;
+
+    htmlOut += `<div class="stepResolutionBlock concept"><b>💡 Conceito-chave cobrado</b><p style="margin:6px 0 0;line-height:1.55">${escText(mainConcept)}</p>${optionLinesHtml}</div>`;
+
+    if (generalRightParts.length) {
+      htmlOut += `<div class="stepResolutionBlock right"><b>✅ Por que a alternativa ${correctLetter} está correta</b>${generalRightParts.map(p => `<p style="margin:6px 0 0;line-height:1.55">${escText(p)}</p>`).join('')}</div>`;
+    }
+    if (generalWrongParts.length) {
+      htmlOut += `<div class="stepResolutionBlock wrongAnalysis"><b>❌ Análise das demais alternativas</b>${generalWrongParts.map(p => `<p style="margin:6px 0 0;line-height:1.55">${escText(p)}</p>`).join('')}</div>`;
+    }
+    if (trapParts.length) {
+      htmlOut += `<div class="stepResolutionBlock trap"><b>⚠️ Pegadinha de prova</b>${trapParts.map(p => `<p style="margin:6px 0 0;line-height:1.55">${escText(p)}</p>`).join('')}</div>`;
+    } else if (related?.trap) {
+      htmlOut += `<div class="stepResolutionBlock trap"><b>⚠️ Pegadinha frequente neste tema</b><p style="margin:6px 0 0;line-height:1.55">${escText(related.trap)}</p></div>`;
+    }
+    if (related?.bizu && !cleanExp.includes(related.bizu)) {
+      htmlOut += `<div class="stepResolutionBlock concept"><b>💡 Bizu do material (${escText(related.title)})</b><p style="margin:6px 0 0;line-height:1.55">${escText(related.bizu)}</p></div>`;
+    }
+    return htmlOut;
+  }
+  window.buildFormattedResolutionStepsHtml = buildFormattedResolutionStepsHtml;
+
+  // ── 2) Confirmação ao Sair do Simulado / Treino ("Deseja realmente sair do simulado?") e Bloqueio de Fechamento Acidental ──
+  function saveActiveQuestionSession() {
+    try {
+      if (!activeQuestions || !Array.isArray(activeQuestions.questions) || !activeQuestions.questions.length) {
+        sessionStorage.removeItem(ACTIVE_QUESTION_SESSION_KEY);
+        return;
+      }
+      const payload = {
+        savedAt: Date.now(),
+        title: document.querySelector('#questionDialogTitle')?.textContent || 'Treino de Questões',
+        battle: activeQuestions
+      };
+      sessionStorage.setItem(ACTIVE_QUESTION_SESSION_KEY, JSON.stringify(payload));
+    } catch (_e) {}
+  }
+  window.saveActiveQuestionSession = saveActiveQuestionSession;
+
+  function clearSavedQuestionSession() {
+    try {
+      sessionStorage.removeItem(ACTIVE_QUESTION_SESSION_KEY);
+    } catch (_e) {}
+    const resumeBar = document.querySelector('#resumeSavedQuestionSessionBar');
+    if (resumeBar) resumeBar.remove();
+  }
+  window.clearSavedQuestionSession = clearSavedQuestionSession;
+
+  function requestExitQuestionSession() {
+    const qDlg = document.querySelector('#questionDialog');
+    if (!qDlg || !qDlg.open || !activeQuestions) {
+      activeQuestions = null;
+      clearSavedQuestionSession();
+      qDlg?.close();
+      return;
+    }
+    let confirmDlg = document.querySelector('#confirmExitSimuladoDialog');
+    if (!confirmDlg) {
+      document.body.insertAdjacentHTML('beforeend', `
+        <dialog id="confirmExitSimuladoDialog" class="confirmExitDuelModal" aria-labelledby="confirmExitSimuladoTitle">
+          <div class="slExitDuelCard">
+            <span class="slSystemBadge" style="margin-bottom:8px"><i class="slPulseDot"></i> [SISTEMA] CONFIRMAÇÃO DE SAÍDA</span>
+            <h3 id="confirmExitSimuladoTitle" style="margin:0 0 8px;font-size:1.18rem;color:#f8fafc">Deseja realmente sair do simulado?</h3>
+            <p class="small muted" id="confirmExitSimuladoText" style="margin:0 0 16px;line-height:1.55">Seu progresso e suas respostas poderão ser perdidos caso você encerre o treino.</p>
+            <div class="slExitDuelActions">
+              <button type="button" class="action" id="stayInSimuladoBtn">Permanecer</button>
+              <button type="button" class="ghost danger" id="confirmExitSimuladoBtn">Sair do simulado</button>
+            </div>
+          </div>
+        </dialog>
+      `);
+      confirmDlg = document.querySelector('#confirmExitSimuladoDialog');
+    }
+
+    const stayBtn = confirmDlg.querySelector('#stayInSimuladoBtn');
+    const exitBtn = confirmDlg.querySelector('#confirmExitSimuladoBtn');
+
+    if (stayBtn) {
+      stayBtn.onclick = () => {
+        confirmDlg.close();
+      };
+    }
+    if (exitBtn) {
+      exitBtn.onclick = () => {
+        confirmDlg.close();
+        activeQuestions = null;
+        clearSavedQuestionSession();
+        qDlg.close();
+        if (typeof openView === 'function') openView('report');
+        toast('Treino encerrado. Você retornou à aba Questões.');
+      };
+    }
+
+    if (!confirmDlg.open) {
+      confirmDlg.showModal();
+      setTimeout(() => stayBtn?.focus?.(), 30);
+    }
+  }
+  window.requestExitQuestionSession = requestExitQuestionSession;
+
+  // Navegação "← Questão anterior" e restauração do estado respondido da questão
+  function syncQuestionPrevAndRestoreState(battle, item) {
+    if (!battle || !item) return;
+
+    // Garante que as opções do item estejam sem prefixo de letra duplicado ("A) B)")
+    if (Array.isArray(item.options) && item.options.some(o => /^\s*[A-Ea-e]\s*[\)\.\-–—:]\s+/i.test(String(o || '')))) {
+      const cleaned = prepareQuestionConsistent(item);
+      item.options = cleaned.options;
+      item.correct_index = cleaned.correct_index;
+      item.explanation = cleaned.explanation;
+      const optBtns = document.querySelectorAll('#questionOptions [data-question-index] .optBodyText');
+      optBtns.forEach((span, idx) => {
+        if (item.options[idx] !== undefined) span.textContent = item.options[idx];
+      });
+    }
+
+    const prevBtn = document.querySelector('#prevQuestionBtn');
+    if (prevBtn) {
+      prevBtn.hidden = !(battle.current > 0);
+      prevBtn.onclick = () => {
+        if (battle.current > 0) {
+          battle.current--;
+          window.showQuestion();
+        }
+      };
+    }
+
+    // Se a questão já foi respondida anteriormente nesta mesma bateria (ex.: ao voltar para revisar), restaura a resposta sem pontuar de novo
+    if (item._userAnswered) {
+      battle.answered = true;
+      const chosen = item._userChosenIndex;
+      const correct = Number(item.correct_index) || 0;
+      const ok = chosen === correct;
+      document.querySelectorAll('#questionOptions [data-question-index]').forEach(btn => {
+        const idx = Number(btn.dataset.questionIndex);
+        if (idx === correct) btn.classList.add('correct');
+        else if (idx === chosen && !ok) btn.classList.add('wrong');
+        btn.disabled = true;
+      });
+      document.querySelectorAll('#questionOptions [data-scissor-index]').forEach(b => { b.disabled = true; });
+      if (document.querySelector('#skipQuestionBlankBtn')) document.querySelector('#skipQuestionBlankBtn').disabled = true;
+      const fb = document.querySelector('#questionFeedback');
+      if (fb) {
+        fb.innerHTML = formatStepByStepResolution(item, chosen, ok, true);
+      }
+      const nextBtn = document.querySelector('#nextQuestion');
+      if (nextBtn) {
+        nextBtn.hidden = false;
+        nextBtn.textContent = battle.current === battle.questions.length - 1 ? 'Concluir batalha' : 'Próxima questão →';
+      }
+    }
+
+    saveActiveQuestionSession();
+  }
+  window.syncQuestionPrevAndRestoreState = syncQuestionPrevAndRestoreState;
+
+  // Hook em answerQuestion e skipQuestionBlank para salvar o estado da resposta na questão (_userAnswered / _userChosenIndex)
+  const origAnswerQ = window.answerQuestion;
+  if (typeof origAnswerQ === 'function' && !origAnswerQ._r161Hooked) {
+    window.answerQuestion = function(button, item) {
+      const res = origAnswerQ(button, item);
+      if (item && typeof item === 'object') {
+        item._userAnswered = true;
+        item._userChosenIndex = Number(button?.dataset?.questionIndex);
+      }
+      const prevBtn = document.querySelector('#prevQuestionBtn');
+      if (prevBtn && activeQuestions) prevBtn.hidden = !(activeQuestions.current > 0);
+      saveActiveQuestionSession();
+      return res;
+    };
+    window.answerQuestion._r161Hooked = true;
+  }
+
+  const origSkipQ = window.skipQuestionBlank;
+  if (typeof origSkipQ === 'function' && !origSkipQ._r161Hooked) {
+    window.skipQuestionBlank = function(item) {
+      const res = origSkipQ(item);
+      if (item && typeof item === 'object') {
+        item._userAnswered = true;
+        item._userChosenIndex = -2;
+      }
+      const prevBtn = document.querySelector('#prevQuestionBtn');
+      if (prevBtn && activeQuestions) prevBtn.hidden = !(activeQuestions.current > 0);
+      saveActiveQuestionSession();
+      return res;
+    };
+    window.skipQuestionBlank._r161Hooked = true;
+  }
+
+  const origNextQ = window.nextQuestion;
+  if (typeof origNextQ === 'function' && !origNextQ._r161SessionHooked) {
+    window.nextQuestion = nextQuestion = function() {
+      const finishing = activeQuestions && activeQuestions.current >= activeQuestions.questions.length - 1;
+      const res = origNextQ();
+      if (finishing || !activeQuestions) {
+        clearSavedQuestionSession();
+      } else {
+        saveActiveQuestionSession();
+      }
+      return res;
+    };
+    window.nextQuestion._r161SessionHooked = true;
+  }
+
+  // Bloqueia o fechamento por tecla ESC (evento cancel) no #questionDialog sem passar pela confirmação
+  function bindQuestionDialogSafetyAndShortcuts() {
+    const qDlg = document.querySelector('#questionDialog');
+    if (qDlg && !qDlg.dataset.r161Bound) {
+      qDlg.dataset.r161Bound = '1';
+      qDlg.addEventListener('cancel', e => {
+        e.preventDefault();
+        requestExitQuestionSession();
+      });
+    }
+    const cDlg = document.querySelector('#confirmExitSimuladoDialog');
+    if (cDlg && !cDlg.dataset.r161Bound) {
+      cDlg.dataset.r161Bound = '1';
+      cDlg.addEventListener('cancel', e => {
+        e.preventDefault();
+        cDlg.close();
+      });
+    }
+  }
+  bindQuestionDialogSafetyAndShortcuts();
+  setTimeout(bindQuestionDialogSafetyAndShortcuts, 300);
+
+  // Atalhos de teclado acessíveis durante o simulado/bateria (A-E / 1-5, Setas Esquerda/Direita)
+  document.addEventListener('keydown', e => {
+    const qDlg = document.querySelector('#questionDialog');
+    const cDlg = document.querySelector('#confirmExitSimuladoDialog');
+    if (!qDlg || !qDlg.open || (cDlg && cDlg.open) || !activeQuestions) return;
+    const tag = document.activeElement?.tagName;
+    if (tag && ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+
+    if (e.key === 'ArrowLeft' && activeQuestions.current > 0) {
+      e.preventDefault();
+      activeQuestions.current--;
+      window.showQuestion();
+      return;
+    }
+    if ((e.key === 'ArrowRight' || e.key === 'Enter') && activeQuestions.answered) {
+      const nextBtn = document.querySelector('#nextQuestion');
+      if (nextBtn && !nextBtn.hidden && document.activeElement?.tagName !== 'BUTTON') {
+        e.preventDefault();
+        nextBtn.click();
+        return;
+      }
+    }
+    if (!activeQuestions.answered) {
+      const keyMap = { a: 0, b: 1, c: 2, d: 3, e: 4, '1': 0, '2': 1, '3': 2, '4': 3, '5': 4 };
+      const idx = keyMap[String(e.key || '').toLowerCase()];
+      if (idx !== undefined) {
+        const optBtn = document.querySelector(`#questionOptions [data-question-index="${idx}"]`);
+        if (optBtn && !optBtn.disabled) {
+          e.preventDefault();
+          optBtn.click();
+        }
+      }
+    }
+  });
+
+  // Se o usuário atualizou a página com um treino em andamento, oferece barra de retomada imediata na aba Questões
+  function checkAndOfferSavedQuestionSessionResume() {
+    try {
+      const raw = sessionStorage.getItem(ACTIVE_QUESTION_SESSION_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.battle?.questions?.length) return;
+      if (Date.now() - Number(parsed.savedAt || 0) > 6 * 3600 * 1000) {
+        sessionStorage.removeItem(ACTIVE_QUESTION_SESSION_KEY);
+        return;
+      }
+      const reportSection = document.querySelector('#report');
+      if (reportSection && !document.querySelector('#resumeSavedQuestionSessionBar')) {
+        const curNum = (Number(parsed.battle.current) || 0) + 1;
+        const totNum = parsed.battle.questions.length;
+        reportSection.insertAdjacentHTML('afterbegin', `
+          <div id="resumeSavedQuestionSessionBar" class="card" style="margin-bottom:12px;padding:12px 16px;border:1px solid #38bdf8;background:rgba(14,34,56,0.9);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+            <div>
+              <b style="color:#38bdf8;font-size:.92rem">🔄 Treino em andamento salvo: ${escText(parsed.title || 'Simulado')}</b>
+              <div class="small muted">Você estava na <b>Questão ${curNum} de ${totNum}</b> (${Number(parsed.battle.correct) || 0} acerto(s) até aqui).</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="action small" id="resumeSavedQuestionSessionBtn" style="width:auto;padding:7px 14px">▶ Continuar de onde parei</button>
+              <button type="button" class="ghost small" id="discardSavedQuestionSessionBtn" style="width:auto;padding:7px 12px">✕ Descartar</button>
+            </div>
+          </div>
+        `);
+        document.querySelector('#resumeSavedQuestionSessionBtn').onclick = () => {
+          activeQuestions = parsed.battle;
+          if (document.querySelector('#questionDialogTitle')) {
+            document.querySelector('#questionDialogTitle').textContent = parsed.title || 'Treino de Questões';
+          }
+          document.querySelector('#resumeSavedQuestionSessionBar')?.remove();
+          document.querySelector('#questionDialog')?.showModal();
+          window.showQuestion();
+        };
+        document.querySelector('#discardSavedQuestionSessionBtn').onclick = () => {
+          clearSavedQuestionSession();
+        };
+      }
+    } catch (_e) {}
+  }
+  setTimeout(checkAndOfferSavedQuestionSessionResume, 350);
+
+  // CSS para .expAltLine e #confirmExitSimuladoDialog no Tema Claro e Modo Papel
+  (function injectR161Styles() {
+    if (document.getElementById('r161-resolution-exit-styles')) return;
+    const st = document.createElement('style');
+    st.id = 'r161-resolution-exit-styles';
+    st.textContent = `
+      .expPerOptionList {
+        display: grid !important;
+        gap: 7px !important;
+        margin-top: 10px !important;
+      }
+      .expAltLine {
+        display: block !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        padding: 8px 12px !important;
+        border-radius: 8px !important;
+        line-height: 1.5 !important;
+        font-size: 0.88rem !important;
+        word-break: break-word !important;
+      }
+      body.lightAppTheme .expAltLine.isCorrectLine,
+      body.lightPaperMode .expAltLine.isCorrectLine {
+        background: #ecfdf5 !important;
+        color: #065f46 !important;
+        border-left: 4px solid #059669 !important;
+      }
+      body.lightAppTheme .expAltLine.isWrongLine,
+      body.lightPaperMode .expAltLine.isWrongLine {
+        background: #fff1f2 !important;
+        color: #881337 !important;
+        border-left: 4px solid #e11d48 !important;
+      }
+      body.lightAppTheme #confirmExitSimuladoDialog .slExitDuelCard,
+      body.lightPaperMode #confirmExitSimuladoDialog .slExitDuelCard {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border: 1px solid #cbd5e1 !important;
+      }
+      body.lightAppTheme #confirmExitSimuladoTitle,
+      body.lightPaperMode #confirmExitSimuladoTitle {
+        color: #0f172a !important;
+      }
+      body.lightAppTheme #confirmExitSimuladoText,
+      body.lightPaperMode #confirmExitSimuladoText {
+        color: #334155 !important;
+      }
+    `;
+    document.head.appendChild(st);
+  })();
 
 })();

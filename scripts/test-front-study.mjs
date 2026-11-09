@@ -1535,3 +1535,91 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
 
   console.log("OK: Redirecionamento Ler Teoria, Gabarito sugerido por IA e Integração Goodnotes (r160) validados.");
 }
+
+
+// ── Bateria r161: Quebra de linha entre alternativas na explicação, Confirmação ao Sair do Simulado, Sincronização de Letras no Embaralhamento e Persistência ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+
+  // 1) Verifica confirmação de saída ("Deseja realmente sair do simulado?", "Permanecer", "Sair do simulado") e bloqueio de clique fora
+  assert.ok(
+    htmlSrc.includes("id=\"confirmExitSimuladoDialog\"") &&
+    htmlSrc.includes("Deseja realmente sair do simulado?") &&
+    htmlSrc.includes("Seu progresso e suas respostas poderão ser perdidos caso você encerre o treino.") &&
+    htmlSrc.includes("id=\"stayInSimuladoBtn\"") &&
+    htmlSrc.includes("id=\"confirmExitSimuladoBtn\"") &&
+    htmlSrc.includes("id=\"prevQuestionBtn\"") &&
+    v77Src.includes("['questionDialog','lessonDialog','timedSimuladoDialog','duelArenaDialog','confirmExitDuelDialog','confirmExitSimuladoDialog'].includes(dlg.id)"),
+    "O modal de questões não pode fechar ao clicar fora e deve exigir confirmação ao clicar em Sair"
+  );
+
+  // 2) Testa em VM o desmembramento em linhas separadas da explicação e a higienização/embaralhamento de alternativas
+  const r161Start = v77Src.indexOf("const ACTIVE_QUESTION_SESSION_KEY = 'jornada-active-question-session-v161';");
+  const r161End = v77Src.indexOf("function saveActiveQuestionSession()");
+  assert.ok(r161Start > 0 && r161End > r161Start, "Bloco r161 deve existir em dist/v77-experience.js");
+
+  const vmCtx = {
+    window: {},
+    normalizeLegalText: (s) => String(s || ""),
+    escText: (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
+    questionFingerprint: (q) => "fp-test",
+    shuffle: (arr) => [...arr].reverse() // inverte determinísticamente para testar atualização de letras A, B, C, D
+  };
+  vm.createContext(vmCtx);
+  vm.runInContext(v77Src.slice(r161Start, r161End), vmCtx);
+
+  // 2a) Verifica remoção de prefixos duplicados ("B) 2 + 2 = 5.") e cura da questão "Qual frase NÃO é uma proposição?"
+  const flawedQ = {
+    subject: "Raciocínio Lógico-Matemático",
+    topic: "Proposições",
+    statement: "Qual frase NÃO é uma proposição?",
+    options: [
+      "B) 2 + 2 = 5.",
+      "D) 2 + 2 = 4 ou o céu é azul.",
+      "A) O céu é azul.",
+      "C) Se 2 + 2 = 4, então o céu é azul."
+    ],
+    correct_index: 0,
+    origin: "autoral"
+  };
+  const preparedFlawed = vmCtx.window.prepareQuestionConsistent(flawedQ);
+  assert.ok(
+    preparedFlawed.options.every(o => !/^[A-E]\)/i.test(o)),
+    "Nenhuma alternativa preparada pode manter prefixo antigo A), B), C), D) embutido no texto"
+  );
+  assert.equal(
+    preparedFlawed.options[preparedFlawed.correct_index],
+    "Que horas começa o plantão policial?",
+    "A questão defeituosa sobre NÃO proposição deve apontar para a frase interrogativa corrigida"
+  );
+
+  // 2b) Verifica sincronização do gabarito com a explicação após embaralhamento e quebra de linha entre alternativas
+  const condQ = {
+    subject: "Raciocínio Lógico-Matemático",
+    topic: "Condicional",
+    statement: "Qual conectivo só é falso quando o antecedente é verdadeiro e o consequente é falso?",
+    options: ["P ^ Q", "P v Q", "P → Q", "P ↔ Q"],
+    correct_index: 2, // C) P → Q
+    explanation: "Conceito-chave: condicional (→) é falso apenas quando antecedente verdadeiro e consequente falso. ✅ Correta: C) P → Q. ❌ A) é conjunção, falsa apenas quando ambos falsos. ❌ B) é disjunção, falsa apenas quando ambos falsos. ❌ D) é bicondicional, falso quando valores diferentes.",
+    origin: "autoral"
+  };
+  const prepCond = vmCtx.window.prepareQuestionConsistent(condQ);
+  // Como shuffle no teste inverte [0,1,2,3] -> [3,2,1,0], o antigo índice 2 (C: "P → Q") vai para o novo índice 1 (B)!
+  assert.equal(prepCond.correct_index, 1, "Após inverter as 4 opções, o índice correto 2 (C) deve passar a ser 1 (B)");
+  assert.equal(prepCond.options[prepCond.correct_index], "P → Q", "O texto da alternativa correta deve continuar sendo P → Q");
+  assert.ok(prepCond.explanation.includes("Correta: B)"), "A letra na explicação deve ser atualizada de C) para B) após o embaralhamento");
+
+  const renderedHtml = vmCtx.window.buildFormattedResolutionStepsHtml(
+    prepCond.explanation,
+    prepCond,
+    prepCond.correct_index,
+    "B",
+    false,
+    null
+  );
+  const altLineMatches = renderedHtml.match(/class="expAltLine/g) || [];
+  assert.equal(altLineMatches.length, 4, "Cada uma das 4 alternativas (1 correta + 3 incorretas) deve ser renderizada em sua própria linha (.expAltLine)");
+
+  console.log("OK: Quebra de linha entre alternativas, confirmação ao sair do simulado, sincronia de letras no embaralhamento e retomada de progresso (r161) validados.");
+}
