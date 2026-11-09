@@ -525,15 +525,15 @@ Responda EXCLUSIVAMENTE com um JSON válido no formato:
       return json(request, { error: "Proteção de consumo temporariamente indisponível.", code: usage.reason }, 503);
     }
 
+    const hasExplicitGabaritoInRawText = /(?:gabarito|resposta(?:s)?\s*(?:oficial|correta)?|alternativa\s+correta|item\s+correto)\s*[:\-=–]?\s*(?:letra\s*)?(?:CERTO|ERRADO|[A-E])\b/i.test(rawText);
     const prompt = submode === "parse_raw"
-      ? `Extraia e estruture as questões de concurso contidas no texto abaixo.
+      ? `Extraia e estruture as questões contidas no texto abaixo SEM INVENTAR GABARITO.
 Disciplina padrão: ${subject}. Banca/Fonte: ${board}.
-Para cada questão identificada:
-- Preserve o enunciado e as 4 alternativas (se a questão original tiver 5 alternativas A-E, mantenha a alternativa correta e as 3 melhores distratoras para fechar exatamente 4 opções).
-- Identifique o gabarito correto em correct_index (0 a 3).
-- Marque origin como "oficial".
-- Escreva em explanation uma RESOLUÇÃO PASSO A PASSO didática no estilo boaResposta contendo exatamente:
-  "Conceito-chave: [resumo direto da regra cobrada]\n✅ Por que a correta está certa: [explicação clara]\n❌ Análise das alternativas: [por que as outras opções estão incorretas]\n⚠️ Pegadinha da banca: [ponto de atenção]".
+Regras obrigatórias:
+- Preserve TODAS as alternativas originais da questão: se for Certo/Errado (2 opções), mantenha ["CERTO", "ERRADO"]; se tiver 4 alternativas (A-D), mantenha as 4; se tiver 5 alternativas (A-E), preserve integralmente as 5 alternativas (NUNCA apague a 5ª alternativa E).
+- Só preencha correct_index (0 a 4) se o gabarito estiver EXPLICITAMENTE escrito no texto colado. Se a questão NÃO trouxer gabarito explícito no texto, devolva correct_index como -1 (nunca chute a letra A / índice 0).
+- Marque origin como "${hasExplicitGabaritoInRawText ? "oficial" : "adaptada_do_pdf"}".
+- Escreva em explanation uma RESOLUÇÃO PASSO A PASSO didática contendo Conceito-chave, justificativa do gabarito e análise das alternativas.
 
 TEXTO COLADO PELO ALUNO:
 ${rawText}`
@@ -576,23 +576,39 @@ Regras obrigatórias de qualidade (estilo boaResposta):
       const generated = await askStructuredQuestions(prompt, activeGeminiKey, Boolean(personalGeminiKey));
       const keySource = personalGeminiKey && generated.provider === "gemini" ? "personal" : "shared";
       const sanitized = generated.questions
-        .filter((q: any) => q?.statement && Array.isArray(q?.options) && q.options.length === 4)
-        .map((q: any) => ({
-          subject: String(q.subject || subject),
-          topic: String(q.topic || topic),
-          board: String(q.board || board),
-          difficulty: ["facil", "medio", "dificil"].includes(String(q.difficulty || "").toLowerCase()) ? String(q.difficulty).toLowerCase() : "medio",
-          origin: submode === "parse_raw" ? "oficial" : "autoral",
-          statement: String(q.statement).trim(),
-          options: q.options.slice(0, 4).map((o: any) => String(o).trim()),
-          correct_index: Math.min(3, Math.max(0, Number(q.correct_index) || 0)),
-          explanation: String(q.explanation || "").trim(),
-        }));
+        .filter((q: any) => {
+          if (!q?.statement || !Array.isArray(q?.options)) return false;
+          const opts = q.options.map((o: any) => String(o ?? "").trim()).filter(Boolean);
+          if (opts.length < 2 || opts.length > 5) return false;
+          const rawIdx = q.correct_index;
+          if (rawIdx === null || rawIdx === undefined || rawIdx === "" || !Number.isInteger(Number(rawIdx))) return false;
+          const idx = Number(rawIdx);
+          if (idx < 0 || idx >= opts.length) return false;
+          if (submode === "parse_raw" && !hasExplicitGabaritoInRawText) return false;
+          return true;
+        })
+        .map((q: any) => {
+          const opts = q.options.slice(0, 5).map((o: any) => String(o ?? "").trim()).filter(Boolean);
+          const idx = Number(q.correct_index);
+          return {
+            subject: String(q.subject || subject),
+            topic: String(q.topic || topic),
+            board: String(q.board || board),
+            difficulty: ["facil", "medio", "dificil"].includes(String(q.difficulty || "").toLowerCase()) ? String(q.difficulty).toLowerCase() : "medio",
+            origin: (submode === "parse_raw" && hasExplicitGabaritoInRawText) ? "oficial" : "autoral",
+            statement: String(q.statement).trim(),
+            options: opts,
+            correct_index: idx,
+            explanation: String(q.explanation || "").trim(),
+          };
+        });
 
-      if (!sanitized.length) throw new Error("EMPTY_QUESTIONS");
+      if (!sanitized.length) {
+        return json(request, { error: submode === "parse_raw" ? "Nenhuma questão com gabarito explícito pôde ser extraída do texto colado. Inclua o gabarito (ex.: Gabarito: B) para importar sem chutar alternativas." : "Nenhuma questão válida gerada.", code: "NO_VALID_QUESTIONS_WITH_KEY" }, 422);
+      }
 
-      // Salva no banco compartilhado se forem questões oficiais/importadas
-      if (submode === "parse_raw" && SERVICE_ROLE_KEY) {
+      // Salva no banco compartilhado APENAS se for parse_raw com gabarito explícito verificado no texto
+      if (submode === "parse_raw" && hasExplicitGabaritoInRawText && SERVICE_ROLE_KEY) {
         const sharedRows = sanitized.map((q: any) => ({
           fingerprint: questionHash(q.statement),
           subject: q.subject,
@@ -716,7 +732,11 @@ DIRETRIZES OBRIGATÓRIAS DO PROFESSOR COORDENADOR:
    - Use Active Recall (estilo Anki): Frente com pergunta conceitual direta e autossuficiente; Verso com resposta enxuta e objetiva.
 6. AVISO DE CONFERÊNCIA:
    - Encerre lembrando de conferir a literalidade na legislação oficial atualizada e no edital do concurso.
-Modo pedagógico solicitado pelo aluno: ${mode}.`;
+CONTRATO ESTRITO DO MODO SOLICITADO (${mode}):
+- Se modo = "radar da banca": NUNCA invente porcentagens ("cai em 73% das provas"). Classifique os tópicos apenas qualitativamente (Alta prioridade, Média prioridade, Complementar) e rotule como estimativa pedagógica caso não haja estatística no material do aluno.
+- Se modo = "bizus e mnemônicos": NUNCA crie siglas inventadas. Cite apenas mnemônicos consagrados (SO-CI-DI-VA-PLU, CON-GAR-ERR-PRO, LIMPE, MP3.COM, CAPACETE de PM, CO-FI-FO-MO-OB, PATI) ou macetes diretos de eliminação de alternativa.
+- Se modo = "flashcards": Estruture cada cartão estritamente com "Frente: [pergunta direta]" e "Verso: [resposta objetiva]".
+- Se modo = "questões comentadas": Rotule todas as questões criadas como "[Questão Autoral / Pedagógica]" e nunca afirme serem transcrições literais de provas oficiais se forem geradas agora.`;
 
   const userPrompt = context
     ? `MATERIAL DE REFERÊNCIA:\n${context}\n\nPEDIDO DO ESTUDANTE:\n${question}`
@@ -726,13 +746,21 @@ Modo pedagógico solicitado pelo aluno: ${mode}.`;
     let result: { answer: string; model: string; provider: string } | null = null;
     let keySource: "personal" | "shared" = personalGeminiKey ? "personal" : "shared";
 
-    // Se o usuário configurou sua própria chave Gemini pessoal, prioriza a chave dele primeiro.
+    // Prioriza Gemini primeiro (chave pessoal ou compartilhada) para maior precisão jurídica e pesquisa
     if (personalGeminiKey) {
       try {
         result = await askGemini(systemPrompt, userPrompt, personalGeminiKey);
         keySource = "personal";
       } catch (personalErr) {
-        console.warn("Chave Gemini pessoal falhou no assistente; tentando provedores de reserva", personalErr);
+        console.warn("Chave Gemini pessoal falhou; tentando Gemini compartilhado", personalErr);
+      }
+    }
+    if (!result && GEMINI_API_KEY) {
+      try {
+        result = await askGemini(systemPrompt, userPrompt, GEMINI_API_KEY);
+        keySource = "shared";
+      } catch (sharedGeminiErr) {
+        console.warn("Gemini compartilhado falhou; tentando reserva", sharedGeminiErr);
       }
     }
 
@@ -742,14 +770,8 @@ Modo pedagógico solicitado pelo aluno: ${mode}.`;
         keySource = "shared";
       } catch (deepSeekError) {
         console.warn("DeepSeek indisponível; acionando Groq", deepSeekError);
-        try {
-          result = await askGroq(systemPrompt, userPrompt);
-          keySource = "shared";
-        } catch (groqError) {
-          console.warn("Groq indisponível; acionando Gemini", groqError);
-          result = await askGemini(systemPrompt, userPrompt, GEMINI_API_KEY || activeGeminiKey);
-          keySource = GEMINI_API_KEY && GEMINI_API_KEY !== personalGeminiKey ? "shared" : (personalGeminiKey ? "personal" : "shared");
-        }
+        result = await askGroq(systemPrompt, userPrompt);
+        keySource = "shared";
       }
     }
 
@@ -758,7 +780,8 @@ Modo pedagógico solicitado pelo aluno: ${mode}.`;
       return json(request, { error: "O assistente retornou uma resposta vazia. Reformule sua pergunta e tente novamente.", code: "EMPTY_RESPONSE" }, 502);
     }
     await finishUsage(usage.event_id, "success", result.provider, result.model);
-    return json(request, { ...result, key_source: keySource, grounded: Boolean(context), user_id: user.id });
+    const confidence = context ? "apoiada_no_material" : "conhecimento_geral_conferir";
+    return json(request, { ...result, key_source: keySource, grounded: Boolean(context), confidence, user_id: user.id });
   } catch (error) {
     console.error("Todas as IAs falharam", error);
     const message = String((error as Error)?.message ?? error);

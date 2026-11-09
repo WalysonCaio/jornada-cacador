@@ -234,6 +234,25 @@ Não invente se o texto for ilegível; aponte as linhas ilegíveis. Seja pedagog
       }
     }
 
+    if (result && typeof result === "object") {
+      // Reconcilia a nota geral (score) com a soma exata dos critérios e garante o aviso de estimativa pedagógica
+      if (Array.isArray(result.criteria) && result.criteria.length > 0) {
+        const sumMax = result.criteria.reduce((acc: number, c: any) => acc + Math.max(0, Number(c?.max_score) || 0), 0);
+        const sumScore = result.criteria.reduce((acc: number, c: any) => {
+          const maxC = Math.max(0, Number(c?.max_score) || 25);
+          const sC = Math.max(0, Math.min(maxC, Math.round(Number(c?.score) || 0)));
+          c.score = sC;
+          return acc + sC;
+        }, 0);
+        result.score = sumMax > 0 && sumMax !== 100
+          ? Math.max(0, Math.min(100, Math.round((sumScore / sumMax) * 100)))
+          : Math.max(0, Math.min(100, Math.round(sumScore)));
+      }
+      const diag = String(result.diagnosis || "").trim();
+      if (!/estimativa pedag[oó]gica/i.test(diag)) {
+        result.diagnosis = (diag ? diag + " " : "") + "(Nota calculada como estimativa pedagógica; não substitui a correção oficial da banca examinadora.)";
+      }
+    }
     if (!result) {
       if (lastStatus === 429) {
         await fetch(`${SUPABASE_URL}/rest/v1/essay_submissions?id=eq.${encodeURIComponent(submissionId)}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "pending", updated_at: new Date().toISOString() }) });

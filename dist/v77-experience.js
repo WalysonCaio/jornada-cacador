@@ -3254,18 +3254,26 @@
     const sKey=subjectKey(canonicalSubjectName(subject||'geral'))||'geral';
     const tKey=topicKey(topic||'geral')||'geral';
     const mKey=`${campId}|${sKey}|${tKey}`;
-    const prev=state.topicMastery[mKey]||{attempts:0,correct:0,mastery:0};
+    const prev=state.topicMastery[mKey]||{attempts:0,correct:0,mastery:0,bonus70Paid:false,bonus85Paid:false};
     const attempts=Number(prev.attempts||0)+1;
     const correct=Number(prev.correct||0)+(isCorrect?1:0);
     const mastery=attempts<5
       ?Number(((correct/Math.max(1,attempts))*100*(attempts/5)).toFixed(2))
       :Number(((correct/attempts)*100).toFixed(2));
-    state.topicMastery[mKey]={attempts,correct,mastery,subjectKey:sKey,topicKey:tKey,lastAttemptAt:new Date().toISOString()};
+    let bonus70Paid=Boolean(prev.bonus70Paid);
+    let bonus85Paid=Boolean(prev.bonus85Paid);
     let masteryBonus=0;
     if(isCorrect&&attempts>=8){
-      if(mastery>=85)masteryBonus=15;
-      else if(mastery>=70)masteryBonus=8;
+      if(mastery>=85&&!bonus85Paid){
+        masteryBonus=15;
+        bonus85Paid=true;
+        bonus70Paid=true;
+      }else if(mastery>=70&&!bonus70Paid){
+        masteryBonus=8;
+        bonus70Paid=true;
+      }
     }
+    state.topicMastery[mKey]={attempts,correct,mastery,bonus70Paid,bonus85Paid,subjectKey:sKey,topicKey:tKey,lastAttemptAt:new Date().toISOString()};
     return {mastery,attempts,correct,mastery_bonus:masteryBonus,subject_key:sKey,topic_key:tKey};
   }
   window.updateLocalTopicMastery=updateLocalTopicMastery;
@@ -3314,11 +3322,13 @@
   window.recordQuestionAttemptServer=recordQuestionAttemptServer;
 
   async function completeMissionHonestServer(missionId,subject,correct,total,isBoss=false){
-    const safeTotal=Math.max(1,Number(total)||1);
-    const safeCorrect=Math.max(0,Math.min(safeTotal,Number(correct)||0));
-    const localScore=Number(((safeCorrect/safeTotal)*100).toFixed(1));
-    const localPerfXp=Math.min(60,Math.floor(localScore*0.6));
-    const fallbackObj={base_xp:40,performance_xp:localPerfXp,mastery_bonus:localScore>=70?20:0,boss_bonus:(isBoss&&localScore>=70)?200:0,total_xp:40+localPerfXp+(localScore>=70?20:0)+((isBoss&&localScore>=70)?200:0),score:localScore};
+    const safeTotal=Math.max(0,Number(total)||0);
+    const safeCorrect=safeTotal>0?Math.max(0,Math.min(safeTotal,Number(correct)||0)):0;
+    const localScore=safeTotal>0?Number(((safeCorrect/safeTotal)*100).toFixed(1)):0;
+    const localPerfXp=safeTotal>0?Math.min(60,Math.floor(localScore*0.6)):0;
+    const masteryBonus=(safeTotal>=5&&localScore>=70)?20:0;
+    const bossBonus=(isBoss&&safeTotal>=5&&localScore>=70)?200:0;
+    const fallbackObj={base_xp:40,performance_xp:localPerfXp,mastery_bonus:masteryBonus,boss_bonus:bossBonus,total_xp:40+localPerfXp+masteryBonus+bossBonus,score:localScore,questions_total:safeTotal,questions_correct:safeCorrect};
     if(!cloudSession?.access_token||!navigator.onLine)return fallbackObj;
     const campaignId=(typeof activeCampaign==='function'&&activeCampaign()?.id)||state?.activeCampaignId||'default';
     try{
@@ -3351,8 +3361,8 @@
     const mission=(typeof missionPool==='function'?missionPool():[]).find(m=>m.id===missionId);
     const subject=mission?.subject||'geral';
     const tracker=state?.dailyTracker||{};
-    const total=Math.max(Number(tracker.questionsAnswered||0),1);
-    const correct=Math.min(total,Number(tracker.questionsCorrect??Math.round(total*0.75)));
+    const total=Math.max(0,Number(tracker.questionsAnswered||0));
+    const correct=total>0?Math.max(0,Math.min(total,Number(tracker.questionsCorrect||0))):0;
     const isBoss=Boolean(state?.bosses?.[missionId]);
     if(typeof complete==='function')complete(missionId);
     const server=await completeMissionHonestServer(missionId,subject,correct,total,isBoss);
@@ -3502,13 +3512,24 @@
     ];
     const allQs=(ALL_QUESTIONS||[]).filter(item=>questionMatchesBoardFilter(item,currentBoard));
     const countsBySubj=new Map();
+    const editalSubjOrder=(typeof orderedMissions==='function'?orderedMissions():[]).map(m=>subjectKey(canonicalSubjectName(m?.subject||''))).filter(Boolean);
     for(const item of allQs){
-      const resolvedSubj=canonicalSubjectName(item.subject,`${item.topic||''} ${item.statement||''}`);
+      let resolvedSubj=resolveStrictQuestionDiscipline(item);
+      if(isInvalidTrailSubject(resolvedSubj)){
+        resolvedSubj=typeof window.inferStrictQuestionSubject==='function'?window.inferStrictQuestionSubject(item.statement||'',item.topic||'','',item.options||[]):'Direito Constitucional';
+      }
       if(isInvalidTrailSubject(resolvedSubj))continue;
       item.subject=resolvedSubj;
       countsBySubj.set(resolvedSubj,(countsBySubj.get(resolvedSubj)||0)+1);
     }
-    const subjects=[...countsBySubj.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'pt-BR'));
+    const subjects=[...countsBySubj.entries()].sort((a,b)=>{
+      const ia=editalSubjOrder.indexOf(subjectKey(a[0]));
+      const ib=editalSubjOrder.indexOf(subjectKey(b[0]));
+      if(ia!==-1&&ib!==-1)return ia-ib;
+      if(ia!==-1)return -1;
+      if(ib!==-1)return 1;
+      return b[1]-a[1]||a[0].localeCompare(b[0],'pt-BR');
+    });
     bar.innerHTML=`
       <div class="quickBoaHeader">
         <div>
@@ -5984,7 +6005,7 @@
     q('#simuladoStage').hidden=true;
     const resultStage=q('#simuladoResultStage');
     resultStage.hidden=false;
-    resultStage.innerHTML=`<div class="card"><div class="sectionHead"><div><div class="eyebrow">RESULTADO DO SIMULADO</div><h2>Você acertou ${totalCorrect} de ${questions.length} (${rawRate}% bruto)</h2>${liquidSummary}<p class="small muted" style="margin:4px 0 0">Tempo utilizado: ${elapsedMinutes} min · Os erros foram enviados automaticamente ao seu Caderno de Erros.</p></div><span class="tag">${displayRate>=70?'Caveira Aprovado (≥70%)':'Abaixo do corte — revisar'}</span></div><div class="performanceChart" style="margin-top:12px">${subjectRows}</div></div><div class="card"><div class="sectionHead" style="flex-wrap:wrap;gap:8px"><div><h3>Diagnóstico de Erros e Gabarito Comentado</h3><p class="small muted" style="margin:2px 0 0">Confira abaixo o que você marcou em cada questão, a explicação do seu erro e o fundamento da alternativa correta:</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="ghost small" id="retrySimuladoWrongsBtn" type="button" ${totalWrong===0?'hidden':''} style="width:auto;border-color:#f43f5e;color:#fda4af">🔁 Refazer ${totalWrong} errada(s)</button><button class="action" id="closeFinishedSimulado" type="button" style="width:auto;padding:10px 18px">Concluir e fechar</button></div></div><div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0"><button type="button" class="quickBoardPill active" data-sim-rev-filter="all">Todas (${questions.length})</button><button type="button" class="quickBoardPill" data-sim-rev-filter="wrong">✗ Apenas Erros (${totalWrong})</button><button type="button" class="quickBoardPill" data-sim-rev-filter="blank">⚪ Em Branco (${totalBlank})</button><button type="button" class="quickBoardPill" data-sim-rev-filter="correct">✓ Acertos (${totalCorrect})</button></div><div class="list" id="simuladoReviewItemsList">${reviewItems}</div></div>`;
+    resultStage.innerHTML=`<div class="card"><div class="sectionHead"><div><div class="eyebrow">RESULTADO DO SIMULADO</div><h2>Você acertou ${totalCorrect} de ${questions.length} (${rawRate}% bruto)</h2>${liquidSummary}<p class="small muted" style="margin:4px 0 0">Tempo utilizado: ${elapsedMinutes} min · Os erros foram enviados automaticamente ao seu Caderno de Erros.</p></div><span class="tag">${displayRate>=70?'Meta interna atingida (≥70% · não é aprovação oficial)':'Abaixo da meta interna — revisar'}</span></div><div class="performanceChart" style="margin-top:12px">${subjectRows}</div></div><div class="card"><div class="sectionHead" style="flex-wrap:wrap;gap:8px"><div><h3>Diagnóstico de Erros e Gabarito Comentado</h3><p class="small muted" style="margin:2px 0 0">Confira abaixo o que você marcou em cada questão, a explicação do seu erro e o fundamento da alternativa correta:</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="ghost small" id="retrySimuladoWrongsBtn" type="button" ${totalWrong===0?'hidden':''} style="width:auto;border-color:#f43f5e;color:#fda4af">🔁 Refazer ${totalWrong} errada(s)</button><button class="action" id="closeFinishedSimulado" type="button" style="width:auto;padding:10px 18px">Concluir e fechar</button></div></div><div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0"><button type="button" class="quickBoardPill active" data-sim-rev-filter="all">Todas (${questions.length})</button><button type="button" class="quickBoardPill" data-sim-rev-filter="wrong">✗ Apenas Erros (${totalWrong})</button><button type="button" class="quickBoardPill" data-sim-rev-filter="blank">⚪ Em Branco (${totalBlank})</button><button type="button" class="quickBoardPill" data-sim-rev-filter="correct">✓ Acertos (${totalCorrect})</button></div><div class="list" id="simuladoReviewItemsList">${reviewItems}</div></div>`;
     resultStage.querySelectorAll('[data-sim-rev-filter]').forEach(fBtn=>{
       fBtn.onclick=()=>{
         resultStage.querySelectorAll('[data-sim-rev-filter]').forEach(b=>b.classList.remove('active'));
@@ -13496,6 +13517,10 @@
         const beforeExp=s?.explanation||'';
         const beforeMnem=s?.mnemonic||'';
         window.sanitizeSummaryObject(s);
+        if(s&&(isInvalidTrailSubject(s.category)||s.category==='Conteúdo Geral')){
+          const realCat=typeof window.inferStrictQuestionSubject==='function'?window.inferStrictQuestionSubject(`${s.explanation||''} ${(s.points||[]).join(' ')}`,s.title||'','',[]):'Direito Constitucional';
+          if(realCat&&!isInvalidTrailSubject(realCat))s.category=realCat;
+        }
         if((s?.explanation!==beforeExp||s?.mnemonic!==beforeMnem)&&s?.id&&!s._cloudPatchedOnce&&typeof cloudSession==='object'&&cloudSession?.access_token&&navigator.onLine){
           s._cloudPatchedOnce=true;
           cloudFetch(`generated_study_content?id=eq.${encodeURIComponent(s.id)}`,{

@@ -1424,3 +1424,75 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
 
   console.log("OK: IA Honesta (r157), Separação Estudado vs. Dominado (40 XP vs 100 XP) e Proteção Anti-Inflação de Ranking (r158) validados.");
 }
+
+// ── r159: Bloqueio de Nomes de Arquivos como Disciplina ("500 Questões Pmpe"), Domínio Estrito por Tópico, Bônus Único, Sem 75% Inventado e Redação Reconciliada ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const assistFnSrc = readFileSync(new URL("../supabase/functions/assistente-pmpe/index.ts", import.meta.url), "utf8");
+  const redacaoFnSrc = readFileSync(new URL("../supabase/functions/redacao-gemini/index.ts", import.meta.url), "utf8");
+  const hyperFnSrc = readFileSync(new URL("../supabase/functions/hyper-endpoint/index.ts", import.meta.url), "utf8");
+  const sqlV104 = readFileSync(new URL("../supabase/migrations/20261109180000_v104_honest_mastery_bonus.sql", import.meta.url), "utf8");
+
+  // 1) Testa em VM que "500 Questões Pmpe", "Caderno PMPE", "Apostila Completa" NUNCA viram disciplina
+  const sliceHtml = (start, end) => {
+    const s = htmlSrc.indexOf(start);
+    const e = htmlSrc.indexOf(end, s);
+    return htmlSrc.slice(s, e);
+  };
+  const ctxSubj = { window: {}, state: { customCampaign: { missions: [] } } };
+  vm.createContext(ctxSubj);
+  vm.runInContext(sliceHtml("function normalizeText(", "function missionForQuestion("), ctxSubj);
+
+  for (const fakeSubj of ["500 Questões Pmpe", "500 QUESTÕES PMPE", "1000 Questões Comentadas", "Caderno de Questões PMPE", "Apostila PMPE Soldado", "PMPE", "CBMPE"]) {
+    assert.equal(ctxSubj.isInvalidTrailSubject(fakeSubj), true, `Nome de arquivo/concurso "${fakeSubj}" deve ser barrado por isInvalidTrailSubject`);
+    assert.equal(ctxSubj.canonicalSubjectName(fakeSubj), "Conteúdo Geral", `canonicalSubjectName("${fakeSubj}") não pode retornar nome de arquivo como disciplina`);
+  }
+  assert.equal(
+    ctxSubj.inferStrictQuestionSubject("Nos termos do art. 5º da Constituição Federal, ninguém será preso senão em flagrante delito ou por ordem escrita e fundamentada de autoridade judiciária competente.", "Questão 12", "500 Questões Pmpe"),
+    "Direito Constitucional",
+    "Questão oriunda do arquivo '500 Questões Pmpe' deve ser classificada em sua disciplina acadêmica real (Direito Constitucional)"
+  );
+
+  // 2) Testa em VM que 5 questões de um tópico NÃO marcam outro tópico da mesma disciplina como Dominado
+  const mStart = htmlSrc.indexOf("function getTopicMasteryStats(");
+  const mEnd = htmlSrc.indexOf("function activeCampaign(){");
+  const vmMastery = {
+    window: {},
+    state: {
+      activeCampaignId: "camp-1",
+      done: { "dc-1": "2026-11-09T10:00:00Z", "dc-2": "2026-11-09T10:05:00Z" },
+      bosses: {},
+      scores: [
+        { id: "dc-1", total: 6, correct: 5, campaignId: "camp-1", subject: "Direito Constitucional" }
+      ],
+      topicMastery: {},
+      learning: { completed: {}, xp: 0 },
+      streak: 1
+    },
+    missionPool: () => [
+      { id: "dc-1", name: "1. Direitos e Garantias Fundamentais (Art. 5º)", subject: "Direito Constitucional" },
+      { id: "dc-2", name: "2. Da Segurança Pública (Art. 144)", subject: "Direito Constitucional" }
+    ],
+    normalizeText: (s) => String(s || "").toLowerCase(),
+    subjectKey: (s) => String(s || "").toLowerCase(),
+    canonicalSubjectName: (s) => String(s || "")
+  };
+  vm.createContext(vmMastery);
+  vm.runInContext(htmlSrc.slice(mStart, mEnd), vmMastery);
+
+  assert.equal(vmMastery.getTopicPedagogicalStatus({ id: "dc-1", name: "1. Direitos e Garantias Fundamentais (Art. 5º)", subject: "Direito Constitucional" }), "mastered", "Tópico dc-1 com 5/6 acertos próprios deve ser mastered (Dominado)");
+  assert.equal(vmMastery.getTopicPedagogicalStatus({ id: "dc-2", name: "2. Da Segurança Pública (Art. 144)", subject: "Direito Constitucional" }), "studied", "Tópico dc-2 da mesma disciplina mas sem questões próprias deve permanecer como studied (Estudado), nunca Dominado");
+
+  // 3) Verifica correções r159: sem 75% inventado, bônus único, adiar erro 7d, selo simulado honesto, redacao-gemini reconciliada e hyper-endpoint 410
+  assert.ok(!v77Src.includes("Math.round(total*0.75)") && v77Src.includes("const correct=total>0?Math.max(0,Math.min(total,Number(tracker.questionsCorrect||0))):0;"), "Fechar missão sem questões não pode inventar 75% de acerto");
+  assert.ok(v77Src.includes("bonus70Paid") && v77Src.includes("bonus85Paid") && htmlSrc.includes("state.masteryBonusPaid"), "Bônus de maestria (+8/+15 e missão) deve ser pago apenas uma vez por tópico");
+  assert.ok(htmlSrc.includes("Adiar revisão (7 dias)") && !htmlSrc.includes(">Marcar como dominado<"), "Caderno de erros deve apenas adiar revisão por 7 dias em vez de apagar o erro manualmente");
+  assert.ok(v77Src.includes("Meta interna atingida (≥70% · não é aprovação oficial)") && !v77Src.includes("Caveira Aprovado (≥70%)"), "Selo do simulado deve indicar meta interna e não aprovação oficial");
+  assert.ok(assistFnSrc.includes("hasExplicitGabaritoInRawText") && assistFnSrc.includes("CONTRATO ESTRITO DO MODO SOLICITADO") && assistFnSrc.includes("conhecimento_geral_conferir"), "assistente-pmpe deve validar gabarito explícito, contratos por modo e campo confidence");
+  assert.ok(redacaoFnSrc.includes("const sumScore = result.criteria.reduce"), "redacao-gemini deve reconciliar a nota total com a soma dos critérios");
+  assert.ok(hyperFnSrc.includes("status: 410") && hyperFnSrc.includes("DEPRECATED_ENDPOINT"), "hyper-endpoint deve responder 410 Gone");
+  assert.ok(sqlV104.includes("bonus_70_paid") && sqlV104.includes("bonus_85_paid"), "Migração v104 deve criar colunas de controle de bônus único");
+
+  console.log("OK: Bloqueio de nomes de arquivos como disciplina ('500 Questões Pmpe'), Domínio estrito por tópico e Pacote Grok r159 validados.");
+}
