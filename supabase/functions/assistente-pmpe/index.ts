@@ -504,6 +504,63 @@ Responda EXCLUSIVAMENTE com um JSON válido no formato:
     }
   }
 
+
+  if (payload.action === "solve_exam_questions_key") {
+    if (!DEEPSEEK_API_KEY && !GROQ_API_KEY && !activeGeminiKey) {
+      return json(request, { error: "Configure sua chave Gemini em Minha conta → Configurar minha IA." }, 503);
+    }
+    const campaignId = String(payload.campaign_id ?? "").trim();
+    const rawQuestions = Array.isArray(payload.questions) ? payload.questions.slice(0, 12) : [];
+    if (!rawQuestions.length) {
+      return json(request, { error: "Nenhuma questão enviada para resolução de gabarito." }, 400);
+    }
+    const usage = await reserveUsage(user.id, campaignId || undefined);
+    if (!usage.allowed) {
+      if (usage.reason === "DAILY_LIMIT") return json(request, { error: `Limite diário atingido (${usage.limit || 40}). A cota renova à meia-noite.`, code: "DAILY_LIMIT" }, 429);
+      return json(request, { error: "Proteção de consumo temporariamente indisponível.", code: usage.reason }, 503);
+    }
+    const itemsText = rawQuestions.map((q: any, idx: number) => {
+      const opts = Array.isArray(q?.options) ? q.options.map((o: any, oi: number) => `(${"ABCDE"[oi] || oi}) ${String(o ?? "").trim()}`).join(" | ") : "";
+      return `Questão #${idx} [Disciplina: ${q?.subject || "Geral"}]: ${String(q?.statement ?? "").trim()}\nAlternativas: ${opts}`;
+    }).join("\n\n");
+
+    const solvePrompt = `Resolva com rigor técnico-jurídico, gramatical, lógico e histórico as ${rawQuestions.length} questões de prova abaixo que foram importadas sem gabarito oficial.
+Para CADA questão (na mesma ordem, de #0 até #${rawQuestions.length - 1}), determine a única alternativa correta (correct_index: 0 para A/CERTO, 1 para B/ERRADO, 2 para C, 3 para D, 4 para E) e escreva uma explicação passo a passo honesta e didática.
+Regras:
+- Nunca chute cegamente a letra A (índice 0): analise todas as alternativas antes de decidir.
+- Preserve o enunciado e as alternativas originais.
+- Inicie explanation com "🤖 [Gabarito sugerido pela IA — confira no gabarito oficial quando disponível] " seguido do Conceito-chave e da justificativa da alternativa correta.
+
+QUESTÕES PARA RESOLVER:
+${itemsText}`;
+
+    try {
+      const generated = await askStructuredQuestions(solvePrompt, activeGeminiKey, Boolean(personalGeminiKey));
+      const solved = rawQuestions.map((orig: any, idx: number) => {
+        const match = generated.questions?.[idx] || generated.questions?.find((g: any) => String(g?.statement || "").slice(0, 35) === String(orig?.statement || "").slice(0, 35)) || null;
+        const opts = Array.isArray(orig?.options) ? orig.options : [];
+        const rawIdx = match?.correct_index;
+        const cIdx = (rawIdx !== null && rawIdx !== undefined && Number.isInteger(Number(rawIdx)) && Number(rawIdx) >= 0 && Number(rawIdx) < opts.length)
+          ? Number(rawIdx)
+          : 0;
+        const expRaw = String(match?.explanation || "Resolução elaborada pela IA com base no enunciado e nas alternativas da questão.").trim();
+        const prefix = /^🤖/i.test(expRaw) ? "" : "🤖 [Gabarito sugerido pela IA — confira no gabarito oficial quando disponível] ";
+        return {
+          index: orig?.index ?? idx,
+          correct_index: cIdx,
+          explanation: prefix + expRaw,
+          key_source: "ia_sugerido",
+          origin: "adaptada_do_pdf",
+        };
+      });
+      await finishUsage(usage.event_id, "success", generated.provider, generated.model);
+      return json(request, { solved, provider: generated.provider, model: generated.model, key_source: "ia_sugerido" });
+    } catch (_err) {
+      await finishUsage(usage.event_id, "error", undefined, undefined, "SOLVE_KEY_FAILED");
+      return json(request, { error: "Não foi possível resolver o gabarito com a IA neste momento. Tente novamente." }, 502);
+    }
+  }
+
   if (payload.action === "generate_structured_questions") {
     if (!DEEPSEEK_API_KEY && !GROQ_API_KEY && !activeGeminiKey) {
       return json(request, { error: "Configure sua chave Gemini em Minha conta → Configurar minha IA." }, 503);

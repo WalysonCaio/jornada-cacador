@@ -1496,3 +1496,42 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
 
   console.log("OK: Bloqueio de nomes de arquivos como disciplina ('500 Questões Pmpe'), Domínio estrito por tópico e Pacote Grok r159 validados.");
 }
+
+
+// ── Bateria r160: Redirecionamento "📖 Ler Teoria", Gabarito sugerido por IA e Integração Goodnotes ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const pdfClientSrc = readFileSync(new URL("../dist/pdf-text-client.js", import.meta.url), "utf8");
+  const assistFnSrc = readFileSync(new URL("../supabase/functions/assistente-pmpe/index.ts", import.meta.url), "utf8");
+
+  // 1) Verifica que openTheoryForSubjectAndTopic e NATIVE_CORE_THEORY_SUMMARIES estão presentes e cobrem os tópicos reportados
+  assert.ok(
+    v77Src.includes("function openTheoryForSubjectAndTopic(") &&
+    v77Src.includes("window.BASIC_SUMMARIES = NATIVE_CORE_THEORY_SUMMARIES") &&
+    v77Src.includes("Revolução Pernambucana de 1817") &&
+    v77Src.includes("Capitanias Hereditárias") &&
+    v77Src.includes("Negação de Condicional (MANÉ)"),
+    "openTheoryForSubjectAndTopic e NATIVE_CORE_THEORY_SUMMARIES devem existir e cobrir História de PE e RLM"
+  );
+
+  // 2) Verifica que a resolução de gabarito com IA está ativa no modal, nos cards e na Edge Function
+  assert.ok(
+    pdfClientSrc.includes("resolveAiBtn.hidden = false") &&
+    v77Src.includes("function solveMissingAnswerKeyWithAi(") &&
+    v77Src.includes("key_source = 'ia_sugerido'") &&
+    assistFnSrc.includes("payload.action === \"solve_exam_questions_key\""),
+    "A resolução de gabarito por IA deve estar ativa no modal, em v77-experience.js e em assistente-pmpe"
+  );
+
+  // 3) Verifica a integração com Goodnotes para a Etapa 2 da Missão Diária ("Criar um resumo detalhado")
+  assert.ok(
+    v77Src.includes("function openGoodnotesImportModal(") &&
+    v77Src.includes("function saveImportedGoodnotesSummary(") &&
+    v77Src.includes("tracker.goodnotesImported = true") &&
+    htmlSrc.includes("n.source==='Goodnotes'"),
+    "A importação/check-in do Goodnotes deve salvar a nota e marcar automaticamente a Etapa 2 da Missão Diária"
+  );
+
+  console.log("OK: Redirecionamento Ler Teoria, Gabarito sugerido por IA e Integração Goodnotes (r160) validados.");
+}

@@ -1419,6 +1419,12 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
             } else if (userChoice?.allowWithoutKey) {
               extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard, allowWithoutKey: true });
               examReport = extractedQs?.report || {};
+              if (userChoice?.resolveWithAi && Array.isArray(extractedQs) && extractedQs.length > 0 && typeof window.solveQuestionsArrayWithAi === "function") {
+                toast("🤖 Resolvendo gabarito e comentários das questões com a IA...");
+                await window.solveQuestionsArrayWithAi(extractedQs, doc);
+                examReport.answerUnknown = extractedQs.filter(q => q.answer_unknown || !Number.isInteger(Number(q.correct_index)) || Number(q.correct_index) < 0).length;
+                examReport.aiKeyed = extractedQs.filter(q => q.key_source === "ia_sugerido").length;
+              }
             }
           }
 
@@ -2004,7 +2010,7 @@ Gere EXCLUSIVAMENTE um objeto JSON puro (sem markdown) no formato:
 
           <!-- Opção 4: Resolver com IA -->
           <button type="button" class="ghost" id="examModalResolveAiBtn" style="text-align:left;padding:10px 14px;border-color:#38bdf8;font-size:.82rem">
-            🤖 <b>4. Não tenho gabarito: Resolver e comentar com a IA</b>
+            🤖 <b>4. Não tenho gabarito: Resolver e comentar com a IA (Gabarito Sugerido)</b>
           </button>
 
           <button type="button" class="ghost danger" id="examModalCancelBtn" style="padding:8px;font-size:.82rem">
@@ -2082,7 +2088,7 @@ Gere EXCLUSIVAMENTE um objeto JSON puro (sem markdown) no formato:
         };
       }
 
-      if (resolveAiBtn) resolveAiBtn.hidden = true; // a resolução por IA ainda não foi implementada: não prometer
+      if (resolveAiBtn) { if (typeof window.solveQuestionsArrayWithAi === "function") resolveAiBtn.hidden = false; else resolveAiBtn.hidden = true; }
       resolveAiBtn.onclick = () => {
         dlg.close();
         resolve({ allowWithoutKey: true, resolveWithAi: true });

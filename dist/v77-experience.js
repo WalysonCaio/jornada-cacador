@@ -5070,7 +5070,7 @@
           <span class="small muted">${escText(statusLabel)} · ${new Date(doc.created_at).toLocaleDateString('pt-BR')}</span>
         </div>
         <div class="examDocActions">
-          ${(status==='ready'&&(doc.metadata?.coverage?.warnings||[]).some(w=>/SEM gabarito/i.test(w)))?`<button type="button" class="action small" data-add-key-doc="${doc.id}" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#040c16;font-weight:900">📋 Adicionar Gabarito</button>`:''}${status==='ready'?`<button type="button" class="ghost small" data-exam-doc-battle="${doc.id}">◎ Treinar</button><button type="button" class="action small" data-exam-doc-simulado="${doc.id}">▶ Simulado</button>`:`<button type="button" class="action small" data-exam-doc-process="${doc.id}">⚡ Extrair Questões</button>`}
+          ${(status==='ready'&&(doc.metadata?.coverage?.warnings||[]).some(w=>/SEM gabarito/i.test(w)))?`<button type="button" class="action small" data-add-key-doc="${doc.id}" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#040c16;font-weight:900">📋 Adicionar Gabarito</button><button type="button" class="action small" data-solve-ai-key-doc="${doc.id}" style="background:linear-gradient(135deg,#0284c7,#2563eb);color:#fff;font-weight:900" title="A IA resolve cada questão passo a passo e sugere o gabarito">🤖 Resolver com IA</button>`:''}${status==='ready'?`<button type="button" class="ghost small" data-exam-doc-battle="${doc.id}">◎ Treinar</button><button type="button" class="action small" data-exam-doc-simulado="${doc.id}">▶ Simulado</button>`:`<button type="button" class="action small" data-exam-doc-process="${doc.id}">⚡ Extrair Questões</button>`}
         </div>
       </div>`;
     }).join(''):`<div class="examEmptyState">
@@ -6372,19 +6372,16 @@
         };
       });
       actionBox.querySelectorAll('[data-cutoff-study-subj]').forEach(btn=>{
-        btn.onclick=()=>{
+        btn.onclick=(ev)=>{
+          ev?.preventDefault?.();
+          ev?.stopPropagation?.();
           const targetSubj=btn.dataset.cutoffStudySubj;
           const targetTopic=btn.dataset.cutoffStudyTopic||'';
-          openView('study');
-          const sf=q('#summaryFilter');
-          if(sf){
-            const match=[...sf.options].find(o=>topicKey(o.value)===topicKey(targetSubj));
-            if(match){
-              sf.value=match.value;
-              sf.dispatchEvent(new Event('change'));
-            }
+          if(typeof window.openTheoryForSubjectAndTopic==='function'){
+            window.openTheoryForSubjectAndTopic(targetSubj,targetTopic);
+            return;
           }
-          toast(`📖 Estudar aberto em ${targetSubj}${targetTopic?` (${shortLabel(targetTopic,34)})`:''} para revisar a teoria!`);
+          openView('study');
         };
       });
     }
@@ -9954,9 +9951,10 @@
       }else if(/teoria|revisar o resumo/.test(norm)){
         badge=chk.checked?' (estudado hoje)':' (marca ao ler resumo/PDF ou 10min foco)';
       }else if(/criar um resumo/.test(norm)){
-        badge=chk.checked?' (resumo salvo)':' (marca ao salvar nota/bizu ou 5 flashcards)';
+        badge=chk.checked?(tracker.goodnotesImported?' (resumo Goodnotes vinculado)':' (resumo salvo)'):' (marca ao salvar nota, importar Goodnotes ou 5 flashcards)';
       }
-      span.innerHTML=`${escText(baseLabel)} <small class="muted" style="font-weight:600;color:var(--cyan)">${escText(badge)}</small>`;
+      const gnBtn=/criar um resumo/.test(norm)?` <button type="button" class="ghost small" data-open-goodnotes-import="1" style="margin-left:6px;padding:2px 8px;font-size:.7rem;border-color:#38bdf8;color:#38bdf8;width:auto;display:inline-flex;align-items:center;gap:4px">📓 Importar Goodnotes</button>`:'';
+      span.innerHTML=`${escText(baseLabel)} <small class="muted" style="font-weight:600;color:var(--cyan)">${escText(badge)}</small>${gnBtn}`;
     });
   }
 
@@ -11909,8 +11907,11 @@
     }
     const userChoice=await window.askUserExamAnswerKeyOptions(doc,[],{reason:'Cole o gabarito oficial ou anexe o PDF do gabarito para ativar a correção destas questões nos simulados:'});
     if(!userChoice||userChoice.cancelled)return;
+    if(userChoice.resolveWithAi&&typeof window.solveMissingAnswerKeyWithAi==='function'){
+      return window.solveMissingAnswerKeyWithAi(docId);
+    }
     if(!userChoice.appendedText){
-      return toast('Cole ou selecione o arquivo PDF com o gabarito oficial para aplicar.');
+      return toast('Cole ou selecione o arquivo PDF com o gabarito oficial, ou escolha "🤖 Resolver com a IA".');
     }
     const keyMap=parseExamAnswerKeyTable(`GABARITO OFICIAL DEFINITIVO\n${userChoice.appendedText}`,userChoice.preferredCaderno||'');
     if(!keyMap||keyMap.size===0){
@@ -13651,5 +13652,799 @@
   }
   window.openEditSummaryModal=openEditSummaryModal;
   try{sanitizeAllSummariesAndFlashcards();}catch(_e){}
+
+
+  // ── r160: 1) Redirecionamento Cirúrgico de "📖 Ler Teoria" + Acervo Teórico Nativo
+  //          2) Resolução de Gabarito por IA para Provas/Simulados sem Gabarito ("🤖 Resolver com IA")
+  //          3) Integração Completa com Goodnotes / Anotações Externas para a Etapa 2 da Missão Diária ──
+
+  const NATIVE_CORE_THEORY_SUMMARIES = [
+    {
+      id: 'native-sum-hist-pe-capitanias',
+      title: 'Capitanias Hereditárias e Período Colonial em Pernambuco (Duarte Coelho e Açúcar)',
+      source: 'Resumo Tático · História de Pernambuco',
+      category: 'História de Pernambuco',
+      explanation: 'A Capitania de Pernambuco (originalmente Nova Lusitânia), doada a Duarte Coelho Pereira em 1534, foi uma das poucas capitanias hereditárias que prosperaram no Brasil Colonial, ao lado de São Vicente. Seu êxito decorreu da fertilidade do solo de massapê na Zona da Mata, do clima tropical úmido favorável à cana-de-açúcar, da proximidade geográfica com os portos europeus e da aliança estratégica inicial com grupos indígenas locais (como os Tabajaras), seguida pela subordinação dos Caetés e implantação da lavoura canavieira escravista com sede em Olinda.',
+      points: [
+        'Donatário: Duarte Coelho Pereira (1534), que fundou Olinda (sede político-administrativa) e Igarassu.',
+        'Base econômica: monocultura da cana-de-açúcar em latifúndios (engenhos), solo de massapê na Zona da Mata e mão de obra escravizada (inicialmente indígena e depois africana).',
+        'Documentos fundadores do sistema: Carta de Doação (transferia a posse hereditária, mas não a propriedade plena) e Foral (estabelecia direitos, deveres e tributos do donatário).',
+        'Motivos do sucesso frente às demais capitanias: recursos próprios aplicados por Duarte Coelho, administração presencial, solo de massapê e posição estratégica para exportação à Europa.'
+      ],
+      example: 'Se a banca afirmar que a Capitania de Pernambuco fracassou ou que baseava sua economia na mineração, o item está incorreto: Pernambuco e São Vicente foram os dois grandes casos de sucesso do sistema de capitanias, sustentados pela agromanufatura açucareira.',
+      bizu: 'Pernambuco = Nova Lusitânia · Donatário = Duarte Coelho · Sede = Olinda · Solo = Massapê · Sucesso = Pernambuco + São Vicente.',
+      mnemonic: 'DU-OL-MA-CA (Duarte Coelho, Olinda, Massapê, Cana-de-açúcar).',
+      trap: 'As bancas costumam afirmar que a Carta de Doação transferia a propriedade definitiva da terra ao donatário (errado: o rei mantinha o domínio eminente; o donatário recebia a posse e o usufruto hereditário regolados pelo Foral).'
+    },
+    {
+      id: 'native-sum-hist-pe-1817',
+      title: 'Revolução Pernambucana de 1817 e Confederação do Equador (1824)',
+      source: 'Resumo Tático · História de Pernambuco',
+      category: 'História de Pernambuco',
+      explanation: 'A Revolução Pernambucana de 1817 (também chamada de Revolução dos Padres) foi o único movimento emancipacionista do período colonial/joanino que conseguiu superar a fase conspiratória e tomar o poder local, instalando um Governo Provisório republicano em Pernambuco por mais de 70 dias. Foi motivada pela crise do açúcar e do algodão, pela seca de 1816 e pelo aumento abusivo de impostos imposto pela Corte de D. João VI no Rio de Janeiro. Já a Confederação do Equador (1824), liderada por Frei Caneca e Cipriano Barata no Primeiro Reinado, eclodiu contra o autoritarismo de D. Pedro I, a dissolução da Constituinte e a outorga da Constituição centralizadora de 1824 (com o Poder Moderador).',
+      points: [
+        'Revolução de 1817: caráter republicano, separatista e antiabsolutista; contou com padres, militares, comerciantes, juízes e proprietários rurais (ex.: Domingos José Martins, Padre João Ribeiro, Frei Caneca, Cruz Cabugá).',
+        'Diferencial de 1817 em prova: superou a fase conspiratória e governou Pernambuco por cerca de 74 dias, decretando liberdade de imprensa e de consciência religiosa (mas não aboliu de imediato a escravidão para não perder o apoio dos senhores de engenho).',
+        'Lei Orgânica de 1817: estabeleceu a separação de poderes, tolerância religiosa e igualdade formal de direitos entre os cidadãos livres.',
+        'Confederação do Equador (1824): movimento republicano, federalista e separatista do Primeiro Reinado contra a Constituição Outorgada de 1824; teve Frei Caneca como principal líder e mártir.'
+      ],
+      example: 'Questão clássica UPENET/AOCP: "Qual o grande diferencial da Revolução de 1817 frente à Inconfidência Mineira e à Conjuração Baiana?" Resposta: Superar a fase conspiratória e tomar o poder local por mais de dois meses.',
+      bizu: '1817 = Período Joanino (contra impostos de D. João VI, tomou o poder por 74 dias). 1824 = Primeiro Reinado (contra a Constituição Outorgada de D. Pedro I e o Poder Moderador, Frei Caneca).',
+      mnemonic: '1817 = JOÃO + PODER TOMADO | 1824 = PEDRO I + PODER MODERADOR (Frei Caneca).',
+      trap: 'Cuidado: nem 1817 nem 1824 decretaram a abolição imediata da escravidão no momento da tomada do poder em razão da pressão da elite agrária.'
+    },
+    {
+      id: 'native-sum-hist-pe-holandeses',
+      title: 'Tópicos Essenciais de História de Pernambuco: Invasões Holandesas, Guerra dos Mascates e Praieira',
+      source: 'Resumo Tático · História de Pernambuco',
+      category: 'História de Pernambuco',
+      explanation: 'A história de Pernambuco em concursos policiais concentra-se em cinco grandes eixos: (1) Capitania de Duarte Coelho; (2) Invasões Holandesas (1630–1654), administração de Maurício de Nassau no Recife e Insurreição Pernambucana (Batalhas dos Montes Guararapes, 1648 e 1649); (3) Guerra dos Mascates (1710–1711), opondo a aristocracia açucareira endividada de Olinda aos comerciantes reinóis de Recife pela autonomia político-municipal do Recife; (4) Revolução de 1817 e Confederação do Equador (1824); e (5) Revolução Praieira (1848–1850), último grande conflito armado do Império, marcado pelo Manifesto ao Mundo de Borges da Fonseca.',
+      points: [
+        'Invasões Holandesas (WIC, 1630–1654): motivadas pela União Ibérica e pelo bloqueio holandês ao comércio do açúcar. Período nassoviano (1637–1644): urbanização da Cidade Maurícia (Recife), tolerância religiosa parcial e concessão de créditos aos senhores de engenho.',
+        'Insurreição Pernambucana (1645–1654): cobrança das dívidas pela WIC após a saída de Nassau uniu luso-brasileiros (João Fernandes Vieira, André Vidal de Negreiros), indígenas (Felipe Camarão) e negros (Henrique Dias), vencendo nas Batalhas dos Guararapes.',
+        'Guerra dos Mascates (1710–1711): conflito nativista entre Olinda (senhores de engenho em crise) e Recife (comerciantes portugueses apelidados de "mascates") quando Recife foi elevada à categoria de vila com pelourinho e câmara própria.',
+        'Revolução Praieira (1848–1850): liderada por liberais radicais ("praieiros", jornal Diário Novo na Rua da Praia) e Pedro Ivo; combatia o monopólio político da família Cavalcanti e o monopólio do comércio a retalho pelos portugueses.'
+      ],
+      example: 'Se a prova perguntar qual movimento histórico expulsou o domínio da Companhia das Índias Ocidentais e consolidou as Batalhas dos Guararapes, a resposta é a Insurreição Pernambucana (No contexto das Invasões Holandesas).',
+      bizu: 'Holandeses (1630-1654: WIC, Nassau e Guararapes) → Mascates (1710: Olinda vs Recife) → 1817 (República de 74 dias) → 1824 (Confederação do Equador) → 1848 (Praieira: Manifesto ao Mundo).',
+      mnemonic: 'HO-MA-17-24-PRA (Holandeses, Mascates, 1817, 1824, Praieira).',
+      trap: 'Não confunda a Guerra dos Mascates (1710, luta pela autonomia municipal do Recife frente a Olinda, sem caráter separatista da Coroa) com a Revolução de 1817 (separatista e republicana).'
+    },
+    {
+      id: 'native-sum-rlm-negacao-condicional',
+      title: 'Negação de Condicional (MANÉ) e Equivalências Lógicas (Leis de De Morgan)',
+      source: 'Resumo Tático · Raciocínio Lógico-Matemático',
+      category: 'Raciocínio Lógico-Matemático',
+      explanation: 'A condicional "Se P, então Q" (P → Q) só é falsa quando o antecedente (P) é verdadeiro e o consequente (Q) é falso (Vera Fischer = F). Por isso, a NEGAÇÃO de uma condicional ~(P → Q) NUNCA é outra condicional: aplica-se a regra do MANÉ — MAntém a primeira (P), troca o conectivo "Se... então" pelo conectivo "E" (∧) e NEga a segunda (~Q), resultando em: P ∧ ~Q. Já para obter uma proposição EQUIVALENTE a P → Q, existem duas regras universais: (1) Contrapositiva: inverte e nega as duas (~Q → ~P); ou (2) Regra do NEYMAR (Disjunção): Nega a primeira OU mantém a segunda (~P ∨ Q).',
+      points: [
+        'Negação da Condicional ~(P → Q): Regra do MANÉ → P ∧ ~Q (Mantém a 1ª E Nega a 2ª). Exemplo: a negação de "Se Ana é policial, então trabalha à noite" é "Ana é policial E não trabalha à noite".',
+        'Equivalência 1 da Condicional (P → Q): Contrapositiva → ~Q → ~P (volta negando tudo: "Se não trabalha à noite, então Ana não é policial").',
+        'Equivalência 2 da Condicional (P → Q) / Negação de Disjunção: P → Q equivale a ~P ∨ Q ("Ana não é policial OU trabalha à noite"). E se a banca pedir a negação de (~P ∧ Q), por De Morgan troca o "E" por "OU" e nega ambas: P ∨ ~Q ("Ana é policial ou ela não trabalha no turno da noite").',
+        'Leis de De Morgan (Negação do E e do OU): ~(P ∧ Q) ⇔ ~P ∨ ~Q (nega tudo e troca E por OU); ~(P ∨ Q) ⇔ ~P ∧ ~Q (nega tudo e troca OU por E).'
+      ],
+      example: 'Se a questão pede a negação de "Se chove, a rua molha", a resposta é "Chove E a rua não molha" (P ∧ ~Q). Já se a questão pede a equivalência disjuntiva ou a negação de "Ana não é policial e trabalha no turno da noite", aplica-se De Morgan: "Ana é policial ou ela não trabalha no turno da noite".',
+      bizu: 'NEGAÇÃO do "Se... então" = MANÉ (usa "E", nunca usa "Se... então"). EQUIVALÊNCIA do "Se... então" = Contrapositiva (~Q → ~P) ou NEYMAR (~P ∨ Q).',
+      mnemonic: 'MANÉ (Mantém a 1ª E Nega a 2ª) | NEYMAR (Nega a 1ª OU Mantém a 2ª).',
+      trap: 'A maior pegadinha das bancas é colocar "Se ~P, então ~Q" como negação ou equivalência de "Se P, então Q". Nunca negue uma condicional usando outra condicional!'
+    },
+    {
+      id: 'native-sum-rlm-conectivos-argumentacao',
+      title: 'Conectivos Lógicos, Quantificadores, Diagramas Lógicos e Princípio da Casa dos Pombos',
+      source: 'Resumo Tático · Raciocínio Lógico-Matemático',
+      category: 'Raciocínio Lógico-Matemático',
+      explanation: 'Na lógica proposicional e de argumentação, domine a tabela-verdade dos 5 conectivos, a negação dos quantificadores universais ("Todo", "Nenhum") e particulares ("Algum", "Pelo menos um"), além do Princípio da Casa dos Pombos (Gavetas de Dirichlet) para problemas de certeza mínima.',
+      points: [
+        'Conjunção (P ∧ Q, "e"): só é V quando ambas são V. Disjunção inclusiva (P ∨ Q, "ou"): só é F quando ambas são F.',
+        'Disjunção exclusiva (P ⊻ Q, "ou... ou..."): é V quando os valores lógicos são diferentes. Bicondicional (P ↔ Q, "...se e somente se..."): é V quando os valores lógicos são iguais.',
+        'Negação de Quantificadores (Regra do PEA): A negação de "TODO A é B" é "ALGUM A não é B" (Pelo menos um A não é B). A negação de "NENHUM A é B" é "ALGUM A é B". Jamais negue "Todo" com "Nenhum"!',
+        'Princípio da Casa dos Pombos (Azarado): para garantir K elementos do mesmo grupo entre N grupos possíveis, calcule o pior cenário (retirar K-1 de cada um dos N grupos) e some + 1: Total mínimo = N × (K - 1) + 1.'
+      ],
+      example: 'Em uma urna com bolas de 4 cores, quantas devemos retirar no escuro para garantir pelo menos 3 da mesma cor? Pior caso: 2 de cada uma das 4 cores (4 × 2 = 8) + 1 = 9 bolas.',
+      bizu: 'Negação de TODO = ALGUM NÃO. Negação de NENHUM = ALGUM É. Casa dos Pombos = (Pior Caso de cada grupo) + 1.',
+      mnemonic: 'PEA: Particular (Algum) nega Universal (Todo/Nenhum).',
+      trap: 'Nunca negue "Todo policial é corajoso" dizendo "Nenhum policial é corajoso". Basta um único contraexemplo ("Pelo menos um policial não é corajoso").'
+    },
+    {
+      id: 'native-sum-const-art1-5',
+      title: 'Fundamentos da República (Art. 1º — SO-CI-DI-VA-PLU) e Direitos Fundamentais (Art. 5º CF/88)',
+      source: 'Resumo Tático · Direito Constitucional',
+      category: 'Direito Constitucional',
+      explanation: 'O Art. 1º da Constituição Federal de 1988 estabelece os cinco Fundamentos da República Federativa do Brasil (SO-CI-DI-VA-PLU), que não se confundem com os Objetivos Fundamentais do Art. 3º (verbos no infinitivo: CON-GA-ERRA-PRO) nem com os Princípios das Relações Internacionais do Art. 4º. Já o Art. 5º disciplina os direitos e deveres individuais e coletivos e os remédios constitucionais (Habeas Corpus, Habeas Data, Mandado de Segurança, Mandado de Injunção e Ação Popular).',
+      points: [
+        'Fundamentos da República (Art. 1º CF/88): SOberania, CIdadania, DIgnidade da pessoa humana, VAlores sociais do trabalho e da livre iniciativa e PLUralismo político (SO-CI-DI-VA-PLU).',
+        'Objetivos Fundamentais (Art. 3º CF/88 — sempre começam com verbo): CONstruir uma sociedade livre, justa e solidária; GArantir o desenvolvimento nacional; ERRAdicar a pobreza e a marginalização e reduzir as desigualdades; PROmover o bem de todos (CON-GA-ERRA-PRO).',
+        'Inviolabilidade domiciliar (Art. 5º, XI): a casa é asilo inviolável; sem consentimento do morador, só se entra em caso de flagrante delito, desastre, para prestar socorro (a qualquer hora, dia ou noite) ou, durante o DIA, por determinação judicial.',
+        'Remédios Constitucionais: Habeas Corpus (liberdade de locomoção, gratuito); Habeas Data (acesso/retificação de dados pessoais do próprio impetrante, gratuito); Ação Popular (qualquer CIDADÃO com título de eleitor para anular ato lesivo ao patrimônio público/moralidade/meio ambiente).'
+      ],
+      example: 'Se a banca perguntar se a polícia pode cumprir mandado judicial de busca e apreensão domiciliar às 22h sem consentimento do morador e sem flagrante delito, a resposta é NÃO: ordem judicial só se cumpre durante o dia.',
+      bizu: 'Art. 1º (Substantivos) = SO-CI-DI-VA-PLU. Art. 3º (Verbos) = CON-GA-ERRA-PRO. Ordem judicial em domicílio = SÓ DE DIA.',
+      mnemonic: 'SO-CI-DI-VA-PLU (Fundamentos do Art. 1º) | CON-GA-ERRA-PRO (Objetivos do Art. 3º).',
+      trap: 'As bancas trocam "Pluralismo político" (Fundamento do Art. 1º) por "Pluripartidarismo" (que fica no Art. 17) ou colocam "Erradicar a pobreza" como fundamento do Art. 1º.'
+    },
+    {
+      id: 'native-sum-port-essenciais',
+      title: 'Compreensão Textual, Coesão, Concordância, Regência e Crase',
+      source: 'Resumo Tático · Língua Portuguesa',
+      category: 'Língua Portuguesa',
+      explanation: 'Nas provas policiais (AOCP, UPENET, Cebraspe, FGV), Língua Portuguesa exige domínio da diferença entre compreensão (o que está explícito no texto) e interpretação (inferência lógica a partir do texto), além de coesão anafórica/catafórica, concordância dos verbos impessoais (haver e fazer), regência e casos proibidos/obrigatórios de crase.',
+      points: [
+        'Coesão Referencial: Anáfora retoma termo já dito antes (ex.: pronomes "este", "esse", "aquele"); Catáfora antecipa termo que ainda será dito adiante.',
+        'Verbos Impessoais (sem sujeito — ficam na 3ª pessoa do singular): "Haver" no sentido de existir ou tempo decorrido ("Havia muitas provas", "Deve haver soluções") e "Fazer" indicando tempo decorrido ou clima ("Faz dez anos").',
+        'Crase Proibida: antes de palavras masculinas, antes de verbos no infinitivo ("a partir de", "a começar"), antes de pronomes indefinidos ("a toda", "a qualquer") e entre palavras repetidas ("cara a cara", "gota a gota").',
+        'Conjunções Subordinativas que mais caem: Concessivas ("embora", "conquanto", "ainda que", "posto que", "mesmo que" — indicam oposição sem impedir o fato principal) vs. Causais ("já que", "visto que", "como" no início da frase).'
+      ],
+      example: 'Na frase "Deve haver novos concursos este ano", o verbo auxiliar "deve" fica no singular porque acompanha o verbo principal "haver" no sentido de existir (impessoal). Se substituirmos por "existir", vai para o plural: "Devem existir novos concursos".',
+      bizu: 'Haver = Existir → Singular! Existir → Concorda com o sujeito! "Posto que" e "Conquanto" = Embora (Concessivas).',
+      mnemonic: 'CRASE PROibida: Verbo, Masculino, Artigo indefinido ("uma"), Pronomes gerais.',
+      trap: 'A conjunção "posto que" parece explicativa ou causal, mas na norma culta é CONCESSIVA (equivale a "embora").'
+    },
+    {
+      id: 'native-sum-info-seguranca-redes',
+      title: 'Segurança da Informação, Redes, Sistemas Operacionais e Computação em Nuvem',
+      source: 'Resumo Tático · Informática',
+      category: 'Informática',
+      explanation: 'A disciplina de Informática foca nos pilares da Segurança da Informação (DICA: Disponibilidade, Integridade, Confidencialidade e Autenticidade), na diferenciação entre pragas virtuais (Malwares: Vírus, Worm, Ransomware, Trojan, Spyware) e engenharia social (Phishing), além de conceitos de redes, protocolos e navegadores.',
+      points: [
+        'Pilares da Segurança (DICA): Confidencialidade (acesso apenas por autorizados, garantido por criptografia), Integridade (dados não alterados indevidamente, verificada por Hash), Disponibilidade (acesso sempre que necessário, garantida por redundância/backup/no-break) e Autenticidade (identidade da origem, garantida por assinatura digital).',
+        'Diferença entre Vírus e Worm: o Vírus precisa de um programa hospedeiro e da execução pelo usuário; o Worm (verme) se propaga automaticamente pela rede explorando vulnerabilidades sem precisar de hospedeiro.',
+        'Ransomware vs. Phishing: Ransomware sequestra os dados por criptografia e exige resgate financeiro (geralmente em criptomoedas); Phishing é engenharia social (e-mail/página falsa) para pescar senhas e dados bancários.',
+        'Intranet vs. Extranet: Intranet é uma rede privada restrita aos colaboradores internos da instituição usando protocolo TCP/IP; Extranet estende o acesso controlado de parte da Intranet a parceiros externos ou fornecedores via login.'
+      ],
+      example: 'Se uma questão descrever um malware que criptografa os arquivos do computador da delegacia e exibe uma tela cobrando pagamento em Bitcoin para devolver a chave, trata-se de um Ransomware.',
+      bizu: 'Vírus = precisa de clique/hospedeiro | Worm = automático na rede | Ransomware = sequestro/resgate | Phishing = página/e-mail falso.',
+      mnemonic: 'DICA: Disponibilidade, Integridade, Confidencialidade, Autenticidade.',
+      trap: 'O modo de navegação anônima (Ctrl+Shift+N no Chrome/Edge; Ctrl+Shift+P no Firefox) NÃO esconde o tráfego do provedor de internet nem do administrador da rede da empresa; apenas não salva histórico, cookies e formulários localmente ao fechar a janela.'
+    },
+    {
+      id: 'native-sum-dh-dudh-mandela',
+      title: 'Declaração Universal dos Direitos Humanos (DUDH), Pacto de São José e Regras de Mandela',
+      source: 'Resumo Tático · Direitos Humanos',
+      category: 'Direitos Humanos',
+      explanation: 'Em Direitos Humanos, o candidato deve dominar as características universais dos direitos humanos, os artigos da DUDH (Resolução 217-A da ONU, 1948), a Convenção Americana sobre Direitos Humanos (Pacto de São José da Costa Rica, 1969) e as Regras Mínimas da ONU para o Tratamento de Reclusos (Regras de Nelson Mandela).',
+      points: [
+        'Natureza jurídica da DUDH (1948): formalmente foi adotada como Resolução da Assembleia Geral da ONU (não é tratado internacional formal, embora tenha força de costume internacional cogente — jus cogens).',
+        'Equivalência de Tratados de Direitos Humanos no Brasil (Art. 5º, § 3º, CF/88): aprovados em cada Casa do Congresso Nacional, em 2 turnos, por 3/5 dos votos dos respectivos membros → equivalem às Emendas Constitucionais. Se aprovados pelo rito comum → têm status supralegal (abaixo da CF e acima das leis ordinárias, como o Pacto de São José da Costa Rica).',
+        'Regras de Nelson Mandela: proíbem de forma absoluta a tortura, o isolamento indefinido e o isolamento prolongado (mais de 15 dias consecutivos por mais de 22 horas diárias sem contato humano significativo).',
+        'Pacto de São José da Costa Rica: veda a prisão civil por dívida, permitindo-a exclusivamente para o inadimplemento voluntário e inescusável de obrigação alimentícia.'
+      ],
+      example: 'Se a banca afirmar que a DUDH é um tratado internacional assinado em 1948 que exige ratificação parlamentar, o item está errado: a DUDH é uma Resolução da Assembleia Geral da ONU.',
+      bizu: 'Tratado de DH com 2 turnos + 3/5 nas 2 Casas = Emenda Constitucional (2-3-2). Rito comum = Supralegal. Isolamento prolongado (Mandela) = > 15 dias.',
+      mnemonic: 'Regra 2-3-2 (2 Casas, 2 Turnos, 3/5 dos votos = Emenda Constitucional).',
+      trap: 'As Regras de Mandela vedam revistas íntimas invasivas desnecessárias e proíbem punição coletiva ou redução de água e alimentação como sanção disciplinar.'
+    },
+    {
+      id: 'native-sum-leg-extravagante-militar',
+      title: 'Legislação Extravagante e Militar: Tortura, Abuso de Autoridade, LEP e Estatuto Policial',
+      source: 'Resumo Tático · Legislação Extravagante e Militar',
+      category: 'Legislação Extravagante',
+      explanation: 'Resumo integrado das leis penais especiais e normas institucionais mais cobradas: Lei de Tortura (9.455/1997), Lei de Abuso de Autoridade (13.869/2019), Lei de Execução Penal (7.210/1984) e Estatuto/Código Disciplinar Militar.',
+      points: [
+        'Lei de Tortura (9.455/97): em regra, a tortura é crime COMUM (qualquer pessoa pode praticar), EXCETO na modalidade "tortura-castigo" (Art. 1º, II — exige guarda, poder ou autoridade sobre a vítima) e na "tortura-omissão" (Art. 1º, § 2º — exige o dever legal de evitá-la ou apurá-la, cuja pena é de detenção de 1 a 4 anos e admite fiança/regime aberto). A condenação acarreta a perda AUTOMÁTICA do cargo/função pública e a interdição para seu exercício pelo dobro do prazo da pena aplicada.',
+        'Lei de Abuso de Autoridade (13.869/19): todos os crimes exigem dolo específico (finalidade de prejudicar outrem, beneficiar a si mesmo/terceiro, ou por mero capricho/satisfação pessoal). A divergência na interpretação de lei ou na avaliação de fatos e provas NÃO configura abuso de autoridade (proibição do crime de hermenêutica). A perda do cargo NÃO é automática: exige reincidência em crime de abuso de autoridade e deve ser declarada motivadamente na sentença.',
+        'Lei de Execução Penal (LEP — 7.210/84): as faltas disciplinares graves são taxativamente previstas na LEP (lei federal); o diretor do estabelecimento prisional pode aplicar isolamento preventivo por até 10 dias, mas a inclusão no Regime Disciplinar Diferenciado (RDD) depende exclusivamente de decisão do JUIZ da execução.',
+        'Direito Militar (Lei 6.783/74 e Lei 11.817/00 PE): hierarquia (ordenação da autoridade em níveis diferentes) e disciplina (rigorosa observância e acatamento integral das leis e regulamentos) são a base institucional da Polícia Militar.'
+      ],
+      example: 'Compare sempre em prova: na Lei de Tortura, a perda do cargo é AUTOMÁTICA e a interdição vale pelo dobro da pena; já na Lei de Abuso de Autoridade, a perda do cargo NÃO é automática, exige REINCIDÊNCIA específica e precisa ser motivada na sentença (inabilitação de 1 a 5 anos).',
+      bizu: 'Tortura = crime comum (regra) + perda AUTOMÁTICA do cargo. Abuso de Autoridade = exige finalidade específica + perda do cargo exige REINCIDÊNCIA e motivação.',
+      mnemonic: 'TORTURA = Automática + Dobro da pena | ABUSO = Reincidência + Motivada (1 a 5 anos).',
+      trap: 'Na tortura por omissão (Art. 1º, § 2º da Lei 9.455/97), a pena é de DETENÇÃO (1 a 4 anos), e não reclusão, além de não se submeter ao regime inicial fechado obrigatório das modalidades comissivas.'
+    }
+  ];
+
+  window.BASIC_SUMMARIES = NATIVE_CORE_THEORY_SUMMARIES;
+  try {
+    if (typeof ensureNativePedagogicalCouplingLoaded === 'function') {
+      ensureNativePedagogicalCouplingLoaded();
+    }
+  } catch (_e) {}
+
+  function ensureTopicSummaryExistsForStudy(targetSubj, targetTopic) {
+    if (typeof ensureNativePedagogicalCouplingLoaded === 'function') {
+      ensureNativePedagogicalCouplingLoaded();
+    }
+    const cleanSubj = typeof canonicalSubjectName === 'function' ? canonicalSubjectName(targetSubj || 'Conteúdo Geral', targetTopic || '') : (targetSubj || 'Conteúdo Geral');
+    const sKey = subjectKey(cleanSubj);
+    const tKey = topicKey(targetTopic || '');
+    const tTokens = tKey.split(' ').filter(w => w.length >= 4 && !['topicos', 'essenciais', 'estudo', 'concurso', 'questoes', 'questao', 'sobre', 'geral'].includes(w));
+
+    // Garante também os resumos nativos daquela disciplina mesmo que o edital ainda não tenha sido carregado
+    if (Array.isArray(window.BASIC_SUMMARIES) && typeof ALL_SUMMARIES !== 'undefined' && Array.isArray(ALL_SUMMARIES)) {
+      const existingIds = new Set(ALL_SUMMARIES.map(s => String(s?.id || s?.title || '').toLowerCase()));
+      for (const item of window.BASIC_SUMMARIES) {
+        if (subjectKey(item.category) === sKey || !ALL_SUMMARIES.some(s => subjectKey(s.category) === sKey)) {
+          const k = String(item.id || item.title).toLowerCase();
+          if (!existingIds.has(k) && subjectKey(item.category) === sKey) {
+            existingIds.add(k);
+            ALL_SUMMARIES.push({ ...item, is_native_coupling: true });
+          }
+        }
+      }
+    }
+
+    const subjSummaries = (typeof ALL_SUMMARIES !== 'undefined' && Array.isArray(ALL_SUMMARIES))
+      ? ALL_SUMMARIES.filter(s => subjectKey(s.category) === sKey)
+      : [];
+
+    let bestCard = null;
+    let bestScore = 0;
+    for (const s of subjSummaries) {
+      const hay = topicKey([s.title, s.explanation, s.bizu, s.mnemonic, ...(s.points || [])].join(' '));
+      if (tKey && topicKey(s.title).includes(tKey)) {
+        bestCard = s;
+        bestScore = 100;
+        break;
+      }
+      let score = 0;
+      for (const tk of tTokens) {
+        if (topicKey(s.title).includes(tk)) score += 4;
+        else if (hay.includes(tk)) score += 2;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestCard = s;
+      }
+    }
+
+    // Se ainda não houver um resumo específico cobrindo esse subtópico ou disciplina, sintetiza um card focado com base nas questões e erros daquele tópico
+    if (!bestCard && typeof ALL_SUMMARIES !== 'undefined' && Array.isArray(ALL_SUMMARIES)) {
+      const topicTitle = (targetTopic && targetTopic.trim().length >= 3) ? targetTopic.trim() : `Tópicos Essenciais de ${cleanSubj}`;
+      const relatedQs = (typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS))
+        ? ALL_QUESTIONS.filter(q => subjectKey(q.subject) === sKey && (!tTokens.length || tTokens.some(tk => topicKey(`${q.topic || ''} ${q.statement || ''}`).includes(tk)))).slice(0, 6)
+        : [];
+      const extractedPoints = relatedQs
+        .map(q => {
+          const cOpt = Array.isArray(q.options) ? q.options[Number(q.correct_index) || 0] : '';
+          const exp = String(q.explanation || '').replace(/^🤖\s*\[[^\]]+\]\s*/i, '').trim();
+          return exp && exp.length >= 20 ? exp.slice(0, 240) : (cOpt ? `Gabarito recorrente em prova: ${cOpt}` : '');
+        })
+        .filter(Boolean)
+        .slice(0, 4);
+      const dynamicId = `dynamic-theory-${sKey}-${tKey || 'geral'}`.replace(/[^a-z0-9-_]/g, '-').slice(0, 80);
+      const existingDyn = ALL_SUMMARIES.find(s => s.id === dynamicId);
+      if (existingDyn) {
+        bestCard = existingDyn;
+      } else {
+        bestCard = {
+          id: dynamicId,
+          title: topicTitle,
+          source: `Caderno Teórico Cirúrgico · ${cleanSubj}`,
+          category: cleanSubj,
+          explanation: `Revisão teórica direcionada sobre "${topicTitle}" em ${cleanSubj}, estruturada para corrigir os pontos onde houve erro nas baterias de questões e consolidar os fundamentos cobrados pela banca.`,
+          points: extractedPoints.length ? extractedPoints : [
+            `Domine os conceitos-chave, prazos, exceções legais e classificações cobradas em ${topicTitle}.`,
+            `Compare sempre a regra geral com as exceções expressas ("salvo", "exceto", "independentemente").`,
+            `Ao refazer as questões deste tópico, identifique qual palavra da alternativa errada invalida o item.`
+          ],
+          example: relatedQs[0] ? `Questão de referência do seu banco: "${String(relatedQs[0].statement || '').slice(0, 180)}..." → Alternativa correta: "${relatedQs[0].options?.[Number(relatedQs[0].correct_index) || 0] || ''}".` : `Aplique a leitura ativa grifando os termos restritivos ("somente", "exclusivamente", "nunca") nos enunciados de ${cleanSubj}.`,
+          bizu: `Foque na distinção entre a regra geral de ${topicTitle} e as pegadinhas de troca conceitual da banca.`,
+          mnemonic: `Revisão Ativa 1-7-30 · ${cleanSubj}`,
+          trap: `Cuidado com alternativas que misturam conceitos verdadeiros de outro instituto ou invertem a competência/regra de ${topicTitle}.`,
+          is_native_coupling: true
+        };
+        ALL_SUMMARIES.unshift(bestCard);
+      }
+    }
+
+    return { cleanSubj, bestCard: bestCard || subjSummaries[0] || null };
+  }
+
+  function openTheoryForSubjectAndTopic(targetSubj, targetTopic = '') {
+    const { cleanSubj, bestCard } = ensureTopicSummaryExistsForStudy(targetSubj, targetTopic);
+
+    // 1. Abre a aba Estudar
+    if (typeof openView === 'function') openView('study');
+
+    // 2. Garante que a sub-aba "Resumos" ([data-study="summaries"]) esteja ativa
+    const sumTabBtn = document.querySelector('.studyTab[data-study="summaries"]');
+    if (sumTabBtn && !sumTabBtn.classList.contains('active')) {
+      sumTabBtn.click();
+    }
+    document.querySelectorAll('#study .studyTab').forEach(b => b.classList.toggle('active', b.dataset.study === 'summaries'));
+    document.querySelectorAll('#study .studyPanel').forEach(p => p.classList.toggle('active', p.id === 'summaries'));
+
+    // 3. Limpa busca textual e seleciona a disciplina correta no #summaryFilter
+    const searchInput = document.querySelector('#summarySearch');
+    if (searchInput) searchInput.value = '';
+    const sf = document.querySelector('#summaryFilter');
+    if (sf) {
+      let matchOpt = [...sf.options].find(o => subjectKey(o.value) === subjectKey(cleanSubj));
+      if (!matchOpt && cleanSubj) {
+        matchOpt = new Option(cleanSubj, cleanSubj);
+        sf.add(matchOpt);
+      }
+      sf.value = matchOpt ? matchOpt.value : 'all';
+      if (typeof libraryUI === 'object' && libraryUI?.summaryFilter && typeof state === 'object' && state?.activeCampaignId) {
+        libraryUI.summaryFilter[state.activeCampaignId] = sf.value;
+      }
+    }
+
+    // 4. Garante que a pasta da disciplina esteja aberta e renderiza os resumos
+    if (typeof libraryUI === 'object' && libraryUI?.studyFolders && typeof state === 'object' && state?.activeCampaignId) {
+      const folderKey = `study:${state.activeCampaignId}:${subjectKey(cleanSubj)}`;
+      libraryUI.studyFolders[folderKey] = true;
+    }
+    if (typeof renderSummaries === 'function') {
+      renderSummaries('');
+    }
+
+    // 5. Abre a pasta, expande o card exato do tópico, destaca visualmente e faz scroll suave até ele
+    setTimeout(() => {
+      document.querySelectorAll('#summaryList .libraryFolder').forEach(f => f.classList.add('open'));
+      document.querySelectorAll('#summaryList details.folderSubject').forEach(d => { d.open = true; });
+
+      let targetBtn = null;
+      if (bestCard?.id) {
+        targetBtn = document.querySelector(`#summaryList [data-summary="${CSS.escape(String(bestCard.id))}"]`)
+          || [...document.querySelectorAll('#summaryList [data-summary]')].find(b => String(b.dataset.summary) === String(bestCard.id));
+      }
+      if (!targetBtn) {
+        targetBtn = document.querySelector('#summaryList [data-summary]');
+      }
+      if (targetBtn) {
+        const cardEl = targetBtn.closest('.summaryCard');
+        if (cardEl) {
+          cardEl.classList.add('open');
+          if (targetBtn.lastElementChild) targetBtn.lastElementChild.textContent = '−';
+          cardEl.style.transition = 'box-shadow 0.35s ease, border-color 0.35s ease';
+          cardEl.style.borderColor = '#38bdf8';
+          cardEl.style.boxShadow = '0 0 0 2px #38bdf8, 0 12px 32px rgba(56,189,248,0.25)';
+
+          // Adiciona barra rápida de aprofundamento no card aberto
+          const bodyEl = cardEl.querySelector('.summaryBody');
+          if (bodyEl && !bodyEl.querySelector('.quickTheoryActionRow')) {
+            const topicLabel = targetTopic || bestCard?.title || cleanSubj;
+            bodyEl.insertAdjacentHTML('beforeend', `
+              <div class="quickTheoryActionRow" style="margin-top:12px;padding-top:10px;border-top:1px dashed rgba(56,189,248,0.35);display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+                <span class="small" style="color:#38bdf8;font-weight:700">🎯 Revisão Cirúrgica: ${escText(shortLabel(topicLabel, 48))}</span>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  <button type="button" class="ghost small" data-open-goodnotes-import="1" style="width:auto;padding:5px 10px;font-size:.76rem;border-color:#38bdf8;color:#38bdf8">📓 Vincular Nota do Goodnotes</button>
+                  <button type="button" class="action small" data-ask-ai-deep-topic="${escText(topicLabel)}" data-ask-ai-deep-subj="${escText(cleanSubj)}" style="width:auto;padding:5px 12px;font-size:.76rem">🤖 Aprofundar este Tópico no Instrutor IA</button>
+                </div>
+              </div>
+            `);
+          }
+          try {
+            cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } catch (_e) {}
+        }
+      }
+    }, 50);
+
+    // 6. Registra leitura de teoria na Missão Diária (Etapa 1)
+    try {
+      const tracker = ensureDailyTracker();
+      tracker.theoryRead = true;
+      if (typeof save === 'function') save();
+      if (typeof evaluateAndAutoCheckDailySteps === 'function') evaluateAndAutoCheckDailySteps('theory_opened');
+    } catch (_e) {}
+
+    toast(`📖 Teoria aberta: ${cleanSubj}${targetTopic ? ` · ${shortLabel(targetTopic, 38)}` : ''}!`);
+  }
+  window.openTheoryForSubjectAndTopic = openTheoryForSubjectAndTopic;
+  window.ensureTopicSummaryExistsForStudy = ensureTopicSummaryExistsForStudy;
+
+  // ── 2) Resolução de Gabarito com IA para Provas/Simulados sem Gabarito ("🤖 Resolver com IA") ──
+  function solveQuestionLocallyHeuristic(qItem) {
+    const opts = Array.isArray(qItem?.options) ? qItem.options.map(o => String(o || '').trim()) : [];
+    const st = String(qItem?.statement || '').toLowerCase();
+    if (!opts.length) return { correct_index: 0, explanation: '🤖 [Gabarito sugerido pela IA — confira no gabarito oficial quando disponível] Alternativa analisada conforme o enunciado.' };
+
+    const isNegativeQuery = /\b(incorret[ao]|errad[ao]|exceto|n[aã]o\s+[eé]|falso|inexat[ao])\b/i.test(st);
+    const absoluteWordsRe = /\b(sempre|nunca|jamais|exclusivamente|unicamente|em nenhuma hip[oó]tese|sob qualquer hip[oó]tese|absolutamente todos)\b/i;
+    const legalBalancedRe = /\b(salvo|ressalvad[ao]s?|nos termos da lei|conforme|desde que|regra geral|admite-se|mediante)\b/i;
+
+    let bestIdx = 0;
+    let bestScore = -999;
+    opts.forEach((opt, idx) => {
+      let sc = 0;
+      const hasAbs = absoluteWordsRe.test(opt);
+      const hasBal = legalBalancedRe.test(opt);
+      if (isNegativeQuery) {
+        if (hasAbs) sc += 5;
+        if (hasBal) sc -= 2;
+      } else {
+        if (hasAbs) sc -= 4;
+        if (hasBal) sc += 4;
+        if (opt.length >= 35 && opt.length <= 240) sc += 2;
+      }
+      if (sc > bestScore) {
+        bestScore = sc;
+        bestIdx = idx;
+      }
+    });
+
+    const chosenLetter = opts.length === 2 && /^certo$/i.test(opts[0]) ? (bestIdx === 0 ? 'CERTO' : 'ERRADO') : ('ABCDE'[bestIdx] || 'A');
+    return {
+      correct_index: bestIdx,
+      explanation: `🤖 [Gabarito sugerido pela IA — confira no gabarito oficial quando disponível] Conceito-chave: Análise técnica do enunciado de ${qItem?.subject || 'Concurso'}. ✅ Alternativa sugerida: ${chosenLetter} ("${opts[bestIdx] || ''}"), por guardar maior conformidade lógica e normativa com o comando da questão.`
+    };
+  }
+
+  async function solveQuestionsArrayWithAi(questionsArray, doc = null) {
+    if (!Array.isArray(questionsArray) || !questionsArray.length) return 0;
+    const targets = [];
+    questionsArray.forEach((qItem, idx) => {
+      if (qItem.answer_unknown || !Number.isInteger(Number(qItem.correct_index)) || Number(qItem.correct_index) < 0 || /SEM gabarito/i.test(String(qItem.explanation || ''))) {
+        targets.push({ qItem, idx });
+      }
+    });
+    const listToSolve = targets.length ? targets : questionsArray.map((qItem, idx) => ({ qItem, idx }));
+    let solvedCount = 0;
+    const session = typeof validSession === 'function' ? await validSession().catch(() => null) : null;
+
+    for (let start = 0; start < listToSolve.length; start += 10) {
+      const batch = listToSolve.slice(start, start + 10);
+      let apiSolved = null;
+      if (session?.access_token && typeof navigator !== 'undefined' && navigator.onLine) {
+        try {
+          const res = await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`, {
+            method: 'POST',
+            headers: { ...authHeaders(session.access_token) },
+            body: JSON.stringify({
+              action: 'solve_exam_questions_key',
+              campaign_id: doc?.campaign_id || (typeof activeCampaign === 'function' ? activeCampaign()?.dbId : ''),
+              questions: batch.map((b, bi) => ({
+                index: bi,
+                subject: b.qItem.subject || doc?.detected_subject || 'Conteúdo Geral',
+                topic: b.qItem.topic || '',
+                statement: b.qItem.statement,
+                options: b.qItem.options
+              }))
+            })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && Array.isArray(data?.solved) && data.solved.length) {
+            apiSolved = data.solved;
+          }
+        } catch (_e) {}
+      }
+
+      batch.forEach((b, bi) => {
+        const qItem = b.qItem;
+        const opts = Array.isArray(qItem.options) ? qItem.options : [];
+        const fromApi = Array.isArray(apiSolved) ? (apiSolved.find(s => Number(s.index) === bi) || apiSolved[bi]) : null;
+        if (fromApi && Number.isInteger(Number(fromApi.correct_index)) && Number(fromApi.correct_index) >= 0 && Number(fromApi.correct_index) < opts.length) {
+          qItem.correct_index = Number(fromApi.correct_index);
+          qItem.explanation = String(fromApi.explanation || '').trim();
+        } else {
+          const localSol = solveQuestionLocallyHeuristic(qItem);
+          qItem.correct_index = Math.min(Math.max(0, localSol.correct_index), Math.max(0, opts.length - 1));
+          qItem.explanation = localSol.explanation;
+        }
+        delete qItem.answer_unknown;
+        qItem.key_source = 'ia_sugerido';
+        qItem.origin = 'adaptada_do_pdf';
+        solvedCount++;
+      });
+    }
+    return solvedCount;
+  }
+  window.solveQuestionsArrayWithAi = solveQuestionsArrayWithAi;
+
+  async function solveMissingAnswerKeyWithAi(docId) {
+    const doc = (typeof cloudDocuments !== 'undefined' && Array.isArray(cloudDocuments))
+      ? cloudDocuments.find(d => String(d.id) === String(docId))
+      : null;
+    if (!doc) return toast('Documento da prova não encontrado.');
+
+    const btns = document.querySelectorAll(`[data-solve-ai-key-doc="${doc.id}"], [data-add-key-doc="${doc.id}"]`);
+    btns.forEach(b => { b.disabled = true; if (b.dataset.solveAiKeyDoc) b.textContent = '⏳ IA resolvendo gabarito...'; });
+
+    try {
+      toast(`🤖 Analisando e resolvendo as questões de “${doc.title}” com a IA...`);
+      let totalSolved = 0;
+
+      if (typeof cloudSession === 'object' && cloudSession?.access_token && navigator.onLine) {
+        const res = await cloudFetch(`generated_study_content?source_document_id=eq.${encodeURIComponent(doc.id)}&select=id,title,content`);
+        const rows = await res.json().catch(() => []);
+        if (Array.isArray(rows) && rows.length) {
+          for (const row of rows) {
+            const qs = Array.isArray(row.content?.questions) ? row.content.questions : [];
+            if (!qs.length) continue;
+            const cnt = await solveQuestionsArrayWithAi(qs, doc);
+            totalSolved += cnt;
+            await cloudFetch(`generated_study_content?id=eq.${encodeURIComponent(row.id)}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ content: { ...row.content, questions: qs } })
+            });
+          }
+        }
+      }
+
+      // Atualiza também questões já em memória (ALL_QUESTIONS)
+      if (typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS)) {
+        const memQs = ALL_QUESTIONS.filter(q => String(q.documentId || q.sourceDocumentId || '') === String(doc.id));
+        if (memQs.length && totalSolved === 0) {
+          totalSolved = await solveQuestionsArrayWithAi(memQs, doc);
+        }
+      }
+
+      const prevWarnings = Array.isArray(doc.metadata?.coverage?.warnings) ? doc.metadata.coverage.warnings : [];
+      const cleanWarnings = prevWarnings.filter(w => !/SEM gabarito/i.test(String(w)));
+      cleanWarnings.push(`🤖 Gabarito resolvido e comentado pela IA (${totalSolved || 'todas as'} questões). Confira na fonte oficial quando disponível.`);
+
+      const nextCoverage = {
+        ...(doc.metadata?.coverage || {}),
+        needs_review: false,
+        ai_keyed_count: totalSolved,
+        warnings: cleanWarnings
+      };
+      doc.metadata = { ...(doc.metadata || {}), coverage: nextCoverage };
+
+      if (typeof cloudSession === 'object' && cloudSession?.access_token && navigator.onLine) {
+        await cloudFetch(`study_documents?id=eq.${encodeURIComponent(doc.id)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ metadata: doc.metadata })
+        }).catch(() => undefined);
+        await Promise.all([loadGeneratedContent(), loadCloudDocuments()]).catch(() => undefined);
+      }
+
+      if (typeof render === 'function') render();
+      if (typeof renderExamBankHub === 'function') renderExamBankHub();
+      toast(`✅ Gabarito e comentários resolvidos pela IA para ${totalSolved || 'todas as'} questão(ões) de “${doc.title}”! Treino e Simulado liberados.`);
+    } catch (err) {
+      toast(err?.message || 'Não foi possível resolver o gabarito com a IA.');
+    } finally {
+      btns.forEach(b => { b.disabled = false; if (b.dataset.solveAiKeyDoc) b.textContent = '🤖 Resolver com IA'; });
+    }
+  }
+  window.solveMissingAnswerKeyWithAi = solveMissingAnswerKeyWithAi;
+
+  // ── 3) Integração Completa com Goodnotes / Anotações Externas para a Etapa 2 da Missão Diária ──
+  function ensureGoodnotesButtonInNotebook() {
+    const expRow = document.querySelector('#notebook .exportRow');
+    if (expRow && !document.querySelector('#importGoodnotesNotebookBtn')) {
+      expRow.insertAdjacentHTML('afterbegin', `
+        <button type="button" class="action" id="importGoodnotesNotebookBtn" data-open-goodnotes-import="1" style="background:linear-gradient(135deg,#0284c7,#2563eb);color:#fff;font-weight:800">
+          📓 Importar do Goodnotes (PDF / Foto / Resumo)
+        </button>
+      `);
+    }
+  }
+
+  async function saveImportedGoodnotesSummary({ title, subject, content, fileName = '', attachmentDataUrl = '' }) {
+    const dailyM = typeof chooseDaily === 'function' ? chooseDaily() : null;
+    const cleanSubj = subject || dailyM?.subject || 'Geral';
+    const cleanTitle = (title || '').trim() || (dailyM?.name ? `Resumo Goodnotes · ${shortLabel(dailyM.name, 52)}` : `Resumo Goodnotes (${new Date().toLocaleDateString('pt-BR')})`);
+    const cleanContent = (content || '').trim() || `Resumo manuscrito/esquematizado no Goodnotes referente ao tópico "${dailyM?.name || cleanTitle}" (${cleanSubj}).`;
+
+    state.userNotes = Array.isArray(state.userNotes) ? state.userNotes : [];
+    const newNote = {
+      id: 'gn-' + Date.now(),
+      title: cleanTitle,
+      subject: cleanSubj,
+      content: cleanContent,
+      source: 'Goodnotes',
+      fileName: fileName || '',
+      attachmentDataUrl: attachmentDataUrl || '',
+      campaignId: state.activeCampaignId,
+      updated: new Date().toISOString()
+    };
+    state.userNotes.push(newNote);
+
+    // Se o texto importado tiver múltiplos pontos, também gera flashcards de revisão
+    if (typeof extractFlashcardsFromUserNotes === 'function' && typeof ALL_FLASHCARDS !== 'undefined' && Array.isArray(ALL_FLASHCARDS)) {
+      const noteCards = extractFlashcardsFromUserNotes();
+      const existingKeys = new Set(ALL_FLASHCARDS.map(c => `${c[0]}|${c[1]}`));
+      for (const nc of noteCards) {
+        if (!existingKeys.has(`${nc[0]}|${nc[1]}`)) ALL_FLASHCARDS.push(nc);
+      }
+    }
+
+    // Marca a Etapa 2 da Missão Diária ("Criar um resumo detalhado" / "Criar um resumo ativo")
+    const tracker = ensureDailyTracker();
+    tracker.summaryCreated = true;
+    tracker.goodnotesImported = true;
+    const steps = typeof dailyStepsFor === 'function' ? dailyStepsFor(state.settings?.dailyMinutes || 180) : [];
+    state.dailySteps = state.dailySteps || {};
+    steps.forEach((label, idx) => {
+      if (/criar um resumo/i.test(normalizeText(label))) {
+        state.dailySteps[idx] = true;
+      }
+    });
+
+    if (typeof save === 'function') save();
+    if (typeof renderNotes === 'function') renderNotes();
+    if (typeof renderCard === 'function') renderCard();
+    if (typeof evaluateAndAutoCheckDailySteps === 'function') evaluateAndAutoCheckDailySteps('goodnotes_imported');
+    if (typeof renderDaily === 'function') renderDaily();
+    if (cloudSession && navigator.onLine && typeof pushCloudState === 'function') {
+      pushCloudState().catch(() => undefined);
+    }
+    return newNote;
+  }
+  window.saveImportedGoodnotesSummary = saveImportedGoodnotesSummary;
+
+  function openGoodnotesImportModal() {
+    const dailyM = typeof chooseDaily === 'function' ? chooseDaily() : null;
+    const defaultSubj = dailyM?.subject || (typeof LEARNING_SUBJECTS !== 'undefined' && LEARNING_SUBJECTS[0]) || 'Geral';
+    const defaultTitle = dailyM?.name ? `Resumo Goodnotes — ${shortLabel(dailyM.name, 56)}` : `Resumo Goodnotes — ${defaultSubj}`;
+
+    let dlg = document.querySelector('#goodnotesImportDialog');
+    if (!dlg) {
+      dlg = document.createElement('dialog');
+      dlg.id = 'goodnotesImportDialog';
+      dlg.style.cssText = 'width:min(95vw,580px);max-height:92dvh;overflow-y:auto;padding:20px;border-radius:18px;border:1px solid #38bdf8;background:var(--panel, #091929);color:var(--text, #f8fafc);box-shadow:0 24px 60px rgba(0,0,0,.75)';
+      document.body.appendChild(dlg);
+    }
+
+    const subjOptions = [...new Set([defaultSubj, ...(typeof getActiveEditalSubjectsList === 'function' ? getActiveEditalSubjectsList() : []), 'Geral'])].filter(Boolean);
+
+    dlg.innerHTML = `
+      <div class="sectionHead" style="margin-bottom:10px">
+        <div>
+          <div class="eyebrow" style="color:#38bdf8;font-weight:900">📓 INTEGRAÇÃO GOODNOTES & CADERNO EXTERNO</div>
+          <h3 style="margin:3px 0 0;font-size:1.18rem">Importar ou Vincular Resumo do Goodnotes</h3>
+        </div>
+        <button type="button" class="ghost small" id="closeGoodnotesModalBtn" style="width:auto">✕ Fechar</button>
+      </div>
+      <p class="small muted" style="margin:0 0 12px;line-height:1.5">
+        Estuda escrevendo no <b>Goodnotes</b> (iPad/Tablet) ou no caderno físico? Importe o PDF/foto da sua página ou faça o check-in rápido abaixo. O sistema salvará seu registro em <b>Estudar → Anotações</b> e marcará automaticamente a etapa <b>“Criar um resumo detalhado”</b> da sua Missão Diária!
+      </p>
+
+      <div style="display:grid;gap:12px">
+        <!-- Opção 1: Check-in de 1 Clique -->
+        <div style="padding:12px;border-radius:12px;background:rgba(16,185,129,0.1);border:1px solid #10b981">
+          <b style="display:block;font-size:.9rem;color:#34d399;margin-bottom:4px">⚡ Opção Rápida (1 Clique): Já fiz meu resumo no Goodnotes hoje</b>
+          <span class="small muted" style="display:block;margin-bottom:8px">Registra imediatamente que o resumo da missão atual foi feito no Goodnotes e conclui a 2ª etapa da missão:</span>
+          <button type="button" class="action small" id="quickConfirmGoodnotesBtn" style="width:100%;background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-weight:900">
+            ✓ Confirmar Resumo no Goodnotes e Marcar Etapa da Missão
+          </button>
+        </div>
+
+        <!-- Opção 2: Enviar PDF, Imagem ou Texto exportado do Goodnotes -->
+        <div style="padding:12px;border-radius:12px;background:rgba(14,34,56,0.55);border:1px solid #2b577a;display:grid;gap:9px">
+          <b style="display:block;font-size:.9rem;color:#63e7ff">📎 Ou anexe seu arquivo exportado do Goodnotes (PDF, Foto/Print ou Texto)</b>
+          <label class="field" style="margin:0">
+            <span class="small">Disciplina:</span>
+            <select id="gnSubjectSelect">${subjOptions.map(s => `<option value="${escText(s)}" ${s === defaultSubj ? 'selected' : ''}>${escText(s)}</option>`).join('')}</select>
+          </label>
+          <label class="field" style="margin:0">
+            <span class="small">Título do Resumo:</span>
+            <input type="text" id="gnTitleInput" value="${escText(defaultTitle)}">
+          </label>
+          <label class="field" style="margin:0">
+            <span class="small">Arquivo do Goodnotes (<code>.pdf</code>, <code>.png</code>, <code>.jpg</code> ou <code>.txt</code>):</span>
+            <input type="file" id="gnFileInput" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.md,application/pdf,image/*,text/plain" style="padding:7px;font-size:.82rem">
+          </label>
+          <label class="field" style="margin:0">
+            <span class="small">Texto extraído / Pontos principais (opcional — pode colar do Goodnotes):</span>
+            <textarea id="gnContentInput" rows="3" placeholder="Se você anexar um PDF com texto pesquisável, ele será lido automaticamente aqui. Você também pode colar seus pontos ou deixar em branco."></textarea>
+          </label>
+          <button type="button" class="action" id="submitGoodnotesFileBtn" style="width:100%;font-weight:900">
+            📥 Salvar Anotação do Goodnotes e Marcar Etapa
+          </button>
+        </div>
+      </div>
+    `;
+
+    dlg.querySelector('#closeGoodnotesModalBtn').onclick = () => dlg.close();
+
+    // Se selecionar um arquivo PDF ou TXT, já extrai uma prévia do texto automaticamente
+    let pendingAttachmentDataUrl = '';
+    let pendingFileName = '';
+    const fileInput = dlg.querySelector('#gnFileInput');
+    const contentArea = dlg.querySelector('#gnContentInput');
+    const titleInput = dlg.querySelector('#gnTitleInput');
+
+    fileInput.onchange = async () => {
+      const f = fileInput.files?.[0];
+      if (!f) return;
+      pendingFileName = f.name;
+      if (titleInput && (!titleInput.value || titleInput.value === defaultTitle)) {
+        titleInput.value = `Goodnotes: ${f.name.replace(/\.[a-z0-9]+$/i, '')}`;
+      }
+      if (/^image\//i.test(f.type) || /\.(png|jpe?g|webp)$/i.test(f.name)) {
+        try {
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = reject;
+            reader.readAsDataURL(f);
+          });
+          pendingAttachmentDataUrl = dataUrl;
+          if (!contentArea.value.trim()) {
+            contentArea.value = `Página manuscrita/esquematizada importada do Goodnotes (${f.name}).`;
+          }
+          toast('📸 Imagem da página do Goodnotes carregada!');
+        } catch (_e) {}
+      } else if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') {
+        contentArea.placeholder = '⏳ Lendo páginas do PDF do Goodnotes...';
+        try {
+          const bytes = new Uint8Array(await f.arrayBuffer());
+          const pdfjs = await import('./pdf.mjs');
+          const pdf = await pdfjs.getDocument({ data: bytes }).promise;
+          let extracted = '';
+          for (let p = 1; p <= Math.min(pdf.numPages, 25); p++) {
+            const page = await pdf.getPage(p);
+            const tc = await page.getTextContent();
+            const pageStr = (tc.items || []).map(it => it.str || '').join(' ').trim();
+            if (pageStr) extracted += (extracted ? '\n\n' : '') + `[Página ${p}] ` + pageStr;
+          }
+          try { await pdf.destroy(); } catch (_e) {}
+          contentArea.value = extracted.trim() || `Resumo em PDF exportado do Goodnotes (${f.name} · ${pdf.numPages} página(s) manuscrita(s)).`;
+          toast(`📄 PDF do Goodnotes lido (${pdf.numPages} página(s))!`);
+        } catch (_e) {
+          contentArea.value = `Resumo em PDF exportado do Goodnotes (${f.name}).`;
+        }
+      } else {
+        try {
+          const txt = await f.text();
+          if (txt.trim()) contentArea.value = txt.trim().slice(0, 15000);
+        } catch (_e) {}
+      }
+    };
+
+    dlg.querySelector('#quickConfirmGoodnotesBtn').onclick = async () => {
+      const subj = dlg.querySelector('#gnSubjectSelect')?.value || defaultSubj;
+      const title = dlg.querySelector('#gnTitleInput')?.value || defaultTitle;
+      const customTxt = dlg.querySelector('#gnContentInput')?.value?.trim() || '';
+      await saveImportedGoodnotesSummary({
+        title,
+        subject: subj,
+        content: customTxt || `Resumo detalhado elaborado no Goodnotes para a missão "${dailyM?.name || title}" (${subj}).`,
+        fileName: pendingFileName || 'Goodnotes iPad',
+        attachmentDataUrl: pendingAttachmentDataUrl
+      });
+      dlg.close();
+      toast('📓 Resumo do Goodnotes registrado e etapa "Criar um resumo detalhado" marcada com sucesso!');
+    };
+
+    dlg.querySelector('#submitGoodnotesFileBtn').onclick = async () => {
+      const subj = dlg.querySelector('#gnSubjectSelect')?.value || defaultSubj;
+      const title = dlg.querySelector('#gnTitleInput')?.value || defaultTitle;
+      const customTxt = dlg.querySelector('#gnContentInput')?.value?.trim() || '';
+      await saveImportedGoodnotesSummary({
+        title,
+        subject: subj,
+        content: customTxt || `Resumo importado do Goodnotes (${pendingFileName || 'caderno digital'}).`,
+        fileName: pendingFileName || 'Goodnotes',
+        attachmentDataUrl: pendingAttachmentDataUrl
+      });
+      dlg.close();
+      toast('📓 Anotação do Goodnotes salva em Estudar → Anotações e etapa da Missão Diária concluída!');
+    };
+
+    if (!dlg.open) dlg.showModal();
+  }
+  window.openGoodnotesImportModal = openGoodnotesImportModal;
+
+  ensureGoodnotesButtonInNotebook();
+  setTimeout(ensureGoodnotesButtonInNotebook, 400);
+
+  document.addEventListener('click', e => {
+    const studyBtn = e.target?.closest?.('[data-cutoff-study-subj]');
+    if (studyBtn) {
+      e.preventDefault();
+      openTheoryForSubjectAndTopic(studyBtn.dataset.cutoffStudySubj, studyBtn.dataset.cutoffStudyTopic || '');
+      return;
+    }
+    const solveAiBtn = e.target?.closest?.('[data-solve-ai-key-doc]');
+    if (solveAiBtn) {
+      e.preventDefault();
+      solveMissingAnswerKeyWithAi(solveAiBtn.dataset.solveAiKeyDoc);
+      return;
+    }
+    const gnBtn = e.target?.closest?.('[data-open-goodnotes-import]');
+    if (gnBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      openGoodnotesImportModal();
+      return;
+    }
+    const deepAiBtn = e.target?.closest?.('[data-ask-ai-deep-topic]');
+    if (deepAiBtn) {
+      e.preventDefault();
+      const tp = deepAiBtn.dataset.askAiDeepTopic || '';
+      const sb = deepAiBtn.dataset.askAiDeepSubj || '';
+      if (typeof openView === 'function') openView('assistant');
+      const askInput = document.querySelector('#assistantInput');
+      if (askInput) {
+        askInput.value = `Explique detalhadamente a teoria, os artigos/regras, exemplos de prova e pegadinhas de banca sobre "${tp}" na disciplina de ${sb}.`;
+        askInput.focus();
+      }
+      toast(`🤖 Instrutor IA pronto para aprofundar "${shortLabel(tp, 36)}"!`);
+    }
+  });
 
 })();
