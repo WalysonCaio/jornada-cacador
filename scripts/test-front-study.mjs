@@ -1674,3 +1674,47 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
 
   console.log("OK: Preservação de alternativas de 1 letra, cura da questão ESCOLAR e bloqueio de falso alerta de figura em quadro negro (r162) validados.");
 }
+
+
+// ── Bateria r163: Vínculo de Superação no Caderno de Erros (1/3 -> 3/3 mesmo após mudança de disciplina/tópico), Deduplicação e Adiar 7 dias ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+
+  assert.ok(
+    htmlSrc.includes("function findMatchingErrorKey(") &&
+    htmlSrc.includes("data-retry-error-key=") &&
+    v77Src.includes("function deduplicateAndSanitizeErrorNotebook(") &&
+    v77Src.includes("function launchSingleErrorRetryByKey("),
+    "findMatchingErrorKey, deduplicateAndSanitizeErrorNotebook e launchSingleErrorRetryByKey devem existir"
+  );
+
+  // Testa em VM que acertar 3 vezes seguidas uma questão cujo subject foi higienizado (ex.: de "500 Questões Pmpe" para "Raciocínio Lógico-Matemático") elimina o erro original sem criar duplicata
+  const ec = [
+    slice("function normalizeText(", "function subjectKey("),
+    slice("function missionForQuestion(", "function dueReviews("),
+    "function missionPool(){return[{id:'m1',subject:'Raciocínio Lógico-Matemático',name:'Proposições'}]} function learningCategory(s){return String(s||'')} function addDaysISO(d){return new Date(Date.now()+d*864e5).toISOString()}",
+  ].join("\n");
+  const ctx = { state: { activeCampaignId: "c1", errors: {}, questionStatsByCampaign: {} } };
+  vm.createContext(ctx);
+  vm.runInContext(ec, ctx);
+
+  // 1) Erra a questão quando ela tinha subject antigo "500 Questões Pmpe"
+  const qOld = { subject: "500 Questões Pmpe", topic: "Item 3", statement: "Um professor de raciocínio lógico escreveu a palavra escolar em um quadro negro.", options: ["A.", "E.", "R.", "S."], correct_index: 0 };
+  vm.runInContext(`recordQuestionResult(${JSON.stringify(qOld)}, false, 2)`, ctx);
+  assert.equal(Object.keys(ctx.state.errors).length, 1, "Deve registrar 1 erro no caderno");
+
+  // 2) Refaz a mesma questão agora com o subject higienizado "Raciocínio Lógico-Matemático" e acerta 3 vezes
+  const qClean = { subject: "Raciocínio Lógico-Matemático", topic: "Ciclos e Resto da Divisão", statement: "Um professor de raciocínio lógico escreveu a palavra escolar em um quadro negro.", options: ["A.", "E.", "R.", "S."], correct_index: 0 };
+  vm.runInContext(`recordQuestionResult(${JSON.stringify(qClean)}, true, 0)`, ctx);
+  const errAfter1 = Object.values(ctx.state.errors)[0];
+  assert.equal(errAfter1.correctStreak, 1, "1º acerto deve incrementar correctStreak para 1/3 no registro existente");
+
+  vm.runInContext(`recordQuestionResult(${JSON.stringify(qClean)}, true, 0)`, ctx);
+  assert.equal(Object.values(ctx.state.errors)[0].correctStreak, 2, "2º acerto deve incrementar correctStreak para 2/3");
+
+  vm.runInContext(`recordQuestionResult(${JSON.stringify(qClean)}, true, 0)`, ctx);
+  assert.equal(Object.keys(ctx.state.errors).length, 0, "Após o 3º acerto consecutivo, o erro deve sair definitivamente do Caderno de Erros");
+
+  console.log("OK: Vínculo de superação no Caderno de Erros (1/3 -> 3/3), deduplicação e botão Refazer Questão direto no card (r163) validados.");
+}

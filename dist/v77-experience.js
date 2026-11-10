@@ -6353,7 +6353,7 @@
             activeQuestions={
               mode:'battle',
               subject:cleanSubj,
-              questions:[targetQ,...extraPool].map(prepareQuestion),
+              questions:[{...targetQ,_errorNotebookKey:errKey},...extraPool].map(qItem=>{const p=prepareQuestion(qItem);if(qItem._errorNotebookKey)p._errorNotebookKey=qItem._errorNotebookKey;return p}),
               current:0,
               correct:0,
               streak:0,
@@ -15072,5 +15072,130 @@
     `;
     document.head.appendChild(st);
   })();
+
+
+  // ── r163: Deduplicação do Caderno de Erros, Vínculo Direto de Superação (1/3 -> 3/3) e Ação Rápida "⚔️ Refazer Questão" em Todos os Cards de Erro ──
+  function deduplicateAndSanitizeErrorNotebook() {
+    if (typeof state !== 'object' || !state?.errors) return;
+    const byStmt = new Map();
+    const entries = Object.entries(state.errors);
+    let changed = false;
+    for (const [k, err] of entries) {
+      if (!err || typeof err !== 'object') continue;
+      if (err.campaignId && err.campaignId !== state.activeCampaignId) continue;
+      // Corrige disciplina se estiver com nome de arquivo (ex.: "500 Questões Pmpe")
+      const cleanSubj = typeof resolveStrictQuestionDiscipline === 'function'
+        ? resolveStrictQuestionDiscipline(err.question || '', err.topic || '', err.subject || '', err.options || [])
+        : (err.subject || 'Conteúdo Geral');
+      if (cleanSubj && cleanSubj !== err.subject) {
+        err.subject = cleanSubj;
+        changed = true;
+      }
+      const normQ = normalizeText(err.question || '').replace(/\s+/g, ' ').trim();
+      if (normQ.length < 12) continue;
+      const mapKey = `${err.campaignId || state.activeCampaignId}|${normQ}`;
+      if (!byStmt.has(mapKey)) {
+        byStmt.set(mapKey, { key: k, err });
+      } else {
+        const prev = byStmt.get(mapKey);
+        prev.err.misses = Math.max(Number(prev.err.misses || 1), Number(err.misses || 1));
+        prev.err.attempts = Math.max(Number(prev.err.attempts || 1), Number(err.attempts || 1));
+        prev.err.correctStreak = Math.max(Number(prev.err.correctStreak || 0), Number(err.correctStreak || 0));
+        if (!prev.err.options && err.options) prev.err.options = err.options;
+        if (!prev.err.explanation && err.explanation) prev.err.explanation = err.explanation;
+        delete state.errors[k];
+        changed = true;
+      }
+    }
+    if (changed && typeof save === 'function') save();
+  }
+  window.deduplicateAndSanitizeErrorNotebook = deduplicateAndSanitizeErrorNotebook;
+
+  function launchSingleErrorRetryByKey(errKey) {
+    if (!errKey || !state?.errors?.[errKey]) return toast('Registro de erro não encontrado.');
+    deduplicateAndSanitizeErrorNotebook();
+    const err = state.errors[errKey];
+    if (!err) return;
+    const cleanSubj = typeof resolveStrictQuestionDiscipline === 'function'
+      ? resolveStrictQuestionDiscipline(err.question || '', err.topic || '', err.subject || '', err.options || [])
+      : (err.subject || 'Revisão de Erros');
+    const matchedReal = (typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS))
+      ? ALL_QUESTIONS.find(qItem => topicKey(qItem.statement || '') === topicKey(err.question || ''))
+      : null;
+
+    let targetQ = null;
+    if (matchedReal) {
+      targetQ = { ...matchedReal, subject: cleanSubj, _errorNotebookKey: errKey };
+    } else if (Array.isArray(err.options) && err.options.length >= 2 && Number.isInteger(Number(err.correct_index))) {
+      targetQ = {
+        subject: cleanSubj,
+        topic: err.topic || 'Correção de Erro',
+        statement: err.question,
+        options: [...err.options],
+        correct_index: Number(err.correct_index),
+        explanation: err.explanation || `A alternativa correta é: ${err.correctAnswer || ''}`,
+        difficulty: 'medio',
+        origin: 'adaptada_do_pdf',
+        _errorNotebookKey: errKey
+      };
+    } else if (err.question && err.correctAnswer) {
+      const distractors = typeof buildSubjectAppropriateDistractors === 'function'
+        ? buildSubjectAppropriateDistractors(cleanSubj, err.correctAnswer)
+        : ['Alternativa incorreta para contraste.', 'Hipótese não prevista na norma.', 'Afirmação incompatível com o comando.'];
+      const wrongChosen = err.lastChosen && err.lastChosen !== err.correctAnswer ? [err.lastChosen] : [];
+      const opts = [err.correctAnswer, ...wrongChosen, ...distractors].slice(0, 4);
+      targetQ = {
+        subject: cleanSubj,
+        topic: err.topic || 'Correção de Erro',
+        statement: err.question,
+        options: opts,
+        correct_index: 0,
+        explanation: err.explanation || `A alternativa correta é: ${err.correctAnswer}`,
+        difficulty: 'medio',
+        origin: 'adaptada_do_pdf',
+        _errorNotebookKey: errKey
+      };
+    }
+
+    if (!targetQ) {
+      if (typeof startSubjectTargetedFix === 'function') return startSubjectTargetedFix(cleanSubj, true);
+      return;
+    }
+
+    const extraPool = (typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS))
+      ? ALL_QUESTIONS.filter(qItem => topicKey(resolveStrictQuestionDiscipline(qItem)) === topicKey(cleanSubj) && topicKey(qItem.statement || '') !== topicKey(err.question || '')).slice(0, 4)
+      : [];
+
+    const preparedList = [targetQ, ...extraPool].map(qItem => {
+      const p = prepareQuestionConsistent(qItem);
+      if (qItem._errorNotebookKey) p._errorNotebookKey = qItem._errorNotebookKey;
+      return p;
+    });
+
+    activeQuestions = {
+      mode: 'retry_errors',
+      subject: cleanSubj,
+      questions: preparedList,
+      current: 0,
+      correct: 0,
+      streak: 0,
+      level: 1,
+      answered: false
+    };
+    if (document.querySelector('#questionDialogTitle')) {
+      document.querySelector('#questionDialogTitle').textContent = `⚔️ Correção Cirúrgica · ${err.topic || cleanSubj}`;
+    }
+    document.querySelector('#questionDialog')?.showModal();
+    window.showQuestion();
+  }
+  window.launchSingleErrorRetryByKey = launchSingleErrorRetryByKey;
+
+  document.addEventListener('click', e => {
+    const retryBtn = e.target?.closest?.('[data-retry-error-key]');
+    if (retryBtn) {
+      e.preventDefault();
+      launchSingleErrorRetryByKey(retryBtn.dataset.retryErrorKey);
+    }
+  });
 
 })();
