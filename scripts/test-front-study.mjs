@@ -1555,7 +1555,7 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   );
 
   // 2) Testa em VM o desmembramento em linhas separadas da explicação e a higienização/embaralhamento de alternativas
-  const r161Start = v77Src.indexOf("const ACTIVE_QUESTION_SESSION_KEY = 'jornada-active-question-session-v161';");
+  const r161Start = v77Src.indexOf("const ACTIVE_QUESTION_SESSION_KEY = 'jornada-active-question-session-v162';");
   const r161End = v77Src.indexOf("function saveActiveQuestionSession()");
   assert.ok(r161Start > 0 && r161End > r161Start, "Bloco r161 deve existir em dist/v77-experience.js");
 
@@ -1622,4 +1622,55 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   assert.equal(altLineMatches.length, 4, "Cada uma das 4 alternativas (1 correta + 3 incorretas) deve ser renderizada em sua própria linha (.expAltLine)");
 
   console.log("OK: Quebra de linha entre alternativas, confirmação ao sair do simulado, sincronia de letras no embaralhamento e retomada de progresso (r161) validados.");
+}
+
+
+// ── Bateria r162: Preservação de alternativas de 1 letra ("A.", "E.", "R.", "S."), Cura da questão ESCOLAR (2.022ª posição) e Filtro de Falso-Positivo de Figura ("quadro negro") ──
+{
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const r162Start = v77Src.indexOf("const ACTIVE_QUESTION_SESSION_KEY = 'jornada-active-question-session-v162';");
+  const r162End = v77Src.indexOf("function saveActiveQuestionSession()");
+  const vmCtx = {
+    window: {},
+    normalizeLegalText: (s) => String(s || ""),
+    escText: (s) => String(s || ""),
+    questionFingerprint: () => "fp-escolar",
+    shuffle: (arr) => [...arr]
+  };
+  vm.createContext(vmCtx);
+  vm.runInContext(v77Src.slice(r162Start, r162End), vmCtx);
+
+  // 1) Verifica que alternativas de 1 letra ("A.", "B.", "C.", "D.", "E.", "R.", "S.") NUNCA ficam em branco
+  for (const singleOpt of ["A.", "B.", "C.", "D.", "E.", "R.", "S.", "A", "E"]) {
+    assert.equal(
+      vmCtx.window.stripOptionLetterPrefixClean(singleOpt),
+      singleOpt,
+      `Alternativa de 1 letra "${singleOpt}" jamais pode ser apagada por stripOptionLetterPrefixClean`
+    );
+  }
+
+  // 2) Verifica que "A) C." remove apenas o prefixo "A) " e mantém "C."
+  assert.equal(vmCtx.window.stripOptionLetterPrefixClean("A) C."), "C.");
+  assert.equal(vmCtx.window.stripOptionLetterPrefixClean("B) 2 + 2 = 5."), "2 + 2 = 5.");
+
+  // 3) Verifica a cura automática da questão da palavra "ESCOLAR" (2.022ª posição) mesmo se A e B estivessem vazias
+  const escolarCorrupted = {
+    subject: "Raciocínio Lógico-Matemático",
+    topic: "Estruturas Lógicas e Raciocínio Matemático",
+    statement: "Um professor de raciocínio lógico escreveu a palavra “escolar” em um quadro negro, repetindo-a diversas vezes, uma ao lado da outra. No quadro, era possível ler o texto seguinte. ESCOLARESCOLARESCOLARESCOL... Com base nesse caso hipotético e considerando ser possível escrever essa palavra muitas e muitas vezes, começando pela letra E, que ocupa a primeira posição, é correto afirmar que a letra que ocupará a 2.022ª posição será a letra",
+    options: ["", "", "R.", "S."],
+    correct_index: 0,
+    origin: "oficial"
+  };
+  const healedEscolar = vmCtx.window.prepareQuestionConsistent(escolarCorrupted);
+  assert.deepEqual(Array.from(healedEscolar.options), ["A.", "E.", "R.", "S."], "As alternativas A. e E. da questão ESCOLAR devem ser restauradas integralmente");
+  assert.equal(healedEscolar.options[healedEscolar.correct_index], "A.", "A 2.022ª letra de ESCOLAR (2022 = 7*288 + 6 -> 6ª letra) deve ser A.");
+
+  // 4) Verifica que "quadro negro" e "tabela-verdade" são ignorados pelo detector de figuras (needsVisualCue)
+  assert.ok(
+    v77Src.includes("quadro[\\s-]negro") && v77Src.includes("tabela[\\s-]verdade"),
+    "needsVisualCue deve ignorar expressões textuais como quadro negro e tabela-verdade"
+  );
+
+  console.log("OK: Preservação de alternativas de 1 letra, cura da questão ESCOLAR e bloqueio de falso alerta de figura em quadro negro (r162) validados.");
 }

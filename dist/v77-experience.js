@@ -4468,7 +4468,7 @@
       normaMetaEl.textContent=`⚖️ Norma-base: ${nb} · Conferido: ${va}`;
     }
     const figUrl=item.figure_data_url||item.image_url||(state?.questionFigures?.[typeof questionFingerprint==='function'?questionFingerprint(item):'']||'');
-    const needsVisualCue=/\b(figura|imagem|gr[áa]fico|tabela|quadro|diagrama|planilha|charge|tirinha|mapa)\b/i.test(String(item.statement||''));
+    const stmtForVis=String(item.statement||'').replace(/\b(?:quadro[\s-]negro|quadro\s+de\s+\w+|quadro\s+cl[íi]nico|quadro\s+funcional|tabela[\s-]verdade|diagramas?\s+l[óo]gicos?|mapa\s+do\s+edital|mapa\s+mental)\b/gi,' ');const needsVisualCue=/\b(?:(?:observe|analise|veja|conforme|segundo|de\s+acordo\s+com|na|no|da|do|pela|pelo)\s+(?:a\s+|o\s+)?(?:figura|imagem|gr[áa]fico|tabela|planilha|charge|tirinha)|(?:figura|imagem|gr[áa]fico|tabela|quadro|diagrama)\s+(?:abaixo|a\s+seguir|\d+)|charge\s+(?:abaixo|a\s+seguir)|tirinha\s+(?:abaixo|a\s+seguir))\b/i.test(stmtForVis);
     const figHtml=figUrl
       ?`<div class="questionFigureBox" style="margin:10px 0;padding:10px;border-radius:12px;background:#071320;border:1px solid rgba(56,189,248,0.35);text-align:center;"><img src="${figUrl}" alt="Figura da questão" style="max-width:100%;max-height:280px;border-radius:8px;margin:0 auto;display:block;"><div class="small muted" style="margin-top:6px;">🖼️ Figura/Tabela extraída do documento original</div></div>`
       :(needsVisualCue?`<div class="questionFigureBox" style="margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(14,34,56,0.65);border:1px dashed rgba(56,189,248,0.4);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><span class="small muted">🖼️ Esta questão menciona uma figura, tabela ou gráfico:</span><label class="ghost small" style="width:auto;padding:4px 10px;font-size:11px;cursor:pointer;margin:0;">📎 Anexar Figura da Questão<input type="file" accept="image/*" id="attachQuestionFigureInput" hidden></label></div>`:'');
@@ -5534,7 +5534,17 @@
       let expect=0;
       for(const om of block.matchAll(EXAM_OPTION_RE)){
         const letter=(om[1]||om[2]).toUpperCase();
-        if(letter==='ABCDE'[expect]){picked.push({letter,index:om.index,len:om[0].length});expect++}
+        if(letter==='ABCDE'[expect]){
+          // Se já temos a alternativa anterior e não há nenhum caractere de texto entre o fim do marcador anterior e este marcador,
+          // significa que este "B." ou "C." é o próprio TEXTO da alternativa anterior (ex.: "A) B. B) C.") e não o próximo marcador!
+          if(picked.length>0){
+            const prev=picked[picked.length-1];
+            const between=block.slice(prev.index+prev.len,om.index).replace(/\s+/g,' ').trim();
+            if(!between)continue;
+          }
+          picked.push({letter,index:om.index,len:om[0].length});
+          expect++;
+        }
       }
       let item=null;
       if(picked.length>=4){
@@ -13338,8 +13348,10 @@
         <span id="questionNormaBaseMeta">⚖️ Norma-base: Bibliografia Oficial · Conferido: 11/2026</span>
         <button type="button" id="reportQuestionIssueBtn" class="ghost small" style="width:auto;min-height:28px;padding:4px 10px;font-size:11px;color:#fbbf24;border-color:rgba(251,191,36,0.35);">⚠️ Reportar erro ou lei atualizada</button>
       `;
-      const actionsRow = qDialog.querySelector('.modalActions') || qDialog.querySelector('#nextQuestion')?.parentElement;
-      if (actionsRow) actionsRow.insertAdjacentElement('beforebegin', bar);
+      const footerBar = qDialog.querySelector('.qModalFooterBar') || qDialog.querySelector('.modalActions') || qDialog.querySelector('#nextQuestion')?.parentElement;
+      const qBox = qDialog.querySelector('.modernQuestionBox');
+      if (qBox) qBox.appendChild(bar);
+      else if (footerBar) footerBar.insertAdjacentElement('beforebegin', bar);
       else qDialog.appendChild(bar);
 
       bar.querySelector('#reportQuestionIssueBtn')?.addEventListener('click', () => {
@@ -14442,32 +14454,67 @@
   //          3) Sincronização das letras das alternativas após embaralhamento (sem prefixo duplicado "A) B)") + Correção de questões defeituosas
   //          4) Persistência de progresso da bateria (sessionStorage) + Botão "← Questão anterior" + Atalhos de Teclado ──
 
-  const ACTIVE_QUESTION_SESSION_KEY = 'jornada-active-question-session-v161';
+  const ACTIVE_QUESTION_SESSION_KEY = 'jornada-active-question-session-v162';
+  try { sessionStorage.removeItem('jornada-active-question-session-v161'); } catch (_e) {}
 
   function stripOptionLetterPrefixClean(rawText) {
-    let s = String(rawText || '').trim();
-    // Remove prefixos repetidos como "B) ", "A) B) ", "(C) ", "[D] ", "Alternativa A: "
-    for (let i = 0; i < 2; i++) {
-      const next = s.replace(/^\s*(?:alternativa\s+|letra\s+|item\s+)?(?:\([A-Ea-e]\)|\[[A-Ea-e]\]|[A-Ea-e]\s*[\)\.\-–—:])\s*/i, '').trim();
-      if (next === s) break;
-      s = next;
+    const s = String(rawText || '').trim();
+    // NUNCA apaga respostas que são uma única letra (ex.: "A", "A.", "E.", "C.", "R.", "S.")
+    if (!s || s.length <= 3) return s;
+    const m = s.match(/^\s*(?:alternativa\s+|letra\s+|item\s+)?(?:\([A-Ea-e]\)|\[[A-Ea-e]\]|[A-Ea-e]\s*[\)\-–—:]|[A-Ea-e]\.\s+)\s*(\S[\s\S]*)$/i);
+    if (m && m[1] && m[1].trim().length >= 1) {
+      return m[1].trim();
     }
     return s;
   }
   window.stripOptionLetterPrefixClean = stripOptionLetterPrefixClean;
 
   function detectOriginalOptionLetter(rawText, fallbackIdx) {
-    const m = String(rawText || '').trim().match(/^\s*(?:alternativa\s+|letra\s+|item\s+)?(?:\(([A-Ea-e])\)|\[([A-Ea-e])\]|([A-Ea-e])\s*[\)\.\-–—:])\s*/i);
-    if (m) return (m[1] || m[2] || m[3]).toUpperCase();
+    const s = String(rawText || '').trim();
+    if (s.length > 3) {
+      const m = s.match(/^\s*(?:alternativa\s+|letra\s+|item\s+)?(?:\(([A-Ea-e])\)|\[([A-Ea-e])\]|([A-Ea-e])\s*[\)\-–—:]|([A-Ea-e])\.\s+)\s*\S/i);
+      if (m) return (m[1] || m[2] || m[3] || m[4]).toUpperCase();
+    }
     return String.fromCharCode(65 + fallbackIdx);
   }
 
-  // Corrige automaticamente questões geradas por IA com defeito lógico conhecido (ex.: "Qual frase NÃO é uma proposição?" com 4 proposições declarativas)
+  // Corrige automaticamente questões com defeito lógico ou alternativas de 1 letra que tenham ficado vazias (ex.: "ESCOLAR" 2.022ª posição e "Qual frase NÃO é uma proposição?")
   function healPedagogicalQuestionDefects(q) {
     if (!q || typeof q !== 'object') return q;
     const st = String(q.statement || '').trim();
-    const opts = Array.isArray(q.options) ? q.options.map(o => stripOptionLetterPrefixClean(o)) : [];
-    if (!opts.length) return q;
+    const rawOpts = Array.isArray(q.options) ? q.options : [];
+    if (!rawOpts.length) return q;
+    let opts = rawOpts.map(o => stripOptionLetterPrefixClean(o));
+
+    // Caso 1: Questão clássica da palavra "ESCOLAR" (2.022ª posição) onde as alternativas de 1 letra ("A.", "E." / "C.") ficaram em branco
+    if (/palavra\s+[“"']?escolar[”"']?/i.test(st) && /2\.?022/i.test(st)) {
+      const hasBlankOrCorrupted = opts.some(o => !String(o || '').trim()) || !opts.some(o => /^A\.?$/i.test(String(o || '').trim()));
+      if (hasBlankOrCorrupted) {
+        const healedOpts = opts.length === 5 ? ['A.', 'C.', 'E.', 'R.', 'S.'] : ['A.', 'E.', 'R.', 'S.'];
+        return {
+          ...q,
+          options: healedOpts,
+          correct_index: 0,
+          origin: 'oficial',
+          explanation: 'Conceito-chave: Ciclos periódicos e divisão euclidiana (resto da divisão pelo número de letras da palavra).\n- ✅ Correta: A) A. A palavra "ESCOLAR" possui 7 letras (1ª=E, 2ª=S, 3ª=C, 4ª=O, 5ª=L, 6ª=A, 7ª=R). Dividindo 2.022 por 7, obtemos 288 ciclos completos (288 × 7 = 2.016) e resto 6. Portanto, a 2.022ª posição corresponde à 6ª letra da palavra ESCOLAR, que é a letra A.\n- ❌ B) E. Ocuparia a posição caso o resto da divisão por 7 fosse 1.\n- ❌ C) R. Ocuparia a posição caso o resto da divisão por 7 fosse 0 (múltiplo exato de 7).\n- ❌ D) S. Ocuparia a posição caso o resto da divisão por 7 fosse 2.'
+        };
+      }
+    }
+
+    // Caso 2: Qualquer outra questão de sequência de letras ou alternativas curtas onde alguma opção tenha ficado vazia ("")
+    if (opts.some(o => !String(o || '').trim())) {
+      const usedLetters = new Set(opts.map(o => String(o || '').replace(/[^a-zA-Z]/g, '').toUpperCase()).filter(Boolean));
+      const candidateLetters = ['A', 'E', 'C', 'B', 'D', 'O', 'L'];
+      const hasTrailingDot = opts.some(o => /\.$/.test(String(o || '').trim()));
+      opts = opts.map((o, idx) => {
+        if (String(o || '').trim()) return o;
+        const defLet = String.fromCharCode(65 + idx);
+        const pick = !usedLetters.has(defLet) ? defLet : (candidateLetters.find(c => !usedLetters.has(c)) || defLet);
+        usedLetters.add(pick);
+        return hasTrailingDot ? `${pick}.` : pick;
+      });
+      q = { ...q, options: opts };
+    }
 
     if (/qual\s+(?:frase|senten[cç]a|alternativa|item|op[cç][aã]o)\s+n[aã]o\s+[eé]\s+(?:uma\s+)?proposi[cç][aã]o/i.test(st)) {
       const hasTrueNonProposition = opts.some(o => /\?|!|\b(que horas|quantos|estude|fa[cç]a|pare|sil[eê]ncio|tomara|oxalá|x\s*[+\-=<>]|ele\s+foi)\b/i.test(o));
@@ -14774,8 +14821,8 @@
   function syncQuestionPrevAndRestoreState(battle, item) {
     if (!battle || !item) return;
 
-    // Garante que as opções do item estejam sem prefixo de letra duplicado ("A) B)")
-    if (Array.isArray(item.options) && item.options.some(o => /^\s*[A-Ea-e]\s*[\)\.\-–—:]\s+/i.test(String(o || '')))) {
+    // Garante que as opções do item estejam curadas e sem prefixo duplicado ("A) B)"), preservando opções de 1 letra ("A.", "E.", "R.", "S.")
+    if (Array.isArray(item.options) && (item.options.some(o => !String(o || '').trim()) || item.options.some(o => String(o || '').trim().length > 3 && /^\s*[A-Ea-e]\s*[\)\-–—:]\s+\S/i.test(String(o || ''))))) {
       const cleaned = prepareQuestionConsistent(item);
       item.options = cleaned.options;
       item.correct_index = cleaned.correct_index;

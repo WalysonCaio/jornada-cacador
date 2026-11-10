@@ -1431,7 +1431,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
           if (Array.isArray(extractedQs) && extractedQs.length >= 3 && !examReport.ambiguous && (Number(examReport.percent) >= 50 || examReport.noKey || userChoice?.allowWithoutKey)) {
             // Aprimoramento 3: Recorte automático de figuras/gráficos/tabelas via canvas (pdf.js) para questões que mencionam elementos visuais
             try {
-              const visualRe = /\b(figura|imagem|gr[áa]fico|tabela|quadro|diagrama|planilha|charge|tirinha|mapa|esquema|ilustra[çc][ãa]o)\b/i;
+              const visualRe = /\b(?:(?:observe|analise|veja|conforme|segundo|na|no|da|do)\s+(?:a\s+|o\s+)?(?:figura|imagem|gr[áa]fico|tabela|planilha|charge|tirinha)|(?:figura|gr[áa]fico|tabela|quadro)\s+\d+|charge\s+a\s+seguir|tirinha\s+a\s+seguir)\b/i;
               const visualQs = extractedQs.filter(q => visualRe.test(String(q.statement || "")) && !q.figure_data_url);
               if (visualQs.length > 0 && pdfBytes && typeof document !== "undefined") {
                 const pdfjs = await import("./pdf.mjs");
