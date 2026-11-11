@@ -1551,6 +1551,19 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
               return;
             }
           }
+          if (window._isBatchExamImportActive && (!Array.isArray(extractedQs) || extractedQs.length === 0)) {
+            try {
+              await cloudFetch(`study_documents?id=eq.${doc.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  processing_status: "ready",
+                  metadata: { ...(doc.metadata || {}), note: "Material verificado no lote" }
+                })
+              });
+              doc.processing_status = "ready";
+              return;
+            } catch (_err) {}
+          }
         }
       }
 

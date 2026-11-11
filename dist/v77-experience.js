@@ -5375,7 +5375,7 @@
         try {
           for (let i = 0; i < pendingDocs.length; i++) {
             const pDoc = pendingDocs[i].doc;
-            toast(`⚡ Extraindo (${i + 1}/${count}): “${shortLabel(pDoc.title, 36)}”...`);
+            if (btn) btn.textContent = `⏳ Extraindo (${i + 1}/${count}) — Não feche...`; toast(`⚡ Extraindo (${i + 1}/${count}): “${shortLabel(pDoc.title, 36)}”...`);
             if (typeof processEditalDocument === 'function') {
               const runP = processEditalDocument(pDoc.id);
               const timeoutP = new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT')), 85000));
@@ -5825,7 +5825,7 @@
 
   const EXAM_KEY_HEADING_RE=/\b(?:gabaritos?(?:\s+(?:oficia(?:l|is)|definitivos?|preliminares?|comentados?|geral|das\s+quest[õo]es|da\s+prova|do\s+caderno|do\s+simulado))?|respostas?(?:\s+(?:oficia(?:l|is)|do\s+simulado|corretas?|das\s+quest[õo]es|da\s+prova))|folha\s+de\s+respostas|chave\s+de\s+respostas|tabela\s+de\s+respostas|quadro\s+de\s+respostas)\b/gi;
   const EXAM_KEY_PAIR_RE=/(?:^|[\s|;,(])0*(\d{1,3})\s*(?:[-–—.:)]\s*|\s+)(ANULADA|ANULADO|Anulada|NULA|X|\*|CERTO|ERRADO|Certo|Errado|[A-E])(?=$|[\s|;,.)])/g;
-  const EXAM_OPTION_RE=/(?:^|\n|\s)(?:\(([A-Ea-e])\)|([A-Ea-e])[ \t]*[0\)\.\-–])\s*/g;
+  const EXAM_OPTION_RE=/(?:^|\n|\s)(?:[\(\[]([A-Ea-e])[\)\]]|([A-Ea-e])[ \t]*[0\)\.\-–:])\s*/g;
   const EXAM_BASE_TEXT_RE=/(?:^|\n)[ \t]*(?:TEXTO\s+(?:[IVX]+|\d+|ASSOCIADO|DE\s+APOIO)\b|Leia\s+(?:atentamente\s+)?(?:o|os|a|as)\s+(?:texto|textos|trecho|fragmento|cr[ôo]nica|poema|artigo|charge|tirinha)|O\s+texto\s+(?:a\s+seguir|abaixo)\s+(?:serve\s+de\s+base|refere-se)|As\s+quest[õo]es\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*\d{1,3}\s*(?:a|at[ée]|e|-|–)\s*0*\d{1,3}\s+referem-se\s+ao\s+texto|Texto\s+para\s+(?:responder\s+)?(?:[àa]s\s+)?(?:quest[õo]es|os\s+itens)\s+(?:de\s+)?0*\d{1,3})/i;
 
   function parseBaseTextMeta(rawBaseChunk){
@@ -6033,10 +6033,10 @@
     }
     const body=!inlineMode&&keyMap.start>0?text.slice(0,keyMap.start):text;
     const isCE=!inlineMode&&[...keyMap.values()].every(v=>v==='C'||v==='E'||v==='ANULADA');
-    const explicitMarks=(body.match(/(?:^|\n)[ \t]*QUEST[AÃ]O\s*0*\d{1,3}\b/gi)||[]).length;
+    const explicitMarks=(body.match(/(?:^|\n)[ \t]*(?:QUEST[AÃ]O|Q\.|Q\b)\s*0*\d{1,3}\b/gi)||[]).length;
     const explicitMode=explicitMarks>=1;
     const startRe=explicitMode
-      ?/(?:^|\n)[ \t]*QUEST[AÃ]O\s*0*(\d{1,3})\b[ \t]*[:.\-–)]?[ \t]*/gi
+      ?/(?:^|\n)[ \t]*(?:QUEST[AÃ]O|Q\.|Q\b)\s*0*(\d{1,3})\b[ \t]*[:.\-–)]?[ \t]*/gi
       :/(?:^|\n)[ \t]*(?:QUEST[AÃ]O\s*)?0*(\d{1,3})\s*(?:[.)\-–]\s*|\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ“"(]))/gi;
     const countOptions=t=>[...t.matchAll(EXAM_OPTION_RE)].length;
     const cands=[];
