@@ -5722,8 +5722,10 @@
         if(progDetail)progDetail.textContent=`Extraindo: “${f.name}” · Questões no banco: ${(ALL_QUESTIONS||[]).length}`;
         try{
           const singleCustomTitle = files.length === 1 ? (titleInput?.value?.trim() || '') : '';
-          const res = await uploadAndExtractSingleExamFileInBatch(f, singleCustomTitle);
-          if(res.skipped)skippedCnt++;
+          const extractPromise = uploadAndExtractSingleExamFileInBatch(f, singleCustomTitle);
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_EXCEEDED')), 75000));
+          const res = await Promise.race([extractPromise, timeoutPromise]);
+          if(res?.skipped)skippedCnt++;
           else doneCnt++;
         }catch(err){
           console.warn('Falha ao importar arquivo do lote:',f.name,err);
