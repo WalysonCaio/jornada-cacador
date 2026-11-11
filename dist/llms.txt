@@ -1,0 +1,16 @@
+# Jornada do Caçador — Plataforma Tática de Estudos para Concursos Policiais
+
+> Plataforma educacional brasileira focada na preparação estruturada por edital para carreiras policiais e militares (PMPE, PPPE, PCPE, CBMPE, PMBA, PMCE, PMPB, PRF e PF).
+
+## Funcionalidades Principais e Diferenciais Factuais
+- **Verticalização Automática de Edital em PDF:** Extrai 100% dos tópicos programáticos do PDF oficial ou verticalizado, preservando a ordem cronológica das disciplinas.
+- **Conciliação de até 2 Editais:** Unifica matérias comuns (ex.: Língua Portuguesa, Raciocínio Lógico, Informática, História de PE e Direito Constitucional) para que uma missão concluída avance simultaneamente em dois concursos.
+- **Missão Diária em 4 Etapas + Integração Goodnotes:** Combina leitura teórica (Lei Seca grifada), criação/importação de resumo (incluindo PDF/foto do Goodnotes no iPad), bateria de questões e revisão de erros.
+- **Caderno de Erros com Superação 3/3 e Questões Gêmeas:** Cada erro exige 3 acertos consecutivos para sair do caderno e permite gerar questões gêmeas inéditas no estilo da banca (Instituto AOCP, UPENET/IAUPE, Cebraspe, FGV, IDECAN).
+- **Honestidade de Métricas e IA Transparente:** Separa "Tópico Estudado" (40 XP) de "Tópico Dominado" (exige mínimo de 5 questões respondidas no tópico com precisão >= 70%), exibe intervalo de confiança estatístico (Wilson) no termômetro de aprovação e identifica claramente conteúdos apoiados na biblioteca do aluno versus conhecimento geral da IA.
+- **Arena de Duelos X1, Redação e Painel TAF:** Inclui duelos síncronos/assíncronos de questões (60s por rodada), correção analítica de redação discursiva e controle de índices do Teste de Aptidão Física (barra fixa, flexão, abdominal, natação e corrida de 2.400m).
+
+## Páginas Públicas e Conformidade Legal (LGPD / CDC / Marco Civil)
+- Política de Privacidade (LGPD — Lei 13.709/2018): /privacidade.html
+- Termos de Uso e CDC (Lei 8.078/1990): /termos.html
+- Política de Cookies e Armazenamento Local: /cookies.html

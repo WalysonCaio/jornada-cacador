@@ -11464,7 +11464,9 @@
         <p class="small">Resumos, flashcards, questões comentadas, cronogramas e correções de redação gerados por IA são instrumentos de auxílio pedagógico. Cabe ao usuário conferir artigos de lei, prazos, gabaritos definitivos e regras diretamente no <b>edital oficial do concurso</b> e na legislação vigente.</p>
         <h4>3. Ausência de Promessa de Aprovação</h4>
         <p class="small">Os indicadores do Simulador de Aprovação, XP e Patentes medem apenas a evolução nos treinos internos da plataforma, não representando garantia de aprovação ou classificação em concursos públicos.</p>
-        <h4>4. Convivência na Guilda e Direitos sobre Materiais</h4>
+        <h4>4. Direitos do Consumidor (CDC Art. 49), Marco Civil (Art. 15) e ANPD</h4>
+        <p class="small"><b>Fornecedor e DPO (Decreto 7.962/2013):</b> Walyson Caio — Plataforma Jornada do Caçador (Petrolina/PE). Sem cobranças ocultas; qualquer módulo pago conta com <b>7 dias de direito de arrependimento (reembolso 100% — Art. 49 do CDC)</b> e cancelamento livre sem multa. Logs técnicos são retidos por 6 meses (Art. 15 do Marco Civil da Internet) e incidentes relevantes seguem o protocolo de notificação em 3 dias úteis à ANPD (Resolução CD/ANPD nº 15/2024).</p>
+        <h4>5. Convivência na Guilda e Direitos sobre Materiais</h4>
         <p class="small">O usuário compromete-se a manter respeito no Chat da Guilda e declara possuir direito de uso sobre os PDFs que enviar para estudo, podendo definir sua visibilidade como pública ou privada.</p>
       `
     },
@@ -11508,6 +11510,13 @@
       try{localStorage.setItem(CONSENT_KEY,new Date().toISOString())}catch{}
       if(banner)banner.hidden=true;
       if(q('#legalCenterDialog')?.open)q('#legalCenterDialog').close();
+      if(typeof cloudSession==='object'&&cloudSession?.user?.id&&navigator.onLine&&typeof cloudFetch==='function'){
+        cloudFetch('user_legal_consents',{
+          method:'POST',
+          headers:{Prefer:'resolution=merge-duplicates'},
+          body:JSON.stringify({user_id:cloudSession.user.id,terms_version:'2026.11-r164',privacy_version:'2026.11-r164',user_agent:(navigator.userAgent||'').slice(0,240)})
+        }).catch(()=>undefined);
+      }
     };
     if(q('#acceptCookieBannerBtn'))q('#acceptCookieBannerBtn').onclick=acceptConsent;
     if(q('#acceptLegalFromModalBtn'))q('#acceptLegalFromModalBtn').onclick=acceptConsent;

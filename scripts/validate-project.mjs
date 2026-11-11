@@ -2,7 +2,8 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const html = fs.readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
-const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map((match) => match[1]).filter(Boolean);
+for (const ld of html.matchAll(/<script\s+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)) JSON.parse(ld[1]);
+const scripts = [...html.matchAll(/<script(?!(?:\s[^>]*)?type="application\/ld\+json")(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map((match) => match[1]).filter(Boolean);
 if (!scripts.length) throw new Error("Nenhum JavaScript incorporado foi encontrado.");
 for (const source of scripts) new vm.Script(source);
 for (const relative of ["../dist/v59-enhancements.js", "../dist/v77-experience.js", "../dist/v78-smart-notebook.js", "../dist/sw.js"]) new vm.Script(fs.readFileSync(new URL(relative, import.meta.url), "utf8"), { filename: relative });

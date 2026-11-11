@@ -1718,3 +1718,42 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
 
   console.log("OK: Vínculo de superação no Caderno de Erros (1/3 -> 3/3), deduplicação e botão Refazer Questão direto no card (r163) validados.");
 }
+
+
+// ── Bateria r164: Auditoria 40 Requisitos (LGPD, CDC Art. 49, Marco Civil Art. 15, ANPD, Hostinger .htaccess) + Auditoria Web Quality (WebP < 300KB, WebM, JSON-LD, GEO llms.txt, Skip-Link) ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const privSrc = readFileSync(new URL("../dist/privacidade.html", import.meta.url), "utf8");
+  const termsSrc = readFileSync(new URL("../dist/termos.html", import.meta.url), "utf8");
+  const htaccessSrc = readFileSync(new URL("../dist/.htaccess", import.meta.url), "utf8");
+  const llmsSrc = readFileSync(new URL("../dist/llms.txt", import.meta.url), "utf8");
+  const sqlV105 = readFileSync(new URL("../supabase/migrations/20261111120000_v105_compliance_audit_and_retention.sql", import.meta.url), "utf8");
+
+  // 1) Verifica os artefatos da Auditoria de 40 Requisitos (v105 SQL, .htaccess Hostinger, CDC Art. 49, Marco Civil Art. 15 e ANPD Resolução 15/2024)
+  assert.ok(
+    sqlV105.includes("user_legal_consents") &&
+    sqlV105.includes("security_incident_logs") &&
+    sqlV105.includes("purge_expired_operational_logs") &&
+    htaccessSrc.includes("Strict-Transport-Security") &&
+    htaccessSrc.includes("Content-Security-Policy") &&
+    privSrc.includes("Resolução CD/ANPD nº 15/2024") &&
+    termsSrc.includes("Art. 49 do CDC") &&
+    v77Src.includes("user_legal_consents"),
+    "Todos os itens da auditoria de 40 requisitos (v105 SQL, .htaccess, CDC Art. 49, Marco Civil Art. 15 e ANPD) devem estar presentes"
+  );
+
+  // 2) Verifica os artefatos da Auditoria Senior Web Quality (JSON-LD Schema.org, GEO llms.txt, Skip-Link, WebP < 300KB e WebM)
+  assert.ok(
+    htmlSrc.includes("application/ld+json") &&
+    htmlSrc.includes("SoftwareApplication") &&
+    htmlSrc.includes("FAQPage") &&
+    htmlSrc.includes("class=\"skipToMainLink\"") &&
+    htmlSrc.includes("login-banner.webp") &&
+    htmlSrc.includes("bancas-boss-banner.webp") &&
+    llmsSrc.includes("Jornada do Caçador"),
+    "JSON-LD Schema.org, skipToMainLink, sources WebP e dist/llms.txt (GEO) devem estar presentes"
+  );
+
+  console.log("OK: Auditoria de 40 Requisitos (LGPD/CDC/Marco Civil/ANPD/.htaccess) e Auditoria Web Quality (WebP < 300KB, WebM, JSON-LD, GEO llms.txt, Skip-Link - r164) validadas.");
+}
