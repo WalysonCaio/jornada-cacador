@@ -3321,6 +3321,73 @@
   }
   window.recordQuestionAttemptServer=recordQuestionAttemptServer;
 
+  
+  // ── r171: Auditoria Pedagógica e Técnica Grok (Chefe com Maestria, Selo, Recibo, Estados de Gabarito) ──
+  function disciplineReadyForBoss(subject){
+    const bag = (state && state.topicMastery) || {};
+    const camp = String((state && state.activeCampaignId) || "default");
+    let sKey = "";
+    try { sKey = subjectKey(canonicalSubjectName(subject || "")) || ""; } catch (_e) { sKey = ""; }
+    let attempts = 0, correct = 0;
+    Object.entries(bag).forEach(([k, v]) => {
+      if (!v || typeof v !== "object") return;
+      if (!String(k).startsWith(camp + "|")) return;
+      if (sKey && v.subjectKey && v.subjectKey !== sKey) return;
+      attempts += Number(v.attempts || 0);
+      correct += Number(v.correct || 0);
+    });
+    const score = attempts > 0 ? Number(((correct / attempts) * 100).toFixed(1)) : 0;
+    const ready = attempts >= 10 && score >= 70;
+    return { ready, attempts, score, minAttempts: 10, minScore: 70 };
+  }
+  window.disciplineReadyForBoss = disciplineReadyForBoss;
+
+  function questionOriginSeal(q){
+    const o = String((q && q.origin) || "").toLowerCase();
+    const b = String((q && (q.bank || q.source_bank)) || "").toLowerCase();
+    const src = String((q && (q.material_title || q.source_label || q.catalog || q.source)) || "").toLowerCase();
+    if (q && (q.from_community === true || q.is_community === true || src.includes("compartilh") || src.includes("comunidade"))) return "COMUNIDADE";
+    if (o.includes("oficial") || (q && q.official === true)) return "OFICIAL";
+    if (o.includes("nativ") || b.includes("nativ") || (q && q.native === true)) return "NATIVO";
+    return "IA DO SEU MATERIAL";
+  }
+  window.questionOriginSeal = questionOriginSeal;
+
+  function warnStudyFailure(message){
+    try { if (typeof toast === "function") toast(message); else console.warn(message); }
+    catch (_e) { console.warn(message); }
+  }
+  window.warnStudyFailure = warnStudyFailure;
+
+  function answerKeyStatus(q) {
+    if (q?.annulled || q?.anulada) return "anulada";
+    if (q?.origin === "oficial" && Number.isInteger(Number(q?.correct_index)) && Number(q?.correct_index) >= 0) return "oficial";
+    if (q?.answer_unknown || !Number.isInteger(Number(q?.correct_index)) || Number(q?.correct_index) < 0) return "sem_gabarito";
+    return "oficial";
+  }
+  window.answerKeyStatus = answerKeyStatus;
+
+  function gradeAnswer(q, chosen) {
+    const status = answerKeyStatus(q);
+    if (status === "anulada") return { status, scored: false };
+    if (status !== "oficial") return { status, scored: false, chosen };
+    const ok = Number(chosen) === Number(q.correct_index);
+    return { status, scored: true, ok };
+  }
+  window.gradeAnswer = gradeAnswer;
+
+  function classifyQuestion(q) {
+    const locked = ["edital", "prova", "manual"].includes(q?.subject_source);
+    if (locked && q?.subject && !/geral/i.test(q.subject)) {
+      return { subject: q.subject, source: q.subject_source, confidence: 1 };
+    }
+    if (q?.subject && q.subject !== "Conteúdo Geral" && q.subject !== "Geral") {
+      return { subject: q.subject, source: "origem", confidence: 1 };
+    }
+    return { subject: q?.subject || "Conteúdo Geral", source: "padrao", confidence: 0 };
+  }
+  window.classifyQuestion = classifyQuestion;
+
   async function completeMissionHonestServer(missionId,subject,correct,total,isBoss=false){
     const safeTotal=Math.max(0,Number(total)||0);
     const safeCorrect=safeTotal>0?Math.max(0,Math.min(safeTotal,Number(correct)||0)):0;
@@ -3366,10 +3433,16 @@
     const isBoss=Boolean(state?.bosses?.[missionId]);
     if(typeof complete==='function')complete(missionId);
     const server=await completeMissionHonestServer(missionId,subject,correct,total,isBoss);
-    const bonus=Math.max(0,(Number(server?.performance_xp)||0)+(Number(server?.mastery_bonus)||0));
-    if(bonus>0)applyXpLocal(bonus,'bonus_desempenho_missao');
-    const detail=server?` (desempenho +${server.performance_xp||0} XP${server.mastery_bonus?` · domínio +${server.mastery_bonus} XP`:''})`:'';
-    toast(`🏆 Missão concluída! +${100+bonus} XP${detail}`);
+    const bonus = Math.max(0, (Number(server?.performance_xp) || 0) + (Number(server?.mastery_bonus) || 0));
+    if (bonus > 0) applyXpLocal(bonus, "bonus_desempenho_missao");
+    const ac = Number(server?.questions_correct) || 0;
+    const n = Number(server?.questions_total) || 0;
+    const pct = Number(server?.score) || 0;
+    const perf = Number(server?.performance_xp) || 0;
+    const mast = Number(server?.mastery_bonus) || 0;
+    const bossXp = Number(server?.boss_bonus) || 0;
+    const sampleNote = n < 5 ? " Amostra menor que 5: bônus de domínio não entra." : "";
+    toast(`Recibo da missão: ${ac}/${n} (${pct}%). XP extra: desempenho +${perf}, domínio +${mast}${bossXp ? `, chefe +${bossXp}` : ""}. A base da missão continua no XP do app. 0% de acerto não gera bônus.${sampleNote}`);
     if(typeof renderHero==='function')renderHero();
     if(cloudSession&&navigator.onLine&&typeof pushCloudState==='function')pushCloudState();
   }
@@ -4446,7 +4519,7 @@
     if(!battle)return;
     const item=battle.questions[battle.current];
     const diff=normalizedDifficulty(item);
-    const diffLabel={facil:'🟢 Fácil',medio:'🟡 Média',dificil:'🔴 Difícil'}[diff]||'🟡 Média';
+    const diffLabel={facil:'🟢 Fácil',medio:'🟡 Média',dificil:'🔴 Difícil'}[diff]||'🟡 Média'; const sealOrigin = typeof window.questionOriginSeal === 'function' ? window.questionOriginSeal(item) : 'OFICIAL';
     const boardLabel=item.board||(normalizedOrigin(item)==='oficial'?'Prova Oficial':'Autoral IA');
     const subjName=learningCategory(item.subject)||'Disciplina';
     const topicName=shortLabel(item.topic||'Geral',42);
@@ -4454,7 +4527,7 @@
     if(q('#questionProgressFill'))q('#questionProgressFill').style.width=`${pct}%`;
     if(q('#questionMetaPills')){
       q('#questionMetaPills').innerHTML=`
-        <span class="qMetaPill board">🎯 ${escText(boardLabel)}</span>
+        <span class="qMetaPill board">🎯 ${escText(boardLabel)}</span><span class="qMetaPill seal" style="font-weight:bold;background:rgba(56,189,248,0.18);border:1px solid rgba(56,189,248,0.4);">🏷️ ${escText(sealOrigin)}</span>
         <span class="qMetaPill">${subjectIconForName(subjName)} ${escText(subjName)}</span>
         <span class="qMetaPill">📌 ${escText(topicName)}</span>
         <span class="qMetaPill ${diff}">${diffLabel}</span>

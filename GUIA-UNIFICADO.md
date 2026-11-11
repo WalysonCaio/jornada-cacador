@@ -1,7 +1,7 @@
-# Jornada do Caçador — Guia Unificado e Manual Passo a Passo (r148)
+# Jornada do Caçador — Guia Unificado e Manual Passo a Passo (r171 — v105)
 
 Última atualização documental: 06 de novembro de 2026  
-Versão da aplicação: **r148** (Ciclo Tático Sincronizado, Lei Seca Cronológica, Provas com Raio-X, Banco de Questões sem Viés, Duelo X1 60s e Conformidade LGPD/DPO)
+Versão da aplicação: **r171** (Banco até a migração v105, Chefe com Maestria e Amostra Mínima ≥70%, Selo de Origem em Toda Questão, Recibo Honesto da Missão, Extrator Contínuo em Lote e WebView Seguro) (Ciclo Tático Sincronizado, Lei Seca Cronológica, Provas com Raio-X, Banco de Questões sem Viés, Duelo X1 60s e Conformidade LGPD/DPO)
 
 Este documento reúne o **Manual Passo a Passo de Uso Pedagógico** (seções 1 a 6) e o **Guia Técnico de Manutenção, Banco de Dados e Publicação** (seções 7 a 21).
 
