@@ -4953,7 +4953,7 @@
                 <span>⏭️ Pular arquivos que já foram importados com sucesso antes (retomada inteligente)</span>
               </label>
               <label style="display:flex;align-items:center;gap:7px;cursor:pointer">
-                <input type="checkbox" id="batchAutoAiKeyToggle">
+                <input type="checkbox" id="batchAutoAiKeyToggle" ${localStorage.getItem("jornada-batch-ai-key") === "true" ? "checked" : ""} onchange="localStorage.setItem('jornada-batch-ai-key', this.checked)">
                 <span>🤖 Se algum arquivo não tiver gabarito no PDF, resolver o gabarito com IA automaticamente</span>
               </label>
             </div>
@@ -5370,7 +5370,7 @@
         const count = pendingDocs.length;
         if (btn) { btn.disabled = true; btn.textContent = `⏳ Extraindo ${count} arquivo(s)...`; }
         window._isBatchExamImportActive = true;
-        window._batchResolveMissingKeyWithAi = Boolean(q('#batchAutoAiKeyToggle')?.checked);
+        window._batchResolveMissingKeyWithAi = Boolean(q('#batchAutoAiKeyToggle')?.checked || localStorage.getItem('jornada-batch-ai-key') === 'true');
         let done = 0, failed = 0;
         try {
           for (let i = 0; i < pendingDocs.length; i++) {
@@ -5714,7 +5714,7 @@
 
     _cancelBatchRequested = false;
     window._isBatchExamImportActive = files.length > 1;
-    window._batchResolveMissingKeyWithAi = Boolean(q('#batchAutoAiKeyToggle')?.checked);
+    window._batchResolveMissingKeyWithAi = Boolean(q('#batchAutoAiKeyToggle')?.checked || localStorage.getItem('jornada-batch-ai-key') === 'true');
 
     if(btn){btn.disabled=true;btn.textContent=`⏳ Processando ${files.length} arquivo(s)...`}
     if(progBox)progBox.hidden=false;
@@ -5780,7 +5780,7 @@
       EXAM_KEY_PAIR_RE.lastIndex=0;
       let m,prevEnd=-1,run=[];
       const flush=()=>{
-        if(run.length>=4){
+        if(run.length>=(heads.length?1:2)){
           const pre=region.text.slice(Math.max(0,run[0].index-120),run[0].index);
           const cadMatches=[...pre.matchAll(/\b((?:caderno\s+)?(?:tipo|caderno|prova)\s*(?:[0-9]{1,2}|azul|amarel[ao]|branc[ao]|verde|rosa|cinza|[A-Z]\b))/gi)];const cadMatch=cadMatches.length?cadMatches[cadMatches.length-1]:null;
           const caderno=cadMatch?cadMatch[1].replace(/\s+/g,' ').trim().toUpperCase():'';
@@ -6024,7 +6024,7 @@
     const keyMap=parseExamAnswerKeyTable(text,opts.preferredCaderno||'');
     report.ambiguous=keyMap.ambiguous;report.reason=keyMap.reason;report.cadernos=keyMap.cadernos||[];
     const inlineKeys=(text.match(/(?:gabarito(?:\s+(?:oficial|definitivo|preliminar|comentado|da\s+quest[aã]o))?|respostas?(?:\s+(?:oficiais?|do\s+simulado|corretas?|comentadas?))?|alternativa\s+correta|item\s+correto)\s*[:\-–=—]?\s*(?:(?:letra|alternativa|op[cç][aã]o|correta)\s+)?[\(\[]?\s*(ANULADA|ANULADO|CERTO|ERRADO|[A-Ea-e])\s*[\)\]]?/gi)||[]).length;
-    const inlineMode=keyMap.size===0&&inlineKeys>=3;
+    const inlineMode=keyMap.size===0&&inlineKeys>=1;
     if(keyMap.ambiguous)return finish([]);
     if(keyMap.size===0&&!inlineMode&&!opts.allowWithoutKey){
       report.noKey=true;
@@ -6034,7 +6034,7 @@
     const body=!inlineMode&&keyMap.start>0?text.slice(0,keyMap.start):text;
     const isCE=!inlineMode&&[...keyMap.values()].every(v=>v==='C'||v==='E'||v==='ANULADA');
     const explicitMarks=(body.match(/(?:^|\n)[ \t]*QUEST[AÃ]O\s*0*\d{1,3}\b/gi)||[]).length;
-    const explicitMode=explicitMarks>=3;
+    const explicitMode=explicitMarks>=1;
     const startRe=explicitMode
       ?/(?:^|\n)[ \t]*QUEST[AÃ]O\s*0*(\d{1,3})\b[ \t]*[:.\-–)]?[ \t]*/gi
       :/(?:^|\n)[ \t]*(?:QUEST[AÃ]O\s*)?0*(\d{1,3})\s*(?:[.)\-–]\s*|\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ“"(]))/gi;

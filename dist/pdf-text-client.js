@@ -1406,7 +1406,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
           // Se o PDF tem questões mas o gabarito oficial não foi encontrado ou está incompleto,
           // oferece opções claras ao usuário em vez de falhar silenciosamente no backend!
           let userChoice = null;
-          if ((!Array.isArray(extractedQs) || extractedQs.length < 3 || Number(examReport.percent) < 60) && typeof window.askUserExamAnswerKeyOptions === "function") {
+          if ((!Array.isArray(extractedQs) || extractedQs.length === 0 || (extractedQs.length >= 1 && Number(examReport.percent) < 60 && !examReport.noKey)) && typeof window.askUserExamAnswerKeyOptions === "function") {
             userChoice = window._isBatchExamImportActive
               ? { allowWithoutKey: true, resolveWithAi: Boolean(window._batchResolveMissingKeyWithAi) }
               : await window.askUserExamAnswerKeyOptions(doc, pages, examReport);
@@ -1432,7 +1432,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
             }
           }
 
-          if (Array.isArray(extractedQs) && extractedQs.length >= 3 && !examReport.ambiguous && (Number(examReport.percent) >= 50 || examReport.noKey || userChoice?.allowWithoutKey)) {
+          if (Array.isArray(extractedQs) && extractedQs.length >= 1 && !examReport.ambiguous && (Number(examReport.percent) >= 50 || examReport.noKey || userChoice?.allowWithoutKey)) {
             // Aprimoramento 3: Recorte automático de figuras/gráficos/tabelas via canvas (pdf.js) para questões que mencionam elementos visuais
             try {
               const visualRe = /\b(?:(?:observe|analise|veja|conforme|segundo|na|no|da|do)\s+(?:a\s+|o\s+)?(?:figura|imagem|gr[áa]fico|tabela|planilha|charge|tirinha)|(?:figura|gr[áa]fico|tabela|quadro)\s+\d+|charge\s+a\s+seguir|tirinha\s+a\s+seguir)\b/i;

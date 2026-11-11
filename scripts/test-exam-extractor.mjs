@@ -225,3 +225,58 @@ console.log("OK: extrator de provas (19 cenários: Texto I pré-Q01 de Portuguê
   assert(/Date\.now\(\) - since > 150000/.test(pdfSrc), "a auto-recuperação só pode resetar documentos parados há mais de 150 s");
 }
 console.log("OK: extrator sem gabarito (nunca assume A/CERTO, fora de simulados).");
+
+// ── S20: Mini Simulados por Tópico (1 a 3 questões com gabarito curto em tabela ou linha) ──
+{
+  const mini1 = `
+MINI SIMULADO - HISTORIA DE PERNAMBUCO 21 - PMPE - HD CURSOS
+
+QUESTÃO 01
+A Revolução Pernambucana de 1817 teve como um de seus principais líderes:
+(A) Frei Caneca
+(B) Domingos José Martins
+(C) Zumbi dos Palmares
+(D) Maurício de Nassau
+(E) Duarte Coelho
+
+QUESTÃO 02
+A Confederação do Equador eclodiu em Pernambuco no ano de:
+(A) 1817
+(B) 1822
+(C) 1824
+(D) 1830
+(E) 1889
+
+GABARITO
+01 - B
+02 - C
+`;
+  const r1 = extract(mini1);
+  assert.equal(r1.length, 2, "Mini simulado com 2 questões deve ser extraído perfeitamente");
+  assert.equal(r1[0].options[r1[0].correct_index], "Domingos José Martins");
+  assert.equal(r1[1].options[r1[1].correct_index], "1824");
+  assert.equal(r1.report.percent, 100);
+  assert.equal(r1.report.ambiguous, false);
+  assert(!r1.report.noKey, "Não pode marcar noKey para mini simulado com gabarito");
+
+  const miniSolo = `
+MINI SIMULADO - DIREITO CONSTITUCIONAL 15 - PMPE - HD CURSOS
+
+QUESTÃO 01
+São Poderes da União, independentes e harmônicos entre si:
+(A) O Executivo, o Legislativo e o Judiciário.
+(B) O Ministério Público, a Defensoria e a Polícia.
+(C) O Presidente, o Governador e o Prefeito.
+(D) O Senado, a Câmara e o STF.
+(E) A União, os Estados e os Municípios.
+
+GABARITO OFICIAL
+1-A
+`;
+  const rSolo = extract(miniSolo);
+  assert.equal(rSolo.length, 1, "Mini simulado com 1 questão e 1 gabarito deve ser aceito");
+  assert.equal(rSolo[0].options[rSolo[0].correct_index], "O Executivo, o Legislativo e o Judiciário.");
+  assert.equal(rSolo.report.percent, 100);
+}
+console.log("OK: mini simulados de 1 e 2 questões aceitos sem descartar gabarito.");
+
