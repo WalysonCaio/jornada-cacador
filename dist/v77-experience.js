@@ -6025,7 +6025,7 @@
     report.ambiguous=keyMap.ambiguous;report.reason=keyMap.reason;report.cadernos=keyMap.cadernos||[];
     const inlineKeys=(text.match(/(?:gabarito(?:\s+(?:oficial|definitivo|preliminar|comentado|da\s+quest[aã]o))?|respostas?(?:\s+(?:oficiais?|do\s+simulado|corretas?|comentadas?))?|alternativa\s+correta|item\s+correto)\s*[:\-–=—]?\s*(?:(?:letra|alternativa|op[cç][aã]o|correta)\s+)?[\(\[]?\s*(ANULADA|ANULADO|CERTO|ERRADO|[A-Ea-e])\s*[\)\]]?/gi)||[]).length;
     const inlineMode=keyMap.size===0&&inlineKeys>=1;
-    if(keyMap.ambiguous)return finish([]);
+    if(keyMap.ambiguous){if(!opts.allowWithoutKey)return finish([]);keyMap.clear();}
     if(keyMap.size===0&&!inlineMode&&!opts.allowWithoutKey){
       report.noKey=true;
       report.reason='Detectamos questões numeradas neste PDF, mas a tabela de gabarito oficial não foi encontrada nas últimas páginas.';
