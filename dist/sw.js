@@ -1,4 +1,4 @@
-const CACHE='jornada-cacador-v78-smart-notebook-r166';
+const CACHE='jornada-cacador-v78-smart-notebook-r167';
 const ASSETS=['./','./index.html','./ui-v75.css','./ui-v77.css','./ui-v78.css','./v59-enhancements.js','./v77-experience.js','./v78-smart-notebook.js','./pdf-text-client.js','./pdf.mjs','./pdf.worker.mjs','./content-summaries.js','./native-question-bank.json','./material-deep-dives.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./login-banner.jpg',
   './login-banner.webp',
   './bancas-boss-banner.webp','./bancas-boss-banner.jpg','./og-banner-1200x630.jpg','./privacidade.html','./termos.html','./cookies.html','./404.html'];

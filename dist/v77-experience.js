@@ -5367,21 +5367,32 @@
     if (q('#extractAllPendingExamsBtn')) {
       q('#extractAllPendingExamsBtn').onclick = async () => {
         const btn = q('#extractAllPendingExamsBtn');
-        if (btn) { btn.disabled = true; btn.textContent = `⏳ Extraindo ${pendingDocs.length} arquivo(s)...`; }
+        const count = pendingDocs.length;
+        if (btn) { btn.disabled = true; btn.textContent = `⏳ Extraindo ${count} arquivo(s)...`; }
         window._isBatchExamImportActive = true;
+        window._batchResolveMissingKeyWithAi = Boolean(q('#batchAutoAiKeyToggle')?.checked);
+        let done = 0, failed = 0;
         try {
           for (let i = 0; i < pendingDocs.length; i++) {
             const pDoc = pendingDocs[i].doc;
-            toast(`⚡ Extraindo (${i + 1}/${pendingDocs.length}): “${pDoc.title}”...`);
+            toast(`⚡ Extraindo (${i + 1}/${count}): “${shortLabel(pDoc.title, 36)}”...`);
             if (typeof processEditalDocument === 'function') {
-              await processEditalDocument(pDoc.id).catch(() => undefined);
+              const runP = processEditalDocument(pDoc.id);
+              const timeoutP = new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT')), 85000));
+              await Promise.race([runP, timeoutP]).then(() => done++).catch((err) => {
+                console.warn('Falha na extração pendente:', pDoc.title, err);
+                failed++;
+              });
             }
           }
           await Promise.all([loadGeneratedContent(), loadCloudDocuments()]).catch(() => undefined);
           renderExamBankHub();
-          toast(`✅ Extração em lote concluída para ${pendingDocs.length} arquivo(s)!`);
+          renderUserDocuments();
+          toast(`✅ Extração em lote finalizada: ${done} arquivo(s) extraído(s) com sucesso${failed ? `, ${failed} com falha` : ''}!`);
         } finally {
           window._isBatchExamImportActive = false;
+          window._batchResolveMissingKeyWithAi = false;
+          if (btn) { btn.disabled = false; btn.textContent = `⚡ Extrair ${count} Pendente(s) em Lote`; }
         }
       };
     }

@@ -1556,7 +1556,9 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
 
       const pdfMetaCheck = window._extractedPdfMetaByDocId.get(id);
       if (pdfMetaCheck?.isScannedPdf && typeof window.askUserScannedPdfPermission === "function") {
-        const userChoice = await window.askUserScannedPdfPermission(doc, pdfMetaCheck);
+        const userChoice = window._isBatchExamImportActive
+          ? "compact_ocr"
+          : await window.askUserScannedPdfPermission(doc, pdfMetaCheck);
         if (userChoice === "cancel") {
           doc.processing_status = "pending";
           await cloudFetch(`study_documents?id=eq.${id}`, {
