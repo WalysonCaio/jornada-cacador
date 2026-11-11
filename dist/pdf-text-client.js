@@ -1390,7 +1390,9 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
           let extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard });
           let examReport = extractedQs?.report || {};
           if (examReport.ambiguous && Array.isArray(examReport.cadernos) && examReport.cadernos.length >= 2) {
-            const pickedCad = typeof window.askUserExamCadernoChoice === "function"
+            const pickedCad = window._isBatchExamImportActive
+              ? examReport.cadernos[0]
+              : typeof window.askUserExamCadernoChoice === "function"
               ? await window.askUserExamCadernoChoice(doc, examReport.cadernos)
               : (typeof prompt === "function" ? prompt(`Foram identificados múltiplos gabaritos/cadernos neste PDF (${examReport.cadernos.join(", ")}). Digite qual caderno deseja importar:`, examReport.cadernos[0]) : examReport.cadernos[0]);
             if (pickedCad && pickedCad.trim()) {
@@ -1405,7 +1407,9 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
           // oferece opções claras ao usuário em vez de falhar silenciosamente no backend!
           let userChoice = null;
           if ((!Array.isArray(extractedQs) || extractedQs.length < 3 || Number(examReport.percent) < 60) && typeof window.askUserExamAnswerKeyOptions === "function") {
-            userChoice = await window.askUserExamAnswerKeyOptions(doc, pages, examReport);
+            userChoice = window._isBatchExamImportActive
+              ? { allowWithoutKey: true, resolveWithAi: Boolean(window._batchResolveMissingKeyWithAi) }
+              : await window.askUserExamAnswerKeyOptions(doc, pages, examReport);
             if (userChoice?.cancelled) {
               doc.processing_status = "pending";
               renderUserDocuments();

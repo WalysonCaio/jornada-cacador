@@ -1757,3 +1757,32 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
 
   console.log("OK: Auditoria de 40 Requisitos (LGPD/CDC/Marco Civil/ANPD/.htaccess) e Auditoria Web Quality (WebP < 300KB, WebM, JSON-LD, GEO llms.txt, Skip-Link - r164) validadas.");
 }
+
+
+// ── Bateria r165: Organização por Pastas (Disciplina/Categoria igual à aba Estudar) na Central de Provas + Importação em Lote (94+ Arquivos / Pasta Inteira) ──
+{
+  const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
+  const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
+  const pdfClientSrc = readFileSync(new URL("../dist/pdf-text-client.js", import.meta.url), "utf8");
+
+  assert.ok(
+    v77Src.includes("function classifyExamDocumentMeta(") &&
+    v77Src.includes("id=\"examCatalogCategoryFilter\"") &&
+    v77Src.includes("id=\"examCatalogSubjectFilter\"") &&
+    v77Src.includes("data-exam-group-mode=\"subject_first\"") &&
+    v77Src.includes("data-exam-group-mode=\"category_first\"") &&
+    v77Src.includes("id=\"extractAllPendingExamsBtn\""),
+    "A Central de Provas deve agrupar em pastas retráteis por Disciplina e Categoria (Simulados, Mini Simulados, Cadernos de Questões) igual à aba Estudar"
+  );
+
+  assert.ok(
+    v77Src.includes("id=\"quickExamFolderInput\"") &&
+    v77Src.includes("function uploadAndExtractSingleExamFileInBatch(") &&
+    v77Src.includes("id=\"batchExamProgressBox\"") &&
+    htmlSrc.includes("sourceDocumentId:row.source_document_id") &&
+    pdfClientSrc.includes("window._isBatchExamImportActive"),
+    "O importador deve suportar múltiplos arquivos/pasta inteira em lote com barra de progresso e sem pop-ups bloqueantes"
+  );
+
+  console.log("OK: Organização em Pastas por Disciplina/Categoria na Central de Provas e Importador em Lote de Múltiplos Arquivos/Pasta (r165) validados.");
+}

@@ -4933,12 +4933,40 @@
       <div class="examHubPanel" id="examHubImportPanel" data-exam-panel="import" hidden>
         <div class="examImportSplit">
           <div class="examImportBox">
-            <div class="eyebrow">OPÇÃO 1 · ARQUIVO PDF DA PROVA</div>
-            <h3 style="margin:4px 0 6px">Enviar Prova Oficial ou Simulado em PDF</h3>
-            <p class="small muted" style="margin:0 0 10px">Envie o caderno de prova em PDF direto por aqui. O sistema extrairá as questões e classificará por matéria automaticamente.</p>
-            <input type="file" id="quickExamPdfInput" accept="application/pdf,.pdf" style="margin-bottom:8px">
-            <input type="text" id="quickExamPdfTitle" placeholder="Título da prova (ex.: Prova PMPE 2024 — AOCP)" style="margin-bottom:8px">
-            <button type="button" class="action" id="quickExamPdfUploadBtn">Enviar PDF e Extrair Questões</button>
+            <div class="eyebrow" style="color:#38bdf8;font-weight:900">OPÇÃO 1 · IMPORTAÇÃO EM LOTE (1 OU 100+ ARQUIVOS DE UMA VEZ)</div>
+            <h3 style="margin:4px 0 6px">🚀 Enviar Múltiplos PDFs / JSONs ou Pasta Inteira</h3>
+            <p class="small muted" style="margin:0 0 10px">Selecione <b>todos os seus arquivos de uma vez</b> (ex.: 94 PDFs de Questões, Mini Simulados e Simulados usando <code>Ctrl+A</code>) ou escolha uma pasta inteira. O sistema classifica cada arquivo por categoria e disciplina e extrai tudo em fila automática!</p>
+            <div id="examBatchDropZone" style="padding:12px;border:1.5px dashed #38bdf8;border-radius:12px;background:rgba(14,34,56,0.55);margin-bottom:8px;text-align:center">
+              <div style="font-weight:800;font-size:.86rem;color:#e2e8f0;margin-bottom:6px">📥 Selecione vários arquivos PDF/JSON ou arraste tudo para cá</div>
+              <input type="file" id="quickExamPdfInput" accept="application/pdf,.pdf,.json,application/json" multiple style="margin-bottom:6px;width:100%">
+              <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:4px">
+                <label class="ghost small" style="width:auto;padding:5px 11px;font-size:.76rem;cursor:pointer;margin:0;border-color:#38bdf8;color:#38bdf8">
+                  📁 Selecionar Pasta Inteira do PC
+                  <input type="file" id="quickExamFolderInput" webkitdirectory directory multiple hidden>
+                </label>
+              </div>
+            </div>
+            <input type="text" id="quickExamPdfTitle" placeholder="Título (opcional se enviar 1 arquivo; em lote usa o nome de cada arquivo)" style="margin-bottom:8px">
+            <div style="display:grid;gap:6px;margin-bottom:8px;padding:8px 10px;border-radius:10px;background:rgba(7,19,32,0.75);border:1px solid #1e3a56;font-size:.78rem">
+              <label style="display:flex;align-items:center;gap:7px;cursor:pointer">
+                <input type="checkbox" id="batchSkipExistingToggle" checked>
+                <span>⏭️ Pular arquivos que já foram importados com sucesso antes (retomada inteligente)</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:7px;cursor:pointer">
+                <input type="checkbox" id="batchAutoAiKeyToggle">
+                <span>🤖 Se algum arquivo não tiver gabarito no PDF, resolver o gabarito com IA automaticamente</span>
+              </label>
+            </div>
+            <div id="batchExamPreviewBox" hidden style="margin-bottom:8px;padding:9px 11px;border-radius:10px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.35);font-size:.8rem"></div>
+            <div id="batchExamProgressBox" hidden style="margin-bottom:8px;padding:10px 12px;border-radius:10px;background:rgba(14,34,56,0.92);border:1px solid #38bdf8;font-size:.82rem">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
+                <b id="batchExamProgressTitle" style="color:#38bdf8">⏳ Processando lote...</b>
+                <button type="button" class="ghost danger small" id="cancelBatchExamImportBtn" style="width:auto;padding:3px 9px;font-size:.72rem">⏹ Parar fila</button>
+              </div>
+              <div class="bar" style="height:8px;margin-bottom:6px"><div class="fill" id="batchExamProgressFill" style="width:0%"></div></div>
+              <div class="small muted" id="batchExamProgressDetail">Iniciando...</div>
+            </div>
+            <button type="button" class="action" id="quickExamPdfUploadBtn">🚀 Enviar e Extrair Questões (Individual ou Lote)</button>
           </div>
           <div class="examImportBox">
             <div class="eyebrow">OPÇÃO 2 · TEXTO COPIADO, JSON OU CSV</div>
@@ -4986,10 +5014,7 @@
 
     qa('[data-exam-tab]').forEach(btn=>btn.onclick=()=>switchExamHubTab(btn.dataset.examTab));
     q('#syncSharedBankBtn').onclick=syncSharedQuestionBank;
-    q('#quickExamPdfInput').onchange=e=>{
-      const file=e.target.files?.[0];
-      if(file&&!q('#quickExamPdfTitle').value)q('#quickExamPdfTitle').value=file.name.replace(/\.pdf$/i,'');
-    };
+    bindBatchExamSelectionInputs();
     q('#quickExamPdfUploadBtn').onclick=handleQuickExamPdfUpload;
     q('#importQuestionFileInput').onchange=handleImportQuestionJsonFile;
     q('#parseAndSaveQuestionsBtn').onclick=handleParseAndSaveRawQuestions;
@@ -5038,6 +5063,94 @@
     }).join('');
   }
 
+  let examCatalogState = {
+    search: '',
+    groupMode: localStorage.getItem('jornada-exam-group-mode') || 'subject_first',
+    category: 'all',
+    subject: 'all',
+    foldersOpen: {}
+  };
+
+  function classifyExamDocumentMeta(doc, docQuestions = []) {
+    const title = String(doc?.title || '').trim();
+    const normTitle = normalizeText(title);
+    let catKey = 'questoes';
+    let catLabel = '🎯 Cadernos & Baterias de Questões';
+    let catBadge = 'CADERNO DE QUESTÕES';
+    let catOrder = 3;
+
+    if (/\bmini[\s-]*simulado\b/i.test(normTitle)) {
+      catKey = 'mini_simulado';
+      catLabel = '⚡ Mini Simulados por Tópico';
+      catBadge = 'MINI SIMULADO';
+      catOrder = 2;
+    } else if (doc?.document_type === 'simulado' || /\bsimulado\b/i.test(normTitle) || /\b(?:500|400|300|200|150)\s*quest[oõ]es\s*(?:pmpe|pppe|pcpe|cbmpe|geral)\b/i.test(normTitle)) {
+      catKey = 'simulado';
+      catLabel = '🏆 Simulados Completos & Gerais';
+      catBadge = 'SIMULADO EM PDF';
+      catOrder = 1;
+    } else if (/\bprova\s+oficial\b|\bconcurso\s+p[uú]blico\b|\bcaderno\s+de\s+prova\b/i.test(normTitle)) {
+      catKey = 'prova_oficial';
+      catLabel = '📋 Provas Oficiais de Banca';
+      catBadge = 'PROVA OFICIAL';
+      catOrder = 4;
+    }
+
+    // Determina a disciplina principal do arquivo
+    let subj = '';
+    if (catKey === 'simulado' && /\b(?:pmpe|pppe|pcpe|cbmpe|prf|pf|geral|completo)\b/i.test(normTitle) && !/constitucional|portugues|raciocinio|rlm|informatica|historia|geografia|penal|administrativo|militar|humanos|extravagante/i.test(normTitle)) {
+      subj = 'Simulados Gerais & Multidisciplinares';
+    } else {
+      const fromTitle = typeof window.inferStrictQuestionSubject === 'function'
+        ? window.inferStrictQuestionSubject(title, title, doc?.detected_subject || doc?.metadata?.primary_subject || '', [])
+        : '';
+      if (fromTitle && fromTitle !== 'Conteúdo Geral' && !isInvalidTrailSubject(fromTitle)) {
+        subj = fromTitle;
+      } else if (docQuestions.length > 0) {
+        const counts = {};
+        for (const qItem of docQuestions) {
+          const s = resolveStrictQuestionDiscipline(qItem);
+          if (s && s !== 'Conteúdo Geral') counts[s] = (counts[s] || 0) + 1;
+        }
+        const topSubj = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+        if (topSubj) subj = topSubj;
+      }
+      if (!subj) {
+        const resDoc = typeof resolveDocumentDiscipline === 'function' ? resolveDocumentDiscipline(doc) : '';
+        subj = (resDoc && !isInvalidTrailSubject(resDoc) && resDoc !== 'Conteúdo Geral') ? resDoc : 'Simulados Gerais & Multidisciplinares';
+      }
+    }
+
+    return { catKey, catLabel, catBadge, catOrder, subject: subj };
+  }
+  window.classifyExamDocumentMeta = classifyExamDocumentMeta;
+
+  function renderSingleExamDocCardHtml(doc, docQuestions, meta) {
+    const status = doc.processing_status || 'pending';
+    const qCount = docQuestions.length || Number(doc.metadata?.coverage?.summary_count || 0) || 0;
+    const statusLabel = {
+      ready: qCount ? `${qCount} questões` : 'Pronta',
+      processing: '⏳ Extraindo questões...',
+      pending: '⏳ Aguardando extração',
+      error: '⚠️ Falha — tentar novamente'
+    }[status] || status;
+    const hasMissingKey = status === 'ready' && (doc.metadata?.coverage?.warnings || []).some(w => /SEM gabarito/i.test(w));
+
+    return `<div class="examDocRow" data-exam-doc-id="${escText(doc.id)}">
+      <div style="min-width:0;flex:1">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:2px">
+          <span class="eyebrow" style="margin:0">${escText(meta.catBadge)}</span>
+          <span class="tag" style="padding:1px 7px;font-size:.66rem">${escText(meta.subject)}</span>
+        </div>
+        <b style="display:block;word-break:break-word">${escText(doc.title)}</b>
+        <span class="small muted">${escText(statusLabel)} · ${new Date(doc.created_at).toLocaleDateString('pt-BR')}</span>
+      </div>
+      <div class="examDocActions">
+        ${hasMissingKey ? `<button type="button" class="action small" data-add-key-doc="${doc.id}" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#040c16;font-weight:900">📋 Adicionar Gabarito</button><button type="button" class="action small" data-solve-ai-key-doc="${doc.id}" style="background:linear-gradient(135deg,#0284c7,#2563eb);color:#fff;font-weight:900" title="A IA resolve cada questão passo a passo e sugere o gabarito">🤖 Resolver com IA</button>` : ''}${status === 'ready' ? `<button type="button" class="ghost small" data-exam-doc-battle="${doc.id}">◎ Treinar</button><button type="button" class="action small" data-exam-doc-simulado="${doc.id}">▶ Simulado</button>` : `<button type="button" class="action small" data-exam-doc-process="${doc.id}">⚡ Extrair Questões</button>`}
+      </div>
+    </div>`;
+  }
+
   function renderExamBankHub(){
     ensureExamBankHub();
     const catalogEl=q('#examDocumentsCatalog'),countTag=q('#examHubCountTag');
@@ -5046,36 +5159,273 @@
     if(countTag)countTag.textContent=`${officialQuestions.length} oficia${officialQuestions.length===1?'l':'is'} · ${(ALL_QUESTIONS||[]).length} total`;
 
     const examDocs=(typeof cloudDocuments!=='undefined'?cloudDocuments:[]).filter(d=>['prova','simulado'].includes(d.document_type));
-    const docsHtml=examDocs.length?examDocs.map(doc=>{
-      const docQuestions=(ALL_QUESTIONS||[]).filter(item=>item.sourceDocumentId===doc.id||topicKey(item.board)===topicKey(doc.title));
-      const status=doc.processing_status||'pending';
-      const statusLabel={ready:`${docQuestions.length||Number(doc.metadata?.coverage?.summary_count||0)*5||'Pronta'} questões`,processing:'Extraindo questões...',pending:'Aguardando extração',error:'Falha — tentar novamente'}[status]||status;
-      return `<div class="examDocRow">
-        <div>
-          <span class="eyebrow">${doc.document_type==='simulado'?'SIMULADO EM PDF':'PROVA OFICIAL'}</span>
-          <b>${escText(doc.title)}</b>
-          <span class="small muted">${escText(statusLabel)} · ${new Date(doc.created_at).toLocaleDateString('pt-BR')}</span>
-        </div>
-        <div class="examDocActions">
-          ${(status==='ready'&&(doc.metadata?.coverage?.warnings||[]).some(w=>/SEM gabarito/i.test(w)))?`<button type="button" class="action small" data-add-key-doc="${doc.id}" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#040c16;font-weight:900">📋 Adicionar Gabarito</button><button type="button" class="action small" data-solve-ai-key-doc="${doc.id}" style="background:linear-gradient(135deg,#0284c7,#2563eb);color:#fff;font-weight:900" title="A IA resolve cada questão passo a passo e sugere o gabarito">🤖 Resolver com IA</button>`:''}${status==='ready'?`<button type="button" class="ghost small" data-exam-doc-battle="${doc.id}">◎ Treinar</button><button type="button" class="action small" data-exam-doc-simulado="${doc.id}">▶ Simulado</button>`:`<button type="button" class="action small" data-exam-doc-process="${doc.id}">⚡ Extrair Questões</button>`}
+    if(!examDocs.length){
+      catalogEl.innerHTML=`<div class="examEmptyState">
+        <b>Nenhuma prova ou simulado em PDF enviado ainda neste portal</b>
+        <p class="small muted" style="margin:4px 0 10px">Clique em <b>“📥 Puxar Questões do Banco”</b> acima, importe <b>1 ou 100+ PDFs de uma vez</b> na aba <b>“➕ Importar Prova / Colar Questões”</b> ou gere questões comentadas na aba <b>“🎯 Gerar no Estilo da Banca”</b>.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+          <button type="button" class="action small" id="emptyGoImportTabBtn" style="width:auto">🚀 Importar Arquivos em Lote (PDF / Pasta)</button>
+          <button type="button" class="ghost small" id="emptyGoGeneratorTabBtn" style="width:auto">🎯 Gerar Caderno da Banca</button>
         </div>
       </div>`;
-    }).join(''):`<div class="examEmptyState">
-      <b>Nenhuma prova em PDF enviada ainda neste portal</b>
-      <p class="small muted" style="margin:4px 0 10px">Clique em <b>“📥 Puxar Questões do Banco”</b> acima, envie o PDF de uma prova na aba <b>“➕ Importar Prova”</b> ou gere questões comentadas na aba <b>“🎯 Gerar no Estilo da Banca”</b>.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
-        <button type="button" class="ghost small" id="emptyGoImportTabBtn">➕ Importar Prova / Questões</button>
-        <button type="button" class="ghost small" id="emptyGoGeneratorTabBtn">🎯 Gerar Caderno da Banca</button>
-      </div>
-    </div>`;
+      if(q('#emptyGoImportTabBtn'))q('#emptyGoImportTabBtn').onclick=()=>switchExamHubTab('import');
+      if(q('#emptyGoGeneratorTabBtn'))q('#emptyGoGeneratorTabBtn').onclick=()=>switchExamHubTab('generator');
+      return;
+    }
 
-    catalogEl.innerHTML=docsHtml;
-    if(q('#emptyGoImportTabBtn'))q('#emptyGoImportTabBtn').onclick=()=>switchExamHubTab('import');
-    if(q('#emptyGoGeneratorTabBtn'))q('#emptyGoGeneratorTabBtn').onclick=()=>switchExamHubTab('generator');
+    // Enriquecimento de metadados de cada prova/simulado/mini-simulado
+    const enrichedDocs = examDocs.map(doc => {
+      const docQuestions = (ALL_QUESTIONS || []).filter(item =>
+        String(item.sourceDocumentId || item.documentId || '') === String(doc.id) ||
+        topicKey(item.board) === topicKey(doc.title)
+      );
+      const meta = classifyExamDocumentMeta(doc, docQuestions);
+      const qCount = docQuestions.length || Number(doc.metadata?.coverage?.summary_count || 0) || 0;
+      return { doc, docQuestions, meta, qCount };
+    });
+
+    const pendingDocs = enrichedDocs.filter(x => x.doc.processing_status !== 'ready');
+    const allSubjects = [...new Set(enrichedDocs.map(x => x.meta.subject))].sort((a, b) => {
+      if (a.startsWith('Simulados Gerais')) return -1;
+      if (b.startsWith('Simulados Gerais')) return 1;
+      const eo = (typeof orderedMissions === 'function' ? orderedMissions() : []).map(m => subjectKey(canonicalSubjectName(m?.subject || '')));
+      const ia = eo.indexOf(subjectKey(a)), ib = eo.indexOf(subjectKey(b));
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return a.localeCompare(b, 'pt-BR');
+    });
+
+    const searchNorm = normalizeText(examCatalogState.search || '').trim();
+    const filteredDocs = enrichedDocs.filter(x => {
+      if (examCatalogState.category !== 'all') {
+        if (examCatalogState.category === 'pending') {
+          if (x.doc.processing_status === 'ready') return false;
+        } else if (x.meta.catKey !== examCatalogState.category) {
+          return false;
+        }
+      }
+      if (examCatalogState.subject !== 'all' && subjectKey(x.meta.subject) !== subjectKey(examCatalogState.subject)) {
+        return false;
+      }
+      if (searchNorm) {
+        const hay = normalizeText(`${x.doc.title} ${x.meta.subject} ${x.meta.catLabel}`);
+        if (!hay.includes(searchNorm)) return false;
+      }
+      return true;
+    });
+
+    // Constrói as pastas retráteis igual à aba Estudar (.libraryFolders -> .libraryFolder -> details.folderSubject)
+    let foldersHtml = '';
+    if (!filteredDocs.length) {
+      foldersHtml = `<div class="empty" style="margin-top:10px">Nenhum arquivo corresponde ao filtro selecionado. Limpe a busca ou troque a categoria acima.</div>`;
+    } else if (examCatalogState.groupMode === 'category_first') {
+      // Agrupamento Nível 1 = Categoria (Simulados Completos, Mini Simulados, Cadernos de Questões, Provas Oficiais) -> Nível 2 = Disciplina
+      const catGroups = {};
+      for (const item of filteredDocs) {
+        (catGroups[item.meta.catKey] ||= { label: item.meta.catLabel, order: item.meta.catOrder, items: [] }).items.push(item);
+      }
+      const sortedCats = Object.entries(catGroups).sort((a, b) => a[1].order - b[1].order);
+      foldersHtml = `<div class="libraryFolders" style="margin-top:10px">${sortedCats.map(([catKey, grp]) => {
+        const fKey = `examcat:${state?.activeCampaignId || 'default'}:${catKey}`;
+        const isOpen = examCatalogState.foldersOpen[fKey] !== undefined ? examCatalogState.foldersOpen[fKey] : true;
+        const totalQs = grp.items.reduce((acc, x) => acc + x.qCount, 0);
+        const bySubj = {};
+        for (const it of grp.items) (bySubj[it.meta.subject] ||= []).push(it);
+        const subjBlocks = Object.entries(bySubj).map(([subjName, sItems]) => {
+          const dKey = `examcatsub:${catKey}:${subjectKey(subjName)}`;
+          const dOpen = examCatalogState.foldersOpen[dKey] !== undefined ? examCatalogState.foldersOpen[dKey] : true;
+          const sQs = sItems.reduce((acc, x) => acc + x.qCount, 0);
+          return `<details class="folderSubject" data-exam-subdetails="${escText(dKey)}" ${dOpen ? 'open' : ''} style="margin-bottom:8px">
+            <summary style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+              <span>📂 <b>${escText(subjName)}</b> · ${sItems.length} arquivo${sItems.length === 1 ? '' : 's'} (${sQs} questões)</span>
+              <button type="button" class="ghost small" data-train-exam-group-subj="${escText(subjName)}" data-train-exam-group-cat="${escText(catKey)}" style="width:auto;padding:3px 9px;font-size:.72rem">◎ Treinar pasta</button>
+            </summary>
+            <div style="padding-top:8px;display:grid;gap:8px">${sItems.map(x => renderSingleExamDocCardHtml(x.doc, x.docQuestions, x.meta)).join('')}</div>
+          </details>`;
+        }).join('');
+        return `<section class="libraryFolder ${isOpen ? 'open' : ''}" data-exam-folder="${escText(fKey)}">
+          <button type="button" class="folderHead" data-exam-folder-toggle="${escText(fKey)}">
+            <span>${escText(grp.label)}</span>
+            <span class="tag">${grp.items.length} arquivo${grp.items.length === 1 ? '' : 's'} · ${totalQs} questões</span>
+          </button>
+          <div class="folderBody">${subjBlocks}</div>
+        </section>`;
+      }).join('')}</div>`;
+    } else {
+      // Padrão (subject_first — Igual à aba Estudar!): Nível 1 = Disciplina -> Nível 2 = Categoria (Simulados, Mini Simulados, Cadernos de Questões)
+      const subjGroups = {};
+      for (const item of filteredDocs) {
+        (subjGroups[item.meta.subject] ||= []).push(item);
+      }
+      const orderedSubjEntries = allSubjects.filter(s => subjGroups[s]).map(s => [s, subjGroups[s]]);
+      foldersHtml = `<div class="libraryFolders" style="margin-top:10px">${orderedSubjEntries.map(([subjName, sItems], sIdx) => {
+        const fKey = `examsubj:${state?.activeCampaignId || 'default'}:${subjectKey(subjName)}`;
+        const isOpen = examCatalogState.foldersOpen[fKey] !== undefined ? examCatalogState.foldersOpen[fKey] : (sIdx === 0 || Boolean(searchNorm));
+        const totalQs = sItems.reduce((acc, x) => acc + x.qCount, 0);
+        const byCat = {};
+        for (const it of sItems) {
+          (byCat[it.meta.catKey] ||= { label: it.meta.catLabel, order: it.meta.catOrder, items: [] }).items.push(it);
+        }
+        const catBlocks = Object.entries(byCat).sort((a, b) => a[1].order - b[1].order).map(([cKey, cGrp]) => {
+          const dKey = `examsubjcat:${subjectKey(subjName)}:${cKey}`;
+          const dOpen = examCatalogState.foldersOpen[dKey] !== undefined ? examCatalogState.foldersOpen[dKey] : true;
+          const cQs = cGrp.items.reduce((acc, x) => acc + x.qCount, 0);
+          return `<details class="folderSubject" data-exam-subdetails="${escText(dKey)}" ${dOpen ? 'open' : ''} style="margin-bottom:8px">
+            <summary style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+              <span>${escText(cGrp.label)} · ${cGrp.items.length} arquivo${cGrp.items.length === 1 ? '' : 's'} (${cQs} questões)</span>
+              <button type="button" class="ghost small" data-train-exam-group-subj="${escText(subjName)}" data-train-exam-group-cat="${escText(cKey)}" style="width:auto;padding:3px 9px;font-size:.72rem">◎ Treinar categoria</button>
+            </summary>
+            <div style="padding-top:8px;display:grid;gap:8px">${cGrp.items.map(x => renderSingleExamDocCardHtml(x.doc, x.docQuestions, x.meta)).join('')}</div>
+          </details>`;
+        }).join('');
+        const icon = subjName.startsWith('Simulados Gerais') ? '🏆' : '▤';
+        return `<section class="libraryFolder ${isOpen ? 'open' : ''}" data-exam-folder="${escText(fKey)}">
+          <button type="button" class="folderHead" data-exam-folder-toggle="${escText(fKey)}">
+            <span><i>${icon}</i>${escText(subjName)}</span>
+            <span class="tag">${sItems.length} arquivo${sItems.length === 1 ? '' : 's'} · ${totalQs} questões</span>
+          </button>
+          <div class="folderBody">${catBlocks}</div>
+        </section>`;
+      }).join('')}</div>`;
+    }
+
+    const controlsBarHtml = `
+      <div class="examCatalogFilterBar" style="margin-top:10px;padding:12px;border-radius:14px;background:rgba(8,22,38,0.75);border:1px solid #1e3b58;display:grid;gap:9px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">
+          <input type="search" id="examCatalogSearchInput" value="${escText(examCatalogState.search)}" placeholder="🔍 Buscar simulado, mini simulado ou matéria..." aria-label="Buscar provas e simulados">
+          <select id="examCatalogCategoryFilter" aria-label="Filtrar por categoria">
+            <option value="all" ${examCatalogState.category === 'all' ? 'selected' : ''}>🗂️ Todas as categorias (${enrichedDocs.length})</option>
+            <option value="simulado" ${examCatalogState.category === 'simulado' ? 'selected' : ''}>🏆 Simulados Completos (${enrichedDocs.filter(x => x.meta.catKey === 'simulado').length})</option>
+            <option value="mini_simulado" ${examCatalogState.category === 'mini_simulado' ? 'selected' : ''}>⚡ Mini Simulados (${enrichedDocs.filter(x => x.meta.catKey === 'mini_simulado').length})</option>
+            <option value="questoes" ${examCatalogState.category === 'questoes' ? 'selected' : ''}>🎯 Cadernos de Questões (${enrichedDocs.filter(x => x.meta.catKey === 'questoes').length})</option>
+            <option value="prova_oficial" ${examCatalogState.category === 'prova_oficial' ? 'selected' : ''}>📋 Provas Oficiais (${enrichedDocs.filter(x => x.meta.catKey === 'prova_oficial').length})</option>
+            ${pendingDocs.length ? `<option value="pending" ${examCatalogState.category === 'pending' ? 'selected' : ''}>⏳ Pendentes de Extração (${pendingDocs.length})</option>` : ''}
+          </select>
+          <select id="examCatalogSubjectFilter" aria-label="Filtrar por disciplina">
+            <option value="all" ${examCatalogState.subject === 'all' ? 'selected' : ''}>📚 Todas as disciplinas (${allSubjects.length})</option>
+            ${allSubjects.map(s => `<option value="${escText(s)}" ${subjectKey(examCatalogState.subject) === subjectKey(s) ? 'selected' : ''}>${escText(s)}</option>`).join('')}
+          </select>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <span class="small muted">Organização:</span>
+            <button type="button" class="ghost small ${examCatalogState.groupMode === 'subject_first' ? 'active' : ''}" data-exam-group-mode="subject_first" style="width:auto;padding:4px 10px;font-size:.74rem">▤ Por Disciplina (Igual ao Estudar)</button>
+            <button type="button" class="ghost small ${examCatalogState.groupMode === 'category_first' ? 'active' : ''}" data-exam-group-mode="category_first" style="width:auto;padding:4px 10px;font-size:.74rem">🗂️ Por Categoria (Simulado / Mini / Questões)</button>
+            <button type="button" class="ghost small" id="toggleAllExamFoldersBtn" style="width:auto;padding:4px 10px;font-size:.74rem">▾ Expandir / Recolher Tudo</button>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${pendingDocs.length ? `<button type="button" class="action small" id="extractAllPendingExamsBtn" style="width:auto;padding:6px 12px;font-size:.76rem;background:linear-gradient(135deg,#f59e0b,#d97706);color:#040c16;font-weight:900">⚡ Extrair ${pendingDocs.length} Pendente(s) em Lote</button>` : ''}
+            <button type="button" class="action small" id="goBatchImportFromCatalogBtn" style="width:auto;padding:6px 12px;font-size:.76rem">➕ Importar Lote de Arquivos (PDF/Pasta)</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    catalogEl.innerHTML = controlsBarHtml + foldersHtml;
+
+    const searchIn = q('#examCatalogSearchInput');
+    if (searchIn) {
+      searchIn.oninput = e => {
+        examCatalogState.search = e.target.value;
+        const pos = searchIn.selectionStart || 0;
+        renderExamBankHub();
+        const nextIn = q('#examCatalogSearchInput');
+        if (nextIn) { nextIn.focus(); try { nextIn.setSelectionRange(pos, pos); } catch (_e) {} }
+      };
+    }
+    const catSel = q('#examCatalogCategoryFilter');
+    if (catSel) catSel.onchange = e => { examCatalogState.category = e.target.value; renderExamBankHub(); };
+    const subjSel = q('#examCatalogSubjectFilter');
+    if (subjSel) subjSel.onchange = e => { examCatalogState.subject = e.target.value; renderExamBankHub(); };
+
+    qa('[data-exam-group-mode]').forEach(btn => btn.onclick = () => {
+      examCatalogState.groupMode = btn.dataset.examGroupMode;
+      localStorage.setItem('jornada-exam-group-mode', examCatalogState.groupMode);
+      renderExamBankHub();
+    });
+
+    if (q('#toggleAllExamFoldersBtn')) {
+      q('#toggleAllExamFoldersBtn').onclick = () => {
+        const folders = qa('#examDocumentsCatalog .libraryFolder');
+        const anyClosed = folders.some(f => !f.classList.contains('open'));
+        folders.forEach(f => {
+          f.classList.toggle('open', anyClosed);
+          if (f.dataset.examFolder) examCatalogState.foldersOpen[f.dataset.examFolder] = anyClosed;
+        });
+        qa('#examDocumentsCatalog details.folderSubject').forEach(d => {
+          d.open = anyClosed;
+          if (d.dataset.examSubdetails) examCatalogState.foldersOpen[d.dataset.examSubdetails] = anyClosed;
+        });
+      };
+    }
+
+    if (q('#goBatchImportFromCatalogBtn')) {
+      q('#goBatchImportFromCatalogBtn').onclick = () => switchExamHubTab('import');
+    }
+
+    if (q('#extractAllPendingExamsBtn')) {
+      q('#extractAllPendingExamsBtn').onclick = async () => {
+        const btn = q('#extractAllPendingExamsBtn');
+        if (btn) { btn.disabled = true; btn.textContent = `⏳ Extraindo ${pendingDocs.length} arquivo(s)...`; }
+        window._isBatchExamImportActive = true;
+        try {
+          for (let i = 0; i < pendingDocs.length; i++) {
+            const pDoc = pendingDocs[i].doc;
+            toast(`⚡ Extraindo (${i + 1}/${pendingDocs.length}): “${pDoc.title}”...`);
+            if (typeof processEditalDocument === 'function') {
+              await processEditalDocument(pDoc.id).catch(() => undefined);
+            }
+          }
+          await Promise.all([loadGeneratedContent(), loadCloudDocuments()]).catch(() => undefined);
+          renderExamBankHub();
+          toast(`✅ Extração em lote concluída para ${pendingDocs.length} arquivo(s)!`);
+        } finally {
+          window._isBatchExamImportActive = false;
+        }
+      };
+    }
+
+    qa('[data-exam-folder-toggle]').forEach(btn => btn.onclick = () => {
+      const folder = btn.closest('.libraryFolder');
+      if (!folder) return;
+      const open = !folder.classList.contains('open');
+      folder.classList.toggle('open', open);
+      examCatalogState.foldersOpen[btn.dataset.examFolderToggle] = open;
+    });
+
+    qa('[data-exam-subdetails]').forEach(det => det.ontoggle = () => {
+      examCatalogState.foldersOpen[det.dataset.examSubdetails] = det.open;
+    });
+
+    qa('[data-train-exam-group-subj]').forEach(btn => btn.onclick = e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const targetSubj = btn.dataset.trainExamGroupSubj;
+      const targetCat = btn.dataset.trainExamGroupCat;
+      const matchingDocs = enrichedDocs.filter(x =>
+        (!targetSubj || subjectKey(x.meta.subject) === subjectKey(targetSubj)) &&
+        (!targetCat || x.meta.catKey === targetCat)
+      );
+      const pool = matchingDocs.flatMap(x => x.docQuestions);
+      if (!pool.length) return toast('Extraia as questões dos arquivos desta pasta primeiro.');
+      activeQuestions = {
+        mode: 'progressive',
+        subject: `${targetSubj || 'Caderno'} (${matchingDocs.length} arq.)`,
+        questions: progressiveQuestions(pool, Math.min(15, pool.length)).map(prepareQuestion),
+        current: 0,
+        correct: 0,
+        streak: 0,
+        level: 1,
+        answered: false
+      };
+      q('#questionDialogTitle').textContent = `🎯 Pasta · ${shortLabel(targetSubj || 'Simulados', 38)}`;
+      q('#questionDialog').showModal();
+      showQuestion();
+    });
 
     qa('[data-exam-doc-process]').forEach(btn=>btn.onclick=async()=>{
       const id=btn.dataset.examDocProcess;
-      const doc=examDocs.find(d=>d.id===id);
       btn.disabled=true;
       btn.textContent='⏳ Extraindo questões...';
       try{
@@ -5090,7 +5440,8 @@
     });
     qa('[data-exam-doc-battle]').forEach(btn=>btn.onclick=()=>{
       const doc=examDocs.find(d=>d.id===btn.dataset.examDocBattle);
-      const docPool=(ALL_QUESTIONS||[]).filter(item=>item.sourceDocumentId===doc?.id||normalizedOrigin(item)==='oficial');
+      let docPool=(ALL_QUESTIONS||[]).filter(item=>String(item.sourceDocumentId||item.documentId||'')===String(doc?.id)||topicKey(item.board)===topicKey(doc?.title));
+      if(!docPool.length)docPool=(ALL_QUESTIONS||[]).filter(item=>normalizedOrigin(item)==='oficial');
       if(!docPool.length)return toast('Extraia as questões desta prova primeiro.');
       activeQuestions={
         mode:'progressive',
@@ -5108,7 +5459,8 @@
     });
     qa('[data-exam-doc-simulado]').forEach(btn=>btn.onclick=()=>{
       const doc=examDocs.find(d=>d.id===btn.dataset.examDocSimulado);
-      const docPool=(ALL_QUESTIONS||[]).filter(item=>item.sourceDocumentId===doc?.id||normalizedOrigin(item)==='oficial');
+      let docPool=(ALL_QUESTIONS||[]).filter(item=>String(item.sourceDocumentId||item.documentId||'')===String(doc?.id)||topicKey(item.board)===topicKey(doc?.title));
+      if(!docPool.length)docPool=(ALL_QUESTIONS||[]).filter(item=>normalizedOrigin(item)==='oficial');
       if(!docPool.length)return toast('Extraia as questões desta prova primeiro.');
       if(q('#questionOrigin'))q('#questionOrigin').value='oficial';
       if(q('#simuladoScope'))q('#simuladoScope').value='filtered';
@@ -5162,28 +5514,239 @@
     }
   }
 
+  let _batchSelectedFiles = [];
+  let _cancelBatchRequested = false;
+
+  function detectBatchFileTypeAndCategory(fileName) {
+    const clean = String(fileName || '').replace(/\.(pdf|json)$/i, '').trim();
+    const norm = normalizeText(clean);
+    const stdTitle = typeof standardizeDocumentTitle === 'function' ? standardizeDocumentTitle(clean) : clean.toUpperCase();
+    const docType = /\bsimulado\b/i.test(norm) ? 'simulado' : 'prova';
+    const catName = /\bmini[\s-]*simulado\b/i.test(norm)
+      ? '⚡ Mini Simulado'
+      : docType === 'simulado'
+      ? '🏆 Simulado'
+      : '🎯 Questões / Prova';
+    const subj = (typeof window.inferStrictQuestionSubject === 'function')
+      ? window.inferStrictQuestionSubject(clean, clean, '', [])
+      : 'Geral';
+    return { stdTitle, docType, catName, subject: subj || 'Geral' };
+  }
+
+  function updateBatchExamSelectionPreview(fileList) {
+    const valid = [...(fileList || [])].filter(f => f && (/\.pdf$/i.test(f.name) || f.type === 'application/pdf' || /\.json$/i.test(f.name) || f.type === 'application/json'));
+    _batchSelectedFiles = valid;
+    const previewBox = q('#batchExamPreviewBox');
+    const titleInput = q('#quickExamPdfTitle');
+    const uploadBtn = q('#quickExamPdfUploadBtn');
+    if (!valid.length) {
+      if (previewBox) previewBox.hidden = true;
+      if (uploadBtn) uploadBtn.textContent = '🚀 Enviar e Extrair Questões (Individual ou Lote)';
+      return;
+    }
+    if (valid.length === 1 && titleInput && !titleInput.value) {
+      titleInput.value = valid[0].name.replace(/\.(pdf|json)$/i, '');
+    } else if (valid.length > 1 && titleInput) {
+      titleInput.value = '';
+      titleInput.placeholder = `Lote de ${valid.length} arquivos selecionado (usará o nome de cada arquivo automaticamente)`;
+    }
+    const items = valid.map(f => detectBatchFileTypeAndCategory(f.name));
+    const simCnt = items.filter(x => x.catName.includes('Simulado') && !x.catName.includes('Mini')).length;
+    const miniCnt = items.filter(x => x.catName.includes('Mini')).length;
+    const qCnt = items.length - simCnt - miniCnt;
+    if (previewBox) {
+      previewBox.hidden = false;
+      previewBox.innerHTML = `
+        <div style="font-weight:800;color:#6ee7b7;margin-bottom:4px">📦 ${valid.length} arquivo(s) pronto(s) para importação automática em lote:</div>
+        <div class="small muted">🏆 ${simCnt} Simulado(s) · ⚡ ${miniCnt} Mini Simulado(s) · 🎯 ${qCnt} Caderno(s) de Questões</div>
+        <div class="small muted" style="margin-top:4px;max-height:84px;overflow-y:auto">${items.slice(0, 15).map((it, idx) => `<div>${idx + 1}. <b>${escText(it.stdTitle)}</b> (${escText(it.catName)} · ${escText(it.subject)})</div>`).join('')}${items.length > 15 ? `<div>... e mais ${items.length - 15} arquivo(s).</div>` : ''}</div>
+      `;
+    }
+    if (uploadBtn) {
+      uploadBtn.textContent = valid.length > 1
+        ? `🚀 Importar Todos os ${valid.length} Arquivos em Lote Agora`
+        : '🚀 Enviar PDF e Extrair Questões';
+    }
+  }
+
+  function bindBatchExamSelectionInputs() {
+    const fileIn = q('#quickExamPdfInput');
+    const folderIn = q('#quickExamFolderInput');
+    const dropZone = q('#examBatchDropZone');
+    const cancelBtn = q('#cancelBatchExamImportBtn');
+
+    if (fileIn && !fileIn.dataset.batchBound) {
+      fileIn.dataset.batchBound = '1';
+      fileIn.onchange = e => updateBatchExamSelectionPreview(e.target.files);
+    }
+    if (folderIn && !folderIn.dataset.batchBound) {
+      folderIn.dataset.batchBound = '1';
+      folderIn.onchange = e => updateBatchExamSelectionPreview(e.target.files);
+    }
+    if (dropZone && !dropZone.dataset.batchBound) {
+      dropZone.dataset.batchBound = '1';
+      dropZone.addEventListener('dragover', e => {
+        e.preventDefault();
+        dropZone.style.borderColor = '#10b981';
+        dropZone.style.background = 'rgba(16,185,129,0.14)';
+      });
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.style.borderColor = '#38bdf8';
+        dropZone.style.background = 'rgba(14,34,56,0.55)';
+      });
+      dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.style.borderColor = '#38bdf8';
+        dropZone.style.background = 'rgba(14,34,56,0.55)';
+        if (e.dataTransfer?.files?.length) {
+          updateBatchExamSelectionPreview(e.dataTransfer.files);
+        }
+      });
+    }
+    if (cancelBtn && !cancelBtn.dataset.batchBound) {
+      cancelBtn.dataset.batchBound = '1';
+      cancelBtn.onclick = () => {
+        _cancelBatchRequested = true;
+        cancelBtn.disabled = true;
+        cancelBtn.textContent = 'Parando após o arquivo atual...';
+        toast('⏹ A fila será pausada assim que o arquivo atual terminar.');
+      };
+    }
+  }
+
+  async function uploadAndExtractSingleExamFileInBatch(file, customTitle = '') {
+    // Se for arquivo JSON de questões, importa direto para o banco de questões da campanha
+    if (/\.json$/i.test(file.name) || file.type === 'application/json') {
+      const txt = await file.text();
+      const parsed = JSON.parse(txt);
+      const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.questions) ? parsed.questions : []);
+      if (arr.length) {
+        const meta = detectBatchFileTypeAndCategory(customTitle || file.name);
+        await saveQuestionsToCampaign(meta.stdTitle, meta.subject, arr, meta.stdTitle);
+        return { ok: true, title: meta.stdTitle };
+      }
+      return { ok: false, title: file.name };
+    }
+
+    const session = await validSession();
+    const campaign = await ensureActiveCampaignRecord();
+    const meta = detectBatchFileTypeAndCategory(customTitle || file.name);
+    const title = customTitle ? (typeof standardizeDocumentTitle === 'function' ? standardizeDocumentTitle(customTitle) : customTitle) : meta.stdTitle;
+    const type = meta.docType;
+
+    // Verifica se já existe documento com o mesmo título na campanha
+    const skipExisting = Boolean(q('#batchSkipExistingToggle')?.checked);
+    const existingDoc = (typeof cloudDocuments !== 'undefined' ? cloudDocuments : []).find(d =>
+      !d.is_community &&
+      ['prova', 'simulado'].includes(d.document_type) &&
+      normalizeText(d.title) === normalizeText(title)
+    );
+    if (existingDoc && existingDoc.processing_status === 'ready' && skipExisting) {
+      return { ok: true, skipped: true, title };
+    }
+
+    let docId = existingDoc?.id || null;
+    if (!docId) {
+      const safe = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'prova.pdf';
+      const path = `${session.user.id}/${campaign.dbId}/${crypto.randomUUID()}-${safe}`;
+      const upload = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${path}`, {
+        method: 'POST',
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/pdf', 'x-upsert': 'false' },
+        body: file
+      });
+      if (!upload.ok) {
+        const errData = await upload.json().catch(() => ({}));
+        throw new Error(errData.message || errData.error || `Falha ao enviar ${file.name}`);
+      }
+      const shareOptIn = q('#shareWithCommunityToggle') ? Boolean(q('#shareWithCommunityToggle').checked) : true;
+      const response = await cloudFetch('study_documents', {
+        method: 'POST',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({
+          campaign_id: campaign.dbId,
+          user_id: session.user.id,
+          title,
+          document_type: type,
+          detected_subject: meta.subject !== 'Geral' ? meta.subject : null,
+          storage_path: path,
+          source_name: file.name,
+          share_with_community: shareOptIn,
+          processing_status: 'pending',
+          metadata: { share_with_community: shareOptIn, private_only: !shareOptIn, primary_subject: meta.subject !== 'Geral' ? meta.subject : undefined }
+        })
+      });
+      const rows = await response.json();
+      if (rows[0]?.id) {
+        docId = rows[0].id;
+        cloudDocuments.unshift(rows[0]);
+        if (window._recentUploadedPdfBytes) window._recentUploadedPdfBytes.set(docId, file);
+      }
+    } else if (window._recentUploadedPdfBytes) {
+      window._recentUploadedPdfBytes.set(docId, file);
+    }
+
+    if (docId && typeof processEditalDocument === 'function') {
+      await processEditalDocument(docId);
+    }
+    return { ok: true, skipped: false, title };
+  }
+
   async function handleQuickExamPdfUpload(){
+    bindBatchExamSelectionInputs();
     const fileInput=q('#quickExamPdfInput'),titleInput=q('#quickExamPdfTitle');
-    const file=fileInput?.files?.[0];
-    if(!file)return toast('Selecione o arquivo PDF da prova primeiro.');
-    if(!cloudSession)return toast('Entre na sua conta para enviar e processar PDFs.');
-    const libFile=q('#documentFile'),libTitle=q('#documentTitle'),libType=q('#documentType');
-    if(!libFile||!libType||typeof uploadStudyDocument!=='function')return toast('Use a aba Biblioteca para enviar o PDF.');
-    const dt=new DataTransfer();
-    dt.items.add(file);
-    libFile.files=dt.files;
-    if(libTitle)libTitle.value=titleInput?.value?.trim()||file.name.replace(/\.pdf$/i,'');
-    libType.value='prova';
+    const files = _batchSelectedFiles.length ? _batchSelectedFiles : [...(fileInput?.files || [])];
+    if(!files.length)return toast('Selecione 1 ou mais arquivos PDF/JSON (ou uma pasta inteira) primeiro.');
+    if(!cloudSession)return toast('Entre na sua conta para enviar e processar arquivos.');
+
     const btn=q('#quickExamPdfUploadBtn');
-    if(btn){btn.disabled=true;btn.textContent='⏳ Enviando e extraindo questões...'}
+    const progBox=q('#batchExamProgressBox'),progTitle=q('#batchExamProgressTitle'),progFill=q('#batchExamProgressFill'),progDetail=q('#batchExamProgressDetail'),cancelBtn=q('#cancelBatchExamImportBtn');
+
+    _cancelBatchRequested = false;
+    window._isBatchExamImportActive = files.length > 1;
+    window._batchResolveMissingKeyWithAi = Boolean(q('#batchAutoAiKeyToggle')?.checked);
+
+    if(btn){btn.disabled=true;btn.textContent=`⏳ Processando ${files.length} arquivo(s)...`}
+    if(progBox)progBox.hidden=false;
+    if(cancelBtn){cancelBtn.disabled=false;cancelBtn.textContent='⏹ Parar fila'}
+
+    let doneCnt=0,skippedCnt=0,failedCnt=0;
+    const qBefore=(ALL_QUESTIONS||[]).length;
+
     try{
-      await uploadStudyDocument();
+      for(let i=0;i<files.length;i++){
+        if(_cancelBatchRequested)break;
+        const f=files[i];
+        const pct=Math.round((i/files.length)*100);
+        if(progFill)progFill.style.width=`${pct}%`;
+        if(progTitle)progTitle.textContent=`🚀 Importando arquivo ${i+1} de ${files.length} (${pct}%)`;
+        if(progDetail)progDetail.textContent=`Extraindo: “${f.name}” · Questões no banco: ${(ALL_QUESTIONS||[]).length}`;
+        try{
+          const singleCustomTitle = files.length === 1 ? (titleInput?.value?.trim() || '') : '';
+          const res = await uploadAndExtractSingleExamFileInBatch(f, singleCustomTitle);
+          if(res.skipped)skippedCnt++;
+          else doneCnt++;
+        }catch(err){
+          console.warn('Falha ao importar arquivo do lote:',f.name,err);
+          failedCnt++;
+        }
+      }
+      if(progFill)progFill.style.width='100%';
+      await Promise.all([loadGeneratedContent(),loadCloudDocuments()]).catch(()=>undefined);
+      const addedQs=Math.max(0,(ALL_QUESTIONS||[]).length-qBefore);
       if(fileInput)fileInput.value='';
+      if(q('#quickExamFolderInput'))q('#quickExamFolderInput').value='';
       if(titleInput)titleInput.value='';
+      _batchSelectedFiles=[];
+      if(q('#batchExamPreviewBox'))q('#batchExamPreviewBox').hidden=true;
       switchExamHubTab('catalog');
       renderExamBankHub();
+      renderUserDocuments();
+      toast(`🎉 Lote finalizado: ${doneCnt} importado(s)${skippedCnt?`, ${skippedCnt} já existente(s) pulado(s)`:''}${failedCnt?`, ${failedCnt} com falha`:''} · +${addedQs} questões prontas no banco!`);
     }finally{
-      if(btn){btn.disabled=false;btn.textContent='Enviar PDF e Extrair Questões'}
+      window._isBatchExamImportActive = false;
+      window._batchResolveMissingKeyWithAi = false;
+      if(progBox)setTimeout(()=>{progBox.hidden=true},2500);
+      if(btn){btn.disabled=false;btn.textContent='🚀 Enviar e Extrair Questões (Individual ou Lote)'}
     }
   }
 
