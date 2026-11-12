@@ -2309,7 +2309,7 @@
     if (!boardFilter || boardFilter === 'all') return true;
     const target = String(boardFilter).toLocaleLowerCase('pt-BR').trim();
     const hay = `${item?.board || ''} ${item?.statement || ''} ${item?.explanation || ''} ${item?.topic || ''}`.toLocaleLowerCase('pt-BR');
-    if (target.includes('aocp')) return /aocp/.test(hay) || !item?.board || item?.board === 'Prova Oficial' || /\b105\s*quest/i.test(String(item?.board||''));
+    if (target.includes('aocp')) return /aocp/.test(String(item?.board || '').toLocaleLowerCase('pt-BR'));
     if (target.includes('cebraspe') || target.includes('cespe')) return /cebraspe|cespe/.test(hay);
     if (target.includes('fgv')) return /\bfgv\b|fundacao getulio vargas/.test(hay);
     if (target.includes('upenet') || target.includes('iaupe')) return /upenet|iaupe/.test(hay);
@@ -3361,18 +3361,21 @@
 
   function answerKeyStatus(q) {
     if (q?.annulled || q?.anulada) return "anulada";
-    if (q?.origin === "oficial" && Number.isInteger(Number(q?.correct_index)) && Number(q?.correct_index) >= 0) return "oficial";
-    if (q?.answer_unknown || !Number.isInteger(Number(q?.correct_index)) || Number(q?.correct_index) < 0) return "sem_gabarito";
-    return "oficial";
+    const raw = q?.correct_index;
+    if (q?.answer_unknown || raw === null || raw === undefined || String(raw).trim() === '' ||
+        !Number.isInteger(Number(raw)) || Number(raw) < 0 ||
+        (Array.isArray(q?.options) && (q.options.length < 2 || q.options.some(o => !String(o ?? '').trim()) || Number(raw) >= q.options.length))) return "sem_gabarito";
+    return q?.origin === "oficial" ? "oficial" : "provisorio";
   }
   window.answerKeyStatus = answerKeyStatus;
 
   function gradeAnswer(q, chosen) {
     const status = answerKeyStatus(q);
-    if (status === "anulada") return { status, scored: false };
-    if (status !== "oficial") return { status, scored: false, chosen };
-    const ok = Number(chosen) === Number(q.correct_index);
-    return { status, scored: true, ok };
+    if (status === "anulada" || status === "sem_gabarito") return { status, scored: false, chosen };
+    if (chosen === null || chosen === undefined || String(chosen).trim() === '' ||
+        !Number.isInteger(Number(chosen)) || Number(chosen) < 0 ||
+        (Array.isArray(q?.options) && Number(chosen) >= q.options.length)) return { status, scored: false, chosen };
+    return { status, scored: true, ok: Number(chosen) === Number(q.correct_index) };
   }
   window.gradeAnswer = gradeAnswer;
 
@@ -3839,14 +3842,10 @@
     const topicSel=q('#questionTopic');
     const selectedTopicLabel=topicSel&&topicSel.selectedIndex>=0?topicSel.options[topicSel.selectedIndex]?.text||'':'';
     let byTopic=source.filter(item=>questionMatchesBoardFilter(item,board)&&(topic==='all'||questionMatchesTopicFilter(item,topic,subject,selectedTopicLabel))&&(difficulty==='all'||normalizedDifficulty(item)===difficulty)&&(origin==='all'||normalizedOrigin(item)===origin));
-    // Se o usuário selecionou um tópico do Edital ainda sem questões diretas por palavra-chave, usa as questões da própria disciplina para nunca travar o estudo da missão
-    if(!byTopic.length&&topic!=='all'&&source.length){
-      byTopic=source.filter(item=>questionMatchesBoardFilter(item,board)&&(difficulty==='all'||normalizedDifficulty(item)===difficulty)&&(origin==='all'||normalizedOrigin(item)===origin));
-    }
-    let filtered=byTopic;
+    let filtered=byTopic.filter(item => !["sem_gabarito", "anulada"].includes(answerKeyStatus(item)));
     if(historyFilter==='unanswered'){
       const unanswered=filtered.filter(item=>!isQuestionAnsweredBefore(item));
-      if(unanswered.length)filtered=unanswered;
+      filtered=unanswered;
     }else if(historyFilter==='wrong'){
       const errEntries=activeCampaignErrors();
       filtered=filtered.filter(item=>questionMatchesErrorPool(item,errEntries));
@@ -3859,7 +3858,7 @@
     if(battleMode==='errors'){
       const errEntries=activeCampaignErrors();
       const errPool=filtered.filter(item=>questionMatchesErrorPool(item,errEntries));
-      if(errPool.length)filtered=errPool;
+      filtered=errPool;
     }
     // Filtro estrito quando disciplina específica está selecionada
     if(subject!=='all'){
@@ -4644,11 +4643,11 @@
       const oldBadge=btn.querySelector('.optStatPill');
       if(oldBadge)oldBadge.remove();
       const pillCls=isCorr?'isCorrectStat':isTrap?'isTrapStat':'isNeutralStat';
-      const pillTxt=isCorr?`📊 ${pct}% ✓`:isTrap?`⚠️ ${pct}% (Pegadinha mais marcada!)`:`📊 ${pct}%`;
+      const pillTxt=isCorr?`📊 ${pct}% ✓`:isTrap?`⚠️ ${pct}% (Seu erro mais frequente)`:`📊 ${pct}%`;
       btn.insertAdjacentHTML('beforeend',`<span class="optStatPill ${pillCls}">${pillTxt}</span>`);
     });
     const trapLetter=optStats.trapIndex>=0?String.fromCharCode(65+optStats.trapIndex):'-';
-    const statSummaryHtml=`<div class="communityOptionStatsBar" style="margin-bottom:10px;padding:9px 12px;border-radius:10px;background:rgba(8,22,38,0.9);border:1px solid rgba(56,189,248,0.28);font-size:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><span>📊 <b>Histórico Real na Questão (${optStats.totalSamples} resposta${optStats.totalSamples===1?"":"s"} registrada${optStats.totalSamples===1?"":"s"}):</b> <strong style="color:#34d399;">${optStats.pcts[correct]}% no gabarito (${String.fromCharCode(65+correct)})</strong></span>${optStats.trapIndex>=0?`<span style="color:#fbbf24;">⚠️ Pegadinha principal: <b>Alternativa ${trapLetter} (${optStats.pcts[optStats.trapIndex]}%)</b></span>`:''}</div>`;
+    const statSummaryHtml=`<div class="communityOptionStatsBar" style="margin-bottom:10px;padding:9px 12px;border-radius:10px;background:rgba(8,22,38,0.9);border:1px solid rgba(56,189,248,0.28);font-size:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><span>📊 <b>Seu histórico nesta questão (${optStats.totalSamples} resposta${optStats.totalSamples===1?"":"s"} registrada${optStats.totalSamples===1?"":"s"}):</b> <strong style="color:#34d399;">${optStats.pcts[correct]}% no gabarito (${String.fromCharCode(65+correct)})</strong></span>${optStats.trapIndex>=0?`<span style="color:#fbbf24;">⚠️ Seu erro mais frequente: <b>Alternativa ${trapLetter} (${optStats.pcts[optStats.trapIndex]}%)</b></span>`:''}</div>`;
     q('#questionFeedback').innerHTML=statSummaryHtml+formatStepByStepResolution(item,chosen,ok,true);
     qa('[data-question-index],[data-scissor-index]').forEach(b=>b.disabled=true);
 
@@ -13737,8 +13736,8 @@
       }
     } catch (_e) {}
 
-    const totalSamples = counts.reduce((a, b) => a + b, 0) || 1;
-    const pcts = counts.map(c => Math.round((c / totalSamples) * 100));
+    const totalSamples = counts.reduce((a, b) => a + b, 0);
+    const pcts = counts.map(c => totalSamples ? Math.round((c / totalSamples) * 100) : 0);
     let actualTrapIdx = -1;
     let maxWrongCount = 0;
     for (let i = 0; i < n; i++) {
@@ -14683,42 +14682,6 @@
   window.ensureTopicSummaryExistsForStudy = ensureTopicSummaryExistsForStudy;
 
   // ── 2) Resolução de Gabarito com IA para Provas/Simulados sem Gabarito ("🤖 Resolver com IA") ──
-  function solveQuestionLocallyHeuristic(qItem) {
-    const opts = Array.isArray(qItem?.options) ? qItem.options.map(o => String(o || '').trim()) : [];
-    const st = String(qItem?.statement || '').toLowerCase();
-    if (!opts.length) return { correct_index: 0, explanation: '🤖 [Gabarito sugerido pela IA — confira no gabarito oficial quando disponível] Alternativa analisada conforme o enunciado.' };
-
-    const isNegativeQuery = /\b(incorret[ao]|errad[ao]|exceto|n[aã]o\s+[eé]|falso|inexat[ao])\b/i.test(st);
-    const absoluteWordsRe = /\b(sempre|nunca|jamais|exclusivamente|unicamente|em nenhuma hip[oó]tese|sob qualquer hip[oó]tese|absolutamente todos)\b/i;
-    const legalBalancedRe = /\b(salvo|ressalvad[ao]s?|nos termos da lei|conforme|desde que|regra geral|admite-se|mediante)\b/i;
-
-    let bestIdx = 0;
-    let bestScore = -999;
-    opts.forEach((opt, idx) => {
-      let sc = 0;
-      const hasAbs = absoluteWordsRe.test(opt);
-      const hasBal = legalBalancedRe.test(opt);
-      if (isNegativeQuery) {
-        if (hasAbs) sc += 5;
-        if (hasBal) sc -= 2;
-      } else {
-        if (hasAbs) sc -= 4;
-        if (hasBal) sc += 4;
-        if (opt.length >= 35 && opt.length <= 240) sc += 2;
-      }
-      if (sc > bestScore) {
-        bestScore = sc;
-        bestIdx = idx;
-      }
-    });
-
-    const chosenLetter = opts.length === 2 && /^certo$/i.test(opts[0]) ? (bestIdx === 0 ? 'CERTO' : 'ERRADO') : ('ABCDE'[bestIdx] || 'A');
-    return {
-      correct_index: bestIdx,
-      explanation: `🤖 [Gabarito sugerido pela IA — confira no gabarito oficial quando disponível] Conceito-chave: Análise técnica do enunciado de ${qItem?.subject || 'Concurso'}. ✅ Alternativa sugerida: ${chosenLetter} ("${opts[bestIdx] || ''}"), por guardar maior conformidade lógica e normativa com o comando da questão.`
-    };
-  }
-
   async function solveQuestionsArrayWithAi(questionsArray, doc = null) {
     if (!Array.isArray(questionsArray) || !questionsArray.length) return 0;
     const targets = [];
@@ -14727,7 +14690,7 @@
         targets.push({ qItem, idx });
       }
     });
-    const listToSolve = targets.length ? targets : questionsArray.map((qItem, idx) => ({ qItem, idx }));
+    const listToSolve = targets.filter(({qItem}) => !qItem.annulled && !qItem.anulada);
     let solvedCount = 0;
     const session = typeof validSession === 'function' ? await validSession().catch(() => null) : null;
 
@@ -14761,14 +14724,15 @@
       batch.forEach((b, bi) => {
         const qItem = b.qItem;
         const opts = Array.isArray(qItem.options) ? qItem.options : [];
-        const fromApi = Array.isArray(apiSolved) ? (apiSolved.find(s => Number(s.index) === bi) || apiSolved[bi]) : null;
-        if (fromApi && Number.isInteger(Number(fromApi.correct_index)) && Number(fromApi.correct_index) >= 0 && Number(fromApi.correct_index) < opts.length) {
+        const fromApi = Array.isArray(apiSolved) ? apiSolved.find(s => s.index !== null && s.index !== undefined && String(s.index).trim() !== "" && Number(s.index) === bi) : null;
+        if (fromApi && fromApi.correct_index !== null && fromApi.correct_index !== undefined && String(fromApi.correct_index).trim() !== "" && Number.isInteger(Number(fromApi.correct_index)) && Number(fromApi.correct_index) >= 0 && Number(fromApi.correct_index) < opts.length) {
           qItem.correct_index = Number(fromApi.correct_index);
           qItem.explanation = String(fromApi.explanation || '').trim();
         } else {
-          const localSol = solveQuestionLocallyHeuristic(qItem);
-          qItem.correct_index = Math.min(Math.max(0, localSol.correct_index), Math.max(0, opts.length - 1));
-          qItem.explanation = localSol.explanation;
+          // Falha, ausência de rede ou resposta inválida: mantém a pendência sem inventar gabarito.
+          qItem.answer_unknown = true;
+          qItem.correct_index = -1;
+          return;
         }
         delete qItem.answer_unknown;
         qItem.key_source = 'ia_sugerido';
@@ -15138,65 +15102,7 @@
 
   // Corrige automaticamente questões com defeito lógico ou alternativas de 1 letra que tenham ficado vazias (ex.: "ESCOLAR" 2.022ª posição e "Qual frase NÃO é uma proposição?")
   function healPedagogicalQuestionDefects(q) {
-    if (!q || typeof q !== 'object') return q;
-    const st = String(q.statement || '').trim();
-    const rawOpts = Array.isArray(q.options) ? q.options : [];
-    if (!rawOpts.length) return q;
-    let opts = rawOpts.map(o => stripOptionLetterPrefixClean(o));
-
-    // Caso 1: Questão clássica da palavra "ESCOLAR" (2.022ª posição) onde as alternativas de 1 letra ("A.", "E." / "C.") ficaram em branco
-    if (/palavra\s+[“"']?escolar[”"']?/i.test(st) && /2\.?022/i.test(st)) {
-      const hasBlankOrCorrupted = opts.some(o => !String(o || '').trim()) || !opts.some(o => /^A\.?$/i.test(String(o || '').trim()));
-      if (hasBlankOrCorrupted) {
-        const healedOpts = opts.length === 5 ? ['A.', 'C.', 'E.', 'R.', 'S.'] : ['A.', 'E.', 'R.', 'S.'];
-        return {
-          ...q,
-          options: healedOpts,
-          correct_index: 0,
-          origin: 'oficial',
-          explanation: 'Conceito-chave: Ciclos periódicos e divisão euclidiana (resto da divisão pelo número de letras da palavra).\n- ✅ Correta: A) A. A palavra "ESCOLAR" possui 7 letras (1ª=E, 2ª=S, 3ª=C, 4ª=O, 5ª=L, 6ª=A, 7ª=R). Dividindo 2.022 por 7, obtemos 288 ciclos completos (288 × 7 = 2.016) e resto 6. Portanto, a 2.022ª posição corresponde à 6ª letra da palavra ESCOLAR, que é a letra A.\n- ❌ B) E. Ocuparia a posição caso o resto da divisão por 7 fosse 1.\n- ❌ C) R. Ocuparia a posição caso o resto da divisão por 7 fosse 0 (múltiplo exato de 7).\n- ❌ D) S. Ocuparia a posição caso o resto da divisão por 7 fosse 2.'
-        };
-      }
-    }
-
-    // Caso 2: Qualquer outra questão de sequência de letras ou alternativas curtas onde alguma opção tenha ficado vazia ("")
-    if (opts.some(o => !String(o || '').trim())) {
-      const usedLetters = new Set(opts.map(o => String(o || '').replace(/[^a-zA-Z]/g, '').toUpperCase()).filter(Boolean));
-      const candidateLetters = ['A', 'E', 'C', 'B', 'D', 'O', 'L'];
-      const hasTrailingDot = opts.some(o => /\.$/.test(String(o || '').trim()));
-      opts = opts.map((o, idx) => {
-        if (String(o || '').trim()) return o;
-        const defLet = String.fromCharCode(65 + idx);
-        const pick = !usedLetters.has(defLet) ? defLet : (candidateLetters.find(c => !usedLetters.has(c)) || defLet);
-        usedLetters.add(pick);
-        return hasTrailingDot ? `${pick}.` : pick;
-      });
-      q = { ...q, options: opts };
-    }
-
-    if (/qual\s+(?:frase|senten[cç]a|alternativa|item|op[cç][aã]o)\s+n[aã]o\s+[eé]\s+(?:uma\s+)?proposi[cç][aã]o/i.test(st)) {
-      const hasTrueNonProposition = opts.some(o => /\?|!|\b(que horas|quantos|estude|fa[cç]a|pare|sil[eê]ncio|tomara|oxalá|x\s*[+\-=<>]|ele\s+foi)\b/i.test(o));
-      if (!hasTrueNonProposition) {
-        const cIdx = (Number.isInteger(Number(q.correct_index)) && Number(q.correct_index) >= 0 && Number(q.correct_index) < opts.length)
-          ? Number(q.correct_index)
-          : 0;
-        const fixedOpts = [...opts];
-        fixedOpts[cIdx] = 'Que horas começa o plantão policial?';
-        const cLetter = String.fromCharCode(65 + cIdx);
-        const otherLines = fixedOpts.map((optTxt, idx) => {
-          const l = String.fromCharCode(65 + idx);
-          if (idx === cIdx) return `- ✅ Correta: ${l}) "${optTxt}" é uma frase interrogativa (pergunta), portanto não admite valor lógico Verdadeiro ou Falso e NÃO é uma proposição.`;
-          const isComp = /\b(se\s+.*ent[aã]o|\s+ou\s+|\s+e\s+|se e somente se)\b/i.test(optTxt);
-          return `- ❌ ${l}) "${optTxt}" é uma proposição lógica ${isComp ? 'composta' : 'simples'} (toda frase declarativa fechada, mesmo que matematicamente falsa como "2 + 2 = 5", possui valor lógico V ou F e é uma proposição).`;
-        });
-        return {
-          ...q,
-          options: fixedOpts,
-          correct_index: cIdx,
-          explanation: `Conceito-chave: Proposição lógica é toda sentença declarativa fechada que pode ser julgada como Verdadeira (V) ou Falsa (F). Frases interrogativas (?), exclamativas (!), imperativas (ordens) e sentenças abertas (com variáveis sem valor definido) NÃO são proposições (mnemônico NESPEI).\n${otherLines.join('\n')}`
-        };
-      }
-    }
+    // Conteúdo e gabarito precisam de revisão explícita, nunca de reparo por heurística.
     return q;
   }
   window.healPedagogicalQuestionDefects = healPedagogicalQuestionDefects;
@@ -15233,36 +15139,22 @@
     if (!rawQ || typeof rawQ !== 'object') return rawQ;
     const q = healPedagogicalQuestionDefects(rawQ);
     const rawOpts = Array.isArray(q.options) ? q.options : [];
-    let originalIdx = Number.isInteger(Number(q.correct_index)) ? Number(q.correct_index) : 0;
-    if (originalIdx < 0 || originalIdx >= Math.max(1, rawOpts.length)) originalIdx = 0;
-
-    // Verifica se a explicação aponta explicitamente o texto da alternativa correta (ex.: "✅ Correta: C) P → Q.")
-    // e reconcilia caso as opções salvas anteriormente estivessem com letras trocadas
-    const expStr = String(q.explanation || '');
-    const explicitCorrMatch = expStr.match(/✅\s*(?:Alternativa\s+)?Correta\s*:\s*([A-E])\s*[\)\.\-–—:]\s*([^\n❌⚠️]+?)(?:\.\s*(?:❌|$)|\n|$)/i);
-    const items = rawOpts.map((rawText, idx) => {
-      const origLetter = detectOriginalOptionLetter(rawText, idx);
-      const cleanText = normalizeLegalText(stripOptionLetterPrefixClean(rawText));
-      return { text: cleanText, index: idx, origLetter };
-    });
-
-    if (explicitCorrMatch) {
-      const expCorrLetter = explicitCorrMatch[1].toUpperCase();
-      const expCorrSnippet = stripOptionLetterPrefixClean(explicitCorrMatch[2]).replace(/\.$/, '').trim().toLowerCase();
-      if (expCorrSnippet.length >= 2) {
-        const textMatchIdx = items.findIndex(it => it.text.toLowerCase().replace(/\.$/, '').trim() === expCorrSnippet || it.text.toLowerCase().includes(expCorrSnippet));
-        if (textMatchIdx >= 0) {
-          originalIdx = textMatchIdx;
-          items[textMatchIdx].origLetter = expCorrLetter;
-        }
-      }
-    }
-
+    const rawIndex = q.correct_index;
+    const validKey = rawOpts.length >= 2 && rawOpts.every(o => String(o ?? '').trim()) && !q.answer_unknown && !q.annulled && !q.anulada &&
+      rawIndex !== null && rawIndex !== undefined && String(rawIndex).trim() !== '' &&
+      Number.isInteger(Number(rawIndex)) && Number(rawIndex) >= 0 && Number(rawIndex) < rawOpts.length;
+    const originalIdx = validKey ? Number(rawIndex) : -1;
+    const items = rawOpts.map((rawText, idx) => ({
+      text: normalizeLegalText(stripOptionLetterPrefixClean(rawText)),
+      index: idx, origLetter: detectOriginalOptionLetter(rawText, idx)
+    }));
+    const orderDependent = rawOpts.some(o => /\b(todas|nenhuma|ambas|anterior(?:es)?|acima|abaixo)\b|\balternativas?\s+[a-e]\b|\b[a-e]\s+e\s+[a-e]\b/i.test(String(o))) ||
+      rawOpts.every(o => /^\s*(?:[IVX]+|\d+)(?:\s*(?:,|e|ou)\s*(?:[IVX]+|\d+))*\s*(?:apenas|somente)?\.?\s*$/.test(String(o)));
     const isCE = items.length === 2 && /^certo$/i.test(items[0]?.text || '');
-    const keepOrder = items.length <= 2 || isCE || q?.origin === 'oficial' || Boolean(q?._alreadyPreparedConsistent);
+    const keepOrder = !validKey || orderDependent || items.length <= 2 || isCE || q?.origin === 'oficial' || Boolean(q?._alreadyPreparedConsistent);
     const mixed = keepOrder ? [...items] : shuffle(items);
 
-    const newCorrectIdx = Math.max(0, mixed.findIndex(it => it.index === originalIdx));
+    const newCorrectIdx = validKey ? mixed.findIndex(it => it.index === originalIdx) : -1;
     const letterMap = new Map();
     mixed.forEach((it, newIdx) => {
       const newLetter = String.fromCharCode(65 + newIdx);
@@ -15271,7 +15163,7 @@
     });
 
     const cleanOptions = mixed.map(it => it.text);
-    const updatedExplanation = remapExplanationOptionLetters(normalizeLegalText(q.explanation || ''), letterMap, cleanOptions, newCorrectIdx);
+    const updatedExplanation = validKey ? remapExplanationOptionLetters(normalizeLegalText(q.explanation || ''), letterMap, cleanOptions, newCorrectIdx) : String(q.explanation || '');
 
     return {
       ...q,

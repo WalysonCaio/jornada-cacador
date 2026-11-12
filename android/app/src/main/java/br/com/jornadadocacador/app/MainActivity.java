@@ -6,6 +6,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.widget.Button;
+import android.widget.TextView;
+import android.widget.LinearLayout;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
 import android.os.Environment;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
@@ -41,7 +46,8 @@ public class MainActivity extends AppCompatActivity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
-        settings.setAllowFileAccess(true);
+        settings.setAllowFileAccess(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setAllowContentAccess(true);
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
@@ -53,7 +59,32 @@ public class MainActivity extends AppCompatActivity {
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        webView.setWebViewClient(new WebViewClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                String scheme = uri.getScheme();
+                if ("https".equalsIgnoreCase(scheme) && Uri.parse(APP_URL).getHost().equalsIgnoreCase(uri.getHost())) return false;
+                if (request.isForMainFrame() && ("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme) || "mailto".equalsIgnoreCase(scheme))) {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); } catch (Exception ignored) { }
+                }
+                return true;
+            }
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (!request.isForMainFrame()) return;
+                LinearLayout panel = new LinearLayout(MainActivity.this);
+                panel.setOrientation(LinearLayout.VERTICAL);
+                panel.setPadding(32, 64, 32, 32);
+                TextView message = new TextView(MainActivity.this);
+                message.setText("Sem conexão ou página indisponível. Verifique sua internet e tente novamente.");
+                Button retry = new Button(MainActivity.this);
+                retry.setText("Tentar novamente");
+                retry.setOnClickListener(v -> { setContentView(webView); webView.loadUrl(APP_URL); });
+                panel.addView(message); panel.addView(retry);
+                setContentView(panel);
+            }
+        });
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override

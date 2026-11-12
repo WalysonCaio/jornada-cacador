@@ -1,3 +1,4 @@
+import { validatedSuggestedKeys } from "../_shared/solved-keys.mjs";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "https://jybislbbblyjsrcdegjt.supabase.co";
 const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY");
@@ -536,23 +537,11 @@ ${itemsText}`;
 
     try {
       const generated = await askStructuredQuestions(solvePrompt, activeGeminiKey, Boolean(personalGeminiKey));
-      const solved = rawQuestions.map((orig: any, idx: number) => {
-        const match = generated.questions?.[idx] || generated.questions?.find((g: any) => String(g?.statement || "").slice(0, 35) === String(orig?.statement || "").slice(0, 35)) || null;
-        const opts = Array.isArray(orig?.options) ? orig.options : [];
-        const rawIdx = match?.correct_index;
-        const cIdx = (rawIdx !== null && rawIdx !== undefined && Number.isInteger(Number(rawIdx)) && Number(rawIdx) >= 0 && Number(rawIdx) < opts.length)
-          ? Number(rawIdx)
-          : 0;
-        const expRaw = String(match?.explanation || "Resolução elaborada pela IA com base no enunciado e nas alternativas da questão.").trim();
-        const prefix = /^🤖/i.test(expRaw) ? "" : "🤖 [Gabarito sugerido pela IA — confira no gabarito oficial quando disponível] ";
-        return {
-          index: orig?.index ?? idx,
-          correct_index: cIdx,
-          explanation: prefix + expRaw,
-          key_source: "ia_sugerido",
-          origin: "adaptada_do_pdf",
-        };
-      });
+      const solved = validatedSuggestedKeys(rawQuestions, generated.questions);
+      if (!solved.length) {
+        await finishUsage(usage.event_id, "error", undefined, undefined, "NO_VALID_SUGGESTED_KEYS");
+        return json(request, {error: "A IA não retornou gabaritos verificáveis para as questões enviadas. Elas continuam sem gabarito."}, 422);
+      }
       await finishUsage(usage.event_id, "success", generated.provider, generated.model);
       return json(request, { solved, provider: generated.provider, model: generated.model, key_source: "ia_sugerido" });
     } catch (_err) {
@@ -635,7 +624,8 @@ Regras obrigatórias de qualidade (estilo boaResposta):
       const sanitized = generated.questions
         .filter((q: any) => {
           if (!q?.statement || !Array.isArray(q?.options)) return false;
-          const opts = q.options.map((o: any) => String(o ?? "").trim()).filter(Boolean);
+          const opts = q.options.map((o: any) => String(o ?? "").trim());
+          if (opts.some((o: string) => !o) || new Set(opts.map((o: string) => o.toLocaleLowerCase("pt-BR"))).size !== opts.length) return false;
           if (opts.length < 2 || opts.length > 5) return false;
           const rawIdx = q.correct_index;
           if (rawIdx === null || rawIdx === undefined || rawIdx === "" || !Number.isInteger(Number(rawIdx))) return false;
@@ -645,7 +635,7 @@ Regras obrigatórias de qualidade (estilo boaResposta):
           return true;
         })
         .map((q: any) => {
-          const opts = q.options.slice(0, 5).map((o: any) => String(o ?? "").trim()).filter(Boolean);
+          const opts = q.options.map((o: any) => String(o ?? "").trim());
           const idx = Number(q.correct_index);
           return {
             subject: String(q.subject || subject),

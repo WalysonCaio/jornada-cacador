@@ -1186,7 +1186,7 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   assert.ok(htmlSrc.includes('id="globalThemeToggleBtn"') && v77Src.includes("applyGlobalAppTheme") && v77Src.includes("body.lightAppTheme"), "O botão #globalThemeToggleBtn deve estar no menu e aplicar o tema claro completo (body.lightAppTheme)");
 
   // 2) Verifica os 6 aprimoramentos estratégicos (TEC, Caveira, Gran, Estudei)
-  assert.ok(v77Src.includes("computeQuestionOptionChoiceStats") && v77Src.includes("Pegadinha mais marcada!"), "Deve conter estatística por alternativa e identificação da pegadinha principal");
+  assert.ok(v77Src.includes("computeQuestionOptionChoiceStats") && v77Src.includes("Seu erro mais frequente"), "Deve conter estatística por alternativa e identificação da pegadinha principal");
   assert.ok(v77Src.includes("computeTopicBankIncidencePct") && v77Src.includes("formatTopicIncidenceBadgeHtml"), "Deve conter cálculo real de incidência por assunto na banca");
   assert.ok(pdfSrc.includes("pageSnapCache") && v77Src.includes("questionFigureBox"), "Deve suportar recorte/anexo de figuras e tabelas nas questões");
   assert.ok(v77Src.includes("renderGuildOfficialSimuladoBanner") && v77Src.includes("startGuildOfficialSimuladoBtn"), "Deve conter o Simulado Oficial da Guilda com Ranking e Nota de Corte por Cargo");
@@ -1490,7 +1490,7 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   assert.ok(htmlSrc.includes("Adiar revisão (7 dias)") && !htmlSrc.includes(">Marcar como dominado<"), "Caderno de erros deve apenas adiar revisão por 7 dias em vez de apagar o erro manualmente");
   assert.ok(v77Src.includes("Meta interna atingida (≥70% · não é aprovação oficial)") && !v77Src.includes("Caveira Aprovado (≥70%)"), "Selo do simulado deve indicar meta interna e não aprovação oficial");
   assert.ok(assistFnSrc.includes("hasExplicitGabaritoInRawText") && assistFnSrc.includes("CONTRATO ESTRITO DO MODO SOLICITADO") && assistFnSrc.includes("conhecimento_geral_conferir"), "assistente-pmpe deve validar gabarito explícito, contratos por modo e campo confidence");
-  assert.ok(redacaoFnSrc.includes("const sumScore = result.criteria.reduce"), "redacao-gemini deve reconciliar a nota total com a soma dos critérios");
+  assert.ok(redacaoFnSrc.includes("validateEssayResult(parseGeminiJsonText(aiData))"), "redacao-gemini deve validar o espelho antes de aceitar a nota");
   assert.ok(hyperFnSrc.includes("status: 410") && hyperFnSrc.includes("DEPRECATED_ENDPOINT"), "hyper-endpoint deve responder 410 Gone");
   assert.ok(sqlV104.includes("bonus_70_paid") && sqlV104.includes("bonus_85_paid"), "Migração v104 deve criar colunas de controle de bônus único");
 
@@ -1590,8 +1590,8 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   );
   assert.equal(
     preparedFlawed.options[preparedFlawed.correct_index],
-    "Que horas começa o plantão policial?",
-    "A questão defeituosa sobre NÃO proposição deve apontar para a frase interrogativa corrigida"
+    "2 + 2 = 5.",
+    "Não inventa uma nova alternativa para corrigir conteúdo defeituoso"
   );
 
   // 2b) Verifica sincronização do gabarito com a explicação após embaralhamento e quebra de linha entre alternativas
@@ -1663,8 +1663,8 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
     origin: "oficial"
   };
   const healedEscolar = vmCtx.window.prepareQuestionConsistent(escolarCorrupted);
-  assert.deepEqual(Array.from(healedEscolar.options), ["A.", "E.", "R.", "S."], "As alternativas A. e E. da questão ESCOLAR devem ser restauradas integralmente");
-  assert.equal(healedEscolar.options[healedEscolar.correct_index], "A.", "A 2.022ª letra de ESCOLAR (2022 = 7*288 + 6 -> 6ª letra) deve ser A.");
+  assert.deepEqual(Array.from(healedEscolar.options), ["", "", "R.", "S."], "Preserva alternativas ausentes para revisão explícita, sem inventar texto");
+  assert.equal(healedEscolar.correct_index, -1, "Alternativas incompletas não devem receber gabarito utilizável");
 
   // 4) Verifica que "quadro negro" e "tabela-verdade" são ignorados pelo detector de figuras (needsVisualCue)
   assert.ok(

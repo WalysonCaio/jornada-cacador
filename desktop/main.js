@@ -18,9 +18,24 @@ function createWindow() {
   });
 
   win.loadURL(APP_URL);
+  const openSafeExternal = (url) => {
+    try {
+      const parsed = new URL(url);
+      if (['https:', 'http:', 'mailto:'].includes(parsed.protocol)) {
+        shell.openExternal(parsed.href).catch(() => undefined);
+      }
+    } catch { /* URL inválida: ignora. */ }
+  };
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    openSafeExternal(url);
     return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event, url) => {
+    try {
+      if (new URL(url).origin === new URL(APP_URL).origin) return;
+    } catch { /* URL inválida: bloqueia. */ }
+    event.preventDefault();
+    openSafeExternal(url);
   });
 }
 

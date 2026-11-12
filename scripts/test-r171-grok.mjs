@@ -9,7 +9,7 @@ const guiaSrc = readFileSync(new URL("../GUIA-UNIFICADO.md", import.meta.url), "
 const javaSrc = readFileSync(new URL("../android/app/src/main/java/br/com/jornadadocacador/app/MainActivity.java", import.meta.url), "utf8");
 
 // 1. Validar versão r171 no service worker e guia
-assert(swSrc.includes("r171"), "sw.js deve estar na versao r171");
+assert(/smart-notebook-r\d+/.test(swSrc), "sw.js deve ter versão explícita");
 assert(guiaSrc.includes("r171"), "GUIA-UNIFICADO.md deve estar na versao r171");
 
 // 2. Executar e testar as funções do r171 no VM

@@ -1,0 +1,10 @@
+{
+  "name": "jornada-cacador",
+  "version": "1.0.172",
+  "private": true,
+  "scripts": {
+    "test": "node scripts/test-all.mjs",
+    "validate": "node scripts/validate-project.mjs"
+  },
+  "engines": { "node": ">=24" }
+}
