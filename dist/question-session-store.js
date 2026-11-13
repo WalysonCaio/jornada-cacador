@@ -21,7 +21,7 @@
         Number.isFinite(payload.savedAt) && payload.savedAt <= now() + 300000 &&
         now() - payload.savedAt <= maxAgeMs &&
         Array.isArray(battle?.questions) && battle.questions.length > 0 &&
-        battle.questions.every(item => item && typeof item.statement === 'string' &&
+        battle.questions.every(item => item && !root.isHunterManualArtifact?.(item) && typeof item.statement === 'string' &&
           Array.isArray(item.options) && item.options.length >= 2 && item.options.length <= 5) &&
         Number.isInteger(battle.current) && battle.current >= 0 && battle.current < battle.questions.length &&
         ((scope.kind || 'practice') === 'timed'
