@@ -1,0 +1,244 @@
+diff --git a/README.md b/README.md
+index f572f4e..abf5d21 100644
+--- a/README.md
++++ b/README.md
+@@ -1,5 +1,11 @@
+ # Jornada do Caçador
+ 
++## Revisão r173 — manuais e desempenho
++
++- [O que mudou, validação e como aplicar](docs/revisao-r173/LEIA-ME.md)
++- Manuais recuperados, carga incremental de questões, reaproveitamento de tópicos e contagens corrigidas.
++- `npm test`: 17/17 scripts; navegação visual e desempenho no aparelho ainda precisam de homologação.
++
+ ## Revisão r172 — 12/11/2026
+ 
+ - [Avaliação técnica e pedagógica](docs/revisao-r172/AVALIACAO-COMPLETA.md)
+diff --git a/dist/content-summaries.js b/dist/content-summaries.js
+index 5f58831..e9eda6c 100644
+--- a/dist/content-summaries.js
++++ b/dist/content-summaries.js
+@@ -177,6 +177,10 @@ window.EXTRA_FLASHCARDS = [
+  ['Informática','Qual a estratégia de backup 3-2-1?','3 cópias, em 2 tipos de mídia, com 1 cópia fora do local.'],
+  ['Informática','O que faz $A$1 em uma planilha?','Mantém coluna A e linha 1 fixas ao copiar a fórmula.'],
+  ['Legislação Especial','Quais são os crimes equiparados a hediondos?','Tortura, terrorismo e tráfico ilícito de drogas.'],
++];
++
++// Resumos são objetos; flashcards acima são tuplas [disciplina, pergunta, resposta].
++window.BASIC_SUMMARIES.push(
+   {"id": "adm-atos-poderes", "category": "Direito Administrativo", "title": "Organização Administrativa, Poderes e Atos Administrativos (CO-FI-FO-MO-OB / PATI)", "source": "Apostila Base & Lei Seca", "page": 1, "explanation": "A Administração Pública organiza-se por Desconcentração (cria órgãos públicos sem personalidade jurídica, com subordinação hierárquica, como PMPE, CBMPE e Secretarias) e por Descentralização (cria entidades da Administração Indireta — FASE: Fundações, Autarquias, Sociedades de Economia Mista e Empresas Públicas — com personalidade jurídica própria e controle finalístico/tutela). O ato administrativo possui 5 requisitos de validade (CO-FI-FO-MO-OB: Competência, Finalidade, Forma, Motivo e Objeto) e 4 atributos clássicos (PATI: Presunção de legitimidade, Autoexecutoriedade, Tipicidade e Imperatividade). Pela Súmula 473 do STF, a Administração pode ANULAR seus próprios atos quando eivados de vícios que os tornem ilegais (efeito ex tunc) ou REVOGÁ-LOS por motivo de conveniência ou oportunidade (efeito ex nunc), respeitados os direitos adquiridos.", "points": ["DesCOncentração = cria Órgãos (subordinação); DesCEntralização = cria Entidades FASE (vinculação/tutela).", "Requisitos do ato (CO-FI-FO-MO-OB): Competência, Finalidade e Forma são vinculados; Motivo e Objeto formam o mérito nos atos discricionários.", "Súmula 473 STF: Anulação = ilegalidade (Administração ou Judiciário, ex tunc); Revogação = conveniência/oportunidade (só Administração, ex nunc).", "Cobrança forçada de multa administrativa NÃO possui autoexecutoriedade (exige execução fiscal judicial)."], "example": "O Poder Judiciário nunca pode revogar um ato administrativo válido de outro Poder por mérito; só pode anulá-lo por ilegalidade.", "bizu": "Para nunca confundir: DesCOncentração tem 'O' de Órgão; DesCEntralização tem 'E' de Entidade.", "mnemonic": "CO-FI-FO-MO-OB (Requisitos) vs. PATI (Atributos) vs. FASE (Indireta).", "trap": "Afirmar que a Polícia Militar é uma autarquia da Administração Indireta (errado: é órgão da Administração Direta)."},
+   {"id": "adm-resp-improbidade", "category": "Direito Administrativo", "title": "Responsabilidade Civil do Estado (Art. 37, § 6º, CF) e Improbidade Administrativa (Lei 14.230/21)", "source": "Apostila Base & Lei Seca", "page": 2, "explanation": "Nos termos do art. 37, § 6º, da CF/88, as pessoas jurídicas de direito público e as de direito privado prestadoras de serviços públicos respondem OBJETIVAMENTE (Teoria do Risco Administrativo) pelos danos que seus agentes, nessa qualidade, causarem a terceiros, assegurado o direito de regresso contra o responsável nos casos de DOLO ou CULPA (responsabilidade subjetiva do agente). Pelo Tema 940 do STF (Dupla Garantia), a vítima deve acionar exclusivamente o Estado, não podendo processar diretamente o servidor. Já na Lei de Improbidade Administrativa (Lei 8.429/92 atualizada pela Lei 14.230/21), foi abolida a modalidade culposa: todos os atos (art. 9º enriquecimento ilícito, art. 10 lesão ao erário e art. 11 violação a princípios) exigem DOLO específico.", "points": ["Art. 37, § 6º, CF/88: Estado responde objetivamente (admite excludentes: culpa exclusiva da vítima, caso fortuito e força maior).", "Tema 940 STF (Dupla Garantia): A ação indenizatória da vítima deve ser proposta contra o Estado, e não contra o agente público.", "Lei 14.230/2021: Exige DOLO específico para qualquer ato de improbidade administrativa (fim da modalidade culposa) e tornou taxativo o rol do art. 11."], "example": "Se uma viatura em perseguição colide com carro de terceiro inocente, o Estado indeniza o particular objetivamente e só cobra do policial em regresso se comprovar dolo ou culpa.", "bizu": "Vítima -> Estado = Objetiva (sem discutir culpa). Estado -> Servidor = Subjetiva (exige dolo ou culpa).", "mnemonic": "Estado = O (Objetiva); Agente = S (Subjetiva). Improbidade = 100% DOLO.", "trap": "Dizer que o ato de improbidade que causa lesão ao erário (art. 10) ainda admite forma culposa."},
+   {"id": "penal-teoria-adm", "category": "Direito Penal", "title": "Aplicação da Lei Penal (LUTA), Excludentes de Ilicitude e Crimes contra a Administração Pública", "source": "Apostila Base & Lei Seca", "page": 3, "explanation": "O Código Penal adota a Teoria da Atividade para o tempo do crime (art. 4º) e a Teoria da Ubiquidade para o lugar do crime (art. 6º — mnemônico LUTA). São causas excludentes de ilicitude (art. 23): estado de necessidade, legítima defesa (incluindo a proteção de refém por agente de segurança pública — art. 25, parágrafo único), estrito cumprimento de dever legal e exercício regular de direito. Nos crimes contra a Administração Pública (arts. 312 a 333), o verbo nuclear define o delito: Apropriar-se/Desviar/Subtrair = Peculato (art. 312); EXIGIR vantagem indevida = Concussão (art. 316); SOLICITAR/RECEBER/ACEITAR promessa = Corrupção Passiva (art. 317); Retardar/Deixar de praticar ato de ofício por interesse/sentimento pessoal = Prevaricação (art. 319).", "points": ["Mnemônico LUTA: LUgar do crime = Ubiquidade (art. 6º CP); Tempo do crime = Atividade (art. 4º CP).", "Art. 28 do CP: Emoção, paixão e embriaguez voluntária ou culposa NÃO excluem a imputabilidade penal.", "Peculato Culposo (art. 312, § 3º): reparação do dano ANTES da sentença irrecorrível extingue a punibilidade; DEPOIS reduz a pena pela metade.", "Súmula 610 STF: Há latrocínio consumado quando o homicídio se consuma, ainda que o agente não realize a subtração de bens da vítima."], "example": "Exigir dinheiro de motorista para não aplicar multa é Concussão (art. 316); solicitar ou aceitar dinheiro oferecido é Corrupção Passiva (art. 317).", "bizu": "Sublinhe sempre o verbo da questão: EXIGIR = Concussão; SOLICITAR/RECEBER = Corrupção Passiva; OFERECER/PROMETER (particular) = Corrupção Ativa (art. 333).", "mnemonic": "LUTA (Lugar=Ubiquidade, Tempo=Atividade) e BRUCE LEE (Excludentes de Ilicitude).", "trap": "Afirmar que na tentativa de subtração com morte consumada há apenas tentativa de latrocínio (viola a Súmula 610 do STF)."},
+@@ -188,4 +192,4 @@ window.EXTRA_FLASHCARDS = [
+   {"id": "manual-02-dominando-questoes", "category": "Manuais do Caçador (Método & Estratégia)", "title": "Manual 02 — Dominando as Questões e Engenharia Reversa das Bancas", "source": "Manual Oficial do Caçador", "page": 2, "explanation": "Estudar teoria sem praticar questões é como tentar aprender a dirigir apenas lendo o manual do carro. As bancas examinadoras (Instituto AOCP, Cebraspe, FGV, UPENET/IAUPE, IBFC e IDECAN) possuem padrões previsíveis de cobrança e repetem cerca de 70% dos temas de provas anteriores mudando apenas a história do enunciado. Resolver questões com engenharia reversa significa ler não apenas o motivo de a alternativa certa estar correta, mas identificar qual palavra invalidou cada uma das outras alternativas.", "points": ["Instituto AOCP e IBFC: cobram literalidade da Lei Seca (trocam 'salvo' por 'inclusive', 'durante o dia' por 'a qualquer hora', 'detenção' por 'reclusão') e Súmulas Vinculantes do STF.", "Cebraspe: cobra casos hipotéticos ('Determinado agente...') e jurisprudência do STF/STJ; desconfie de palavras restritivas absolutas ('sempre', 'jamais', 'em qualquer hipótese') quando o texto trata de direitos fundamentais.", "FGV Conhecimento: cobra interpretação fina de conjunções ('conquanto', 'porquanto'), casos práticos longos em Penal/Administrativo e Princípio da Casa dos Pombos em RLM.", "UPENET / IAUPE: cobra detalhes históricos e geográficos de Pernambuco (1817, 1824, 1848, Borborema, Polos Econômicos) e literalidade do Estatuto da PMPE (Lei 6.783/74)."], "example": "Ao errar uma questão no simulado ou bateria, ela vai automaticamente para o seu Caderno de Erros. Use o filtro '❌ Questões que errei' toda sexta-feira para limpar suas pendências.", "bizu": "Não passe para o próximo assunto se sua taxa de acerto na bateria de 10 questões ficou abaixo de 60%: leia o diagnóstico de erro passo a passo antes de avançar.", "mnemonic": "L-C-E-R: Ler o comando -> Cortar absurdos -> Encontrar a pegadinha -> Revisar o erro.", "trap": "Medir seu estudo pelo 'número de páginas lidas' em vez de medir pela 'taxa de acerto líquida nas questões da sua banca'."},
+     {"id": "manual-04-guia-passo-a-passo", "category": "Manuais do Caçador (Método & Estratégia)", "title": "Manual 04 — Guia Passo a Passo de Uso da Plataforma Jornada do Caçador", "source": "Manual Oficial do Caçador", "page": 4, "explanation": "A plataforma Jornada do Caçador integra em um único painel o Edital Verticalizado, o Ciclo Tático de Estudos, o Cronômetro por Modalidade, a Central de Estudo em Ordem Cronológica, o Banco de Questões por Banca, o Simulador de Aprovação, a Redação IA, o Painel TAF e a Arena Duelo X1. Veja abaixo como utilizar cada módulo na sua rotina diária:", "points": ["Passo 1 (Edital e Planejamento): Em Menu -> Biblioteca, envie o PDF do seu edital na categoria 'Edital do concurso' (100% individual). Depois, na aba Hoje, clique em 'Planejamento' para definir seus minutos diários e dias da semana.", "Passo 2 (Missão Diária, Cronômetro e Ciclo Tático): Na aba Hoje, a Missão Atual, o Ciclo Tático e o Cronômetro trabalham sincronizados na mesma disciplina. Escolha a modalidade (Teoria, Lei Seca, Questões ou Revisão) e cumpra pelo menos 2 etapas (50%) para garantir sua Ofensiva Diária.", "Passo 3 (Central de Estudo e Lei Seca sem PDF): Na aba Estudar, leia os resumos ordenados cronologicamente (Art. 1º -> Art. 2º -> Art. 5º), consulte o Mapa Mental Tático ou use 'Criar Estudo por Texto ou Assunto' na Biblioteca para colar leis secas sem precisar de PDF.", "Passo 4 (Provas em PDF, Gabarito Tardio e Duelo X1): Importe provas com escolha de Caderno (Tipo 1/2/Azul), anexe o gabarito em PDF separado ou use 'Adicionar gabarito depois' (com suporte a questões anuladas). Nos intervalos, desafie colegas ou os Bots das Bancas no Duelo X1 de 60 segundos!"], "example": "Rotina diária ideal na plataforma: 1) Abra a aba Hoje e dê o play no Cronômetro em 'Teoria' -> 2) Clique em '1. Abrir Resumo' no Ciclo Tático -> 3) Clique em 'Questões da Disciplina' abaixo da Missão Atual -> 4) Conclua a missão (+100 XP + até +50 XP de Bônus de Maestria pelo seu índice de acerto).", "bizu": "Vai prestar 2 concursos (ex.: PMPE + CBMPE)? Clique no botão 'Unificar editais' na aba Portais para ativar o Modo Conciliação: os assuntos comuns contam progresso duplo!", "mnemonic": "E-M-Q-R: Edital na Biblioteca -> Missão e Ciclo em Hoje -> Questões da Banca -> Revisão 1-7-30.", "trap": "Concluir missões no clique sem resolver a bateria de questões do tópico: o Termômetro Prático do Edital e o Simulador de Aprovação medem apenas questões realmente resolvidas!"},
+   {"id": "manual-03-revisao-pos-edital", "category": "Manuais do Caçador (Método & Estratégia)", "title": "Manual 03 — Estratégia Pós-Edital e Revisão Espaçada (24h, 7 dias e 30 dias)", "source": "Manual Oficial do Caçador", "page": 3, "explanation": "Pela Curva do Esquecimento de Ebbinghaus, o cérebro humano esquece até 70% do que leu em 7 dias se não houver recuperação ativa da memória. Por isso, a revisão não deve ser 'reler o PDF inteiro do zero', mas sim acionar gatilhos rápidos em 3 janelas: 24 horas (Flashcards e Bizus), 7 dias (Bateria curta de 10 questões do tópico) e 30 dias (Simulado misto e revisão do Caderno de Erros). No pós-edital, priorize os tópicos de alta incidência no Raio-X da Banca.", "points": ["Revisão de 24h (5 a 10 min): passe pelos Flashcards e pontos essenciais do assunto estudado no dia anterior.", "Revisão de 7 dias (15 a 20 min): resolva de 5 a 10 questões oficiais da banca sobre o tema sem consultar o resumo.", "Revisão de 30 dias (30 min): refaça as questões que você errou naquele mês usando o filtro '❌ Questões que errei'.", "Acompanhe no Mapa do Edital as duas barras: Cobertura Teórica (% lido) e Cobertura Prática (% testado em questões) devem caminhar juntas!"], "example": "Se você estudou 'Inquérito Policial' hoje, amanhã (24h) revise os prazos (10d/30d) nos flashcards; na próxima semana (7d), faça 10 questões de Inquérito Policial na aba Questões.", "bizu": "Fique atento ao Sino de Notificações no topo do site: ele avisa automaticamente quais tópicos completaram 24h, 7 dias ou 30 dias desde o seu estudo!", "mnemonic": "Ciclo 1-7-30: 1 dia (Flashcards), 7 dias (Questões), 30 dias (Caderno de Erros).", "trap": "Querer fechar 100% da teoria do edital sem revisar nada no caminho e chegar na semana da prova sem lembrar o que estudou no primeiro mês."}
+-];
++);
+diff --git a/dist/sw.js b/dist/sw.js
+index d8e5a31..9e5b3a8 100644
+--- a/dist/sw.js
++++ b/dist/sw.js
+@@ -1,4 +1,4 @@
+-const CACHE='jornada-cacador-v78-smart-notebook-r172';
++const CACHE='jornada-cacador-v78-smart-notebook-r173';
+ const ASSETS=['./','./index.html','./ui-v75.css','./ui-v77.css','./ui-v78.css','./v59-enhancements.js','./v77-experience.js','./v78-smart-notebook.js','./pdf-text-client.js','./pdf.mjs','./pdf.worker.mjs','./content-summaries.js','./native-question-bank.json','./material-deep-dives.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./login-banner.jpg',
+   './login-banner.webp',
+   './bancas-boss-banner.webp','./bancas-boss-banner.jpg','./og-banner-1200x630.jpg','./privacidade.html','./termos.html','./cookies.html','./404.html'];
+diff --git a/dist/v77-experience.js b/dist/v77-experience.js
+index 7470570..061a23a 100644
+--- a/dist/v77-experience.js
++++ b/dist/v77-experience.js
+@@ -2505,12 +2505,18 @@
+   window.formatStatementWithHighlights = formatStatementWithHighlights;
+   window.questionMatchesBoardFilter = questionMatchesBoardFilter;
+ 
++  // Track source objects per destination array: repeated filters must not rehash the bank.
++  const nativeBankLoadedSources = new WeakMap();
+   function ensureNativeQuestionBankLoaded() {
+-    if (typeof ensureNativePedagogicalCouplingLoaded === 'function') ensureNativePedagogicalCouplingLoaded();
+     if (typeof ALL_QUESTIONS === 'undefined' || !Array.isArray(ALL_QUESTIONS)) return;
++    let loaded = nativeBankLoadedSources.get(ALL_QUESTIONS);
++    if (!loaded) { loaded = new WeakSet(); nativeBankLoadedSources.set(ALL_QUESTIONS, loaded); }
++    const pending = NATIVE_POLICE_QUESTION_BANK.filter(item => !loaded.has(item));
++    if (!pending.length) return;
+     const existingFp = new Set(ALL_QUESTIONS.map(qItem => questionFingerprint(qItem)));
+     let added = 0;
+-    for (const item of NATIVE_POLICE_QUESTION_BANK) {
++    for (const item of pending) {
++      loaded.add(item);
+       const normalized = {
+         ...item,
+         subject: canonicalSubjectName(item.subject),
+@@ -2934,6 +2940,12 @@
+     filters.insertAdjacentHTML('beforeend',`<button type="button" class="ghost small" id="openManuaisCacadorBtn" style="white-space:nowrap;border-color:rgba(250,204,21,0.45);color:#fde047;">📚 Manuais do Caçador (Método)</button>`);
+     document.querySelector('#openManuaisCacadorBtn')?.addEventListener('click',()=>{
+       ensureNativePedagogicalCouplingLoaded();
++      const search=document.querySelector('#summarySearch');
++      if(search)search.value='';
++      const manualCategory='Manuais do Caçador (Método & Estratégia)';
++      const folderKey=`study:${state.activeCampaignId}:${subjectKey(manualCategory)}`;
++      libraryUI.studyFolders[folderKey]=true;
++      libraryUI.subjects[`studydoc:${state.activeCampaignId}:${subjectKey(manualCategory)}:${subjectKey('Manual Oficial do Caçador')}`]=true;
+       const sf=document.querySelector('#summaryFilter');
+       if(sf){
+         let opt=[...sf.options].find(o=>/manuais do ca[cç]ador/i.test(o.value));
+@@ -2945,7 +2957,8 @@
+         sf.dispatchEvent(new Event('change'));
+       }
+       if(typeof renderSummaries==='function')renderSummaries('');
+-      if(typeof toast==='function')toast('📚 Manuais do Caçador abertos (Ciclo de Estudos, Engenharia Reversa e Revisão 1-7-30)!');
++      const count=ALL_SUMMARIES.filter(item=>/^manual-/.test(item.id||'')).length;
++      if(typeof toast==='function')toast(count?`${count} manuais disponíveis: ciclo, questões, revisão e uso da plataforma.`:'Os manuais não foram carregados. Atualize a página para tentar novamente.');
+     });
+   }
+ 
+@@ -3090,7 +3103,8 @@
+     const campId=(typeof state==='object'&&state?.activeCampaignId)||'default';
+     const missionsLen=(typeof state==='object'&&Array.isArray(state?.customCampaign?.missions))?state.customCampaign.missions.length:0;
+     const sig=`${qArr.length}|${errObj?Object.keys(errObj).length:0}|${campId}|${missionsLen}|${qArr[0]?.statement?.slice(0,20)||''}|${qArr[qArr.length-1]?.statement?.slice(0,20)||''}`;
+-    if(!force&&sanitizeAllQuestionsAndErrorsSubjects._lastSig===sig)return;
++    if(!force&&sanitizeAllQuestionsAndErrorsSubjects._lastArray===qArr&&sanitizeAllQuestionsAndErrorsSubjects._lastSig===sig)return;
++    sanitizeAllQuestionsAndErrorsSubjects._lastArray=qArr;
+     const isValidFn=typeof window.isValidPedagogicalQuestion==='function'?window.isValidPedagogicalQuestion:(()=>true);
+     const byStmt=new Map();
+     if(Array.isArray(ALL_QUESTIONS)){
+@@ -3765,6 +3779,10 @@
+     const board=q('#questionBoardFilter')?.value||'all';
+     const currentTopic=topicSelect.value||'all';
+     const subjKey=subject==='all'?'all':topicKey(canonicalSubjectName(subject));
++    const topicSignature=JSON.stringify([state.activeCampaignId,subject,board,
++      (typeof orderedMissions==='function'?orderedMissions():[]).map(m=>[m.id,m.subject,m.name]),
++      (ALL_QUESTIONS||[]).map(item=>[item.subject_canonical,item.topic_canonical,item.topic,item.board,item.statement])]);
++    if(topicSelect._sourceSignature===topicSignature)return;
+     const bySubjBucket=new Map();
+     const byTopicCount=new Map();
+     const byTopicSample=new Map();
+@@ -3800,7 +3818,7 @@
+       for(let i=0;i<candidateQs.length;i++){
+         if(questionMatchesTopicFilter(candidateQs[i],k,m.subject||subject,rawName))matchCnt++;
+       }
+-      entries.push([k,`${shortLabel(displayLabel,48)} (${matchCnt||candidateQs.length||allForSubject.length}q)`]);
++      entries.push([k,`${shortLabel(displayLabel,48)} (${matchCnt}q)`]);
+     });
+     // 2) Subtópicos únicos das questões (itera apenas sobre os ~35 tópicos únicos em byTopicSample, nunca sobre 1.070 questões)
+     const extraTopicsMap=new Map();
+@@ -3827,6 +3845,7 @@
+       const cnt=byTopicCount.get(k)||0;
+       entries.push([k,`${shortLabel(label,48)} (${cnt}q)`]);
+     }
++    topicSelect._sourceSignature=topicSignature;
+     topicSelect.innerHTML='<option value="all">Todos os assuntos da disciplina (Ordem Cronológica)</option>'+entries.map(([key,label])=>`<option value="${escText(key)}" title="${escText(label)}">${escText(label)}</option>`).join('');
+     topicSelect.value=seenKeys.has(currentTopic)?currentTopic:'all';
+     populateExamHubSelects();
+@@ -11178,7 +11197,7 @@
+       const view=q(t.sel);
+       if(!view||q(`#${t.id}`))continue;
+       const head=view.querySelector('.sectionHead');
+-      const html=`<div class="localDbBar" id="${t.id}"><div class="localDbStatus"><span class="localDbDot"></span><span data-local-db-text="1">⚡ <b>Banco Local Ativo:</b> abertura instantânea de abas no aparelho</span></div><button type="button" class="ghost small" data-download-local-db="1">📥 Baixar / Atualizar Banco Local</button></div>`;
++      const html=`<div class="localDbBar" id="${t.id}"><div class="localDbStatus"><span class="localDbDot"></span><span data-local-db-text="1">⚡ <b>Banco Local Ativo:</b> conteúdo disponível no aparelho</span></div><button type="button" class="ghost small" data-download-local-db="1">📥 Baixar / Atualizar Banco Local</button></div>`;
+       if(head)head.insertAdjacentHTML('afterend',html);
+       else view.insertAdjacentHTML('afterbegin',html);
+     }
+@@ -11201,8 +11220,8 @@
+     const fLen=(typeof ALL_FLASHCARDS!=='undefined'&&Array.isArray(ALL_FLASHCARDS))?ALL_FLASHCARDS.length:0;
+     const dLen=(typeof cloudDocuments!=='undefined'&&Array.isArray(cloudDocuments))?cloudDocuments.length:0;
+     const label=(sLen||qLen||dLen)
+-      ?`⚡ <b>Banco Local Ativo no Aparelho:</b> ${sLen} resumos · ${qLen} questões · ${fLen} flashcards · ${dLen} PDFs (abertura instantânea)`
+-      :`⚡ <b>Modo Banco Local:</b> clique ao lado para baixar seus resumos e questões para uso instantâneo sem travamentos`;
++      ?`⚡ <b>Banco Local Ativo no Aparelho:</b> ${sLen} resumos · ${qLen} questões · ${fLen} flashcards · ${dLen} PDFs disponíveis`
++      :`⚡ <b>Modo Banco Local:</b> clique ao lado para baixar seus resumos e questões para consultar no aparelho`;
+     qa('[data-local-db-text]').forEach(el=>{el.innerHTML=label});
+   };
+ 
+@@ -14489,7 +14508,11 @@
+     }
+   ];
+ 
+-  window.BASIC_SUMMARIES = NATIVE_CORE_THEORY_SUMMARIES;
++  // The theory replacement must retain the four independent method guides.
++  window.BASIC_SUMMARIES = [
++    ...NATIVE_CORE_THEORY_SUMMARIES,
++    ...(window.BASIC_SUMMARIES || []).filter(item => /^manual-/.test(item.id || ''))
++  ];
+   try {
+     if (typeof ensureNativePedagogicalCouplingLoaded === 'function') {
+       ensureNativePedagogicalCouplingLoaded();
+diff --git a/package.json b/package.json
+index 6eb71a4..eb31b0a 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "jornada-cacador",
+-  "version": "1.0.172",
++  "version": "1.0.173",
+   "private": true,
+   "scripts": {
+     "test": "node scripts/test-all.mjs",
+diff --git a/scripts/test-front-study.mjs b/scripts/test-front-study.mjs
+index dfb2f41..6f16a7a 100644
+--- a/scripts/test-front-study.mjs
++++ b/scripts/test-front-study.mjs
+@@ -1508,7 +1508,7 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
+   // 1) Verifica que openTheoryForSubjectAndTopic e NATIVE_CORE_THEORY_SUMMARIES estão presentes e cobrem os tópicos reportados
+   assert.ok(
+     v77Src.includes("function openTheoryForSubjectAndTopic(") &&
+-    v77Src.includes("window.BASIC_SUMMARIES = NATIVE_CORE_THEORY_SUMMARIES") &&
++    v77Src.includes("...NATIVE_CORE_THEORY_SUMMARIES,") &&
+     v77Src.includes("Revolução Pernambucana de 1817") &&
+     v77Src.includes("Capitanias Hereditárias") &&
+     v77Src.includes("Negação de Condicional (MANÉ)"),
+diff --git a/scripts/test-r173-navigation.mjs b/scripts/test-r173-navigation.mjs
+new file mode 100644
+index 0000000..12b2de8
+--- /dev/null
++++ b/scripts/test-r173-navigation.mjs
+@@ -0,0 +1,47 @@
++import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import vm from 'node:vm';
++const source=fs.readFileSync(new URL('../dist/v77-experience.js',import.meta.url),'utf8');
++function section(start,end){const a=source.indexOf(start),b=source.indexOf(end,a);assert(a>=0&&b>a);return source.slice(a,b)}
++// Real guide data survives the theory replacement, including a second initialization.
++const manuals={window:{}};vm.createContext(manuals);
++vm.runInContext(fs.readFileSync(new URL('../dist/content-summaries.js',import.meta.url),'utf8'),manuals);
++assert(manuals.window.EXTRA_FLASHCARDS.every(Array.isArray),'flashcards não podem conter objetos de resumo');
++manuals.NATIVE_CORE_THEORY_SUMMARIES=[{id:'theory',category:'Português'}];
++const merge=section('  window.BASIC_SUMMARIES = [','  try {\n    if (typeof ensureNativePedagogicalCouplingLoaded');
++vm.runInContext(merge,manuals);vm.runInContext(merge,manuals);
++assert.equal(manuals.window.BASIC_SUMMARIES.filter(s=>/^manual-/.test(s.id)).length,4);
++assert.equal(manuals.window.BASIC_SUMMARIES.length,5);
++// Inject the real guides again after cloud content replaces the local list.
++Object.assign(manuals,{ALL_SUMMARIES:[],ALL_FLASHCARDS:[],getActiveEditalSubjectsList:()=>['Português'],subjectKey:s=>s.toLowerCase(),canonicalSubjectName:s=>s,activeCampaign:()=>({name:'PMPE'})});
++vm.runInContext(section('  function ensureNativePedagogicalCouplingLoaded(){','  const ESTUDEI_CYCLE_BLOCKS='),manuals);
++manuals.ensureNativePedagogicalCouplingLoaded();
++assert.equal(manuals.ALL_SUMMARIES.filter(s=>/^manual-/.test(s.id)).length,4);
++manuals.ALL_SUMMARIES=[];manuals.ensureNativePedagogicalCouplingLoaded();
++assert.equal(manuals.ALL_SUMMARIES.filter(s=>/^manual-/.test(s.id)).length,4);
++// Repeated reads do no fingerprint work; replacements and appended sources load correctly.
++let fingerprints=0;
++const bank=Array.from({length:1000},(_,i)=>({statement:`Pergunta ${i}`,subject:'Português'}));
++const context={window:{},ALL_QUESTIONS:[],NATIVE_POLICE_QUESTION_BANK:bank,canonicalSubjectName:s=>s,questionFingerprint:q=>{fingerprints++;return q.statement}};
++vm.createContext(context);
++vm.runInContext(section('  const nativeBankLoadedSources =','  // ── r145:'),context);
++context.ensureNativeQuestionBankLoaded();assert.equal(context.ALL_QUESTIONS.length,1000);
++const first=fingerprints;for(let i=0;i<100;i++)context.ensureNativeQuestionBankLoaded();
++assert.equal(fingerprints,first,'navegação não deve recalcular fingerprints');
++context.NATIVE_POLICE_QUESTION_BANK.push({statement:'Nova',subject:'Português'});
++context.ensureNativeQuestionBankLoaded();assert.equal(context.ALL_QUESTIONS.length,1001);
++context.ALL_QUESTIONS=[];context.ensureNativeQuestionBankLoaded();assert.equal(context.ALL_QUESTIONS.length,1001);
++context.ALL_QUESTIONS.splice(0,1);context.ensureNativeQuestionBankLoaded();assert.equal(context.ALL_QUESTIONS.length,1000,'não reinserir item removido na sanitização');
++// Topic UI: zero matches stays zero; cache invalidates on edits and portal/board changes.
++let renders=0,html='';const select={value:'all',set innerHTML(v){renders++;html=v},get innerHTML(){return html}};
++const fields={'#questionTopic':select,'#questionSubject':{value:'all'},'#questionBoardFilter':{value:'all'}};
++const missions=[{id:'m1',subject:'Português',name:'Crase'}];
++const ctx={q:s=>fields[s],state:{activeCampaignId:'a'},ALL_QUESTIONS:[{statement:'Texto',subject:'Português',topic:'Verbos',board:'A'}],ensureTopicFilterSelect(){},sanitizeAllQuestionsAndErrorsSubjects(){},canonicalSubjectName:s=>s,topicKey:s=>s.toLowerCase(),resolveStrictQuestionDiscipline:q=>q.subject,orderedMissions:()=>missions,questionMatchesBoardFilter:(q,b)=>b==='all'||b===q.board,questionMatchesTopicFilter:(q,t)=>q.topic.toLowerCase()===t,isTopicContaminatedByWrongSubject:()=>false,shortLabel:s=>s,escText:s=>s,populateExamHubSelects(){}};
++vm.createContext(ctx);vm.runInContext(section('  function populateTopicFilter(){','  function filteredQuestionPool(){'),ctx);
++ctx.populateTopicFilter();assert(html.includes('Crase (0q)'));
++select.value='verbos';ctx.populateTopicFilter();assert.equal(renders,1);assert.equal(select.value,'verbos');
++ctx.ALL_QUESTIONS[0].topic='Crase';ctx.populateTopicFilter();assert.equal(renders,2);assert(html.includes('Crase (1q)'));assert.equal(select.value,'all');
++ctx.state.activeCampaignId='b';ctx.populateTopicFilter();assert.equal(renders,3);
++fields['#questionBoardFilter'].value='B';ctx.populateTopicFilter();assert.equal(renders,4);assert(html.includes('Crase (0q)'));
++console.log('OK r173: 4 manuais preservados, banco incremental, troca de dados/portal, cache de tópicos e contagem zero honesta.');
++console.log('100 leituras repetidas de 1.000 questões: zero fingerprints adicionais.');

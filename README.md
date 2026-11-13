@@ -1,5 +1,11 @@
 # Jornada do Caçador
 
+## Revisão r173 — manuais e desempenho
+
+- [O que mudou, validação e como aplicar](docs/revisao-r173/LEIA-ME.md)
+- Manuais recuperados, carga incremental de questões, reaproveitamento de tópicos e contagens corrigidas.
+- `npm test`: 17/17 scripts; navegação visual e desempenho no aparelho ainda precisam de homologação.
+
 ## Revisão r172 — 12/11/2026
 
 - [Avaliação técnica e pedagógica](docs/revisao-r172/AVALIACAO-COMPLETA.md)

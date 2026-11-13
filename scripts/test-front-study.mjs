@@ -1508,7 +1508,7 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   // 1) Verifica que openTheoryForSubjectAndTopic e NATIVE_CORE_THEORY_SUMMARIES estão presentes e cobrem os tópicos reportados
   assert.ok(
     v77Src.includes("function openTheoryForSubjectAndTopic(") &&
-    v77Src.includes("window.BASIC_SUMMARIES = NATIVE_CORE_THEORY_SUMMARIES") &&
+    v77Src.includes("...NATIVE_CORE_THEORY_SUMMARIES,") &&
     v77Src.includes("Revolução Pernambucana de 1817") &&
     v77Src.includes("Capitanias Hereditárias") &&
     v77Src.includes("Negação de Condicional (MANÉ)"),

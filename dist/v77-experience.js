@@ -2505,12 +2505,18 @@
   window.formatStatementWithHighlights = formatStatementWithHighlights;
   window.questionMatchesBoardFilter = questionMatchesBoardFilter;
 
+  // Track source objects per destination array: repeated filters must not rehash the bank.
+  const nativeBankLoadedSources = new WeakMap();
   function ensureNativeQuestionBankLoaded() {
-    if (typeof ensureNativePedagogicalCouplingLoaded === 'function') ensureNativePedagogicalCouplingLoaded();
     if (typeof ALL_QUESTIONS === 'undefined' || !Array.isArray(ALL_QUESTIONS)) return;
+    let loaded = nativeBankLoadedSources.get(ALL_QUESTIONS);
+    if (!loaded) { loaded = new WeakSet(); nativeBankLoadedSources.set(ALL_QUESTIONS, loaded); }
+    const pending = NATIVE_POLICE_QUESTION_BANK.filter(item => !loaded.has(item));
+    if (!pending.length) return;
     const existingFp = new Set(ALL_QUESTIONS.map(qItem => questionFingerprint(qItem)));
     let added = 0;
-    for (const item of NATIVE_POLICE_QUESTION_BANK) {
+    for (const item of pending) {
+      loaded.add(item);
       const normalized = {
         ...item,
         subject: canonicalSubjectName(item.subject),
@@ -2934,6 +2940,12 @@
     filters.insertAdjacentHTML('beforeend',`<button type="button" class="ghost small" id="openManuaisCacadorBtn" style="white-space:nowrap;border-color:rgba(250,204,21,0.45);color:#fde047;">📚 Manuais do Caçador (Método)</button>`);
     document.querySelector('#openManuaisCacadorBtn')?.addEventListener('click',()=>{
       ensureNativePedagogicalCouplingLoaded();
+      const search=document.querySelector('#summarySearch');
+      if(search)search.value='';
+      const manualCategory='Manuais do Caçador (Método & Estratégia)';
+      const folderKey=`study:${state.activeCampaignId}:${subjectKey(manualCategory)}`;
+      libraryUI.studyFolders[folderKey]=true;
+      libraryUI.subjects[`studydoc:${state.activeCampaignId}:${subjectKey(manualCategory)}:${subjectKey('Manual Oficial do Caçador')}`]=true;
       const sf=document.querySelector('#summaryFilter');
       if(sf){
         let opt=[...sf.options].find(o=>/manuais do ca[cç]ador/i.test(o.value));
@@ -2945,7 +2957,8 @@
         sf.dispatchEvent(new Event('change'));
       }
       if(typeof renderSummaries==='function')renderSummaries('');
-      if(typeof toast==='function')toast('📚 Manuais do Caçador abertos (Ciclo de Estudos, Engenharia Reversa e Revisão 1-7-30)!');
+      const count=ALL_SUMMARIES.filter(item=>/^manual-/.test(item.id||'')).length;
+      if(typeof toast==='function')toast(count?`${count} manuais disponíveis: ciclo, questões, revisão e uso da plataforma.`:'Os manuais não foram carregados. Atualize a página para tentar novamente.');
     });
   }
 
@@ -3090,7 +3103,8 @@
     const campId=(typeof state==='object'&&state?.activeCampaignId)||'default';
     const missionsLen=(typeof state==='object'&&Array.isArray(state?.customCampaign?.missions))?state.customCampaign.missions.length:0;
     const sig=`${qArr.length}|${errObj?Object.keys(errObj).length:0}|${campId}|${missionsLen}|${qArr[0]?.statement?.slice(0,20)||''}|${qArr[qArr.length-1]?.statement?.slice(0,20)||''}`;
-    if(!force&&sanitizeAllQuestionsAndErrorsSubjects._lastSig===sig)return;
+    if(!force&&sanitizeAllQuestionsAndErrorsSubjects._lastArray===qArr&&sanitizeAllQuestionsAndErrorsSubjects._lastSig===sig)return;
+    sanitizeAllQuestionsAndErrorsSubjects._lastArray=qArr;
     const isValidFn=typeof window.isValidPedagogicalQuestion==='function'?window.isValidPedagogicalQuestion:(()=>true);
     const byStmt=new Map();
     if(Array.isArray(ALL_QUESTIONS)){
@@ -3765,6 +3779,10 @@
     const board=q('#questionBoardFilter')?.value||'all';
     const currentTopic=topicSelect.value||'all';
     const subjKey=subject==='all'?'all':topicKey(canonicalSubjectName(subject));
+    const topicSignature=JSON.stringify([state.activeCampaignId,subject,board,
+      (typeof orderedMissions==='function'?orderedMissions():[]).map(m=>[m.id,m.subject,m.name]),
+      (ALL_QUESTIONS||[]).map(item=>[item.subject_canonical,item.topic_canonical,item.topic,item.board,item.statement])]);
+    if(topicSelect._sourceSignature===topicSignature)return;
     const bySubjBucket=new Map();
     const byTopicCount=new Map();
     const byTopicSample=new Map();
@@ -3800,7 +3818,7 @@
       for(let i=0;i<candidateQs.length;i++){
         if(questionMatchesTopicFilter(candidateQs[i],k,m.subject||subject,rawName))matchCnt++;
       }
-      entries.push([k,`${shortLabel(displayLabel,48)} (${matchCnt||candidateQs.length||allForSubject.length}q)`]);
+      entries.push([k,`${shortLabel(displayLabel,48)} (${matchCnt}q)`]);
     });
     // 2) Subtópicos únicos das questões (itera apenas sobre os ~35 tópicos únicos em byTopicSample, nunca sobre 1.070 questões)
     const extraTopicsMap=new Map();
@@ -3827,6 +3845,7 @@
       const cnt=byTopicCount.get(k)||0;
       entries.push([k,`${shortLabel(label,48)} (${cnt}q)`]);
     }
+    topicSelect._sourceSignature=topicSignature;
     topicSelect.innerHTML='<option value="all">Todos os assuntos da disciplina (Ordem Cronológica)</option>'+entries.map(([key,label])=>`<option value="${escText(key)}" title="${escText(label)}">${escText(label)}</option>`).join('');
     topicSelect.value=seenKeys.has(currentTopic)?currentTopic:'all';
     populateExamHubSelects();
@@ -11178,7 +11197,7 @@
       const view=q(t.sel);
       if(!view||q(`#${t.id}`))continue;
       const head=view.querySelector('.sectionHead');
-      const html=`<div class="localDbBar" id="${t.id}"><div class="localDbStatus"><span class="localDbDot"></span><span data-local-db-text="1">⚡ <b>Banco Local Ativo:</b> abertura instantânea de abas no aparelho</span></div><button type="button" class="ghost small" data-download-local-db="1">📥 Baixar / Atualizar Banco Local</button></div>`;
+      const html=`<div class="localDbBar" id="${t.id}"><div class="localDbStatus"><span class="localDbDot"></span><span data-local-db-text="1">⚡ <b>Banco Local Ativo:</b> conteúdo disponível no aparelho</span></div><button type="button" class="ghost small" data-download-local-db="1">📥 Baixar / Atualizar Banco Local</button></div>`;
       if(head)head.insertAdjacentHTML('afterend',html);
       else view.insertAdjacentHTML('afterbegin',html);
     }
@@ -11201,8 +11220,8 @@
     const fLen=(typeof ALL_FLASHCARDS!=='undefined'&&Array.isArray(ALL_FLASHCARDS))?ALL_FLASHCARDS.length:0;
     const dLen=(typeof cloudDocuments!=='undefined'&&Array.isArray(cloudDocuments))?cloudDocuments.length:0;
     const label=(sLen||qLen||dLen)
-      ?`⚡ <b>Banco Local Ativo no Aparelho:</b> ${sLen} resumos · ${qLen} questões · ${fLen} flashcards · ${dLen} PDFs (abertura instantânea)`
-      :`⚡ <b>Modo Banco Local:</b> clique ao lado para baixar seus resumos e questões para uso instantâneo sem travamentos`;
+      ?`⚡ <b>Banco Local Ativo no Aparelho:</b> ${sLen} resumos · ${qLen} questões · ${fLen} flashcards · ${dLen} PDFs disponíveis`
+      :`⚡ <b>Modo Banco Local:</b> clique ao lado para baixar seus resumos e questões para consultar no aparelho`;
     qa('[data-local-db-text]').forEach(el=>{el.innerHTML=label});
   };
 
@@ -14489,7 +14508,11 @@
     }
   ];
 
-  window.BASIC_SUMMARIES = NATIVE_CORE_THEORY_SUMMARIES;
+  // The theory replacement must retain the four independent method guides.
+  window.BASIC_SUMMARIES = [
+    ...NATIVE_CORE_THEORY_SUMMARIES,
+    ...(window.BASIC_SUMMARIES || []).filter(item => /^manual-/.test(item.id || ''))
+  ];
   try {
     if (typeof ensureNativePedagogicalCouplingLoaded === 'function') {
       ensureNativePedagogicalCouplingLoaded();
