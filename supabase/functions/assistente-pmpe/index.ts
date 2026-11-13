@@ -697,11 +697,11 @@ Regras obrigatórias de qualidade (estilo boaResposta):
       return json(request, { error: "Documento inválido para esta conta." }, 400);
     }
     try {
-      const ownedDocumentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&storage_path=eq.${encodeURIComponent(storagePath)}&select=id&limit=1`, {
+      const ownedDocumentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&storage_path=eq.${encodeURIComponent(storagePath)}&select=id,document_type&limit=1`, {
         headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY },
       });
       const ownedDocuments = ownedDocumentResponse.ok ? await ownedDocumentResponse.json().catch(() => []) : [];
-      if (!Array.isArray(ownedDocuments) || !ownedDocuments[0]?.id) {
+      if (!Array.isArray(ownedDocuments) || !ownedDocuments[0]?.id || !["edital", "edital_concurso"].includes(String(ownedDocuments[0]?.document_type))) {
         return json(request, { error: "O documento ou portal não pertence à conta conectada." }, 403);
       }
       const fileResponse = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${storagePath}`, {
@@ -733,13 +733,31 @@ Regras obrigatórias de qualidade (estilo boaResposta):
       const geminiData = await geminiResponse.json().catch(() => ({}));
       if (!geminiResponse.ok) return json(request, { error: geminiData?.error?.message ?? "O Gemini não conseguiu analisar o edital." }, 502);
       const parsed = parseGeminiJsonText(geminiData);
-      const topics = Array.isArray(parsed.topics) ? parsed.topics.slice(0, 1500) : [];
-      if (!topics.length) return json(request, { error: "Não encontrei um conteúdo programático neste PDF." }, 422);
-      await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "DELETE", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
-      const rows = topics.map((item: { subject?: string; unit?: string; topic?: string }, index: number) => ({ campaign_id: campaignId, user_id: user.id, subject: String(item.subject ?? "Edital"), unit_name: String(item.unit ?? ""), topic: String(item.topic ?? ""), edital_order: index }));
-      await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics`, { method: "POST", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify(rows) });
-      await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready" }) });
-      return json(request, { topics, provider: "gemini", key_source: personalGeminiKey ? "personal" : "shared", document_id: documentId });
+      const topics = Array.isArray(parsed.topics) ? parsed.topics.slice(0, 4000) : [];
+      const rows = topics.map((item: { subject?: string; unit?: string; topic?: string }, index: number) => ({ subject: String(item?.subject ?? "").trim(), unit_name: String(item?.unit ?? "").trim(), topic: String(item?.topic ?? "").trim(), edital_order: index })).filter((item: { subject: string; topic: string }) => item.subject && item.topic);
+      if (!rows.length) return json(request, { error: "Não encontrei um conteúdo programático neste PDF." }, 422);
+      const persisted = await fetch(`${SUPABASE_URL}/rest/v1/rpc/replace_campaign_topics_atomic`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          p_user_id: user.id,
+          p_campaign_id: campaignId,
+          p_document_id: documentId,
+          p_topics: rows,
+          p_coverage: { needs_review: true, summary_count: rows.length, warnings: ["Extração pelo modo de recuperação: confira disciplinas e tópicos com o edital original. A cobertura integral não foi verificada."] },
+        }),
+      }).catch(() => null);
+      const persistedData = persisted ? await persisted.json().catch(() => null) : null;
+      const saved = persistedData?.topics;
+      if (!persisted?.ok || !Array.isArray(saved) || !saved.length || persistedData?.saved !== saved.length) {
+        const missingMigration = persisted?.status === 404 || persistedData?.code === "PGRST202";
+        return json(request, {
+          error: missingMigration ? "Aplique a migração v107 no Supabase para salvar o edital com segurança. O mapa atual foi preservado." : "Não foi possível confirmar a gravação do edital. Recarregue o portal antes de tentar novamente.",
+          code: missingMigration ? "MAP_STORAGE_MIGRATION_REQUIRED" : "TOPICS_SAVE_FAILED",
+          retryable: !missingMigration,
+        }, missingMigration ? 503 : 502);
+      }
+      return json(request, { topics: saved, saved: saved.length, provider: "gemini", key_source: personalGeminiKey ? "personal" : "shared", document_id: documentId });
     } catch (error) {
       console.error("Gemini edital error", error);
       await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "error" }) }).catch(() => undefined);

@@ -6,7 +6,7 @@ for (const ld of html.matchAll(/<script\s+type="application\/ld\+json"[^>]*>([\s
 const scripts = [...html.matchAll(/<script(?!(?:\s[^>]*)?type="application\/ld\+json")(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map((match) => match[1]).filter(Boolean);
 if (!scripts.length) throw new Error("Nenhum JavaScript incorporado foi encontrado.");
 for (const source of scripts) new vm.Script(source);
-for (const relative of ["../dist/v59-enhancements.js", "../dist/v77-experience.js", "../dist/v78-smart-notebook.js", "../dist/sw.js"]) new vm.Script(fs.readFileSync(new URL(relative, import.meta.url), "utf8"), { filename: relative });
+for (const relative of ["../dist/v59-enhancements.js", "../dist/question-session-store.js", "../dist/v77-experience.js", "../dist/v78-smart-notebook.js", "../dist/sw.js"]) new vm.Script(fs.readFileSync(new URL(relative, import.meta.url), "utf8"), { filename: relative });
 
 const markup = html.replace(/<script(?:\s[^>]*)?>[\s\S]*?<\/script>/gi, "");
 const ids = [...markup.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
@@ -26,6 +26,7 @@ for (const relative of publicFiles) {
 
 const sw = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
 if (!sw.includes("jornada-cacador-v78-smart-notebook")) throw new Error("O cache não aponta para a versão 78.");
+if (!html.includes('src="question-session-store.js"') || !sw.includes("question-session-store.js")) throw new Error("A persistência de treinos não está ligada ao HTML e ao cache offline.");
 if (!html.includes('href="ui-v75.css"') || !sw.includes("ui-v75.css")) throw new Error("A interface v75 não está ligada ao HTML e ao cache offline.");
 if (!html.includes('href="ui-v77.css"') || !html.includes('src="v77-experience.js"') || !sw.includes("ui-v77.css") || !sw.includes("v77-experience.js")) throw new Error("A experiência v77 não está ligada ao HTML e ao cache offline.");
 if (!html.includes('href="ui-v78.css"') || !html.includes('src="v78-smart-notebook.js"') || !sw.includes("ui-v78.css") || !sw.includes("v78-smart-notebook.js")) throw new Error("O Caderno Inteligente v78 não está ligado ao HTML e ao cache offline.");

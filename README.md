@@ -1,5 +1,14 @@
 # Jornada do Caçador
 
+## Revisão r174 — questões, confiança e recuperação
+
+- [Como aplicar o pacote](docs/revisao-r174/LEIA-ME.md)
+- [Avaliação completa e prioridades](docs/revisao-r174/AVALIACAO-COMPLETA.md)
+- [Atualizar o GitHub e publicar](docs/revisao-r174/GITHUB-E-APLICACAO.md)
+- Filtros sem preenchimento com outra disciplina, gabaritos com origem explícita, desempenho por banca, retomada local de treinos/simulados e gravação transacional do edital.
+- **Aplicar a migração v107 antes de atualizar funções e frontend.** Sem ela, a nova gravação preserva o mapa anterior e informa a atualização necessária.
+- Testes Node e SQL isolados executados; testes visuais preparados para homologação manual no GitHub. Entrega em branch de revisão; não houve implantação do aplicativo nem migração remota.
+
 ## Revisão r173 — manuais e desempenho
 
 - [O que mudou, validação e como aplicar](docs/revisao-r173/LEIA-ME.md)

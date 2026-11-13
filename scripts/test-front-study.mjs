@@ -306,7 +306,7 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   const pdfClientCode = readFileSync(new URL("../dist/pdf-text-client.js", import.meta.url), "utf8");
   assert(pdfClientCode.includes("Promise.withResolvers"), "pdf-text-client.js deve incluir polyfill para Promise.withResolvers");
   assert(pdfClientCode.includes("extractStructuredEditalTopics"), "pdf-text-client.js deve expor extractStructuredEditalTopics");
-  assert(pdfClientCode.includes("campaign_topics?on_conflict=campaign_id,subject,topic"), "pdf-text-client.js deve salvar campaign_topics com on_conflict para evitar erro 409");
+  assert(pdfClientCode.includes("rpc/replace_campaign_topics_atomic"), "pdf-text-client.js deve salvar o mapa por RPC transacional com upsert e propriedade verificada");
 
   const uc = [
     slice("function normalizeText(", "function missionForQuestion("),
@@ -1215,7 +1215,7 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
 
   assert.ok(htmlSrc.includes("function inferStrictQuestionSubject(") && htmlSrc.includes("window.inferStrictQuestionSubject=inferStrictQuestionSubject"), "Deve conter o classificador estrito por enunciado/tópico inferStrictQuestionSubject");
   assert.ok(v77Src.includes("function sanitizeAllQuestionsAndErrorsSubjects(") && v77Src.includes("function buildSubjectAppropriateDistractors("), "Deve conter higienização automática de disciplinas em ALL_QUESTIONS/state.errors e distratores específicos por disciplina");
-  assert.ok(v77Src.includes("chosenPool=chosenPool.filter(item=>topicKey(resolveStrictQuestionDiscipline(item))===subjKey);"), "startSubjectTargetedFix (Correção de Gargalo) deve garantir que 100% das questões pertencem exclusivamente à disciplina selecionada");
+  assert.ok(v77Src.includes("const eligible=item=>isQuestionDisciplineEligible(item,cleanSubj)") && v77Src.includes("chosenPool=chosenPool.filter(eligible);"), "Correção de Gargalo deve aplicar disciplina estrita e gabarito válido; comportamento exercitado em test-r174-error-retry");
   assert.ok(!v77Src.includes("Alternativa incorreta conforme a literalidade da norma e jurisprudência aplicável."), "Não deve injetar distratores jurídicos genéricos em questões de Raciocínio Lógico, Português ou Informática");
 
   console.log("OK: Isolamento estrito de disciplina na Correção de Gargalos e Caderno de Erros (r152) validado.");

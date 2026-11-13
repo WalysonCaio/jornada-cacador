@@ -1,0 +1,91 @@
+{
+  "campaignId": "browser-smoke-local",
+  "campaignName": "Teste local de navegador",
+  "missions": [
+    { "id": "smoke-mission-portugues", "subject": "Língua Portuguesa", "name": "SMOKE-PORTUGUES" },
+    { "id": "smoke-mission-empty", "subject": "Língua Portuguesa", "name": "SMOKE-SEM-QUESTOES" },
+    { "id": "smoke-mission-penal", "subject": "Direito Penal", "name": "SMOKE-PENAL" }
+  ],
+  "questions": [
+    {
+      "id": "smoke-portugues-1",
+      "subject": "Língua Portuguesa",
+      "subject_source": "manual",
+      "topic": "SMOKE-PORTUGUES",
+      "board": "IDECAN",
+      "origin": "autoral",
+      "key_source": "manual_revisado",
+      "answer_key_validation": "revisado",
+      "key_reference": "Fixture local de teste; não integra o banco publicado.",
+      "difficulty": "facil",
+      "statement": "Quanto à concordância verbal, qual frase está escrita corretamente?",
+      "options": ["Os candidatos estudam diariamente.", "Os candidatos estuda diariamente."],
+      "correct_index": 0,
+      "explanation": "Conceito-chave: o verbo concorda com o sujeito em número e pessoa. ✅ Correta: A) O sujeito plural exige estudam. ❌ B) Estuda está no singular e não concorda com os candidatos."
+    },
+    {
+      "id": "smoke-portugues-2",
+      "subject": "Língua Portuguesa",
+      "subject_source": "manual",
+      "topic": "SMOKE-PORTUGUES",
+      "board": "IDECAN",
+      "origin": "autoral",
+      "key_source": "manual_revisado",
+      "answer_key_validation": "revisado",
+      "key_reference": "Fixture local de teste; não integra o banco publicado.",
+      "difficulty": "medio",
+      "statement": "Qual frase emprega corretamente o sinal indicativo de crase antes de palavra feminina?",
+      "options": ["A aluna foi à escola.", "A aluna foi à pé."],
+      "correct_index": 0,
+      "explanation": "Conceito-chave: a crase resulta da fusão de preposição a com artigo a. ✅ Correta: A) Ir a e a escola permitem a fusão. ❌ B) Pé é palavra masculina; a expressão a pé não recebe crase."
+    },
+    {
+      "id": "smoke-portugues-3",
+      "subject": "Língua Portuguesa",
+      "subject_source": "manual",
+      "topic": "SMOKE-PORTUGUES",
+      "board": "IDECAN",
+      "origin": "autoral",
+      "key_source": "manual_revisado",
+      "answer_key_validation": "revisado",
+      "key_reference": "Fixture local de teste; não integra o banco publicado.",
+      "difficulty": "dificil",
+      "statement": "Quanto à concordância nominal, qual expressão apresenta flexão adequada de número?",
+      "options": ["As novas apostilas.", "As novo apostilas."],
+      "correct_index": 0,
+      "explanation": "Conceito-chave: o adjetivo concorda com o substantivo em gênero e número. ✅ Correta: A) Novas concorda com apostilas. ❌ B) Novo está no masculino singular."
+    },
+    {
+      "id": "smoke-penal-1",
+      "subject": "Direito Penal",
+      "subject_source": "manual",
+      "topic": "SMOKE-PENAL",
+      "board": "IDECAN",
+      "origin": "autoral",
+      "key_source": "manual_revisado",
+      "answer_key_validation": "revisado",
+      "key_reference": "Fixture local de teste; não integra o banco publicado.",
+      "difficulty": "facil",
+      "statement": "No crime de furto, qual conduta corresponde ao núcleo do tipo penal previsto no artigo 155 do Código Penal?",
+      "options": ["Subtrair coisa alheia móvel.", "Receber voluntariamente um presente de seu proprietário."],
+      "correct_index": 0,
+      "explanation": "Conceito-chave: o furto envolve subtração de coisa alheia móvel. ✅ Correta: A) Subtrair é o núcleo do tipo. ❌ B) Receber presente voluntário não caracteriza essa subtração."
+    },
+    {
+      "id": "smoke-penal-2",
+      "subject": "Direito Penal",
+      "subject_source": "manual",
+      "topic": "SMOKE-PENAL",
+      "board": "IDECAN",
+      "origin": "autoral",
+      "key_source": "manual_revisado",
+      "answer_key_validation": "revisado",
+      "key_reference": "Fixture local de teste; não integra o banco publicado.",
+      "difficulty": "medio",
+      "statement": "Segundo o Código Penal, quando o agente quer o resultado ou assume o risco de produzi-lo, o crime é classificado como:",
+      "options": ["Doloso.", "Necessariamente culposo."],
+      "correct_index": 0,
+      "explanation": "Conceito-chave: dolo compreende querer o resultado ou assumir o risco de produzi-lo. ✅ Correta: A) A descrição corresponde ao dolo. ❌ B) Culpa decorre de imprudência, negligência ou imperícia, sem as situações de dolo descritas."
+    }
+  ]
+}
