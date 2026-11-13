@@ -1,5 +1,13 @@
 # Jornada do Caçador
 
+## Revisão r175 — Manuais fora do material de estudos
+
+- [Como aplicar e o que foi corrigido](docs/revisao-r175/LEIA-ME.md).
+- Os quatro guias ficam em **Menu → Manuais do Caçador**, em catálogo próprio de ajuda e método.
+- Não entram em Resumos, flashcards, disciplinas, missões ou contexto da IA; caches legados são filtrados.
+- Esta atualização é de frontend: não acrescenta migração SQL ou alteração de Edge Functions.
+
+
 ## Revisão r174 — questões, confiança e recuperação
 
 - [Como aplicar o pacote](docs/revisao-r174/LEIA-ME.md)

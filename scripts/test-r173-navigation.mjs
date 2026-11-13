@@ -3,22 +3,26 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 const source=fs.readFileSync(new URL('../dist/v77-experience.js',import.meta.url),'utf8');
 function section(start,end){const a=source.indexOf(start),b=source.indexOf(end,a);assert(a>=0&&b>a);return source.slice(a,b)}
-// Real guide data survives the theory replacement, including a second initialization.
+// Platform guides survive independently and are never reinserted as theory.
 const manuals={window:{}};vm.createContext(manuals);
+vm.runInContext(fs.readFileSync(new URL('../dist/hunter-manuals.js',import.meta.url),'utf8'),manuals);
 vm.runInContext(fs.readFileSync(new URL('../dist/content-summaries.js',import.meta.url),'utf8'),manuals);
 assert(manuals.window.EXTRA_FLASHCARDS.every(Array.isArray),'flashcards não podem conter objetos de resumo');
-manuals.NATIVE_CORE_THEORY_SUMMARIES=[{id:'theory',category:'Português'}];
-const merge=section('  window.BASIC_SUMMARIES = [','  try {\n    if (typeof ensureNativePedagogicalCouplingLoaded');
+assert.equal(manuals.window.JornadaManuals.items.length,4);
+assert.equal(manuals.window.BASIC_SUMMARIES.filter(s=>manuals.window.JornadaManuals.isManual(s)).length,0);
+vm.runInContext(section('  function isPlatformManualStudyArtifact(', '  function getActiveEditalSubjectsList('),manuals);
+manuals.NATIVE_CORE_THEORY_SUMMARIES=[{id:'theory',title:'Gramática',category:'Português'}];
+const merge=section('  window.BASIC_SUMMARIES = NATIVE_CORE_THEORY_SUMMARIES.filter(', '  try {\n    if (typeof ensureNativePedagogicalCouplingLoaded');
 vm.runInContext(merge,manuals);vm.runInContext(merge,manuals);
-assert.equal(manuals.window.BASIC_SUMMARIES.filter(s=>/^manual-/.test(s.id)).length,4);
-assert.equal(manuals.window.BASIC_SUMMARIES.length,5);
-// Inject the real guides again after cloud content replaces the local list.
-Object.assign(manuals,{ALL_SUMMARIES:[],ALL_FLASHCARDS:[],getActiveEditalSubjectsList:()=>['Português'],subjectKey:s=>s.toLowerCase(),canonicalSubjectName:s=>s,activeCampaign:()=>({name:'PMPE'})});
+assert.equal(manuals.window.BASIC_SUMMARIES.length,1);
+assert.equal(manuals.window.JornadaManuals.items.length,4,'reinicializar teoria não deve apagar a ajuda');
+Object.assign(manuals,{ALL_SUMMARIES:[{id:'manual-01-ciclo-estudos',category:'Manuais do Caçador'}],ALL_FLASHCARDS:[],getActiveEditalSubjectsList:()=>['Português'],subjectKey:s=>s.toLowerCase(),canonicalSubjectName:s=>s,activeCampaign:()=>({name:'PMPE'})});
 vm.runInContext(section('  function ensureNativePedagogicalCouplingLoaded(){','  const ESTUDEI_CYCLE_BLOCKS='),manuals);
 manuals.ensureNativePedagogicalCouplingLoaded();
-assert.equal(manuals.ALL_SUMMARIES.filter(s=>/^manual-/.test(s.id)).length,4);
+assert.equal(manuals.ALL_SUMMARIES.filter(s=>manuals.window.JornadaManuals.isManual(s)).length,0);
 manuals.ALL_SUMMARIES=[];manuals.ensureNativePedagogicalCouplingLoaded();
-assert.equal(manuals.ALL_SUMMARIES.filter(s=>/^manual-/.test(s.id)).length,4);
+assert.equal(manuals.ALL_SUMMARIES.length,1);
+assert.equal(manuals.window.JornadaManuals.items.length,4);
 // Repeated reads do no fingerprint work; replacements and appended sources load correctly.
 let fingerprints=0;
 const bank=Array.from({length:1000},(_,i)=>({statement:`Pergunta ${i}`,subject:'Português'}));
@@ -43,5 +47,5 @@ select.value='verbos';ctx.populateTopicFilter();assert.equal(renders,1);assert.e
 ctx.ALL_QUESTIONS[0].topic='Crase';ctx.populateTopicFilter();assert.equal(renders,2);assert(html.includes('Crase (1q)'));assert.equal(select.value,'all');
 ctx.state.activeCampaignId='b';ctx.populateTopicFilter();assert.equal(renders,3);
 fields['#questionBoardFilter'].value='B';ctx.populateTopicFilter();assert.equal(renders,4);assert(html.includes('Crase (0q)'));
-console.log('OK r173: 4 manuais preservados, banco incremental, troca de dados/portal, cache de tópicos e contagem zero honesta.');
+console.log('OK r173/r175: 4 guias preservados fora do estudo, banco incremental, troca de dados/portal, cache de tópicos e contagem zero honesta.');
 console.log('100 leituras repetidas de 1.000 questões: zero fingerprints adicionais.');

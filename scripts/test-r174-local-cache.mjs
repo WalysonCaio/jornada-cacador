@@ -9,9 +9,9 @@ const imported = {...native, statement: 'Questão importada de regência', topic
 function setup({readDelayed = false, openDelayed = false, failWrite = false, cacheUser = 'user-a', cacheCampaign = 'portal-a'} = {}) {
   let releaseRead, releaseOpen, request, written = null, badges = 0, renders = 0;
   const cache = {userId: cacheUser, campaignId: cacheCampaign, resetEpoch: 0,
-    questions: [{...native, explanation: 'cache antigo'}, imported, {...imported}],
-    summaries: [{id: 'custom-summary', title: 'Material importado', category: 'Português'}],
-    flashcards: [['Português', 'Pergunta longa o suficiente', 'Resposta longa o suficiente']]};
+    questions: [{...native, explanation: 'cache antigo'}, imported, {...imported}, {...native, id:'manual-01-ciclo-estudos', statement:'Guia antigo da plataforma'}],
+    summaries: [{id: 'custom-summary', title: 'Material importado', category: 'Português'}, {id:'manual-01-ciclo-estudos',title:'Guia antigo',category:'Português'}],
+    flashcards: [['Português', 'Pergunta longa o suficiente', 'Resposta longa o suficiente'], ['Manuais do Caçador', 'Pergunta do guia', 'Resposta do guia']]};
   const db = {transaction: (_table, mode) => {
     const tx = {objectStore: () => ({
       get: () => {
@@ -30,7 +30,7 @@ function setup({readDelayed = false, openDelayed = false, failWrite = false, cac
   const context = {
     state: {activeCampaignId: 'portal-a', customCampaign: {missions: []}}, cloudSession: {user: {id: 'user-a'}},
     ALL_QUESTIONS: [{...native, explanation: 'versão atual'}],
-    ALL_SUMMARIES: [{id: 'manual-local', title: 'Guia da plataforma'}], ALL_FLASHCARDS: [], LEARNING_SUBJECTS: [],
+    ALL_SUMMARIES: [{id: 'local-theory', title: 'Resumo local de teoria'}], ALL_FLASHCARDS: [], LEARNING_SUBJECTS: [],
     cloudDocuments: [], cloudEssays: [],
     localCachePortalKey: id => 'user-a:' + id,
     openLocalStudyCacheDB: () => openDelayed ? new Promise(resolve => {releaseOpen = () => resolve(db);}) : Promise.resolve(db),
@@ -48,6 +48,7 @@ function setup({readDelayed = false, openDelayed = false, failWrite = false, cac
     window: {markViewsDirty() {}, updateLocalDbBadgeUI: () => {badges++;}},
   };
   vm.createContext(context);
+  vm.runInContext(html.slice(html.indexOf('function isHunterManualArtifact('),html.indexOf('function isInvalidTrailSubject(')),context);
   vm.runInContext(source, context);
   return {context, read: () => releaseRead(), open: () => releaseOpen(), cache,
     get written() {return written;}, get badges() {return badges;}, get renders() {return renders;}};
@@ -58,8 +59,9 @@ assert.equal(await merged.context.hydrateFromLocalDatabase(), true);
 assert.equal(merged.context.ALL_QUESTIONS.length, 2, 'Banco nativo inicializado não pode ocultar questões do cache');
 assert.equal(merged.context.ALL_QUESTIONS[0].explanation, 'versão atual', 'Cache não substitui correção mais recente em memória');
 assert.equal(merged.context.ALL_QUESTIONS[1].key_source, 'ia_sugerido', 'Preserve a origem de confiança do gabarito');
-assert.equal(merged.context.ALL_SUMMARIES.length, 2, 'Manuais e material importado devem coexistir');
+assert.equal(merged.context.ALL_SUMMARIES.length, 2, 'Resumo local e material importado devem coexistir');
 assert.equal(merged.context.ALL_FLASHCARDS.length, 1);
+assert(!merged.context.ALL_SUMMARIES.some(item=>item.id?.startsWith('manual-')), 'Cache antigo não pode recolocar guias em Resumos');
 await merged.context.hydrateFromLocalDatabase();
 assert.equal(merged.context.ALL_QUESTIONS.length, 2, 'Reidratar novamente não duplica o banco');
 

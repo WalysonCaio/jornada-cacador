@@ -2538,9 +2538,55 @@
   window.ensureNativeQuestionBankLoaded = ensureNativeQuestionBankLoaded;
 
   // ── r145: Acoplamento Pedagógico Fiel ao Edital + Horas Líquidas Compactas + Ciclo Tático Sincronizado com a Missão ──
+  // Platform help is a separate catalogue, never study data or AI context.
+  function isPlatformManualStudyArtifact(value){
+    if(typeof window.isHunterManualArtifact==='function')return window.isHunterManualArtifact(value);
+    if(typeof window.JornadaManuals?.isManual==='function')return window.JornadaManuals.isManual(value);
+    const fields=Array.isArray(value)?[value[0],value[1],value[3],value[4]]:
+      value&&typeof value==='object'?[value.id,value.category,value.subject,value.title,value.source,value.content_kind]:[value];
+    return fields.some(field=>{
+      const text=String(field||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+      return /^manual-(?:01-ciclo-estudos|02-dominando-questoes|03-revisao-pos-edital|04-guia-passo-a-passo)$/.test(text)||
+        /\b(?:manuais|manual(?: oficial)?) do cacador\b/.test(text)||text==='platform_manual';
+    });
+  }
+  function purgeHunterManualStudyArtifacts(){
+    let removed=0;
+    const purge=list=>{
+      if(!Array.isArray(list))return;
+      for(let i=list.length-1;i>=0;i--)if(isPlatformManualStudyArtifact(list[i])){list.splice(i,1);removed++;}
+    };
+    purge(window.BASIC_SUMMARIES);
+    purge(window.MATERIAL_DEEP_DIVES);
+    if(typeof ALL_SUMMARIES!=='undefined')purge(ALL_SUMMARIES);
+    if(typeof ALL_FLASHCARDS!=='undefined')purge(ALL_FLASHCARDS);
+    if(typeof ALL_QUESTIONS!=='undefined')purge(ALL_QUESTIONS);
+    if(typeof LEARNING_SUBJECTS!=='undefined')purge(LEARNING_SUBJECTS);
+    // Remove only obsolete filter choices, without changing study progress.
+    if(typeof libraryUI!=='undefined'&&libraryUI){
+      for(const field of ['summaryFilter','cardFilter','trailSubject']){
+        for(const [portal,value] of Object.entries(libraryUI[field]||{}))if(isPlatformManualStudyArtifact(value)){
+          if(field==='trailSubject')delete libraryUI[field][portal];else libraryUI[field][portal]='all';
+        }
+      }
+    }
+    if(typeof document!=='undefined'){
+      document.querySelector('#openManuaisCacadorBtn')?.remove();
+      for(const selector of ['#summaryFilter','#cardFilter','#questionSubject','#noteSubject']){
+        const select=document.querySelector(selector);
+        if(!select?.options)continue;
+        const reset=isPlatformManualStudyArtifact(select.value);
+        for(const option of [...select.options])if(isPlatformManualStudyArtifact(option.value)||isPlatformManualStudyArtifact(option.textContent))option.remove();
+        if(reset)select.value=[...select.options].some(option=>option.value==='all')?'all':select.options[0]?.value||'';
+      }
+    }
+    return removed;
+  }
+  window.purgeHunterManualStudyArtifacts=purgeHunterManualStudyArtifacts;
+
   function getActiveEditalSubjectsList(){
     try{
-      const missions=typeof missionPool==='function'?missionPool().filter(m=>m&&m.subject&&!String(m.id||'').startsWith('setup-')):[];
+      const missions=typeof missionPool==='function'?missionPool().filter(m=>m&&m.subject&&!isPlatformManualStudyArtifact(m)&&!String(m.id||'').startsWith('setup-')):[];
       const seen=new Set();
       const list=[];
       for(const m of missions){
@@ -2561,6 +2607,7 @@
 
   function ensureNativePedagogicalCouplingLoaded(){
     try{
+      purgeHunterManualStudyArtifacts();
       const allowedSubjects=getActiveEditalSubjectsList();
       const allowedKeys=new Set(allowedSubjects.map(s=>subjectKey(s)));
       const campName=String((typeof activeCampaign==='function'?activeCampaign()?.name:'')||'').toLowerCase();
@@ -2579,16 +2626,15 @@
       const baseList=[
         ...(typeof window.BASIC_SUMMARIES!=='undefined'&&Array.isArray(window.BASIC_SUMMARIES)?window.BASIC_SUMMARIES:[]),
         ...(typeof window.MATERIAL_DEEP_DIVES!=='undefined'&&Array.isArray(window.MATERIAL_DEEP_DIVES)?window.MATERIAL_DEEP_DIVES:[])
-      ];
+      ].filter(item=>!isPlatformManualStudyArtifact(item));
       if(typeof ALL_SUMMARIES!=='undefined'&&Array.isArray(ALL_SUMMARIES)&&baseList.length){
         const existingIds=new Set(ALL_SUMMARIES.map(s=>String(s?.id||s?.title||'').toLowerCase()));
         for(const item of baseList){
           const rawCat=item.category||item.subject||'Conteúdo Geral';
-          const isManual=/manuais do ca[cç]ador/i.test(rawCat);
-          const normCat=isManual?'Manuais do Caçador (Método & Estratégia)':canonicalSubjectName(rawCat);
+          const normCat=canonicalSubjectName(rawCat);
           const catKey=subjectKey(normCat);
-          // Só injeta resumo nativo se a disciplina fizer parte do edital ativo (ou for Manual do Caçador)
-          if(!isManual&&allowedKeys.size&&!allowedKeys.has(catKey))continue;
+          // Study material must belong to the active edital; manuals are separate help.
+          if(allowedKeys.size&&!allowedKeys.has(catKey))continue;
           const key=String(item?.id||item?.title||'').toLowerCase();
           if(key&&!existingIds.has(key)){
             existingIds.add(key);
@@ -2599,16 +2645,12 @@
             });
           }
         }
-        const sf=typeof document!=='undefined'?document.querySelector('#summaryFilter'):null;
-        if(sf&&![...sf.options].some(o=>/manuais do ca[cç]ador/i.test(o.value))){
-          sf.add(new Option('📚 Manuais do Caçador (Método & Estratégia)','Manuais do Caçador (Método & Estratégia)'));
-        }
       }
       if(typeof ALL_FLASHCARDS!=='undefined'&&Array.isArray(window.ALL_FLASHCARDS)&&baseList.length){
         const existingFronts=new Set(ALL_FLASHCARDS.map(c=>String(Array.isArray(c)?c[1]:c?.front||'').toLowerCase()));
         for(const item of baseList){
           const rawCat=item.category||item.subject||'Conteúdo Geral';
-          if(/manuais do ca[cç]ador/i.test(rawCat))continue;
+          if(isPlatformManualStudyArtifact(item))continue;
           const subj=canonicalSubjectName(rawCat);
           if(allowedKeys.size&&!allowedKeys.has(subjectKey(subj)))continue;
           const front=`[${item.title}] Qual o bizu e a regra central cobrada pelas bancas?`;
@@ -2936,32 +2978,8 @@
   }
 
   function ensureManuaisCacadorShortcutBar(){
-    if(typeof document==='undefined')return;
-    const filters=document.querySelector('#summaries .summaryFilters');
-    if(!filters||document.querySelector('#openManuaisCacadorBtn'))return;
-    filters.insertAdjacentHTML('beforeend',`<button type="button" class="ghost small" id="openManuaisCacadorBtn" style="white-space:nowrap;border-color:rgba(250,204,21,0.45);color:#fde047;">📚 Manuais do Caçador (Método)</button>`);
-    document.querySelector('#openManuaisCacadorBtn')?.addEventListener('click',()=>{
-      ensureNativePedagogicalCouplingLoaded();
-      const search=document.querySelector('#summarySearch');
-      if(search)search.value='';
-      const manualCategory='Manuais do Caçador (Método & Estratégia)';
-      const folderKey=`study:${state.activeCampaignId}:${subjectKey(manualCategory)}`;
-      libraryUI.studyFolders[folderKey]=true;
-      libraryUI.subjects[`studydoc:${state.activeCampaignId}:${subjectKey(manualCategory)}:${subjectKey('Manual Oficial do Caçador')}`]=true;
-      const sf=document.querySelector('#summaryFilter');
-      if(sf){
-        let opt=[...sf.options].find(o=>/manuais do ca[cç]ador/i.test(o.value));
-        if(!opt){
-          opt=new Option('Manuais do Caçador (Método & Estratégia)','Manuais do Caçador (Método & Estratégia)');
-          sf.add(opt);
-        }
-        sf.value=opt.value;
-        sf.dispatchEvent(new Event('change'));
-      }
-      if(typeof renderSummaries==='function')renderSummaries('');
-      const count=ALL_SUMMARIES.filter(item=>/^manual-/.test(item.id||'')).length;
-      if(typeof toast==='function')toast(count?`${count} manuais disponíveis: ciclo, questões, revisão e uso da plataforma.`:'Os manuais não foram carregados. Atualize a página para tentar novamente.');
-    });
+    // Cleanup for tabs that were opened before r175. The only entry is now Help in Menu.
+    if(typeof document!=='undefined')document.querySelector('#openManuaisCacadorBtn')?.remove();
   }
 
   function initAllEstudeiUpgrades(){
@@ -3114,6 +3132,7 @@
   }
 
   function sanitizeAllQuestionsAndErrorsSubjects(force=false){
+    if(typeof purgeHunterManualStudyArtifacts==='function')purgeHunterManualStudyArtifacts();
     if(typeof ensureNativeQuestionBankLoaded==='function')ensureNativeQuestionBankLoaded();
     const qArr=Array.isArray(ALL_QUESTIONS)?ALL_QUESTIONS:[];
     const errObj=(typeof state==='object'&&state?.errors&&typeof state.errors==='object')?state.errors:null;
@@ -3127,7 +3146,7 @@
     if(Array.isArray(ALL_QUESTIONS)){
       for(let i=ALL_QUESTIONS.length-1;i>=0;i--){
         const qItem=ALL_QUESTIONS[i];
-        if(!qItem||typeof qItem!=='object'||!isValidFn(qItem)){
+        if(!qItem||typeof qItem!=='object'||(typeof isPlatformManualStudyArtifact==='function'&&isPlatformManualStudyArtifact(qItem))||!isValidFn(qItem)){
           ALL_QUESTIONS.splice(i,1);
           continue;
         }
@@ -3177,6 +3196,7 @@
     if(state?.errors&&typeof state.errors==='object'){
       let errChanged=false;
       for(const [errKey,err] of Object.entries(state.errors)){
+        if(typeof isPlatformManualStudyArtifact==='function'&&isPlatformManualStudyArtifact({...err,id:errKey}))continue;
         if(!err||typeof err!=='object'){
           delete state.errors[errKey];
           errChanged=true;
@@ -3663,7 +3683,7 @@
 
   function activeCampaignErrors(){
     sanitizeAllQuestionsAndErrorsSubjects();
-    return Object.entries(state?.errors||{}).filter(([,e])=>!e?.campaignId||e.campaignId===state?.activeCampaignId);
+    return Object.entries(state?.errors||{}).filter(([id,e])=>(!e?.campaignId||e.campaignId===state?.activeCampaignId)&&(typeof isPlatformManualStudyArtifact!=='function'||!isPlatformManualStudyArtifact({...e,id})));
   }
 
   function questionMatchesErrorPool(question,errorEntries){
@@ -4123,7 +4143,7 @@
     if(!Array.isArray(ALL_SUMMARIES)||!ALL_SUMMARIES.length)return null;
     const qSubj=resolveStrictQuestionDiscipline(question);
     const qTopic=topicKey(question?.topic);
-    const summaries=ALL_SUMMARIES.filter(s=>!/^manual-/i.test(String(s.id||''))&&!/manuais do ca[cç]ador/i.test(String(s.category||''))&&strictSubjectMatch(s.category||s.subject,qSubj));
+    const summaries=ALL_SUMMARIES.filter(s=>!(typeof isPlatformManualStudyArtifact==='function'?isPlatformManualStudyArtifact(s):/^manual-/i.test(String(s.id||''))||/manuais do ca[cç]ador/i.test(String(s.category||'')))&&strictSubjectMatch(s.category||s.subject,qSubj));
     return summaries.find(s=>topicKey(s.title)===qTopic||(qTopic&&` ${topicKey(s.title)} `.includes(` ${qTopic} `)))
       || summaries[0]
       || null;
@@ -6490,6 +6510,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     const board=q('#genBankBoard')?.value||'Instituto AOCP';
     const subject=q('#genBankSubject')?.value||'Direito Constitucional';
     const topic=q('#genBankTopic')?.value||`Tópicos essenciais de ${subject}`;
+    if(isPlatformManualStudyArtifact(subject)||isPlatformManualStudyArtifact(topic))return toast('Os Manuais do Caçador são guias de ajuda. Escolha uma disciplina do edital para gerar questões.');
     const difficulty=q('#genBankDifficulty')?.value||'progressivo';
     const count=Number(q('#genBankCount')?.value)||5;
     const btn=q('#generateBoardPackBtn');
@@ -9239,14 +9260,15 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   }
 
   function startActiveReviewSession(targetSubject=''){
+    purgeHunterManualStudyArtifacts();
+    if(isPlatformManualStudyArtifact(targetSubject))return toast('Os Manuais do Caçador ficam na ajuda e não geram treino.');
     const due=typeof dueReviews==='function'?dueReviews():[];
     const dueSubjects=new Set(due.map(x=>topicKey(x.kind==='mission'?x.m?.subject:x.e?.subject)).filter(Boolean));
     let pool=(ALL_QUESTIONS||[]).filter(qItem=>{
-      if(targetSubject)return topicKey(qItem.subject)===topicKey(targetSubject);
-      return dueSubjects.size?dueSubjects.has(topicKey(qItem.subject)):true;
+      if(!isQuestionDisciplineEligible(qItem,targetSubject||'all')||['sem_gabarito','anulada'].includes(answerKeyStatus(qItem)))return false;
+      return targetSubject||!dueSubjects.size?true:dueSubjects.has(topicKey(resolveStrictQuestionDiscipline(qItem)));
     });
-    if(pool.length<3)pool=(ALL_QUESTIONS||[]);
-    if(!pool.length)return toast('Envie um material ou gere questões para iniciar a Revisão Ativa.');
+    if(!pool.length)return toast('Não há questões com gabarito válido para esta disciplina ou revisão. Importe questões desse recorte ou revise a teoria.');
     const count=Math.min(5,pool.length);
     const chosen=typeof balancedQuestions==='function'?balancedQuestions(pool,count):pool.slice(0,count);
     activeQuestions={
@@ -9263,6 +9285,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   }
 
   function exportVesperaRaioX(subjectFilter='all'){
+    purgeHunterManualStudyArtifacts();
     const campaignName=(typeof activeCampaign==='function'?activeCampaign()?.name:'Meu Concurso')||'Meu Concurso';
     const errors=Object.values(state?.errors||{}).filter(e=>(!e.campaignId||e.campaignId===state?.activeCampaignId)&&(subjectFilter==='all'||topicKey(e.subject)===topicKey(subjectFilter)));
     const summaries=(ALL_SUMMARIES||[]).filter(s=>subjectFilter==='all'||topicKey(s.category)===topicKey(subjectFilter));
@@ -9271,7 +9294,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       const p=typeof fcProgress==='function'?fcProgress(x):null;
       return !p||p.level==='hard'||p.level==='medium';
     });
-    const notes=(state?.userNotes||[]).filter(n=>subjectFilter==='all'||topicKey(n.subject||'')===topicKey(subjectFilter));
+    const notes=(state?.userNotes||[]).filter(n=>!isPlatformManualStudyArtifact(n)&&(subjectFilter==='all'||topicKey(n.subject||'')===topicKey(subjectFilter)));
 
     const w=window.open('','_blank');
     if(!w)return toast('Permita pop-ups para abrir o Raio-X de Revisão de Véspera.');
@@ -9337,6 +9360,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   }
 
   function enhanceReviewCenter(){
+    purgeHunterManualStudyArtifacts();
     const reviewSection=q('#review');
     if(!reviewSection)return;
     let hub=q('#smartReviewHub');
@@ -9359,7 +9383,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       ...(typeof missionPool==='function'?missionPool().map(m=>m.subject):[]),
       ...(ALL_SUMMARIES||[]).map(s=>s.category),
       ...Object.values(state?.errors||{}).map(e=>e.subject)
-    ].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    ].filter(subject=>subject&&!isPlatformManualStudyArtifact(subject)))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
 
     hub.innerHTML=`
       <div class="sectionHead" style="margin:0">
@@ -10040,7 +10064,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   function toggleSummaryTacticalMindMap(summaryId){
     const box=q(`#mindMapBox-${summaryId}`);
     const item=(ALL_SUMMARIES||[]).find(s=>String(s.id)===String(summaryId));
-    if(!box||!item)return;
+    if(!box||!item||isPlatformManualStudyArtifact(item))return;
     if(!box.hidden){box.hidden=true;return}
     const pts=Array.isArray(item.points)&&item.points.length?item.points:[item.explanation||'Conceito central do tópico.'];
     box.innerHTML=`
@@ -14748,11 +14772,8 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     }
   ];
 
-  // The theory replacement must retain the four independent method guides.
-  window.BASIC_SUMMARIES = [
-    ...NATIVE_CORE_THEORY_SUMMARIES,
-    ...(window.BASIC_SUMMARIES || []).filter(item => /^manual-/.test(item.id || ''))
-  ];
+  // Platform manuals live in JornadaManuals, independently of theory and its caches.
+  window.BASIC_SUMMARIES = NATIVE_CORE_THEORY_SUMMARIES.filter(item=>!isPlatformManualStudyArtifact(item));
   try {
     if (typeof ensureNativePedagogicalCouplingLoaded === 'function') {
       ensureNativePedagogicalCouplingLoaded();
@@ -14760,6 +14781,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   } catch (_e) {}
 
   function ensureTopicSummaryExistsForStudy(targetSubj, targetTopic) {
+    if(isPlatformManualStudyArtifact(targetSubj)||isPlatformManualStudyArtifact(targetTopic))return {cleanSubj:'',bestCard:null,isPlatformHelp:true};
     if (typeof ensureNativePedagogicalCouplingLoaded === 'function') {
       ensureNativePedagogicalCouplingLoaded();
     }
@@ -14772,6 +14794,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     if (Array.isArray(window.BASIC_SUMMARIES) && typeof ALL_SUMMARIES !== 'undefined' && Array.isArray(ALL_SUMMARIES)) {
       const existingIds = new Set(ALL_SUMMARIES.map(s => String(s?.id || s?.title || '').toLowerCase()));
       for (const item of window.BASIC_SUMMARIES) {
+        if(isPlatformManualStudyArtifact(item))continue;
         if (subjectKey(item.category) === sKey || !ALL_SUMMARIES.some(s => subjectKey(s.category) === sKey)) {
           const k = String(item.id || item.title).toLowerCase();
           if (!existingIds.has(k) && subjectKey(item.category) === sKey) {
@@ -14783,7 +14806,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     }
 
     const subjSummaries = (typeof ALL_SUMMARIES !== 'undefined' && Array.isArray(ALL_SUMMARIES))
-      ? ALL_SUMMARIES.filter(s => subjectKey(s.category) === sKey)
+      ? ALL_SUMMARIES.filter(s => !isPlatformManualStudyArtifact(s)&&subjectKey(s.category) === sKey)
       : [];
 
     let bestCard = null;
@@ -14850,6 +14873,10 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   }
 
   function openTheoryForSubjectAndTopic(targetSubj, targetTopic = '') {
+    if(isPlatformManualStudyArtifact(targetSubj)||isPlatformManualStudyArtifact(targetTopic)){
+      if(typeof window.openHunterManuals==='function')window.openHunterManuals();
+      return;
+    }
     const { cleanSubj, bestCard } = ensureTopicSummaryExistsForStudy(targetSubj, targetTopic);
 
     // 1. Abre a aba Estudar
@@ -15978,6 +16005,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     let changed = false;
     for (const [k, err] of entries) {
       if (!err || typeof err !== 'object') continue;
+      if (typeof isPlatformManualStudyArtifact==='function'&&isPlatformManualStudyArtifact({...err,id:k})) continue;
       if (err.campaignId && err.campaignId !== state.activeCampaignId) continue;
       // Corrige disciplina se estiver com nome de arquivo (ex.: "500 Questões Pmpe")
       const cleanSubj = typeof resolveStrictQuestionDiscipline === 'function'

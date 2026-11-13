@@ -1,0 +1,36 @@
+#openHunterManualsBtn small{display:block;margin-top:3px;font-size:.72rem;font-weight:500;line-height:1.35;color:var(--muted,#93a9be)}
+.hunterManualsDialog{width:min(1040px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);box-sizing:border-box;margin:auto;padding:24px;border:1px solid var(--line,#22354a);border-radius:20px;background:var(--panel,#0b1624);color:var(--text,#edf6ff);overflow:auto;box-shadow:0 20px 70px #0007}
+.hunterManualsDialog::backdrop{background:#020810c9;backdrop-filter:blur(5px)}
+.hmHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
+.hmEyebrow{margin:0 0 6px;color:var(--cyan,#59e6ff);font-size:.74rem;letter-spacing:.12em;font-weight:800}
+.hmHeader h2{margin:0;font-size:1.45rem;line-height:1.3}
+.hmClose{flex-shrink:0;min-height:44px}
+.hmDescription{margin:14px 0 22px;max-width:78ch;color:var(--muted,#93a9be);line-height:1.6}
+.hmLayout{display:grid;grid-template-columns:215px minmax(0,1fr);gap:24px;align-items:start}
+.hmNavigation{display:grid;gap:8px;align-content:start}
+.hmNavigation button{display:flex;align-items:center;gap:10px;width:100%;min-height:56px;padding:11px 12px;text-align:left;border:1px solid var(--line,#22354a);border-radius:12px;background:var(--panel2,#101f31);color:var(--text,#edf6ff);font:inherit;font-size:.88rem;line-height:1.45;cursor:pointer}
+.hmNavigation button.isActive{border-color:var(--cyan,#59e6ff);background:#15344a;color:#e7faff}
+.hmGuideNumber{font-size:.76rem;color:var(--muted,#93a9be);font-weight:800;flex-shrink:0}
+.hmNavigation button.isActive .hmGuideNumber{color:var(--cyan,#59e6ff)}
+.hmContent{min-width:0;overflow-wrap:anywhere;line-height:1.7}
+.hmSource{margin:0 0 7px;color:var(--muted,#93a9be);font-size:.77rem;font-weight:700}
+.hmContent h3{margin:0 0 14px;font-size:1.2rem;line-height:1.45;letter-spacing:0}
+.hmContent h3:focus{outline:2px solid var(--cyan,#59e6ff);outline-offset:5px;border-radius:3px}
+.hmIntro{margin:0 0 20px}
+.hmSection{margin:0 0 22px}
+.hmSection h4{margin:0 0 10px;color:var(--cyan,#59e6ff);font-size:1rem;line-height:1.45}
+.hmSection p{margin:0}
+.hmSection ul{margin:0;padding-left:22px}
+.hmSection li{padding-left:3px;margin:0 0 10px}
+.hmReminder{padding:16px;border:1px solid var(--line,#22354a);border-radius:12px;background:var(--panel2,#101f31);font-size:.9rem}
+.hmReminder strong{color:var(--cyan,#59e6ff)}
+.hmReminder p{margin:7px 0 0}
+.hunterManualsDialog button:focus-visible{outline:3px solid var(--cyan,#59e6ff);outline-offset:3px}
+body.lightAppTheme .hunterManualsDialog,body.lightPaperMode .hunterManualsDialog{background:#fff;color:#172b40;border-color:#bed0df}
+body.lightAppTheme .hmNavigation button,body.lightPaperMode .hmNavigation button,body.lightAppTheme .hmReminder,body.lightPaperMode .hmReminder{background:#f3f7fa;color:#172b40;border-color:#bed0df}
+body.lightAppTheme .hmNavigation button.isActive,body.lightPaperMode .hmNavigation button.isActive{background:#e5f5ff;color:#084a70;border-color:#087da8}
+body.lightAppTheme .hmEyebrow,body.lightPaperMode .hmEyebrow,body.lightAppTheme .hmSection h4,body.lightPaperMode .hmSection h4,body.lightAppTheme .hmReminder strong,body.lightPaperMode .hmReminder strong,body.lightAppTheme .hmNavigation button.isActive .hmGuideNumber,body.lightPaperMode .hmNavigation button.isActive .hmGuideNumber{color:#086385}
+body.lightAppTheme .hmDescription,body.lightPaperMode .hmDescription,body.lightAppTheme .hmSource,body.lightPaperMode .hmSource,body.lightAppTheme .hmGuideNumber,body.lightPaperMode .hmGuideNumber,body.lightAppTheme #openHunterManualsBtn small,body.lightPaperMode #openHunterManualsBtn small{color:#4c6376}
+@media(max-width:719px){.hunterManualsDialog{width:calc(100vw - 16px);max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);padding:17px;border-radius:16px}.hmHeader{gap:12px}.hmHeader h2{font-size:1.2rem}.hmDescription{margin-bottom:18px;font-size:.88rem}.hmLayout{grid-template-columns:minmax(0,1fr);gap:20px}.hmNavigation{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.hmNavigation button{padding:10px;min-height:60px;font-size:.8rem}.hmContent h3{font-size:1.1rem}.hmSection li{margin-bottom:12px}}
+@media(max-width:359px){.hmNavigation{grid-template-columns:minmax(0,1fr)}}
+@media(prefers-reduced-motion:reduce){.hunterManualsDialog,.hunterManualsDialog *{scroll-behavior:auto!important}}

@@ -265,18 +265,33 @@ async function runScenario(browser, name, viewport) {
     await exitAndDiscard(page);
     await timedSimuladoRecovery(page, penal);
 
-    // Os quatro Manuais continuam acessíveis como guias de método/plataforma.
+    // Guias vivem em Ajuda: nunca são resumos ou disciplinas do edital.
     await page.locator('button[data-view="study"]').click();
-    await visible(page, '#openManuaisCacadorBtn');
-    await page.locator('#openManuaisCacadorBtn').click();
-    const manuals = page.locator('#summaryList [data-summary^="manual-"]');
-    assert.equal(await manuals.count(), 4, 'Os quatro manuais precisam continuar acessíveis.');
-    await manuals.first().click();
-    await visible(page, '#summaryList .summaryCard.open .summaryBody');
-    await assertNoHorizontalOverflow(page, '#summaryList');
+    await visible(page, '#study.active');
+    assert.equal(await page.locator('#openManuaisCacadorBtn').count(), 0,
+      'O atalho antigo não deve recolocar manuais nos filtros de estudo.');
+    assert.equal(await page.locator('#summaryList [data-summary^="manual-"]').count(), 0);
+    assert(!(await page.locator('#summaryFilter option').allTextContents()).some(containsManual));
     await page.locator('[data-study="cards"]').click();
-    assert(!(await page.locator('#cardFilter option').allTextContents()).some(containsManual),
-      'Manuais da plataforma não devem gerar uma disciplina de flashcards.');
+    assert(!(await page.locator('#cardFilter option').allTextContents()).some(containsManual));
+    await page.locator('#moreBtn').click();
+    await visible(page, '#moreDialog[open] #openHunterManualsBtn');
+    await page.locator('#openHunterManualsBtn').click();
+    await visible(page, '#hunterManualsDialog[open]');
+    assert.equal(await page.locator('#hunterManualsDialog [data-hunter-manual-id]').count(), 4);
+    assert.match(await page.locator('#hunterManualsContent .hmSource').innerText(), /Guia da plataforma/);
+    for (const id of ['manual-01-ciclo-estudos','manual-02-dominando-questoes','manual-03-revisao-pos-edital','manual-04-guia-passo-a-passo']) {
+      await page.locator(`[data-hunter-manual-id="${id}"]`).click();
+      assert.equal(await page.locator(`[data-hunter-manual-id="${id}"]`).getAttribute('aria-current'), 'page');
+      assert((await page.locator('#hunterManualsContent').innerText()).length > 200);
+    }
+    assert(!/GERADO POR IA|\d+ resumos/i.test(await page.locator('#hunterManualsDialog').innerText()));
+    await assertNoHorizontalOverflow(page, '#hunterManualsDialog');
+    await page.locator('#closeHunterManualsBtn').click();
+    await page.locator('#hunterManualsDialog').waitFor({state:'hidden'});
+    await page.locator('#moreBtn').evaluate(button => {
+      if (document.activeElement !== button) throw new Error('Fechar o guia deve devolver o foco ao Menu.');
+    });
     assert.deepEqual(errors, [], 'Não deve haver exceções JavaScript durante os fluxos do estudante.');
     assert.deepEqual(localFailures, [], 'Todos os arquivos locais solicitados devem carregar.');
     console.log(`OK browser ${name}: filtros, vazio honesto, resposta, saída, retomada de treino e simulado, manuais e largura; aba Questões ${questionsOpenMs} ms (amostra local, sem meta de desempenho).`);
