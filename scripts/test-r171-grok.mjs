@@ -46,13 +46,14 @@ assert.equal(penalBoss.score, 100);
 assert.equal(penalBoss.ready, false, "Penal tem apenas 5 questões (min 10), chefe deve permanecer bloqueado");
 
 // Teste 2: questionOriginSeal
-assert.equal(ctx.questionOriginSeal({ origin: "oficial" }), "OFICIAL");
+assert.equal(ctx.questionOriginSeal({ origin: "oficial" }), "DOCUMENTO IMPORTADO");
+assert.equal(ctx.questionOriginSeal({ origin: "oficial", source_url: "https://banca.example/prova.pdf" }), "OFICIAL (FONTE INFORMADA)");
 assert.equal(ctx.questionOriginSeal({ origin: "autoral", from_community: true }), "COMUNIDADE");
 assert.equal(ctx.questionOriginSeal({ origin: "autoral", bank: "nativo" }), "NATIVO");
 assert.equal(ctx.questionOriginSeal({ origin: "adaptada_do_pdf" }), "IA DO SEU MATERIAL");
 
 // Teste 3: answerKeyStatus e gradeAnswer
-const qOficial = { origin: "oficial", correct_index: 2 };
+const qOficial = { origin: "oficial", options:["A","B","C","D"], correct_index: 2 };
 assert.equal(ctx.answerKeyStatus(qOficial), "oficial");
 const g1 = ctx.gradeAnswer(qOficial, 2); assert.equal(g1.status, "oficial"); assert.equal(g1.scored, true); assert.equal(g1.ok, true);
 const g2 = ctx.gradeAnswer(qOficial, 0); assert.equal(g2.status, "oficial"); assert.equal(g2.scored, true); assert.equal(g2.ok, false);

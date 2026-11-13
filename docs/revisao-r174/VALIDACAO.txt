@@ -1,0 +1,182 @@
+VALIDAÇÃO DA REVISÃO r174 — 13/11/2026
+Base: WalysonCaio/jornada-cacador @ 3d1e6ed2bac05a2d3ea3f560928247eadc3abcaa
+Node: v24.22.1
+
+EXECUTADO COM SUCESSO
+- npm test: 26/26 scripts aprovados.
+- npm run test:sql: PostgreSQL/PGlite isolado, incluindo rollback e propriedade.
+- node scripts/validate-project.mjs: JavaScript incorporado/externo, IDs e referências.
+- node --check scripts/browser-smoke.mjs e dist/pdf-text-client.js: sintaxe.
+- git diff --check: sem erros de whitespace.
+
+NÃO EXECUTADO
+- Navegador/medição de clique em celular: cua_repl.js não disponível no ambiente.
+- A suíte Playwright está preparada, com workflow manual de homologação.
+- Supabase remoto, políticas RLS reais e chamadas autenticadas aos provedores.
+- Compilação/testes de APK, AAB ou instaladores Windows.
+- Publicação Cloudflare ou aplicação remota de migrações.
+  Código e pacote disponibilizados na branch GitHub entrega/revisao-r174.
+
+Os scripts antigos incluem contratos estáticos: mensagens históricas sobre FPS,
+acessibilidade ou conformidade legal não representam certificação dessas áreas.
+Os novos testes misturam funções reais em VM/mocks com a integração SQL indicada.
+
+LOG COMPLETO — npm test
+
+> jornada-cacador@1.0.174 test
+> node scripts/test-all.mjs
+
+OK: adicionar gabarito depois (aplica por número, recusa ambiguidade, não sobrescreve nem usa a posição).
+OK: contratos CRUD, anti-loop de PDFs, recuperação automática, chave Gemini pessoal e recursos Caveira/TEC/Qconcursos/Estratégia/Gran validados.
+OK: termômetro honesto (amostra mínima, intervalo, meta configurável, sem números inventados).
+OK: ambos os instaladores usam domínio atual, bloqueiam protocolos arbitrários e navegação externa.
+páginas: 104 caracteres: 351982 tópicos esperados: 476
+ANTIGO: 203/476 tópicos chegaram ao modelo (43%)
+NOVO: 16 trechos, 4 selecionados (12 ignorados), 476/476 tópicos chegam ao modelo
+merge: 476 tópicos, falhas=0, notRun=0
+disciplinas na ordem: 14 LÍNGUA PORTUGUESA | RACIOCÍNIO LÓGICO | INFORMÁTICA ...
+learning_order 1ª disciplina contínuo: true (0..33)
+edital_order sequencial: true
+com 2 falhas -> failed: 2 ok: 2
+prazo estourado -> ok: 1 notRun: 3 failed: 0
+edital curto: 1 trecho(s), selecionados: 1
+página gigante dividida em 4 trechos, max 29956
+acerto falso cedo: 16 trechos -> 16 selecionados; disciplina estranha incluída: true ; tópicos: 476/476
+OK: análise por trechos cobre 100% dos tópicos do edital sintético.
+OK: extrator de provas (19 cenários: Texto I pré-Q01 de Português até 6.000 chars, faixa 01-03, multi-caderno, 5 alternativas e Certo/Errado).
+OK: extrator sem gabarito (nunca assume A/CERTO, fora de simulados).
+OK: mini simulados de 1 e 2 questões aceitos sem descartar gabarito.
+OK: regras de estudo do front validadas (flashcards, fila, filtro, legado, questões, armazenamento).
+OK: reanálise preserva/arquiva progresso.
+OK: ofensiva adaptativa e caderno de erros por questão individual validados.
+OK: desdobramento automático de disciplinas do edital validado.
+OK: tela de redação sem hero inicial e propostas com Textos Motivadores I e II validadas.
+OK: Painel TAF Policial e Ranking Geral de Caçadores validados.
+OK: Central de Revisão Ativa, Raio-X de Véspera, Incidência no Edital e Redação Digitada validados.
+OK: Biblioteca da Comunidade (protegida contra download/CPF), Perfis Primário/Secundário no Ranking (sem TAF) e Responsividade Mobile validados.
+OK: Alinhamento mobile do perfil, grade 6 cards em Hoje, proteção contra conta duplicada e limpeza do Ranking validados.
+OK: Edital exclusivo por usuário, lista estável sem piscar e padronização de títulos na Biblioteca validados.
+OK: Central de Estudo agrupada pelas Disciplinas da Biblioteca (e subpastas por Arquivo) validada.
+OK: Responsividade mobile (Ranking e Revisão), quebras de linha nas questões e Arena de Duelos X1 validados.
+OK: Tela de Login Multiplataforma com banner oficial Solo Leveling validada.
+OK: Card de Patente (Classe do Caçador) e contagem de XP sempre visíveis na aba Hoje validados.
+OK: Automação das caixas da Missão Diária e sincronia completa de missões validadas.
+OK: Central de Notificações interativa e fechamento ao clicar fora validados.
+OK: extrator determinístico de Edital Verticalizado (PPPE) e separação automática de disciplinas validados.
+OK: Trilha de Aprendizagem sem Edital ('Edital e Prova' removido) e personalização responsiva Solo Leveling validadas.
+OK: Responsividade dos selects, Boss Raid real das bancas e fluidez de renderização (v103) validados.
+OK: extrator universal de Editais Verticalizados (numeração contínua, sem número, checkboxes e auto-portal) validado.
+OK: filtro anti-ALTA/MÉDIA, hierarquia Conteúdo — Assunto e Biblioteca da Comunidade ativa por padrão (v107) validados.
+OK: escrita jurídica (art. 5º / 5ª), Popup Global de Convite X1 (Aceitar/Recusar) e Chat Interno da Guilda (v108) validados.
+OK: Banco Local (IndexedDB), troca instantânea de abas, scroll 60fps sem tela preta e memoização O(1) (20ms para 15.000 chamadas) validados (v113).
+OK: Splash Screen adaptativa (Vertical Mobile / Horizontal PC) e Simulador de Aprovação com diagnóstico acionável de erros (v114) validados.
+OK: Conformidade Legal (LGPD/Termos/Cookies), Rodapé, Consentimento, Acessibilidade e Auditoria de 20 Itens (v116) validados.
+OK: Extrator Determinístico de Provas (A–D, A–E com gabarito E, Certo/Errado, Anuladas) e Motor Cognitivo de Questões Gêmeas (v117) validados.
+OK: Flashcards restritos a Materiais/Anotações/Leis (sem textos externos) e Biblioteca Comunitária Universal (v118) validados.
+OK: Botão 🔗 Unificar editais (limite máx. 2 provas), Contagem Regressiva Dupla e Desunificação sem Perda de Progresso (v118-B) validados.
+OK: Bloqueio de Flashcards de Ruído Estrutural, Mnemônicos Honestos e Radar da Banca com Busca Web (v118-C) validados.
+OK: Banco Nativo (Instituto AOCP e bancas), Treino Rápido 1-Clique (boaResposta), Trilha de Aprendizagem e Duelo X1 com Bots validados (v118-D).
+OK: Redesign Moderno das Caixas de Questões, Duelo Rápido Multi-Bancas (AOCP, Cebraspe, FGV, UPENET) e Popup de Confirmação ao Sair do Duelo validados (v118-E).
+OK: Bloqueio de Reanálise Automática, Filtro Anti-Simulado nas Missões, Ordem Pedagógica Estrita (1 -> 2 -> 3) e Higienização de Disciplinas validados (v118-F).
+OK: Edital 100% Individual por Usuário e Perfil (PM PE / BCM PE / CBM PE), Cache Isolado por UserID e Bloqueio de Edital na Comunidade validados (v118-G).
+OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleção de Caderno, 2 colunas e Recursos Projeto Caveira (r126) validados.
+OK: Tema Claro/Escuro no Menu (sem quebrar .tabs) e 6 aprimoramentos TEC/Caveira/Gran/Estudei (r149) validados.
+OK: Marcação automática aos 10 min de foco e sincronia dos minutos da Modalidade do Cronômetro (r151) validadas.
+OK: Isolamento estrito de disciplina na Correção de Gargalos e Caderno de Erros (r152) validado.
+OK: Classificação estrita (Casa dos Pombos/Idades/Porte de Arma), bloqueio de capa/texto órfão e ordem cronológica do Edital (r153) validados.
+OK: Pacote completo da revisão Grok (v103 Maestria/XP, MinHash/LSH, Flashcards do Conceito, Fila de Revisão e Ordem do Edital - r154) validado.
+OK: Correção 100% do Modo Claro em todas as abas/modais e Modo Visual Enxuto sem poluição visual (r155) validados.
+OK: Correção automática de textos/mnemônicos da IA (SOCIDDAPRF -> SO-CI-DI-VA-PLU), Alto Contraste WCAG AAA no Modo Claro e Otimização O(1) da aba Questões (r156) validados.
+OK: IA Honesta (r157), Separação Estudado vs. Dominado (40 XP vs 100 XP) e Proteção Anti-Inflação de Ranking (r158) validados.
+OK: Bloqueio de nomes de arquivos como disciplina ('500 Questões Pmpe'), Domínio estrito por tópico e Pacote Grok r159 validados.
+OK: Redirecionamento Ler Teoria, Gabarito sugerido por IA e Integração Goodnotes (r160) validados.
+OK: Quebra de linha entre alternativas, confirmação ao sair do simulado, sincronia de letras no embaralhamento e retomada de progresso (r161) validados.
+OK: Preservação de alternativas de 1 letra, cura da questão ESCOLAR e bloqueio de falso alerta de figura em quadro negro (r162) validados.
+OK: Vínculo de superação no Caderno de Erros (1/3 -> 3/3), deduplicação e botão Refazer Questão direto no card (r163) validados.
+OK: Auditoria de 40 Requisitos (LGPD/CDC/Marco Civil/ANPD/.htaccess) e Auditoria Web Quality (WebP < 300KB, WebM, JSON-LD, GEO llms.txt, Skip-Link - r164) validadas.
+OK: Organização em Pastas por Disciplina/Categoria na Central de Provas e Importador em Lote de Múltiplos Arquivos/Pasta (r165) validados.
+OK: material íntegro (sem truncar, cobertura real, sem gabarito inventado e anti-ruído validado).
+(node:7212) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+OK: anti-ruído preserva títulos e remove só marca d'água repetida.
+OK: banco nativo (117 questões autorais, posição da certa A/B/C/D = 25/39/28/25, comentários coerentes, sem viés).
+OK: Todas as melhorias Grok (r171) validadas com 100% de sucesso!
+OK r172: gabaritos inválidos/anulados, permutação, ausência de rede, redações inconsistentes, ownership e sintaxe TS. SQL validado estaticamente; integração pendente.
+OK: servidor não assume alternativa A, não troca questões por posição e rejeita opções reordenadas pela IA.
+(node:7240) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+OK r173: 4 manuais preservados, banco incremental, troca de dados/portal, cache de tópicos e contagem zero honesta.
+100 leituras repetidas de 1.000 questões: zero fingerprints adicionais.
+OK r174: migração ausente preserva documento/tópicos; exclusão de conta respeita dependências e informa limpeza parcial.
+(node:7332) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+OK r174: confiança persiste em recarga/exportação; IA pendente não pontua; revisão segue texto e versão das alternativas; respostas parciais/offline e métricas por banca são honestas.
+OK r174: interseção disciplina/banca/assunto, conflitos em revisão, comando gramatical, aliases, manuais excluídos e caches após edição.
+OK r174: diagnóstico verifica contagens e bucket, recusa saúde falsa, distingue falhas de rede/autenticação e não presume RLS validada.
+OK r174: interface não transforma contagem -1, consumo desconhecido ou revisão zero em diagnóstico aprovado.
+(node:7354) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+OK r174: edital sem exclusões isoladas; erro/migração ausente/offline preservam mapa; sucesso só após confirmação; troca de portal isolada; cobertura parcial honesta. Contrato SQL inspecionado; integração PostgreSQL é uma verificação separada.
+OK r174: Caderno de Erros não fabrica alternativas/gabaritos, preserva revisão teórica e só treina questões completas na disciplina e portal corretos.
+OK r174: diagnóstico por disciplina também usa somente alternativas originais e direciona registro incompleto à teoria.
+OK r174: banco nativo e cache importado coexistem; reidratação sem duplicatas; usuário/portal/reset e transação abortada isolados.
+OK r174: histórico por conteúdo acompanha embaralhamento, isola portais/versões, preserva legado sem reinterpretá-lo e exclui gabaritos pendentes.
+OK r174: retomada após fechar aba, isolamento usuário/portal/reset, expiração, quota, descarte e respostas sem pontuação duplicada.
+OK r174: filtros sem catálogo duplicado; gráficos e catálogo após paint; jobs antigos e abas inativas cancelados.
+OK r174: edital pendente/processando mantém o status real mesmo quando o portal já possui missões antigas.
+OK r174: simulado cronometrado preserva respostas/tesoura, relógio contínuo, namespace e finalização idempotente por sessão.
+OK: contratos de segurança validados (contas, duelos, ranking, cabeçalhos).
+OK: contratos v97/v105 (user_state base, duelo sem gabarito exposto, opt-in comunidade e CSP ativa) validados.
+OK: contratos v98 (chat, heartbeat, referência morta) validados.
+OK: contratos v100 (autor da biblioteca sem nome real) validados.
+OK: contratos v101 (server_verified real, sem referências quebradas nas migrações) validados.
+OK: contratos v102 (banco compartilhado com 5 alternativas) validados.
+OK: cache isolado, mídia sem rede, navegação offline, JS ausente 503, conteúdo privado ignorado.
+OK: 1 script(s), 361 IDs únicos, nenhuma referência ausente e nenhum segredo público detectado.
+
+📂 Banco: /workspace/work/jornada-cacador/dist/native-question-bank.json
+📊 Total de questões: 117
+
+── Resultado ──────────────────────────────
+✅ OK estrutural:     117
+❌ Erros:             0
+⚠️ Avisos:            0
+🔁 Duplicatas exatas: 0
+🔍 Quase-duplicatas:  1
+
+Por disciplina:
+    16 lingua portuguesa
+    14 legislacao extravagante
+    12 direito constitucional
+    10 raciocinio logico matematico
+    10 direito administrativo
+     9 informatica
+     9 direito penal
+     7 direito processual penal
+     7 direito militar
+     6 historia de pernambuco
+     5 direitos humanos
+     5 fisica
+     4 biologia
+     2 geografia de pernambuco
+     1 etica no servico publico
+
+📄 Relatório salvo em: /workspace/work/jornada-cacador/scripts/question-bank-report.json
+26/26 scripts passaram.
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice
+
+LOG COMPLETO — npm run test:sql
+
+> jornada-cacador@1.0.174 test:sql
+> node scripts/integration-edital-sql.mjs
+
+OK SQL PostgreSQL/PGlite: atomicidade e rollback após escrita parcial, ownership, ausência de sessão, service_role, deduplicação, IDs/status/maestria/conteúdo e metadados preservados.
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice
