@@ -1,14 +1,37 @@
 /* ============================================================================
- * Jornada do Caçador — Arquitetura Modular & Telemetria (r176)
+ * Jornada do Caçador — Arquitetura Modular, Performance O(1) & Perfil Social (r177)
  * Módulo 1: Telemetria de Performance (performance.mark / measure + p50/p95)
  * Módulo 2: Catálogo de Identificadores Estáveis (Disciplina → Assunto → Subassunto)
- * Módulo 3: Validador de Gabaritos (preliminar / definitivo / revisado / ia_sugerido)
- * Módulo 4: Biblioteca Inteligente & Fontes Externas Gratuitas Confiáveis
+ * Módulo 3: Biblioteca Inteligente & Fontes Externas Gratuitas Confiáveis
+ * Módulo 4: Promotor de Questões do Usuário para Banco Nativo Organizado
+ * Módulo 5: Hub Social "Meu Perfil", Foto no Topo/Ranking/Chat, Visita a Perfis e Privacidade Granular
  * ============================================================================ */
 (function () {
   'use strict';
 
   const JC_MODULES = (window.JC_MODULES = window.JC_MODULES || {});
+
+  // Helper seguro para ler variáveis globais declaradas com let no script inline (state, ALL_QUESTIONS, etc.)
+  function getAppState() {
+    try { if (typeof state === 'object' && state) return state; } catch (_e) {}
+    return window.state || {};
+  }
+  function getAllQuestions() {
+    try { if (typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS)) return ALL_QUESTIONS; } catch (_e) {}
+    return Array.isArray(window.ALL_QUESTIONS) ? window.ALL_QUESTIONS : [];
+  }
+  function getAllSummaries() {
+    try { if (typeof ALL_SUMMARIES !== 'undefined' && Array.isArray(ALL_SUMMARIES)) return ALL_SUMMARIES; } catch (_e) {}
+    return Array.isArray(window.ALL_SUMMARIES) ? window.ALL_SUMMARIES : [];
+  }
+  function getAllFlashcards() {
+    try { if (typeof ALL_FLASHCARDS !== 'undefined' && Array.isArray(ALL_FLASHCARDS)) return ALL_FLASHCARDS; } catch (_e) {}
+    return Array.isArray(window.ALL_FLASHCARDS) ? window.ALL_FLASHCARDS : [];
+  }
+  function getCloudDocs() {
+    try { if (typeof cloudDocuments !== 'undefined' && Array.isArray(cloudDocuments)) return cloudDocuments; } catch (_e) {}
+    return Array.isArray(window.cloudDocuments) ? window.cloudDocuments : [];
+  }
 
   // ── 1. TELEMETRIA DE PERFORMANCE (Medição real da aba Questões e Filtros) ──
   const perfSamples = [];
@@ -42,7 +65,7 @@
           }
         }
       } catch (_e) {}
-      const bankSize = Array.isArray(window.ALL_QUESTIONS) ? window.ALL_QUESTIONS.length : 0;
+      const bankSize = getAllQuestions().length;
       const sample = {
         name,
         durationMs: Number(durationMs.toFixed(2)),
@@ -74,7 +97,7 @@
         p50Ms: p50,
         p95Ms: p95,
         lastMs: last ? last.durationMs : 0,
-        bankSize: last ? last.bankSize : (Array.isArray(window.ALL_QUESTIONS) ? window.ALL_QUESTIONS.length : 0),
+        bankSize: last ? last.bankSize : getAllQuestions().length,
         status: p95 <= 120 ? 'OTIMO_60FPS' : p95 <= 300 ? 'BOM' : 'ATENCAO_CELULAR_FRACO'
       };
     }
@@ -146,7 +169,7 @@
       aliases: ['direito constitucional', 'constitucional', 'cf/88'],
       topics: [
         { id: 'const_princ', name: 'Princípios Fundamentais (Arts. 1º a 4º CF/88)', subtopics: ['Fundamentos SO-CI-DI-VA-PLU', 'Objetivos CON-GA-ERRA-PRO', 'Relações Internacionais'], keywords: ['fundamentos da republica', 'objetivos fundamentais', 'soberania', 'dignidade da pessoa humana', 'pluralismo politico'] },
-        { id: 'const_art5', name: 'Direitos e Deveres Individuais e Coletivos (Art. 5º CF/88)', subtopics: ['Inviolabilidade Domiciliar', 'Remédios Constitucionais (HC, MS, MI, HD, AP)', 'Tratados de Direitos Humanos (Art. 5º, § 3º)'], keywords: ['asilo inviolavel', 'habeas corpus', 'mandado de seguranca', 'acao popular', 'direitos fundamentais', 'art. 5'] },
+        { id: 'const_art5', name: 'Direitos e Deveres Individuais e Coletivos (Art. 5º CF/88)', subtopics: ['Inviolabilidade Domiciliar', 'Direito de Reunião e Liberdade Religiosa', 'Remédios Constitucionais (HC, MS, MI, HD, AP)'], keywords: ['asilo inviolavel', 'reuniao', 'religiosa', 'habeas corpus', 'mandado de seguranca', 'acao popular', 'direitos fundamentais', 'art. 5'] },
         { id: 'const_adm', name: 'Administração Pública Constitucional (Arts. 37 a 41)', subtopics: ['Princípios LIMPE', 'Acumulação de Cargos', 'Responsabilidade Civil Objetiva (Art. 37, § 6º)'], keywords: ['limpe', 'art. 37', 'acumulacao de cargos', 'improbridade', 'estabilidade'] },
         { id: 'const_seg', name: 'Segurança Pública (Art. 144 CF/88)', subtopics: ['Polícia Federal, PRF, Polícias Civis, PM, CBM e Polícia Penal', 'Polícia Ostensiva vs. Polícia Judiciária'], keywords: ['art. 144', 'seguranca publica', 'policia ostensiva', 'policia penal', 'preservacao da ordem publica'] }
       ]
@@ -216,7 +239,7 @@
   JC_MODULES.taxonomy = {
     catalog: STABLE_TAXONOMY,
     resolveStableTaxonomy(subjectStr, topicStr = '', statementStr = '') {
-      const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+      const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
       const sNorm = norm(subjectStr);
       const tNorm = norm(topicStr);
       const stNorm = norm(statementStr);
@@ -224,7 +247,6 @@
 
       let disc = STABLE_TAXONOMY.find(d => norm(d.name) === sNorm || d.aliases.some(a => sNorm.includes(a)));
       if (!disc) {
-        // Pontuação por palavras-chave nos tópicos se a disciplina vier vazia ou Geral
         let bestDisc = null, bestScore = 0;
         for (const d of STABLE_TAXONOMY) {
           let sc = 0;
@@ -235,7 +257,7 @@
           }
           if (sc > bestScore) { bestScore = sc; bestDisc = d; }
         }
-        disc = bestScore >= 2 ? bestDisc : STABLE_TAXONOMY[5]; // fallback Constitucional
+        disc = bestScore >= 2 ? bestDisc : STABLE_TAXONOMY[5];
       }
 
       let bestTopic = disc.topics[0];
@@ -371,23 +393,14 @@
     }
   };
   window.getTrustedExternalSources = (s, t) => JC_MODULES.smartLibrary.getTrustedExternalSources(s, t);
-})();
 
-/* ============================================================================
- * Módulo 5: Promotor de Questões do Usuário para Banco Nativo Organizado
- * Transforma todas as questões importadas (PDFs/Simulados) em Banco Nativo
- * estruturado por Disciplina (ID estável) → Assunto → Subassunto, sem duplicatas.
- * ============================================================================ */
-(function () {
-  'use strict';
-  const JC_MODULES = (window.JC_MODULES = window.JC_MODULES || {});
-
+  // ── 4. PROMOTOR DE QUESTÕES DO USUÁRIO PARA BANCO NATIVO ORGANIZADO ──
   function normalizeKey(str) {
-    return String(str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    return String(str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   }
 
   function consolidateUserQuestionsIntoNativeBank(options = { saveToStorage: true, showToast: true }) {
-    const allQs = Array.isArray(window.ALL_QUESTIONS) ? window.ALL_QUESTIONS : [];
+    const allQs = getAllQuestions();
     const baseNative = Array.isArray(window.NATIVE_POLICE_QUESTION_BANK) ? window.NATIVE_POLICE_QUESTION_BANK : [];
     let savedPromoted = [];
     try {
@@ -439,7 +452,6 @@
     baseNative.forEach(q => registerItem(q, false));
     savedPromoted.forEach(q => registerItem(q, true));
     allQs.forEach(q => {
-      // Só promove para o banco nativo questões com gabarito válido (correct_index >= 0 e !answer_unknown)
       if (!q.answer_unknown && Number.isInteger(Number(q.correct_index)) && Number(q.correct_index) >= 0) {
         registerItem(q, true);
       }
@@ -448,13 +460,13 @@
     window.NATIVE_POLICE_QUESTION_BANK = unified;
     if (options.saveToStorage) {
       try {
-        // Salva as questões promovidas pelo usuário no IndexedDB / localStorage (até 800 itens leves no localStorage e completo no IndexedDB)
         const userAdded = unified.filter(q => q.promoted_to_native);
         localStorage.setItem('jc_promoted_native_bank_v1', JSON.stringify(userAdded.slice(0, 600)));
       } catch (_e) {}
       try {
-        if (typeof window.persistToLocalDatabase === 'function' && window.state?.activeCampaignId) {
-          window.persistToLocalDatabase(window.state.activeCampaignId);
+        const stObj = getAppState();
+        if (typeof window.persistToLocalDatabase === 'function' && stObj?.activeCampaignId) {
+          window.persistToLocalDatabase(stObj.activeCampaignId);
         }
       } catch (_e) {}
     }
@@ -475,7 +487,7 @@
   function exportConsolidatedNativeBankJson() {
     const res = consolidateUserQuestionsIntoNativeBank({ saveToStorage: true, showToast: false });
     const payload = {
-      schema_version: 'r176-stable-taxonomy',
+      schema_version: 'r177-stable-taxonomy',
       exported_at: new Date().toISOString(),
       total_questions: res.total,
       subjects_count: res.subjectsCount,
@@ -499,16 +511,8 @@
   };
   window.consolidateUserQuestionsIntoNativeBank = consolidateUserQuestionsIntoNativeBank;
   window.exportConsolidatedNativeBankJson = exportConsolidatedNativeBankJson;
-})();
 
-/* ============================================================================
- * Módulo 6: Hub Social "Meu Perfil de Caçador" (Estilo Rede Social + Solo Leveling)
- * & Avatar Redondo no Topo da Tela Principal (Desktop + Mobile Responsivo)
- * ============================================================================ */
-(function () {
-  'use strict';
-  const JC_MODULES = (window.JC_MODULES = window.JC_MODULES || {});
-
+  // ── 5. HUB SOCIAL "MEU PERFIL", VISITA A PERFIS DO RANKING/CHAT E PRIVACIDADE GRANULAR ──
   function injectSocialProfileStyles() {
     if (document.getElementById('jc-social-profile-styles')) return;
     const style = document.createElement('style');
@@ -552,7 +556,7 @@
         box-shadow: 0 0 8px rgba(89, 230, 255, 0.45);
         overflow: hidden;
       }
-      .jcHeaderAvatarCircle img {
+      .jcHeaderAvatarCircle img, .rankAvatar img, .slGuildMsgAvatar img {
         width: 100%;
         height: 100%;
         object-fit: cover;
@@ -597,12 +601,19 @@
       }
       .jcProfileCoverBanner {
         height: 185px;
-        background: linear-gradient(180deg, rgba(5, 12, 22, 0.2) 0%, rgba(5, 12, 22, 0.88) 100%), url('bancas-boss-banner.webp') center 28% / cover no-repeat;
+        background: linear-gradient(180deg, rgba(5, 12, 22, 0.25) 0%, rgba(5, 12, 22, 0.9) 100%), url('bancas-boss-banner.webp') center 28% / cover no-repeat;
         position: relative;
         display: flex;
-        align-items: flex-end;
+        align-items: flex-start;
         justify-content: flex-end;
-        padding: 14px 18px;
+        padding: 14px 16px;
+      }
+      .jcCoverTopBtns {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        z-index: 2;
       }
       .jcProfileHeaderBody {
         padding: 0 22px 20px;
@@ -638,6 +649,7 @@
         color: #fff;
         overflow: hidden;
         flex: 0 0 112px;
+        z-index: 3;
       }
       .jcProfileAvatarLargeWrap img {
         width: 100%;
@@ -650,7 +662,7 @@
         bottom: 0;
         left: 0;
         right: 0;
-        background: rgba(4, 12, 22, 0.82);
+        background: rgba(4, 12, 22, 0.84);
         color: #59e6ff;
         font-size: 0.67rem;
         font-weight: 800;
@@ -660,7 +672,7 @@
         transition: background 0.2s;
       }
       .jcAvatarChangeLabel:hover {
-        background: rgba(14, 165, 233, 0.9);
+        background: rgba(14, 165, 233, 0.92);
         color: #fff;
       }
       .jcProfileTitleBlock h2 {
@@ -729,10 +741,44 @@
         border: 1px solid rgba(45, 78, 108, 0.65);
         margin-bottom: 8px;
       }
+      .jcPrivacyCheckRow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 9px 12px;
+        border-radius: 11px;
+        background: rgba(7, 18, 31, 0.75);
+        border: 1px solid rgba(45, 78, 108, 0.6);
+        font-size: 0.81rem;
+        cursor: pointer;
+      }
+      .jcPrivacyCheckRow input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: #38bdf8;
+      }
+      .jcClickableHunter {
+        cursor: pointer;
+        transition: transform 0.15s ease, border-color 0.15s ease;
+      }
+      .jcClickableHunter:hover {
+        border-color: #59e6ff !important;
+      }
       @media (max-width: 760px) {
-        .jcProfileCoverBanner { height: 135px; }
-        .jcProfileAvatarLargeWrap { width: 88px; height: 88px; flex: 0 0 88px; font-size: 1.8rem; }
-        .jcProfileMainRow { margin-top: -40px; }
+        .jcProfileCoverBanner {
+          height: 145px;
+          padding: 10px 12px;
+          align-items: flex-start;
+          justify-content: flex-end;
+        }
+        .jcCoverTopBtns button {
+          font-size: 0.68rem !important;
+          padding: 5px 8px !important;
+        }
+        .jcProfileHeaderBody { padding: 0 14px 16px; }
+        .jcProfileAvatarLargeWrap { width: 86px; height: 86px; flex: 0 0 86px; font-size: 1.7rem; }
+        .jcProfileMainRow { margin-top: -38px; }
         .jcProfileStatsStrip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .jcProfileTwoCols { grid-template-columns: 1fr; }
       }
@@ -742,7 +788,8 @@
         box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08) !important;
       }
       body.lightAppTheme .jcProfileStatItem,
-      body.lightAppTheme .jcBoardStatRow {
+      body.lightAppTheme .jcBoardStatRow,
+      body.lightAppTheme .jcPrivacyCheckRow {
         background: #f8fafc !important;
         border-color: #cbd5e1 !important;
       }
@@ -768,27 +815,63 @@
   }
 
   function getHunterAvatarDataUrl() {
-    const st = window.state || {};
-    return st.profileAvatarDataUrl || localStorage.getItem('jc_profile_avatar_v1') || '';
+    const st = getAppState();
+    return st.profileAvatarDataUrl || st.publicProfile?.avatar || localStorage.getItem('jc_profile_avatar_v1') || '';
   }
 
   function setHunterAvatarDataUrl(dataUrl) {
-    if (window.state) window.state.profileAvatarDataUrl = dataUrl;
+    const st = getAppState();
+    st.profileAvatarDataUrl = dataUrl;
+    st.publicProfile = st.publicProfile || {};
+    st.publicProfile.avatar = dataUrl;
     try {
       if (dataUrl) localStorage.setItem('jc_profile_avatar_v1', dataUrl);
       else localStorage.removeItem('jc_profile_avatar_v1');
-      if (typeof window.save === 'function') window.save();
+      if (typeof save === 'function') save();
+      if (typeof cloudSession === 'object' && cloudSession && navigator.onLine && typeof pushCloudState === 'function') {
+        pushCloudState();
+      }
     } catch (_e) {}
     decorateTopHeaderAvatarPill();
   }
 
   function getHunterDisplayName() {
-    const sess = window.cloudSession;
+    const st = getAppState();
+    const sess = typeof cloudSession !== 'undefined' ? cloudSession : window.cloudSession;
     const user = sess?.user;
     const metaName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
-    const customName = window.state?.profileDisplayName || localStorage.getItem('jc_profile_display_name_v1') || '';
+    const customName = st.profileDisplayName || st.publicProfile?.name || localStorage.getItem('jc_profile_display_name_v1') || '';
     return customName || metaName || (user?.email ? user.email.split('@')[0] : 'Caçador');
   }
+
+  function getPrivacyConfig() {
+    const st = getAppState();
+    const p = st.publicProfile?.privacy || {};
+    return {
+      hiddenFromRanking: Boolean(st.publicProfile?.hidden),
+      showAvatar: p.showAvatar !== false,
+      showStreak: p.showStreak !== false,
+      showAccuracy: p.showAccuracy !== false,
+      showHours: p.showHours !== false,
+      showTargetRole: p.showTargetRole !== false,
+      showBadges: p.showBadges !== false,
+      showBio: p.showBio !== false
+    };
+  }
+
+  function renderHunterAvatarHtml(itemOrName, isMe = false, extraAvatarUrl = '') {
+    const name = typeof itemOrName === 'object' ? (itemOrName?.name || itemOrName?.author_name || 'Caçador') : String(itemOrName || 'Caçador');
+    const initials = getHunterInitials(name);
+    const priv = getPrivacyConfig();
+    const myAvatar = isMe && priv.showAvatar ? getHunterAvatarDataUrl() : '';
+    const theirAvatar = typeof itemOrName === 'object' ? (itemOrName?.avatar || itemOrName?.avatar_url || extraAvatarUrl || '') : extraAvatarUrl;
+    const finalAvatar = myAvatar || theirAvatar;
+    if (finalAvatar) {
+      return `<img src="${finalAvatar}" alt="Foto de ${name.replace(/"/g, '')}">`;
+    }
+    return `<span>${initials}</span>`;
+  }
+  window.renderHunterAvatarHtml = renderHunterAvatarHtml;
 
   function decorateTopHeaderAvatarPill() {
     injectSocialProfileStyles();
@@ -800,20 +883,132 @@
     btn.classList.add('jcTopProfilePill');
     btn.title = `Meu Perfil de Caçador (${name})`;
     const avatarInner = avatarUrl
-      ? `<img src="${avatarUrl}" alt="Foto de perfil de ${name}">`
+      ? `<img src="${avatarUrl}" alt="Foto de perfil de ${name.replace(/"/g, '')}">`
       : `<span>${initials}</span>`;
     btn.innerHTML = `<span class="jcHeaderAvatarCircle" id="topHeaderAvatarCircle">${avatarInner}</span><span class="jcHeaderProfileName">${name}</span>`;
     btn.onclick = (e) => {
       e?.preventDefault?.();
-      if (typeof window.openView === 'function') {
-        window.openView('profile');
+      if (typeof openView === 'function') {
+        openView('profile');
       }
     };
   }
 
+  // Modal de Visita ao Perfil Público de Outro Caçador (Ranking / Chat da Guilda)
+  function openPublicHunterProfileVisitorModal(hunterData) {
+    if (!hunterData) return;
+    if (hunterData.is_me) {
+      if (typeof openView === 'function') openView('profile');
+      return;
+    }
+    let dlg = document.getElementById('jcPublicHunterVisitorDialog');
+    if (!dlg) {
+      dlg = document.createElement('dialog');
+      dlg.id = 'jcPublicHunterVisitorDialog';
+      dlg.style.cssText = 'width:min(94vw,540px);padding:0;border-radius:22px;overflow:hidden;background:#081523;border:1px solid rgba(89,230,255,0.45);color:#f8fafc;box-shadow:0 24px 64px rgba(0,0,0,0.8)';
+      document.body.appendChild(dlg);
+    }
+
+    const hName = String(hunterData.name || hunterData.author_name || 'Caçador da Guilda').trim();
+    const hRole = String(hunterData.role || hunterData.author_role || 'Carreiras Policiais').trim();
+    const hSecRole = String(hunterData.secondary_role || '').trim();
+    const hXp = Number(hunterData.xp ?? hunterData._displayXp ?? hunterData.author_xp ?? 0);
+    const hStreak = Number(hunterData.streak ?? hunterData._displayStreak ?? 0);
+    const hBestStreak = Math.max(hStreak, Number(hunterData.best_streak || 0));
+    const hAcc = Number(hunterData.accuracy || 0);
+    const hMissions = Number(hunterData.missions_done ?? hunterData._displayMissions ?? 0);
+    const hHours = Number(hunterData._displayHours || Math.round(((hMissions * 50) + (hStreak * 30)) / 60 * 10) / 10 || 0);
+    const hRankLabel = typeof level === 'function' ? (level(hXp, false)?.label || 'Caçador') : 'Caçador Ativo';
+    const hBio = hunterData.bio || '“Membro ativo da Guilda na Jornada do Caçador.”';
+    const hPriv = hunterData.privacy || {};
+    const avatarHtml = renderHunterAvatarHtml(hunterData, false);
+
+    dlg.innerHTML = `
+      <div style="height:125px;background:linear-gradient(180deg,rgba(4,10,18,0.2),rgba(4,10,18,0.92)),url('bancas-boss-banner.webp') center 30%/cover no-repeat;display:flex;justify-content:space-between;align-items:flex-start;padding:12px 16px">
+        <span class="tag" style="background:rgba(4,12,22,0.85);color:#59e6ff;border:1px solid rgba(89,230,255,0.35)">👤 Perfil Público do Caçador</span>
+        <button type="button" class="ghost small" id="jcCloseVisitorProfileBtn" style="width:auto;padding:5px 12px;background:rgba(4,12,22,0.85);color:#fff">✕ Fechar</button>
+      </div>
+      <div style="padding:0 20px 20px">
+        <div style="display:flex;align-items:flex-end;gap:14px;margin-top:-42px;flex-wrap:wrap">
+          <div style="width:86px;height:86px;border-radius:50%;border:4px solid #081523;outline:2px solid #59e6ff;background:linear-gradient(135deg,#0284c7,#1e3a8a);display:grid;place-items:center;font-size:1.85rem;font-weight:900;color:#fff;overflow:hidden;flex:0 0 86px">
+            ${avatarHtml}
+          </div>
+          <div style="flex:1;min-width:180px">
+            <h3 style="margin:0;font-size:1.28rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span>${hName}</span>
+              <span class="jcProfileRoleBadge">🛡️ ${hRankLabel}</span>
+            </h3>
+            ${hPriv.showTargetRole !== false ? `
+              <div class="small" style="color:#7dd3fc;margin-top:4px;font-weight:700">
+                🎯 Foco: ${hRole}${hSecRole ? ` · 🛡️ 2º Alvo: ${hSecRole}` : ''}
+              </div>
+            ` : '<div class="small muted" style="margin-top:4px">🔒 Cargo-alvo ocultado pelo usuário</div>'}
+          </div>
+        </div>
+
+        ${hPriv.showBio !== false ? `<p class="jcProfileBioMotto" style="margin-top:10px">${hBio}</p>` : ''}
+
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:14px">
+          <div class="jcProfileStatItem">
+            <b>⚡ ${hXp} XP</b>
+            <span>Experiência na Guilda</span>
+          </div>
+          <div class="jcProfileStatItem">
+            <b style="color:#fbbf24">${hPriv.showStreak !== false ? `🔥 ${hStreak} dias (Rec: ${hBestStreak}d)` : '🔒 Privado'}</b>
+            <span>Ofensiva de Estudos</span>
+          </div>
+          <div class="jcProfileStatItem">
+            <b style="color:#34d399">${hPriv.showAccuracy !== false ? `🎯 ${hAcc}% (${hMissions} missões)` : '🔒 Privado'}</b>
+            <span>Precisão &amp; Missões</span>
+          </div>
+          <div class="jcProfileStatItem">
+            <b>${hPriv.showHours !== false ? `⏱️ ${hHours}h` : '🔒 Privado'}</b>
+            <span>Ritmo Estimado</span>
+          </div>
+        </div>
+
+        ${hPriv.showBadges !== false ? `
+          <div style="margin-top:14px;padding:10px 12px;border-radius:12px;background:rgba(6,16,28,0.75);border:1px solid rgba(45,78,108,0.65)">
+            <div class="small muted" style="margin-bottom:6px;font-weight:800">🏅 Insígnias Visíveis do Caçador</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              ${hMissions >= 1 ? '<span class="tag">✓ Recruta Ativo</span>' : ''}
+              ${hStreak >= 3 ? '<span class="tag" style="color:#fbbf24">🔥 Fogo Constante (3d+)</span>' : ''}
+              ${hXp >= 1000 ? '<span class="tag" style="color:#34d399">⚡ Veterano (1.000+ XP)</span>' : ''}
+              ${hAcc >= 70 && hMissions >= 3 ? '<span class="tag" style="color:#6ee7b7">🎯 Mira Precisa (70%+)</span>' : ''}
+            </div>
+          </div>
+        ` : ''}
+
+        <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+          ${hunterData.user_id && hunterData.user_id !== 'local' ? `
+            <button type="button" class="action" id="jcVisitorChallengeDuelBtn" style="flex:1">⚔️ Desafiar ${hName.split(' ')[0]} para Duelo X1</button>
+          ` : ''}
+          <button type="button" class="ghost" id="jcVisitorCloseBottomBtn" style="flex:1">Voltar</button>
+        </div>
+      </div>
+    `;
+
+    dlg.querySelector('#jcCloseVisitorProfileBtn').onclick = () => dlg.close();
+    dlg.querySelector('#jcVisitorCloseBottomBtn').onclick = () => dlg.close();
+    const duelBtn = dlg.querySelector('#jcVisitorChallengeDuelBtn');
+    if (duelBtn) {
+      duelBtn.onclick = () => {
+        dlg.close();
+        try {
+          const challBtn = document.querySelector(`[data-challenge-from-rank^="${hunterData.user_id}|"]`);
+          if (challBtn) { challBtn.click(); return; }
+        } catch (_e) {}
+        if (typeof openView === 'function') openView('duel');
+      };
+    }
+    if (!dlg.open) dlg.showModal();
+  }
+  window.openPublicHunterProfileVisitorModal = openPublicHunterProfileVisitorModal;
+
   function computeBoardAccuracyStats() {
-    const allQs = Array.isArray(window.ALL_QUESTIONS) ? window.ALL_QUESTIONS : [];
-    const fpMap = (window.state && window.state.answeredQuestionFingerprints) || {};
+    const allQs = getAllQuestions();
+    const st = getAppState();
+    const fpMap = st.answeredQuestionFingerprints || {};
     const boards = {};
     for (const q of allQs) {
       const bName = String(q.board || (q.origin === 'oficial' ? 'Instituto AOCP' : 'Simulado / Autoral')).trim();
@@ -826,8 +1021,8 @@
         : 'Simulados & Outras Bancas';
       if (!boards[normBoard]) boards[normBoard] = { totalAvailable: 0, answered: 0, correct: 0 };
       boards[normBoard].totalAvailable++;
-      if (typeof window.questionFingerprint === 'function') {
-        const fp = window.questionFingerprint(q);
+      if (typeof questionFingerprint === 'function') {
+        const fp = questionFingerprint(q);
         if (fpMap[fp] === 'correct') {
           boards[normBoard].answered++;
           boards[normBoard].correct++;
@@ -854,9 +1049,17 @@
       sec = document.createElement('section');
       sec.className = 'view';
       sec.id = 'profile';
-      mainEl.appendChild(sec);
+      const footerEl = mainEl.querySelector('footer.appLegalFooter');
+      if (footerEl) mainEl.insertBefore(sec, footerEl);
+      else mainEl.appendChild(sec);
+    } else {
+      // Garante que #profile sempre fique ANTES do rodapé dentro de main.app!
+      const mainEl = document.querySelector('main.app');
+      const footerEl = mainEl?.querySelector('footer.appLegalFooter');
+      if (mainEl && footerEl && sec.parentElement !== mainEl) {
+        mainEl.insertBefore(sec, footerEl);
+      }
     }
-    // Garante atalho no Menu (#moreDialog)
     const menuGrid = document.querySelector('#moreDialog .menuGrid');
     if (menuGrid && !menuGrid.querySelector('[data-menu-view="profile"]')) {
       menuGrid.insertAdjacentHTML('afterbegin', `<button class="menuItem" data-menu-view="profile">👤<span>Meu Perfil Social</span></button>`);
@@ -864,7 +1067,7 @@
       if (pBtn) {
         pBtn.onclick = () => {
           document.getElementById('moreDialog')?.close();
-          if (typeof window.openView === 'function') window.openView('profile');
+          if (typeof openView === 'function') openView('profile');
         };
       }
     }
@@ -874,44 +1077,57 @@
   function renderHunterProfileHub() {
     const sec = ensureProfileViewSectionExists();
     if (!sec) return;
-    const st = window.state || {};
+    try { if (typeof refreshStreak === 'function') refreshStreak(); } catch (_e) {}
+    try { if (typeof syncHunterStatsSnapshot === 'function') syncHunterStatsSnapshot(); } catch (_e) {}
+
+    const st = getAppState();
+    const allQs = getAllQuestions();
+    const allSums = getAllSummaries();
+    const allCards = getAllFlashcards();
+    const priv = getPrivacyConfig();
+
     const name = getHunterDisplayName();
     const avatarUrl = getHunterAvatarDataUrl();
     const initials = getHunterInitials(name);
-    const camp = typeof window.activeCampaign === 'function' ? window.activeCampaign() : { name: 'PMPE — Soldado' };
-    const targetRole = st.profileTargetRole || camp?.name || 'Soldado da Polícia Militar de Pernambuco (PMPE)';
-    const bioMotto = st.profileBioMotto || '“Disciplina diária, constância no ciclo e foco cirúrgico até a posse.”';
+    const camp = typeof activeCampaign === 'function' ? activeCampaign() : { name: 'PMPE — Soldado' };
+    const targetRole = st.profileTargetRole || st.publicProfile?.role || camp?.name || 'PMPE — Soldado';
+    const secRole = st.publicProfile?.secondaryRole || '';
+    const bioMotto = st.profileBioMotto || st.publicProfile?.bio || '“Disciplina diária, constância no ciclo e foco cirúrgico até a posse.”';
     const cityState = st.profileCity || 'Pernambuco, Brasil';
 
-    const totalXp = typeof window.xp === 'function' ? window.xp() : 0;
-    const pool = typeof window.missionPool === 'function' ? window.missionPool() : [];
+    const totalXp = typeof xp === 'function' ? xp() : Number(st.hunterStats?.xp || 0);
+    const pool = typeof missionPool === 'function' ? missionPool() : [];
     const doneMissions = pool.filter(m => st.done?.[m.id]).length;
     const editalPct = pool.length ? Math.round((doneMissions / pool.length) * 100) : 0;
-    const rankObj = typeof window.level === 'function' ? window.level(totalXp, pool.length > 0 && doneMissions === pool.length) : { label: 'C II - Caçador Experiente' };
+    const rankObj = typeof level === 'function' ? level(totalXp, pool.length > 0 && doneMissions === pool.length) : { label: 'C II - Caçador Experiente' };
 
     const scores = (st.scores || []).filter(s => !s.campaignId || s.campaignId === st.activeCampaignId);
-    const qTotal = scores.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
-    const qCorr = scores.reduce((acc, s) => acc + (Number(s.correct) || 0), 0);
-    const accuracy = qTotal > 0 ? Math.round((qCorr / qTotal) * 100) : 0;
+    const scoreTotal = scores.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
+    const scoreCorr = scores.reduce((acc, s) => acc + (Number(s.correct) || 0), 0);
+    const tracked = st.questionStatsByCampaign?.[st.activeCampaignId] || {};
+    const qTotal = Math.max(scoreTotal, Number(tracked.total || 0));
+    const qCorr = Number(tracked.total || 0) > scoreTotal ? Number(tracked.correct || 0) : scoreCorr;
+    const accuracy = qTotal > 0 ? Math.round((qCorr / qTotal) * 100) : (Number(st.hunterStats?.accuracy) || 0);
+
     const totalFocusSeconds = Object.values(st.studyByDay || {}).reduce((acc, v) => acc + (Number(v) || 0), 0);
     const totalFocusHours = (totalFocusSeconds / 3600).toFixed(1);
-    const streak = Number(st.streak || 0);
-    const bestStreak = Math.max(streak, Number(st.bestStreak || 0));
+    const streak = Math.max(Number(st.streak || 0), Number(st.hunterStats?.streak || 0));
+    const bestStreak = Math.max(streak, Number(st.bestStreak || 0), Number(st.hunterStats?.bestStreak || 0));
     const bossesWon = Object.keys(st.bosses || {}).length;
 
     const boardStats = computeBoardAccuracyStats();
-    const telemetry = JC_MODULES.telemetry ? JC_MODULES.telemetry.getStats() : { p50Ms: 12, bankSize: (window.ALL_QUESTIONS || []).length };
+    const telemetry = JC_MODULES.telemetry ? JC_MODULES.telemetry.getStats() : { p50Ms: 12, bankSize: allQs.length };
 
     const avatarHtml = avatarUrl
-      ? `<img src="${avatarUrl}" alt="Foto de ${name}">`
+      ? `<img src="${avatarUrl}" alt="Foto de ${name.replace(/"/g, '')}">`
       : `<span>${initials}</span>`;
 
     sec.innerHTML = `
       <div class="jcProfileSocialCard">
         <div class="jcProfileCoverBanner">
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button type="button" class="ghost small" id="jcOpenAccountModalFromProfileBtn" style="width:auto;background:rgba(4,12,22,0.82);border-color:rgba(89,230,255,0.45);color:#fff;font-size:.76rem">⚙️ Conta, Senha &amp; Sincronização</button>
-            <button type="button" class="ghost small" id="jcOpenPersonalAiFromProfileBtn" style="width:auto;background:rgba(4,12,22,0.82);border-color:rgba(52,211,153,0.45);color:#6ee7b7;font-size:.76rem">🔑 Chave IA Pessoal</button>
+          <div class="jcCoverTopBtns">
+            <button type="button" class="ghost small" id="jcOpenAccountModalFromProfileBtn" style="width:auto;background:rgba(4,12,22,0.85);border-color:rgba(89,230,255,0.45);color:#fff;font-size:.75rem">⚙️ Conta, Senha &amp; Sincronização</button>
+            <button type="button" class="ghost small" id="jcOpenPersonalAiFromProfileBtn" style="width:auto;background:rgba(4,12,22,0.85);border-color:rgba(52,211,153,0.45);color:#6ee7b7;font-size:.75rem">🔑 Chave IA Pessoal</button>
           </div>
         </div>
         <div class="jcProfileHeaderBody">
@@ -931,7 +1147,7 @@
                   <span class="jcProfileRoleBadge">🛡️ ${rankObj.label}</span>
                 </h2>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:4px;font-size:.82rem;color:#94a3b8">
-                  <span>🎯 <b>Cargo Pretendido:</b> <strong style="color:#f8fafc">${targetRole}</strong></span>
+                  <span>🎯 <b>Cargo Pretendido:</b> <strong style="color:#f8fafc">${targetRole}</strong>${secRole ? ` · 🛡️ <b>2º Alvo:</b> <strong style="color:#cbd5e1">${secRole}</strong>` : ''}</span>
                   <span>·</span>
                   <span>📍 ${cityState}</span>
                 </div>
@@ -939,21 +1155,35 @@
               </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button type="button" class="action small" id="jcEditSocialProfileBtn" style="width:auto;padding:8px 14px;font-size:.8rem">✏️ Editar Perfil &amp; Cargo</button>
+              <button type="button" class="action small" id="jcEditSocialProfileBtn" style="width:auto;padding:8px 14px;font-size:.8rem">✏️ Editar Perfil &amp; Privacidade</button>
               ${avatarUrl ? `<button type="button" class="ghost small" id="jcRemoveAvatarBtn" style="width:auto;padding:8px 11px;font-size:.76rem">🗑️ Remover Foto</button>` : ''}
             </div>
           </div>
 
-          <div id="jcEditProfileDrawer" hidden style="margin-top:16px;padding:14px;border-radius:14px;background:rgba(6,16,28,0.9);border:1px solid rgba(89,230,255,0.35);display:grid;gap:10px">
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px">
-              <label class="field" style="margin:0">Seu Nome de Exibição<input type="text" id="jcEditNameInput" value="${name}" maxlength="50"></label>
-              <label class="field" style="margin:0">Cargo Pretendido / Concurso-Alvo<input type="text" id="jcEditRoleInput" value="${targetRole}" maxlength="80" placeholder="Ex.: Soldado PMPE / Policial Penal"></label>
+          <div id="jcEditProfileDrawer" hidden style="margin-top:16px;padding:16px;border-radius:16px;background:rgba(6,16,28,0.94);border:1px solid rgba(89,230,255,0.4);display:grid;gap:12px">
+            <div class="eyebrow" style="color:#38bdf8">1. IDENTIDADE E CARGO PRETENDIDO</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
+              <label class="field" style="margin:0">Seu Nome de Exibição (Perfil &amp; Ranking)<input type="text" id="jcEditNameInput" value="${name}" maxlength="50"></label>
+              <label class="field" style="margin:0">1º Concurso / Cargo Pretendido<input type="text" id="jcEditRoleInput" value="${targetRole}" maxlength="80" placeholder="Ex.: PMPE — Soldado"></label>
+              <label class="field" style="margin:0">2º Concurso (Opcional)<input type="text" id="jcEditSecRoleInput" value="${secRole}" maxlength="80" placeholder="Ex.: CBMPE / PPPE"></label>
               <label class="field" style="margin:0">Cidade / Estado<input type="text" id="jcEditCityInput" value="${cityState}" maxlength="50"></label>
             </div>
             <label class="field" style="margin:0">Lema de Estudos / Bio do Perfil<input type="text" id="jcEditBioInput" value="${bioMotto.replace(/^“|”$/g, '')}" maxlength="140"></label>
-            <div style="display:flex;gap:8px;justify-content:flex-end">
+
+            <div class="eyebrow" style="color:#34d399;margin-top:4px">2. PRIVACIDADE DO SEU PERFIL PÚBLICO (O QUE OUTROS USUÁRIOS PODEM VER AO CLICAR EM VOCÊ)</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px">
+              <label class="jcPrivacyCheckRow"><span>📷 Mostrar minha Foto de Perfil no Ranking e Chat</span><input type="checkbox" id="jcPrivAvatar" ${priv.showAvatar ? 'checked' : ''}></label>
+              <label class="jcPrivacyCheckRow"><span>🔥 Mostrar minha Ofensiva (Dias Seguidos)</span><input type="checkbox" id="jcPrivStreak" ${priv.showStreak ? 'checked' : ''}></label>
+              <label class="jcPrivacyCheckRow"><span>🎯 Mostrar minha Taxa de Acerto (%) e Missões</span><input type="checkbox" id="jcPrivAccuracy" ${priv.showAccuracy ? 'checked' : ''}></label>
+              <label class="jcPrivacyCheckRow"><span>⏱️ Mostrar minhas Horas de Estudo</span><input type="checkbox" id="jcPrivHours" ${priv.showHours ? 'checked' : ''}></label>
+              <label class="jcPrivacyCheckRow"><span>🛡️ Mostrar meu Cargo Pretendido / Concurso</span><input type="checkbox" id="jcPrivRole" ${priv.showTargetRole ? 'checked' : ''}></label>
+              <label class="jcPrivacyCheckRow"><span>🏅 Mostrar minhas Insígnias e Bio</span><input type="checkbox" id="jcPrivBadges" ${priv.showBadges ? 'checked' : ''}></label>
+              <label class="jcPrivacyCheckRow" style="grid-column:1/-1;border-color:rgba(244,63,94,0.4)"><span>🕵️ Modo Invisível Completo: Ocultar meu perfil da lista do Ranking Geral</span><input type="checkbox" id="jcPrivHiddenAll" ${priv.hiddenFromRanking ? 'checked' : ''}></label>
+            </div>
+
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
               <button type="button" class="ghost small" id="jcCancelEditProfileBtn" style="width:auto">Cancelar</button>
-              <button type="button" class="action small" id="jcSaveEditProfileBtn" style="width:auto">💾 Salvar Meu Perfil</button>
+              <button type="button" class="action small" id="jcSaveEditProfileBtn" style="width:auto">💾 Salvar Perfil &amp; Privacidade</button>
             </div>
           </div>
 
@@ -962,24 +1192,24 @@
             <div class="jcProfileStatItem"><b style="color:#fbbf24">🔥 ${streak}d</b><span>Ofensiva (Recorde: ${bestStreak}d)</span></div>
             <div class="jcProfileStatItem"><b style="color:#34d399">${accuracy}%</b><span>Precisão (${qCorr}/${qTotal})</span></div>
             <div class="jcProfileStatItem"><b>${totalFocusHours}h</b><span>Horas Líquidas</span></div>
-            <div class="jcProfileStatItem"><b>${editalPct}%</b><span>Cobertura do Edital</span></div>
+            <div class="jcProfileStatItem"><b>${editalPct}%</b><span>Cobertura (${doneMissions}/${pool.length})</span></div>
             <div class="jcProfileStatItem"><b style="color:#f43f5e">🏆 ${bossesWon}</b><span>Chefes Derrotados</span></div>
           </div>
         </div>
       </div>
 
       <div class="jcProfileTwoCols">
-        <!-- Coluna Esquerda: Apresentação, Metas e Banco Nativo -->
         <div style="display:grid;gap:14px">
           <div class="card" style="margin:0">
-            <div class="sectionHead"><h2>📋 Apresentação &amp; Status</h2><span class="tag">Em Dia</span></div>
+            <div class="sectionHead"><h2>📋 Apresentação &amp; Sincronia Real</h2><span class="tag">Sincronizado</span></div>
             <div class="list" style="gap:8px;font-size:.84rem">
-              <div class="topic"><span>🎯 <b>Portal Ativo:</b> ${camp?.name || 'PMPE'}</span></div>
-              <div class="topic"><span>📚 <b>Acervo no Aparelho:</b> ${(window.ALL_QUESTIONS || []).length} questões · ${(window.ALL_SUMMARIES || []).length} resumos · ${(window.ALL_FLASHCARDS || []).length} flashcards</span></div>
-              <div class="topic"><span>⚡ <b>Velocidade da Aba Questões:</b> p50 ${telemetry.p50Ms || 10}ms (Meta &lt; 120ms)</span></div>
+              <div class="topic"><span>🎯 <b>Portal Ativo:</b> ${camp?.name || 'PMPE — Soldado'} (${doneMissions} missões cumpridas)</span></div>
+              <div class="topic"><span>📚 <b>Acervo no Aparelho:</b> <b>${allQs.length} questões</b> · <b>${allSums.length} resumos</b> · <b>${allCards.length} flashcards</b></span></div>
+              <div class="topic"><span>🔒 <b>Privacidade no Ranking:</b> ${priv.hiddenFromRanking ? 'Oculto (Modo Invisível)' : 'Visível para a Guilda (com filtros personalizados)'}</span></div>
+              <div class="topic"><span>⚡ <b>Velocidade da Aba Questões:</b> abertura instantânea (p50 ${telemetry.p50Ms || 8}ms)</span></div>
             </div>
             <div style="display:grid;gap:8px;margin-top:12px">
-              <button type="button" class="action small" id="jcProfileConsolidateNativeBtn" style="width:100%">🏛️ Consolidar Minhas Questões no Banco Nativo</button>
+              <button type="button" class="action small" id="jcProfileConsolidateNativeBtn" style="width:100%">🏛️ Consolidar Minhas ${allQs.length} Questões no Banco Nativo</button>
               <button type="button" class="ghost small" id="jcProfileExportNativeJsonBtn" style="width:100%">📥 Baixar Meu Banco Nativo Consolidado (.json)</button>
             </div>
           </div>
@@ -987,15 +1217,14 @@
           <div class="card" style="margin:0">
             <div class="sectionHead"><h2>🏅 Insígnias Desbloqueadas</h2><span class="tag">Carreira</span></div>
             <div class="achievementGrid">
-              <div class="achievement ${doneMissions >= 1 ? 'unlocked' : ''}"><b>${doneMissions >= 1 ? '✓' : '◈'} Recruta Ativo</b><span class="small muted">1ª missão cumprida</span></div>
-              <div class="achievement ${streak >= 3 ? 'unlocked' : ''}"><b>${streak >= 3 ? '✓' : '◈'} Fogo Constante</b><span class="small muted">3+ dias de ofensiva</span></div>
-              <div class="achievement ${qTotal >= 50 ? 'unlocked' : ''}"><b>${qTotal >= 50 ? '✓' : '◈'} Atirador de Elite</b><span class="small muted">50+ questões resolvidas</span></div>
-              <div class="achievement ${bossesWon >= 1 ? 'unlocked' : ''}"><b>${bossesWon >= 1 ? '✓' : '◈'} Matador de Chefes</b><span class="small muted">1+ chefe derrotado</span></div>
+              <div class="achievement ${doneMissions >= 1 ? 'unlocked' : ''}"><b>${doneMissions >= 1 ? '✓' : '◈'} Recruta Ativo</b><span class="small muted">1ª missão cumprida (${doneMissions} feitas)</span></div>
+              <div class="achievement ${streak >= 3 ? 'unlocked' : ''}"><b>${streak >= 3 ? '✓' : '◈'} Fogo Constante</b><span class="small muted">3+ dias seguidos (atual: ${streak}d)</span></div>
+              <div class="achievement ${qTotal >= 30 ? 'unlocked' : ''}"><b>${qTotal >= 30 ? '✓' : '◈'} Atirador de Questões</b><span class="small muted">30+ resolvidas (atual: ${qTotal})</span></div>
+              <div class="achievement ${accuracy >= 60 && qTotal >= 10 ? 'unlocked' : ''}"><b>${accuracy >= 60 && qTotal >= 10 ? '✓' : '◈'} Mira Calibrada</b><span class="small muted">60%+ precisão (atual: ${accuracy}%)</span></div>
             </div>
           </div>
         </div>
 
-        <!-- Coluna Direita: Desempenho por Banca Examinadora e por Disciplina -->
         <div style="display:grid;gap:14px">
           <div class="card" style="margin:0">
             <div class="sectionHead">
@@ -1006,7 +1235,7 @@
               <span class="tag">${boardStats.length} bancas</span>
             </div>
             <div>
-              ${boardStats.map(b => {
+              ${boardStats.length ? boardStats.map(b => {
                 const pctVal = b.pct !== null ? b.pct : 0;
                 const barColor = b.pct === null ? '#334155' : pctVal >= 70 ? '#10b981' : pctVal >= 50 ? '#f59e0b' : '#ef4444';
                 return `
@@ -1014,13 +1243,13 @@
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.83rem">
                       <b>🏛️ ${b.board}</b>
                       <span class="small" style="color:${b.pct === null ? '#94a3b8' : barColor};font-weight:800">
-                        ${b.pct !== null ? `${b.pct}% de acerto (${b.correct}/${b.answered} resolvidas)` : `${b.totalAvailable} questões no banco (ainda não treinada)`}
+                        ${b.pct !== null ? `${b.pct}% de acerto (${b.correct}/${b.answered} resolvidas · ${b.totalAvailable} no banco)` : `${b.totalAvailable} questões disponíveis no seu banco`}
                       </span>
                     </div>
-                    <div class="bar" style="height:8px;margin-top:4px"><div class="fill" style="width:${b.pct !== null ? Math.max(4, pctVal) : 0}%;background:${barColor}"></div></div>
+                    <div class="bar" style="height:8px;margin-top:4px"><div class="fill" style="width:${b.pct !== null ? Math.max(6, pctVal) : 12}%;background:${barColor}"></div></div>
                   </div>
                 `;
-              }).join('')}
+              }).join('') : '<div class="empty">Nenhuma questão carregada ainda neste portal.</div>'}
             </div>
           </div>
 
@@ -1068,7 +1297,7 @@
           const img = new Image();
           img.onload = () => {
             const cnv = document.createElement('canvas');
-            const size = 220;
+            const size = 200;
             cnv.width = size;
             cnv.height = size;
             const ctx = cnv.getContext('2d');
@@ -1076,10 +1305,10 @@
             const sx = (img.width - minSide) / 2;
             const sy = (img.height - minSide) / 2;
             ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
-            const dataUrl = cnv.toDataURL('image/webp', 0.84);
+            const dataUrl = cnv.toDataURL('image/webp', 0.82);
             setHunterAvatarDataUrl(dataUrl);
             renderHunterProfileHub();
-            if (typeof window.toast === 'function') window.toast('📸 Foto de perfil atualizada com sucesso!');
+            if (typeof toast === 'function') toast('📸 Foto aplicada no Perfil, Topo, Ranking e Chat da Guilda!');
           };
           img.src = String(reader.result || '');
         };
@@ -1092,7 +1321,7 @@
       remBtn.onclick = () => {
         setHunterAvatarDataUrl('');
         renderHunterProfileHub();
-        if (typeof window.toast === 'function') window.toast('Foto de perfil removida.');
+        if (typeof toast === 'function') toast('Foto de perfil removida.');
       };
     }
 
@@ -1107,24 +1336,43 @@
     }
     const saveProfBtn = document.getElementById('jcSaveEditProfileBtn');
     if (saveProfBtn) {
-      saveProfBtn.onclick = () => {
+      saveProfBtn.onclick = async () => {
         const newName = document.getElementById('jcEditNameInput')?.value.trim() || name;
         const newRole = document.getElementById('jcEditRoleInput')?.value.trim() || targetRole;
+        const newSecRole = document.getElementById('jcEditSecRoleInput')?.value.trim() || '';
         const newCity = document.getElementById('jcEditCityInput')?.value.trim() || cityState;
         const newBio = document.getElementById('jcEditBioInput')?.value.trim() || '';
-        if (window.state) {
-          window.state.profileDisplayName = newName;
-          window.state.profileTargetRole = newRole;
-          window.state.profileCity = newCity;
-          window.state.profileBioMotto = newBio ? `“${newBio}”` : bioMotto;
-          if (typeof window.save === 'function') window.save();
+
+        const stObj = getAppState();
+        stObj.profileDisplayName = newName;
+        stObj.profileTargetRole = newRole;
+        stObj.profileCity = newCity;
+        stObj.profileBioMotto = newBio ? `“${newBio}”` : bioMotto;
+        stObj.publicProfile = stObj.publicProfile || {};
+        stObj.publicProfile.name = newName;
+        stObj.publicProfile.role = newRole;
+        stObj.publicProfile.secondaryRole = newSecRole;
+        stObj.publicProfile.bio = stObj.profileBioMotto;
+        stObj.publicProfile.avatar = getHunterAvatarDataUrl();
+        stObj.publicProfile.hidden = Boolean(document.getElementById('jcPrivHiddenAll')?.checked);
+        stObj.publicProfile.privacy = {
+          showAvatar: Boolean(document.getElementById('jcPrivAvatar')?.checked),
+          showStreak: Boolean(document.getElementById('jcPrivStreak')?.checked),
+          showAccuracy: Boolean(document.getElementById('jcPrivAccuracy')?.checked),
+          showHours: Boolean(document.getElementById('jcPrivHours')?.checked),
+          showTargetRole: Boolean(document.getElementById('jcPrivRole')?.checked),
+          showBadges: Boolean(document.getElementById('jcPrivBadges')?.checked),
+          showBio: Boolean(document.getElementById('jcPrivBadges')?.checked)
+        };
+
+        try { localStorage.setItem('jc_profile_display_name_v1', newName); } catch (_e) {}
+        if (typeof save === 'function') save();
+        if (typeof cloudSession === 'object' && cloudSession && navigator.onLine && typeof pushCloudState === 'function') {
+          try { await pushCloudState(); } catch (_e) {}
         }
-        try {
-          localStorage.setItem('jc_profile_display_name_v1', newName);
-        } catch (_e) {}
         decorateTopHeaderAvatarPill();
         renderHunterProfileHub();
-        if (typeof window.toast === 'function') window.toast('✅ Perfil de Caçador atualizado!');
+        if (typeof toast === 'function') toast('✅ Perfil, Ranking e Privacidade sincronizados com sucesso!');
       };
     }
 
@@ -1165,7 +1413,7 @@
     const goQBtn = document.getElementById('jcProfileGoQuestionsBtn');
     if (goQBtn) {
       goQBtn.onclick = () => {
-        if (typeof window.openView === 'function') window.openView('report');
+        if (typeof openView === 'function') openView('report');
       };
     }
   }
@@ -1173,7 +1421,8 @@
   JC_MODULES.socialProfile = {
     decorateHeader: decorateTopHeaderAvatarPill,
     renderProfile: renderHunterProfileHub,
-    computeBoardStats: computeBoardAccuracyStats
+    computeBoardStats: computeBoardAccuracyStats,
+    openVisitorModal: openPublicHunterProfileVisitorModal
   };
   window.renderHunterProfileHub = renderHunterProfileHub;
   window.decorateTopHeaderAvatarPill = decorateTopHeaderAvatarPill;
@@ -1182,7 +1431,6 @@
     ensureProfileViewSectionExists();
     decorateTopHeaderAvatarPill();
 
-    // Hook em updateAccountUI para manter a bolinha com foto de perfil sempre atualizada
     if (typeof window.updateAccountUI === 'function' && !window.updateAccountUI._jcProfileHooked) {
       const origUpdate = window.updateAccountUI;
       window.updateAccountUI = function () {
@@ -1192,7 +1440,6 @@
       window.updateAccountUI._jcProfileHooked = true;
     }
 
-    // Hook em openView para renderizar a aba 'profile' quando aberta
     if (typeof window.openView === 'function' && !window.openView._jcProfileHooked) {
       const origOpenView = window.openView;
       window.openView = function (id) {

@@ -236,8 +236,8 @@
     $$('[data-study-folder-toggle]').forEach(button=>button.onclick=()=>{const folder=button.closest('.libraryFolder'),open=!folder.classList.contains('open');folder.classList.toggle('open',open);libraryUI.studyFolders[button.dataset.studyFolderToggle]=open;saveLibraryUI()});
     $$('[data-summary]').forEach(b=>b.onclick=()=>{const summary=b.closest('.summaryCard');summary.classList.toggle('open');b.lastElementChild.textContent=summary.classList.contains('open')?'−':'＋'});
     $$('[data-open-summary-source]').forEach(button=>button.onclick=()=>openSummarySource(button.dataset.openSummarySource));
-    $$$('[data-edit-summary]').forEach(button=>button.onclick=()=>window.openEditSummaryModal?.(button.dataset.editSummary));
-    $$$('[data-report-summary]').forEach(button=>button.onclick=()=>reportSummaryIssue(button.dataset.reportSummary));
+    document.querySelectorAll('[data-edit-summary]').forEach(button=>button.onclick=()=>window.openEditSummaryModal?.(button.dataset.editSummary));
+    document.querySelectorAll('[data-report-summary]').forEach(button=>button.onclick=()=>reportSummaryIssue(button.dataset.reportSummary));
     $$('[data-approve-summary]').forEach(button=>button.onclick=()=>setSummaryApproval(button.dataset.approveSummary,button.dataset.approved!=='1'))
   };
 

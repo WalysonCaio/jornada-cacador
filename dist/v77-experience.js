@@ -5390,13 +5390,30 @@
       return;
     }
 
-    // Enriquecimento de metadados de cada prova/simulado/mini-simulado
+    // Enriquecimento O(1) ultra-rápido por Map de IDs/Títulos (evita 183 x 6065 = 1,1 milhão de iterações!)
+    const qsByDocId = new Map();
+    const qsByBoardKey = new Map();
+    for (const item of (ALL_QUESTIONS || [])) {
+      const dId = String(item.sourceDocumentId || item.documentId || '');
+      if (dId) {
+        let arr = qsByDocId.get(dId);
+        if (!arr) { arr = []; qsByDocId.set(dId, arr); }
+        arr.push(item);
+      }
+      const bKey = topicKey(item.board || '');
+      if (bKey) {
+        let arrB = qsByBoardKey.get(bKey);
+        if (!arrB) { arrB = []; qsByBoardKey.set(bKey, arrB); }
+        arrB.push(item);
+      }
+    }
     const enrichedDocs = examDocs.map(doc => {
-      const docQuestions = (ALL_QUESTIONS || []).filter(item =>
-        String(item.sourceDocumentId || item.documentId || '') === String(doc.id) ||
-        topicKey(item.board) === topicKey(doc.title)
-      );
-      const meta = classifyExamDocumentMeta(doc, docQuestions);
+      const docQuestions = qsByDocId.get(String(doc.id)) || qsByBoardKey.get(topicKey(doc.title)) || [];
+      if (!doc._cachedExamMeta || doc._cachedExamMetaQCount !== docQuestions.length) {
+        doc._cachedExamMeta = classifyExamDocumentMeta(doc, docQuestions);
+        doc._cachedExamMetaQCount = docQuestions.length;
+      }
+      const meta = doc._cachedExamMeta;
       const qCount = docQuestions.length || Number(doc.metadata?.coverage?.summary_count || 0) || 0;
       return { doc, docQuestions, meta, qCount };
     });
@@ -7728,7 +7745,7 @@
       baseRenderQuestionFilters();
       populateTopicFilter();
       updateQuestionPool();
-      renderExamBankHub();
+      window._lastQuestionFilterSyncTs = Date.now();
       if (window.JC_MODULES?.telemetry) {
         const sample = window.JC_MODULES.telemetry.markEnd('jc_questions_tab_open');
         const countEl = q('#questionPoolCount');
@@ -7953,9 +7970,13 @@
       const defaultName=user?.user_metadata?.full_name||user?.user_metadata?.name||(user?.email?user.email.split('@')[0]:'')||'Caçador';
       const defaultRole=(typeof activeCampaign==='function'?activeCampaign()?.name:'')||'PMPE — Soldado';
       state.publicProfile=state.publicProfile||{};
+      const myAvatar = typeof window.renderHunterAvatarHtml === 'function' ? (state.profileAvatarDataUrl || state.publicProfile.avatar || localStorage.getItem('jc_profile_avatar_v1') || '') : '';
       state.hunterStats={
-        name:state.publicProfile.name||defaultName,
-        role:state.publicProfile.role||defaultRole,
+        name:state.profileDisplayName||state.publicProfile.name||defaultName,
+        role:state.profileTargetRole||state.publicProfile.role||defaultRole,
+        avatar:myAvatar,
+        bio:state.profileBioMotto||state.publicProfile.bio||'',
+        privacy:state.publicProfile.privacy||{},
         xp:curXp,
         rank:curRank,
         streak:Number(state?.streak||0),
@@ -8423,6 +8444,9 @@
       missions_done:Number(hs.missionsDone||0),
       accuracy:Number(hs.accuracy||0),
       xp:Number(hs.xp||0),
+      avatar:hs.avatar||state?.profileAvatarDataUrl||localStorage.getItem('jc_profile_avatar_v1')||'',
+      bio:hs.bio||state?.profileBioMotto||'',
+      privacy:hs.privacy||state?.publicProfile?.privacy||{},
       updated_at:new Date().toISOString()
     };
   }
@@ -8636,12 +8660,12 @@
       ${top3.length?`
         <div class="podiumGrid">
           ${top3.map((item,idx)=>`
-            <div class="podiumCard ${idx===0?'first':''}">
+            <div class="podiumCard jcClickableHunter ${idx===0?'first':''}" data-visit-hunter-idx="${idx}" title="Clique para visitar o perfil de ${escText(item.name)}">
               <div class="eyebrow">${medals[idx]}</div>
               <div style="display:flex;justify-content:center;margin:4px 0">
-                <span class="rankAvatar">${escText((item.name||'C').trim().slice(0,1).toUpperCase())}</span>
+                <span class="rankAvatar" style="overflow:hidden;padding:0">${typeof window.renderHunterAvatarHtml==='function'?window.renderHunterAvatarHtml(item,Boolean(item.is_me)):escText((item.name||'C').trim().slice(0,1).toUpperCase())}</span>
               </div>
-              <strong style="font-size:1rem">${escText(item.name)}${item.is_me?' (Você)':''}</strong>
+              <strong style="font-size:1rem;text-decoration:underline;text-decoration-color:rgba(89,230,255,0.4)">${escText(item.name)}${item.is_me?' (Você)':''}</strong>
               ${renderRoleBadgesHtml(item.role,item.secondary_role,true)}
               <div style="font-size:1.25rem;font-weight:900;color:var(--gold);margin-top:4px">🔥 ${Number(item._displayStreak??item.streak??0)} dia${Number(item._displayStreak??item.streak??0)===1?'':'s'} ${isWeekly?'na semana':'de ofensiva total'}</div>
               <div class="small muted">${escText(rankLabelForXp(item.xp))} · ${Number(item._displayXp??item.xp??0)} XP ${isWeekly?'(semana)':'(geral)'}</div>
@@ -8662,11 +8686,11 @@
             return `
               <div class="rankRow ${item.is_me?'isMe':''}">
                 <div class="rankPos">#${idx+1}</div>
-                <div class="rankRowMain" style="display:flex;align-items:center;gap:10px;min-width:0">
-                  <span class="rankAvatar">${escText((item.name||'C').trim().slice(0,1).toUpperCase())}</span>
+                <div class="rankRowMain jcClickableHunter" data-visit-hunter-idx="${idx}" title="Clique para visitar o perfil de ${escText(item.name)}" style="display:flex;align-items:center;gap:10px;min-width:0;cursor:pointer">
+                  <span class="rankAvatar" style="overflow:hidden;padding:0">${typeof window.renderHunterAvatarHtml==='function'?window.renderHunterAvatarHtml(item,Boolean(item.is_me)):escText((item.name||'C').trim().slice(0,1).toUpperCase())}</span>
                   <div style="min-width:0;flex:1">
                     <div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                      ${escText(item.name)}${item.is_me?' <span class="tag" style="padding:2px 6px;font-size:.68rem">Você</span>':''}
+                      <span style="text-decoration:underline;text-decoration-color:rgba(89,230,255,0.35)">${escText(item.name)}</span>${item.is_me?' <span class="tag" style="padding:2px 6px;font-size:.68rem">Você</span>':''} <span class="small muted" style="font-size:.68rem;color:#38bdf8">👤 Ver perfil</span>
                       ${studiedToday?' <span style="color:#4ade80;font-size:.75rem;font-weight:700">● Estudou hoje</span>':''}
                     </div>
                     ${renderRoleBadgesHtml(item.role,item.secondary_role,false)}
@@ -8694,6 +8718,16 @@
 
     q('#refreshRankingBtn').onclick=()=>loadHuntersLeaderboard(true);
     if(q('#openDuelArenaFromRankBtn'))q('#openDuelArenaFromRankBtn').onclick=()=>openView('duel');
+    qa('[data-visit-hunter-idx]').forEach(el=>{
+      el.onclick=(ev)=>{
+        if(ev.target?.closest?.('button'))return;
+        const idx=Number(el.dataset.visitHunterIdx);
+        const hItem=filtered[idx];
+        if(hItem&&typeof window.openPublicHunterProfileVisitorModal==='function'){
+          window.openPublicHunterProfileVisitorModal(hItem);
+        }
+      };
+    });
     qa('[data-challenge-from-rank]').forEach(btn=>{
       btn.onclick=()=>{
         const raw=btn.dataset.challengeFromRank||'',cut=raw.indexOf('|'),uid=cut<0?raw:raw.slice(0,cut),uname=cut<0?'Oponente':raw.slice(cut+1);
@@ -11428,7 +11462,16 @@
     runV77ViewEnhancements(activeId,true);
   };
   const baseRenderReport=renderReport;
-  renderReport=function(){baseRenderReport();if(Date.now()-(window._lastQuestionFilterSyncTs||0)>30){populateTopicFilter();updateQuestionPool();}renderPerformanceChart();renderExamBankHub()};
+  renderReport=function(){
+    baseRenderReport();
+    if(Date.now()-(window._lastQuestionFilterSyncTs||0)>250){
+      populateTopicFilter();
+      updateQuestionPool();
+      window._lastQuestionFilterSyncTs=Date.now();
+    }
+    renderPerformanceChart();
+    renderExamBankHub();
+  };
 
   window.renderNotifications=renderNotifications=renderInteractiveNotifications;if(q('#notificationBtn'))q('#notificationBtn').onclick=()=>{renderInteractiveNotifications();q('#notificationDialog').showModal()};enableBackdropClickToCloseDialogs();enhanceSoloLevelingVisuals();hookAutomaticDailyStepTracking();addTodayCommand();ensureReverseSchedulePanel();bindQuestionCenter();updateTodayCommand();decorateDailyStepProgressLabels();renderReverseSchedule();
   qa('[data-menu-view]').forEach(button=>button.onclick=()=>{q('#moreDialog')?.close();openView(button.dataset.menuView)});
@@ -12080,11 +12123,11 @@
             const isBizuCard=/^💡/.test(String(m.message||'').trim());
             return `
               <div class="slGuildMsg ${isMe?'isMe':''} ${isDuelCall?'duelCallMsg':isStatusCard?'statusCardMsg':isBizuCard?'bizuCardMsg':''}">
-                <div class="slGuildMsgAvatar">${escText((m.author_name||'C').trim().slice(0,1).toUpperCase())}</div>
+                <div class="slGuildMsgAvatar jcClickableHunter" data-guild-visit-author="${escText(m.user_id||'')}|" data-guild-author-name="${escText(m.author_name||'Caçador')}" data-guild-author-role="${escText(m.author_role||'PMPE')}" data-guild-author-xp="${Number(m.author_xp||0)}" data-guild-is-me="${isMe?'1':'0'}" style="overflow:hidden;padding:0;cursor:pointer" title="Ver perfil de ${escText(m.author_name||'Caçador')}">${typeof window.renderHunterAvatarHtml==='function'?window.renderHunterAvatarHtml({name:m.author_name,avatar:m.author_avatar},isMe):escText((m.author_name||'C').trim().slice(0,1).toUpperCase())}</div>
                 <div class="slGuildMsgBody">
                   <div class="slGuildMsgHead">
                     <div class="slGuildAuthorWrap">
-                      <strong class="slGuildAuthor">${escText(m.author_name||'Caçador')}</strong>
+                      <strong class="slGuildAuthor jcClickableHunter" data-guild-visit-author="${escText(m.user_id||'')}|" data-guild-author-name="${escText(m.author_name||'Caçador')}" data-guild-author-role="${escText(m.author_role||'PMPE')}" data-guild-author-xp="${Number(m.author_xp||0)}" data-guild-is-me="${isMe?'1':'0'}" style="cursor:pointer;text-decoration:underline;text-decoration-color:rgba(89,230,255,0.35)" title="Ver perfil de ${escText(m.author_name||'Caçador')}">${escText(m.author_name||'Caçador')}</strong>
                       <span class="slGuildRankPill">${escText(shortRank)}</span>
                       <span class="slGuildChanTag ${cb.cls}">${cb.label}</span>
                     </div>
@@ -14760,6 +14803,22 @@
   function openTheoryForSubjectAndTopic(targetSubj, targetTopic = '') {
     const { cleanSubj, bestCard } = ensureTopicSummaryExistsForStudy(targetSubj, targetTopic);
 
+    // Pré-configura o filtro e o estado aberto ANTES de openView('study') para que renderStudy() e o MutationObserver abram direto na matéria e no card exato!
+    try {
+      if (typeof libraryUI === 'object' && libraryUI) {
+        const campId = state?.activeCampaignId || 'default';
+        libraryUI.summaryFilter = libraryUI.summaryFilter || {};
+        libraryUI.summaryFilter[campId] = cleanSubj || 'all';
+        libraryUI.studyFolders = libraryUI.studyFolders || {};
+        libraryUI.studyFolders[`study:${campId}:${subjectKey(cleanSubj)}`] = true;
+        libraryUI.openSummaries = libraryUI.openSummaries || {};
+        if (bestCard?.id) {
+          libraryUI.openSummaries[`${campId}:${bestCard.id}`] = true;
+        }
+        if (typeof saveLibraryUI === 'function') saveLibraryUI();
+      }
+    } catch (_e) {}
+
     // 1. Abre a aba Estudar
     if (typeof openView === 'function') openView('study');
 
@@ -15292,6 +15351,26 @@
   setTimeout(ensureGoodnotesButtonInNotebook, 400);
 
   document.addEventListener('click', e => {
+    const visitGuildEl = e.target?.closest?.('[data-guild-visit-author]');
+    if (visitGuildEl && typeof window.openPublicHunterProfileVisitorModal === 'function') {
+      e.preventDefault();
+      const isMe = visitGuildEl.dataset.guildIsMe === '1';
+      const uName = visitGuildEl.dataset.guildAuthorName || 'Caçador';
+      const uRole = visitGuildEl.dataset.guildAuthorRole || 'PMPE';
+      const uXp = Number(visitGuildEl.dataset.guildAuthorXp || 0);
+      const uId = String(visitGuildEl.dataset.guildVisitAuthor || '').replace(/\|$/, '');
+      const fromRank = (typeof leaderboardRows !== 'undefined' && Array.isArray(leaderboardRows))
+        ? leaderboardRows.find(r => (uId && String(r.user_id) === uId) || topicKey(r.name) === topicKey(uName))
+        : null;
+      window.openPublicHunterProfileVisitorModal(fromRank || {
+        user_id: uId,
+        is_me: isMe,
+        name: uName,
+        role: uRole,
+        xp: uXp
+      });
+      return;
+    }
     const studyBtn = e.target?.closest?.('[data-cutoff-study-subj]');
     if (studyBtn) {
       e.preventDefault();
