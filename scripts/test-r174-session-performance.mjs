@@ -63,6 +63,7 @@ function section(start, end) {
 // Rendering the filters performs one pass and never builds the catalogue or charts.
 const calls = [];
 const filters = {
+  window: {},
   renderQuestionFilters: () => calls.push('filters'),
   populateTopicFilter: () => calls.push('topics'),
   updateQuestionPool: () => calls.push('pool'),

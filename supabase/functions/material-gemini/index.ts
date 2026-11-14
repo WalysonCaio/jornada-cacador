@@ -1,3 +1,9 @@
+// ARQUIVO AUTOCONTIDO PARA COLAR NO EDITOR DO SUPABASE: material-gemini
+// Gerado por: node scripts/build-supabase-dashboard.mjs
+// Fonte: supabase/functions/material-gemini/index.ts
+// SHA-256 da fonte: 8bffccda4daecc2291059d1f463c2f378832d754a582c10ed7f73cc0f4b57f93
+// Atualize a fonte e regenere; não exclua os validadores incorporados.
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
@@ -1083,7 +1089,7 @@ function sanitizeQuestions(value: unknown, fallbackTopic: string) {
     const statement = hasBaseText
       ? rawStmtStr.split(/\n{2,}/).map((p) => p.replace(/[ \t]+/g, " ").trim()).filter(Boolean).join("\n\n").slice(0, 7000)
       : cleanGeneratedText(raw?.statement, 2400);
-    let options = Array.isArray(raw?.options) ? raw.options.map((option: unknown) => cleanGeneratedText(option, 600)).filter(Boolean) : [];
+    let options = Array.isArray(raw?.options) ? raw.options.map((option: unknown) => cleanGeneratedText(option, 600)) : [];
     const rawIdx = raw?.correct_index;
     const letterIdx = typeof rawIdx === "string" ? ({ A: 0, B: 1, C: 2, D: 3, E: 4 } as Record<string, number>)[rawIdx.trim().toUpperCase()] : undefined;
     const numIdx = Number(rawIdx);
@@ -1091,13 +1097,7 @@ function sanitizeQuestions(value: unknown, fallbackTopic: string) {
     let correctIndex = letterIdx !== undefined ? letterIdx : (hasIdx && Number.isInteger(numIdx) ? numIdx : -1);
     // Gabarito ausente, inválido ou fora das alternativas: descarta a questão em vez de assumir a letra A.
     if (correctIndex < 0 || correctIndex >= options.length) continue;
-    if (options.length > 5) {
-      const correctText = options[correctIndex] ?? options[0];
-      const kept = options.filter((_, idx) => idx === correctIndex || idx < 5).slice(0, 5);
-      if (!kept.includes(correctText)) kept[4] = correctText;
-      options = kept;
-      correctIndex = options.indexOf(correctText);
-    }
+    if (options.length > 5 || options.some((option: string) => !option)) continue;
     const normalizedOptions = options.map((option: string) => option.toLocaleLowerCase("pt-BR"));
     const explanation = cleanGeneratedText(raw?.explanation || "Confira a justificativa no resumo deste tópico.", 3000);
     const difficulty = ["facil", "medio", "dificil"].includes(raw?.difficulty) ? raw.difficulty : "medio";

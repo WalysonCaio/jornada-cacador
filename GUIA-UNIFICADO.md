@@ -1,7 +1,10 @@
-# Jornada do Caçador — Guia Unificado e Manual Passo a Passo (r177 — v105)
+# Jornada do Caçador — Guia Unificado (r178)
 
-Última atualização documental: 06 de novembro de 2026  
-Versão da aplicação: **r177** (Banco até a migração v105, Chefe com Maestria e Amostra Mínima ≥70%, Selo de Origem em Toda Questão, Recibo Honesto da Missão, Extrator Contínuo em Lote e WebView Seguro) (Ciclo Tático Sincronizado, Lei Seca Cronológica, Provas com Raio-X, Banco de Questões sem Viés, Duelo X1 60s e Conformidade LGPD/DPO)
+Atualização da revisão: 14/11/2026. Versão do código: **r178**.
+
+Para aplicar esta entrega, siga [Revisão r178](docs/revisao-r178/LEIA-ME.md), incluindo a migração v108 e a republicação das funções. A v107 continua necessária para a gravação atômica do edital. O restante deste guia descreve funcionalidades históricas e não substitui os limites e resultados documentados na revisão atual.
+
+**Manuais do Caçador:** ficam em Menu → Manuais do Caçador, como ajuda da plataforma. Não são materiais de disciplina. Gabarito sugerido pela IA exige revisão; ausência de chave permanece pendente. Treinos locais podem ser retomados no mesmo aparelho; isso não garante recuperação da sessão em outro dispositivo.
 
 Este documento reúne o **Manual Passo a Passo de Uso Pedagógico** (seções 1 a 6) e o **Guia Técnico de Manutenção, Banco de Dados e Publicação** (seções 7 a 21).
 

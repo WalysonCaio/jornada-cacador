@@ -6,7 +6,7 @@ for (const ld of html.matchAll(/<script\s+type="application\/ld\+json"[^>]*>([\s
 const scripts = [...html.matchAll(/<script(?!(?:\s[^>]*)?type="application\/ld\+json")(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map((match) => match[1]).filter(Boolean);
 if (!scripts.length) throw new Error("Nenhum JavaScript incorporado foi encontrado.");
 for (const source of scripts) new vm.Script(source);
-for (const relative of ["../dist/v59-enhancements.js", "../dist/v77-experience.js", "../dist/v78-smart-notebook.js", "../dist/sw.js"]) new vm.Script(fs.readFileSync(new URL(relative, import.meta.url), "utf8"), { filename: relative });
+for (const relative of ["../dist/v59-enhancements.js", "../dist/hunter-manuals.js", "../dist/jc-architecture-modules.js", "../dist/question-session-store.js", "../dist/v77-experience.js", "../dist/v78-smart-notebook.js", "../dist/sw.js"]) new vm.Script(fs.readFileSync(new URL(relative, import.meta.url), "utf8"), { filename: relative });
 
 const markup = html.replace(/<script(?:\s[^>]*)?>[\s\S]*?<\/script>/gi, "");
 const ids = [...markup.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
@@ -17,7 +17,7 @@ const referencedIds = [...scripts.join("\n").matchAll(/\$\('#([A-Za-z0-9_-]+)'\)
 const missing = [...new Set(referencedIds.filter((id) => !html.includes(`id="${id}"`)))];
 if (missing.length) throw new Error(`Elementos referenciados e ausentes: ${missing.join(", ")}`);
 
-const publicFiles = ["../dist/index.html", "../dist/sw.js", "../dist/content-summaries.js", "../dist/material-deep-dives.js", "../dist/v59-enhancements.js", "../dist/v77-experience.js", "../dist/v78-smart-notebook.js"];
+const publicFiles = ["../dist/hunter-manuals.js", "../dist/jc-architecture-modules.js", "../dist/index.html", "../dist/sw.js", "../dist/content-summaries.js", "../dist/material-deep-dives.js", "../dist/v59-enhancements.js", "../dist/v77-experience.js", "../dist/v78-smart-notebook.js"];
 const secretPatterns = [/SUPABASE_SERVICE_ROLE_KEY\s*=\s*["'][^"']+/i, /GEMINI_API_KEY\s*=\s*["'][^"']+/i, /GROQ_API_KEY\s*=\s*["'][^"']+/i];
 for (const relative of publicFiles) {
   const contents = fs.readFileSync(new URL(relative, import.meta.url), "utf8");
@@ -26,9 +26,11 @@ for (const relative of publicFiles) {
 
 const sw = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
 if (!sw.includes("jornada-cacador-v78-smart-notebook")) throw new Error("O cache não aponta para a versão 78.");
+if (!html.includes('src="question-session-store.js"') || !sw.includes("question-session-store.js")) throw new Error("A persistência de treinos não está ligada ao HTML e ao cache offline.");
 if (!html.includes('href="ui-v75.css"') || !sw.includes("ui-v75.css")) throw new Error("A interface v75 não está ligada ao HTML e ao cache offline.");
 if (!html.includes('href="ui-v77.css"') || !html.includes('src="v77-experience.js"') || !sw.includes("ui-v77.css") || !sw.includes("v77-experience.js")) throw new Error("A experiência v77 não está ligada ao HTML e ao cache offline.");
 if (!html.includes('href="ui-v78.css"') || !html.includes('src="v78-smart-notebook.js"') || !sw.includes("ui-v78.css") || !sw.includes("v78-smart-notebook.js")) throw new Error("O Caderno Inteligente v78 não está ligado ao HTML e ao cache offline.");
+if (!html.includes('src="hunter-manuals.js"') || !html.includes('href="hunter-manuals.css"') || !sw.includes('hunter-manuals.js') || !sw.includes('hunter-manuals.css')) throw new Error("Os guias independentes não estão ligados ao HTML e ao cache offline.");
 const modernUi = fs.readFileSync(new URL("../dist/ui-v75.css", import.meta.url), "utf8");
 for (const required of ["@media(max-width:719px)", "@media(min-width:1040px)", "prefers-reduced-motion", ":focus-visible", "env(safe-area-inset-bottom)"]) if (!modernUi.includes(required)) throw new Error(`Interface responsiva incompleta: ${required}`);
 const experienceUi = fs.readFileSync(new URL("../dist/ui-v77.css", import.meta.url), "utf8");
@@ -88,3 +90,5 @@ for (const rel of ["../dist/index.html", "../dist/v59-enhancements.js", "../dist
   const bad = s.match(/(?<!\$)\$\([^)]+\)\.(forEach|map|filter|some)/);
   if (bad) throw new Error(`singleDollarArrayGuard falhou em ${rel}: ${bad[0]}`);
 }
+
+if (!html.includes('src="jc-architecture-modules.js"') || !sw.includes("jc-architecture-modules.js")) throw new Error("Módulos r178 ausentes no HTML/cache.");

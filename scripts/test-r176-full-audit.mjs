@@ -7,8 +7,8 @@ const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "ut
 const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
 const swSrc = readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
 
-// 1. Verificar vinculação do módulo e Service Worker r177
-assert(swSrc.includes("r177"), "sw.js deve estar na versao r177");
+// 1. Verificar vinculação do módulo e Service Worker r178
+assert(swSrc.includes("r178"), "sw.js deve estar na versao r178");
 assert(swSrc.includes("./jc-architecture-modules.js"), "sw.js deve fazer cache offline do módulo jc-architecture-modules.js");
 assert(htmlSrc.includes('src="jc-architecture-modules.js"'), "index.html deve carregar jc-architecture-modules.js");
 assert(htmlSrc.includes('id="profile"'), "index.html deve possuir a view #profile (Meu Perfil)");
@@ -33,7 +33,7 @@ const ctx = {
     removeItem: (k) => mockStorage.delete(k)
   },
   performance: {
-    now: () => Date.now(),
+    now: (() => { let t = 0; return () => t += 17; })(),
     mark: () => {},
     measure: () => ({ duration: 14.5 })
   },
@@ -106,9 +106,9 @@ assert(promoted.hierarchy["Direito Constitucional"].subjectId === "disc_const");
 assert(v77Src.includes("libraryUI.openSummaries[sKeyId] = true"), "openTheoryForSubjectAndTopic deve gravar libraryUI.openSummaries para o MutationObserver não fechar o card!");
 assert(v77Src.includes("smartExternalLibraryBox"), "openTheoryForSubjectAndTopic deve exibir a Biblioteca Externa de Confiança no card aberto!");
 
-console.log("OK: Auditoria completa r177 (Telemetria p50/p95, Taxonomia com IDs Estáveis, Biblioteca Inteligente Externa, Promotor de Banco Nativo e Hub Social Meu Perfil) validada!");
+console.log("OK: Auditoria completa r178 (Telemetria p50/p95, Taxonomia com IDs Estáveis, Biblioteca Inteligente Externa, Promotor de Banco Nativo e Hub Social Meu Perfil) validada!");
 
-// 8. Validações r177:
+// 8. Validações r178:
 // - #profile está dentro de <main class="app"> ANTES do <footer class="appLegalFooter">
 const idxProfile = htmlSrc.indexOf('id="profile"');
 const idxFooter = htmlSrc.indexOf('<footer class="appLegalFooter"');
@@ -126,4 +126,4 @@ assert(v77Src.includes("openPublicHunterProfileVisitorModal"), "Ranking e Chat d
 assert(modSrc.includes("getAppState()"), "jc-architecture-modules.js deve ler getAppState() diretamente do escopo global let state");
 assert(modSrc.includes("jcPrivStreak") && modSrc.includes("jcPrivAccuracy"), "Meu Perfil deve ter controles granulares de privacidade");
 
-console.log("OK: Correções r177 (Rodapé abaixo do Perfil, Sincronia Real com let state, Foto no Ranking/Chat, Visita de Perfil com Privacidade, Otimização O(1) da aba Questões e Ler Teoria sem erro $$$) validadas!");
+console.log("OK: Correções r178 (Rodapé abaixo do Perfil, Sincronia Real com let state, Foto no Ranking/Chat, Visita de Perfil com Privacidade, Otimização O(1) da aba Questões e Ler Teoria sem erro $$$) validadas!");

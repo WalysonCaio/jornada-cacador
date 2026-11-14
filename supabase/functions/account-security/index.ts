@@ -1,3 +1,9 @@
+// ARQUIVO AUTOCONTIDO PARA COLAR NO EDITOR DO SUPABASE: account-security
+// Gerado por: node scripts/build-supabase-dashboard.mjs
+// Fonte: supabase/functions/account-security/index.ts
+// SHA-256 da fonte: 5f3ba7d89210713e71e1b246bb7cbcece07526ac614f371ccf1b64df4b0ae14f
+// Atualize a fonte e regenere; não exclua os validadores incorporados.
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const PUBLIC_KEY = "sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw";
@@ -82,7 +88,6 @@ Deno.serve(async (request) => {
       const document = await selectOwned("study_documents", documentId, "id,campaign_id,document_type,storage_path");
       if (!document) return json({ error: "Arquivo não encontrado ou não pertence à sua conta." }, 404);
       const storagePath = String(document.storage_path ?? "");
-      const isEdital = ["edital", "edital_concurso"].includes(String(document.document_type ?? ""));
 
       const databaseDelete = await fetch(`${SUPABASE_URL}/rest/v1/rpc/delete_user_study_document`, {
         method: "POST",
@@ -93,27 +98,12 @@ Deno.serve(async (request) => {
       if (!databaseDelete.ok || databaseResult?.deleted !== true) {
         const missingMigration = databaseDelete.status === 404 || String(databaseResult?.code ?? "") === "PGRST202";
         if (missingMigration) {
-          // Fallback transacional seguro caso a migração 20261017_v74_secure_document_delete.sql
-          // ainda não tenha sido aplicada manualmente no SQL Editor.
-          let deletedTopicsCount = 0;
-          if (isEdital && document.campaign_id) {
-            const topicsDelete = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${encodeURIComponent(String(document.campaign_id))}&user_id=eq.${user.id}`, {
-              method: "DELETE",
-              headers: { ...serviceHeaders, Prefer: "return=representation" },
-            });
-            if (!topicsDelete.ok) return json({ error: "Não foi possível remover os tópicos vinculados ao edital." }, 409);
-            const removedTopics = await topicsDelete.json().catch(() => []);
-            deletedTopicsCount = Array.isArray(removedTopics) ? removedTopics.length : 0;
-          }
-          const deletedDoc = await deleteOwnedRow("study_documents", documentId);
-          if (!deletedDoc) return json({ error: "O banco não confirmou a exclusão do arquivo." }, 409);
-          databaseResult = {
-            deleted: true,
-            document_type: document.document_type,
-            campaign_id: document.campaign_id,
-            deleted_topics: deletedTopicsCount,
-            fallback_used: true,
-          };
+          // Requisições REST separadas não formam uma transação. Sem a RPC,
+          // preserve o arquivo e seu mapa, inclusive se a exclusão seria parcial.
+          return json({
+            code: "DOCUMENT_DELETE_MIGRATION_REQUIRED",
+            error: "A exclusão segura está indisponível. Aplique 20261017_v74_secure_document_delete.sql no Supabase e tente novamente. Nenhum arquivo ou tópico foi removido.",
+          }, 503);
         } else {
           return json({ error: "O banco não confirmou a exclusão do arquivo." }, 409);
         }
@@ -205,13 +195,29 @@ Deno.serve(async (request) => {
       return json({ ...resetResult, reset: true, verified: true, remaining, version: "72", gemini_key_preserved: true });
     }
 
-    for (const path of documentPaths) {
-      await deleteStorageObject(path);
-      await deleteStorageObject(`${path}.text.json`);
+    // O Supabase recusa excluir um usuário que ainda possui objetos no Storage.
+    // Esta operação distribuída é retomável, mas não é uma transação entre
+    // Storage e Auth: uma falha precisa informar que a limpeza pode ser parcial.
+    const cleanupPaths = [...new Set([
+      ...documentPaths.flatMap((path: string) => [path, `${path}.text.json`]),
+      ...essayPaths,
+    ])];
+    for (const path of cleanupPaths) {
+      try { await deleteStorageObject(path); }
+      catch {
+        return json({
+          code: "ACCOUNT_DELETE_INCOMPLETE",
+          error: "A limpeza dos arquivos não foi concluída e a conta ainda existe. Alguns arquivos podem ter sido removidos. Tente excluir a conta novamente para continuar.",
+          retryable: true,
+        }, 502);
+      }
     }
-    for (const path of essayPaths) await deleteStorageObject(path);
     const deleteResponse = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user.id}`, { method: "DELETE", headers: serviceHeaders });
-    if (!deleteResponse.ok) return json({ error: "Não foi possível excluir a conta agora." }, 502);
+    if (!deleteResponse.ok) return json({
+      code: "ACCOUNT_DELETE_INCOMPLETE",
+      error: "Os arquivos vinculados foram removidos, mas a exclusão da conta não foi confirmada. Tente novamente para concluir a operação.",
+      retryable: true,
+    }, 502);
     return json({ deleted: true });
   } catch (error) {
     console.error("account-security", error);

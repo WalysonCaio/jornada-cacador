@@ -1,3 +1,61 @@
+// ARQUIVO AUTOCONTIDO PARA COLAR NO EDITOR DO SUPABASE: assistente-pmpe
+// Gerado por: node scripts/build-supabase-dashboard.mjs
+// Fonte: supabase/functions/assistente-pmpe/index.ts
+// SHA-256 da fonte: ec2580cf1a4b9ac231c36058526ee3a4f17ee1bba8396b69431008d04333c66e
+// Atualize a fonte e regenere; não exclua os validadores incorporados.
+
+// Dependência incorporada: ../_shared/solved-keys.mjs (SHA-256 9648f444db9058b826236cfb6c82d6313565ab28e8ca97c32d195bc3567b2cbd)
+const { validatedSuggestedKeys } = (() => {
+function validatedSuggestedKeys(originals, generated) {
+  if (!Array.isArray(originals) || !Array.isArray(generated)) return [];
+  const normalize = text => String(text ?? '').normalize('NFC').replace(/\s+/g, ' ').trim();
+  return originals.flatMap((original, index) => {
+    const matches = generated.filter(item => normalize(item?.statement) === normalize(original?.statement));
+    if (matches.length !== 1 || !normalize(original?.statement)) return [];
+    const match = matches[0], options = original.options;
+    if (!Array.isArray(options) || !Array.isArray(match.options) || options.length !== match.options.length ||
+        options.some((text, i) => normalize(text) !== normalize(match.options[i]))) return [];
+    const raw = match.correct_index;
+    if (options.length < 2 || options.length > 5 || options.some(text => !normalize(text)) || new Set(options.map(normalize)).size !== options.length ||
+        raw === null || raw === undefined || typeof raw === 'boolean' || typeof raw === 'object' || String(raw).trim() === '' || !Number.isInteger(Number(raw)) || Number(raw) < 0 || Number(raw) >= options.length || !normalize(match.explanation)) return [];
+    return [{index: original.index ?? index, correct_index:Number(raw), explanation:'🤖 [Gabarito sugerido pela IA — confira no gabarito oficial quando disponível] '+normalize(match.explanation),key_source:'ia_sugerido',origin:'adaptada_do_pdf'}];
+  });
+}
+return { validatedSuggestedKeys };
+})();
+// Dependência incorporada: ../_shared/question-integrity.mjs (SHA-256 67f45373841d01dd15769476a7b280adf2d2cd740f2348a6ee1f51a922b10662)
+const { normalizeSharedQuestion } = (() => {
+// Public question projection: never repairs a missing key by guessing A.
+function normalizeSharedQuestion(value, defaults = {}) {
+  if (!value || typeof value !== 'object' || !String(value.statement ?? '').trim()) return null;
+  if (!Array.isArray(value.options) || value.options.length < 2 || value.options.length > 5) return null;
+  const options = value.options.map(option => String(option ?? '').trim());
+  if (options.some(option => !option) || new Set(options.map(option => option.toLocaleLowerCase('pt-BR'))).size !== options.length) return null;
+  const raw = value.correct_index;
+  const valid = raw !== null && raw !== undefined && typeof raw !== 'boolean' && typeof raw !== 'object' &&
+    String(raw).trim() !== '' && Number.isInteger(Number(raw)) && Number(raw) >= 0 && Number(raw) < options.length && !value.answer_unknown;
+  return {
+    subject: String(value.subject || defaults.subject || 'Conteúdo Geral'),
+    topic: String(value.topic || defaults.topic || 'Assunto não informado'),
+    board: String(value.board || defaults.board || 'Banca não informada'),
+    difficulty: ['facil', 'medio', 'dificil'].includes(value.difficulty) ? value.difficulty : 'medio',
+    origin: String(value.origin || defaults.origin || 'importada'),
+    statement: String(value.statement).trim(),
+    options,
+    correct_index: valid ? Number(raw) : -1,
+    explanation: String(value.explanation || ''),
+    ...(value.source || defaults.source ? {source: String(value.source || defaults.source)} : {}),
+    ...(value.exam_title ? {exam_title: String(value.exam_title)} : {}),
+    ...(value.exam_year !== null && value.exam_year !== undefined && String(value.exam_year).trim() !== '' && Number.isInteger(Number(value.exam_year)) ? {exam_year: Number(value.exam_year)} : {}),
+    ...(value.key_reference ? {key_reference: String(value.key_reference)} : {}),
+    ...(valid ? {} : {answer_unknown: true}),
+    ...(value.key_source ? {key_source: String(value.key_source)} : {}),
+    ...(value.answer_key_validation ? {answer_key_validation: String(value.answer_key_validation)} : {}),
+    ...(value.annulled || value.anulada ? {annulled: true} : {}),
+  };
+}
+return { normalizeSharedQuestion };
+})();
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "https://jybislbbblyjsrcdegjt.supabase.co";
 const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY");
@@ -70,8 +128,8 @@ async function reserveUsage(userId: string, campaignId?: string) {
     method: "POST",
     headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({ p_user_id: userId, p_campaign_id: campaignId || null, p_operation: "assistant", p_daily_limit: 40 }),
-  });
-  return response.ok ? await response.json() : { allowed: false, reason: "USAGE_GUARD_UNAVAILABLE" };
+  }).catch(() => null);
+  return response?.ok ? await response.json().catch(() => ({ allowed: false, reason: "USAGE_GUARD_UNAVAILABLE" })) : { allowed: false, reason: "USAGE_GUARD_UNAVAILABLE" };
 }
 
 async function finishUsage(eventId: number | undefined, status: "success" | "error", provider?: string, model?: string, errorCode?: string) {
@@ -262,8 +320,8 @@ async function askStructuredQuestions(prompt: string, geminiKey = GEMINI_API_KEY
             difficulty: { type: "STRING", enum: ["facil", "medio", "dificil"] },
             origin: { type: "STRING" },
             statement: { type: "STRING" },
-            options: { type: "ARRAY", minItems: 4, maxItems: 4, items: { type: "STRING" } },
-            correct_index: { type: "INTEGER", minimum: 0, maximum: 3 },
+            options: { type: "ARRAY", minItems: 2, maxItems: 5, items: { type: "STRING" } },
+            correct_index: { type: "INTEGER", minimum: 0, maximum: 4 },
             explanation: { type: "STRING" },
           },
           required: ["subject", "topic", "difficulty", "statement", "options", "correct_index", "explanation"],
@@ -347,7 +405,12 @@ Deno.serve(async (request) => {
   if (!authorization.startsWith("Bearer ")) {
     return json(request, { error: "Entre na sua conta para usar o assistente." }, 401);
   }
-  const user = await authenticatedUser(authorization);
+  let user;
+  try {
+    user = await authenticatedUser(authorization);
+  } catch {
+    return json(request, { error: "Não foi possível validar sua sessão. Tente novamente.", code: "AUTH_UNAVAILABLE" }, 503);
+  }
   if (!user?.id) {
     return json(request, { error: "Sessão inválida ou expirada." }, 401);
   }
@@ -358,6 +421,9 @@ Deno.serve(async (request) => {
   } catch {
     return json(request, { error: "Solicitação inválida." }, 400);
   }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return json(request, { error: "Solicitação inválida." }, 400);
+  }
 
   const personalGeminiKey = await userGeminiKey(user.id);
   const activeGeminiKey = personalGeminiKey || GEMINI_API_KEY || "";
@@ -366,67 +432,43 @@ Deno.serve(async (request) => {
     if (!SERVICE_ROLE_KEY) return json(request, { error: "Configuração do servidor incompleta." }, 503);
     const seen = new Map<string, any>();
 
-    // 1. Consulta a tabela dedicada shared_question_bank (se já criada)
     const sharedRes = await fetch(`${SUPABASE_URL}/rest/v1/shared_question_bank?select=*&order=created_at.desc&limit=300`, {
       headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY },
     }).catch(() => null);
     if (sharedRes?.ok) {
       const rows = await sharedRes.json().catch(() => []);
-      if (Array.isArray(rows)) {
-        for (const r of rows) {
-          if (Array.isArray(r.options) && r.options.length === 4 && r.statement) {
-            const fp = r.fingerprint || questionHash(r.statement);
-            seen.set(fp, {
-              subject: String(r.subject || "Conteúdo Geral"),
-              topic: String(r.topic || "Prova Oficial"),
-              board: String(r.board || "Banca Oficial"),
-              difficulty: ["facil", "medio", "dificil"].includes(r.difficulty) ? r.difficulty : "medio",
-              origin: r.origin || "oficial",
-              statement: String(r.statement),
-              options: r.options.map(String),
-              correct_index: Number(r.correct_index) || 0,
-              explanation: String(r.explanation || ""),
-            });
-          }
-        }
+      if (Array.isArray(rows)) for (const row of rows) {
+        const question = normalizeSharedQuestion(row);
+        if (question) seen.set(row.fingerprint || questionHash(question.statement), question);
       }
     }
 
-    // 2. Também agrega questões oficiais/adaptadas de provas já processadas em generated_study_content
-    const contentRes = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?content_type=in.(summary,question_pack)&select=title,content&order=created_at.desc&limit=350`, {
-      headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY },
+    // Use the same authenticated projection as the community library. Reading
+    // generated_study_content with service_role would bypass private documents
+    // and the existing watermark sanitizer, regardless of the sharing controls.
+    const communityRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_community_exam_library`, {
+      method: "POST",
+      headers: { Authorization: authorization, apikey: PUBLISHABLE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ p_exam_name: "", p_exam_org: "" }),
     }).catch(() => null);
-    if (contentRes?.ok) {
-      const rows = await contentRes.json().catch(() => []);
-      if (Array.isArray(rows)) {
-        for (const row of rows) {
-          const subject = String(row?.content?.subject || "Conteúdo Geral");
-          const source = String(row?.content?.source || "");
-          const isExamSource = /prova|simulado|oficial|aocp|cebraspe|fgv|concurso/i.test(source);
-          const qs = Array.isArray(row?.content?.questions) ? row.content.questions : [];
-          for (const q of qs) {
-            const origin = String(q?.origin || "autoral").toLowerCase();
-            if ((/oficial|adaptada_do_pdf|importad|prova/.test(origin) || isExamSource) && Array.isArray(q?.options) && q.options.length === 4 && q?.statement) {
-              const fp = questionHash(q.statement);
-              if (!seen.has(fp)) {
-                seen.set(fp, {
-                  subject,
-                  topic: String(q.topic || row.title || "Prova Oficial"),
-                  board: String(q.board || (source ? source.slice(0, 50) : "Prova Oficial")),
-                  difficulty: ["facil", "medio", "dificil"].includes(q.difficulty) ? q.difficulty : "medio",
-                  origin: "oficial",
-                  statement: String(q.statement),
-                  options: q.options.map(String),
-                  correct_index: Math.min(3, Math.max(0, Number(q.correct_index) || 0)),
-                  explanation: String(q.explanation || ""),
-                });
-              }
-            }
-          }
+    if (communityRes?.ok) {
+      const community = await communityRes.json().catch(() => null);
+      const rows = Array.isArray(community?.summaries) ? community.summaries : [];
+      for (const row of rows) {
+        const source = String(row?.content?.source || "");
+        const isExamSource = /prova|simulado|oficial|aocp|cebraspe|fgv|concurso/i.test(source);
+        const questions = Array.isArray(row?.content?.questions) ? row.content.questions : [];
+        for (const item of questions) {
+          if (!/oficial|adaptada_do_pdf|importad|prova/.test(String(item?.origin || "").toLowerCase()) && !isExamSource) continue;
+          const question = normalizeSharedQuestion(item, {subject: row?.content?.subject, topic: row?.title, source});
+          if (!question) continue;
+          const fingerprint = questionHash(question.statement);
+          if (!seen.has(fingerprint)) seen.set(fingerprint, question);
         }
       }
     }
 
+    if (!sharedRes?.ok && !communityRes?.ok) return json(request, {error: "O banco compartilhado está temporariamente indisponível. Tente novamente.",code:"SHARED_BANK_UNAVAILABLE"}, 503);
     const questions = [...seen.values()];
     return json(request, { questions, count: questions.length });
   }
@@ -536,23 +578,11 @@ ${itemsText}`;
 
     try {
       const generated = await askStructuredQuestions(solvePrompt, activeGeminiKey, Boolean(personalGeminiKey));
-      const solved = rawQuestions.map((orig: any, idx: number) => {
-        const match = generated.questions?.[idx] || generated.questions?.find((g: any) => String(g?.statement || "").slice(0, 35) === String(orig?.statement || "").slice(0, 35)) || null;
-        const opts = Array.isArray(orig?.options) ? orig.options : [];
-        const rawIdx = match?.correct_index;
-        const cIdx = (rawIdx !== null && rawIdx !== undefined && Number.isInteger(Number(rawIdx)) && Number(rawIdx) >= 0 && Number(rawIdx) < opts.length)
-          ? Number(rawIdx)
-          : 0;
-        const expRaw = String(match?.explanation || "Resolução elaborada pela IA com base no enunciado e nas alternativas da questão.").trim();
-        const prefix = /^🤖/i.test(expRaw) ? "" : "🤖 [Gabarito sugerido pela IA — confira no gabarito oficial quando disponível] ";
-        return {
-          index: orig?.index ?? idx,
-          correct_index: cIdx,
-          explanation: prefix + expRaw,
-          key_source: "ia_sugerido",
-          origin: "adaptada_do_pdf",
-        };
-      });
+      const solved = validatedSuggestedKeys(rawQuestions, generated.questions);
+      if (!solved.length) {
+        await finishUsage(usage.event_id, "error", undefined, undefined, "NO_VALID_SUGGESTED_KEYS");
+        return json(request, {error: "A IA não retornou gabaritos verificáveis para as questões enviadas. Elas continuam sem gabarito."}, 422);
+      }
       await finishUsage(usage.event_id, "success", generated.provider, generated.model);
       return json(request, { solved, provider: generated.provider, model: generated.model, key_source: "ia_sugerido" });
     } catch (_err) {
@@ -589,7 +619,7 @@ Disciplina padrão: ${subject}. Banca/Fonte: ${board}.
 Regras obrigatórias:
 - Preserve TODAS as alternativas originais da questão: se for Certo/Errado (2 opções), mantenha ["CERTO", "ERRADO"]; se tiver 4 alternativas (A-D), mantenha as 4; se tiver 5 alternativas (A-E), preserve integralmente as 5 alternativas (NUNCA apague a 5ª alternativa E).
 - Só preencha correct_index (0 a 4) se o gabarito estiver EXPLICITAMENTE escrito no texto colado. Se a questão NÃO trouxer gabarito explícito no texto, devolva correct_index como -1 (nunca chute a letra A / índice 0).
-- Marque origin como "${hasExplicitGabaritoInRawText ? "oficial" : "adaptada_do_pdf"}".
+- Marque origin como "importada". A presença de um gabarito no texto não comprova a origem oficial nem valida a associação de cada resposta.
 - Escreva em explanation uma RESOLUÇÃO PASSO A PASSO didática contendo Conceito-chave, justificativa do gabarito e análise das alternativas.
 
 TEXTO COLADO PELO ALUNO:
@@ -635,28 +665,30 @@ Regras obrigatórias de qualidade (estilo boaResposta):
       const sanitized = generated.questions
         .filter((q: any) => {
           if (!q?.statement || !Array.isArray(q?.options)) return false;
-          const opts = q.options.map((o: any) => String(o ?? "").trim()).filter(Boolean);
+          const opts = q.options.map((o: any) => String(o ?? "").trim());
+          if (opts.some((o: string) => !o) || new Set(opts.map((o: string) => o.toLocaleLowerCase("pt-BR"))).size !== opts.length) return false;
           if (opts.length < 2 || opts.length > 5) return false;
           const rawIdx = q.correct_index;
-          if (rawIdx === null || rawIdx === undefined || rawIdx === "" || !Number.isInteger(Number(rawIdx))) return false;
+          if (rawIdx === null || rawIdx === undefined || typeof rawIdx === "boolean" || typeof rawIdx === "object" || String(rawIdx).trim() === "" || !Number.isInteger(Number(rawIdx))) return false;
           const idx = Number(rawIdx);
           if (idx < 0 || idx >= opts.length) return false;
           if (submode === "parse_raw" && !hasExplicitGabaritoInRawText) return false;
           return true;
         })
         .map((q: any) => {
-          const opts = q.options.slice(0, 5).map((o: any) => String(o ?? "").trim()).filter(Boolean);
+          const opts = q.options.map((o: any) => String(o ?? "").trim());
           const idx = Number(q.correct_index);
           return {
             subject: String(q.subject || subject),
             topic: String(q.topic || topic),
             board: String(q.board || board),
             difficulty: ["facil", "medio", "dificil"].includes(String(q.difficulty || "").toLowerCase()) ? String(q.difficulty).toLowerCase() : "medio",
-            origin: (submode === "parse_raw" && hasExplicitGabaritoInRawText) ? "oficial" : "autoral",
+            origin: submode === "parse_raw" ? "importada" : "autoral",
             statement: String(q.statement).trim(),
             options: opts,
             correct_index: idx,
-            explanation: String(q.explanation || "").trim(),
+            explanation: (submode === "parse_raw" ? "🤖 [Gabarito sugerido pela IA — extraído de material importado; validação humana pendente] " : "") + String(q.explanation || "").trim(),
+            ...(submode === "parse_raw" ? {key_source: "ia_sugerido", answer_key_validation: "pendente"} : {}),
           };
         });
 
@@ -664,7 +696,9 @@ Regras obrigatórias de qualidade (estilo boaResposta):
         return json(request, { error: submode === "parse_raw" ? "Nenhuma questão com gabarito explícito pôde ser extraída do texto colado. Inclua o gabarito (ex.: Gabarito: B) para importar sem chutar alternativas." : "Nenhuma questão válida gerada.", code: "NO_VALID_QUESTIONS_WITH_KEY" }, 422);
       }
 
-      // Salva no banco compartilhado APENAS se for parse_raw com gabarito explícito verificado no texto
+      // O texto contém uma indicação de gabarito, mas a associação extraída pela
+      // IA continua pendente de revisão. Não promove a extração a fonte oficial.
+      // O prefixo preserva essa situação no catálogo legado, sem colunas de proveniência.
       if (submode === "parse_raw" && hasExplicitGabaritoInRawText && SERVICE_ROLE_KEY) {
         const sharedRows = sanitized.map((q: any) => ({
           fingerprint: questionHash(q.statement),
@@ -672,7 +706,7 @@ Regras obrigatórias de qualidade (estilo boaResposta):
           topic: q.topic,
           board: q.board,
           difficulty: q.difficulty,
-          origin: "oficial",
+          origin: "adaptada_do_pdf",
           statement: q.statement,
           options: q.options,
           correct_index: q.correct_index,
@@ -707,11 +741,11 @@ Regras obrigatórias de qualidade (estilo boaResposta):
       return json(request, { error: "Documento inválido para esta conta." }, 400);
     }
     try {
-      const ownedDocumentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&storage_path=eq.${encodeURIComponent(storagePath)}&select=id&limit=1`, {
+      const ownedDocumentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&storage_path=eq.${encodeURIComponent(storagePath)}&select=id,document_type&limit=1`, {
         headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY },
       });
       const ownedDocuments = ownedDocumentResponse.ok ? await ownedDocumentResponse.json().catch(() => []) : [];
-      if (!Array.isArray(ownedDocuments) || !ownedDocuments[0]?.id) {
+      if (!Array.isArray(ownedDocuments) || !ownedDocuments[0]?.id || !["edital", "edital_concurso"].includes(String(ownedDocuments[0]?.document_type))) {
         return json(request, { error: "O documento ou portal não pertence à conta conectada." }, 403);
       }
       const fileResponse = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${storagePath}`, {
@@ -743,13 +777,31 @@ Regras obrigatórias de qualidade (estilo boaResposta):
       const geminiData = await geminiResponse.json().catch(() => ({}));
       if (!geminiResponse.ok) return json(request, { error: geminiData?.error?.message ?? "O Gemini não conseguiu analisar o edital." }, 502);
       const parsed = parseGeminiJsonText(geminiData);
-      const topics = Array.isArray(parsed.topics) ? parsed.topics.slice(0, 1500) : [];
-      if (!topics.length) return json(request, { error: "Não encontrei um conteúdo programático neste PDF." }, 422);
-      await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "DELETE", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
-      const rows = topics.map((item: { subject?: string; unit?: string; topic?: string }, index: number) => ({ campaign_id: campaignId, user_id: user.id, subject: String(item.subject ?? "Edital"), unit_name: String(item.unit ?? ""), topic: String(item.topic ?? ""), edital_order: index }));
-      await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics`, { method: "POST", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify(rows) });
-      await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready" }) });
-      return json(request, { topics, provider: "gemini", key_source: personalGeminiKey ? "personal" : "shared", document_id: documentId });
+      const topics = Array.isArray(parsed.topics) ? parsed.topics.slice(0, 4000) : [];
+      const rows = topics.map((item: { subject?: string; unit?: string; topic?: string }, index: number) => ({ subject: String(item?.subject ?? "").trim(), unit_name: String(item?.unit ?? "").trim(), topic: String(item?.topic ?? "").trim(), edital_order: index })).filter((item: { subject: string; topic: string }) => item.subject && item.topic);
+      if (!rows.length) return json(request, { error: "Não encontrei um conteúdo programático neste PDF." }, 422);
+      const persisted = await fetch(`${SUPABASE_URL}/rest/v1/rpc/replace_campaign_topics_atomic`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          p_user_id: user.id,
+          p_campaign_id: campaignId,
+          p_document_id: documentId,
+          p_topics: rows,
+          p_coverage: { needs_review: true, summary_count: rows.length, warnings: ["Extração pelo modo de recuperação: confira disciplinas e tópicos com o edital original. A cobertura integral não foi verificada."] },
+        }),
+      }).catch(() => null);
+      const persistedData = persisted ? await persisted.json().catch(() => null) : null;
+      const saved = persistedData?.topics;
+      if (!persisted?.ok || !Array.isArray(saved) || !saved.length || persistedData?.saved !== saved.length) {
+        const missingMigration = persisted?.status === 404 || persistedData?.code === "PGRST202";
+        return json(request, {
+          error: missingMigration ? "Aplique a migração v107 no Supabase para salvar o edital com segurança. O mapa atual foi preservado." : "Não foi possível confirmar a gravação do edital. Recarregue o portal antes de tentar novamente.",
+          code: missingMigration ? "MAP_STORAGE_MIGRATION_REQUIRED" : "TOPICS_SAVE_FAILED",
+          retryable: !missingMigration,
+        }, missingMigration ? 503 : 502);
+      }
+      return json(request, { topics: saved, saved: saved.length, provider: "gemini", key_source: personalGeminiKey ? "personal" : "shared", document_id: documentId });
     } catch (error) {
       console.error("Gemini edital error", error);
       await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "error" }) }).catch(() => undefined);
