@@ -18,3 +18,14 @@ supabase/.temp/
 *.zip
 0
 CLAUDE.md
+
+# Arquivos locais e artefatos regeneráveis
+**/local.properties
+**/.idea/
+**/release/
+*.log
+*.jks
+.claude/
+.openai/
+/$null
+browser-artifacts/

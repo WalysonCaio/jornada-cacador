@@ -8,7 +8,8 @@ export function validatedSuggestedKeys(originals, generated) {
     if (!Array.isArray(options) || !Array.isArray(match.options) || options.length !== match.options.length ||
         options.some((text, i) => normalize(text) !== normalize(match.options[i]))) return [];
     const raw = match.correct_index;
-    if (raw === null || raw === undefined || String(raw).trim() === '' || !Number.isInteger(Number(raw)) || Number(raw) < 0 || Number(raw) >= options.length || !normalize(match.explanation)) return [];
+    if (options.length < 2 || options.length > 5 || options.some(text => !normalize(text)) || new Set(options.map(normalize)).size !== options.length ||
+        raw === null || raw === undefined || typeof raw === 'boolean' || typeof raw === 'object' || String(raw).trim() === '' || !Number.isInteger(Number(raw)) || Number(raw) < 0 || Number(raw) >= options.length || !normalize(match.explanation)) return [];
     return [{index: original.index ?? index, correct_index:Number(raw), explanation:'🤖 [Gabarito sugerido pela IA — confira no gabarito oficial quando disponível] '+normalize(match.explanation),key_source:'ia_sugerido',origin:'adaptada_do_pdf'}];
   });
 }

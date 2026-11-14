@@ -781,22 +781,6 @@ async function setDocumentStatus(documentId: string, userId: string, processingS
   }).catch(() => undefined);
 }
 
-async function saveEditalCoverage(documentId: string, userId: string, info: { percent: number; topics: number; pages: number; needsReview: boolean; warnings: string[] }) {
-  if (!documentId || !userId) return;
-  const base = `${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(userId)}`;
-  const auth = { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY };
-  try {
-    const current = await fetch(`${base}&select=metadata`, { headers: auth });
-    const rows = current.ok ? await current.json().catch(() => []) : [];
-    const metadata = rows?.[0]?.metadata && typeof rows[0].metadata === "object" ? rows[0].metadata : {};
-    await fetch(base, {
-      method: "PATCH",
-      headers: { ...auth, "Content-Type": "application/json" },
-      body: JSON.stringify({ metadata: { ...metadata, coverage: { percent: info.percent, summary_count: info.topics, estimated_pages: info.pages, needs_review: info.needsReview, warnings: info.warnings.slice(0, 5) } } }),
-    });
-  } catch { /* informativo: não deve derrubar a análise */ }
-}
-
 const ALLOWED_ORIGINS = new Set([
   "https://jornada.wcaio.workers.dev",
   "http://localhost:4173",
@@ -1406,59 +1390,44 @@ ${chunk.text}`;
     if (meta.confidence < 0.65) meta.warnings.unshift("A IA indicou baixa confiança na identificação do cargo ou do conteúdo programático. Revise o mapa antes de iniciar as missões.");
 
     const coverage = parsed?._coverage ?? null;
-    const topicsFilter = `campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}`;
-    const serviceHeaders = { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY };
-    let backupRows: any[] = [];
-    try {
-      const backup = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?${topicsFilter}&select=campaign_id,user_id,subject,unit_name,topic,edital_order,subject_order,learning_order,difficulty,prerequisite_topic,pedagogical_reason&limit=5000`, { headers: serviceHeaders });
-      if (backup.ok) backupRows = await backup.json().catch(() => []);
-    } catch { /* sem backup */ }
-    const backupSubjectCount = new Set((backupRows || []).map((r: any) => normalizeSearch(r?.subject))).size;
-    const newSubjectCount = new Set(uniqueTopics.map((t) => normalizeSearch(t.subject))).size;
-    if (coverage?.incomplete && Array.isArray(backupRows) && backupRows.length > uniqueTopics.length && backupSubjectCount >= newSubjectCount) {
-      await finishUsage(usage.event_id, "error", "PARTIAL_RESULT", selectedModel);
-      await setDocumentStatus(documentId, user.id, "pending");
-      return reply(request, { error: `A análise leu só parte do edital (${uniqueTopics.length} tópicos contra ${backupRows.length} já salvos). O mapa atual foi mantido; tente novamente em instantes.`, retryable: true, code: "PARTIAL_RESULT", coverage, warnings: meta.warnings }, 503);
-    }
-    const restoreBackup = async () => {
-      if (Array.isArray(backupRows) && backupRows.length) {
-        await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics`, { method: "POST", headers: { ...serviceHeaders, "Content-Type": "application/json" }, body: JSON.stringify(backupRows) }).catch(() => undefined);
-      }
-    };
-    const cleared = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "DELETE", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
-    if (!cleared.ok) {
-      console.error("campaign_topics delete", cleared.status, await cleared.text());
-      await finishUsage(usage.event_id, "error", "MAP_CLEAR_FAILED", selectedModel);
-      await setDocumentStatus(documentId, user.id, "pending");
-      return reply(request, { error: "Não foi possível preparar o mapa anterior para a nova análise.", retryable: true }, 502);
-    }
-    const rows = uniqueTopics.map((item) => ({ campaign_id: campaignId, user_id: user.id, subject: item.subject, unit_name: item.unit, topic: item.topic, edital_order: item.edital_order, subject_order: item.subject_order, learning_order: item.learning_order, difficulty: item.difficulty, prerequisite_topic: item.prerequisite_topic || null, pedagogical_reason: item.pedagogical_reason || null }));
-    const inserted = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?on_conflict=campaign_id,subject,topic`, { method: "POST", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json", "Prefer": "return=representation,resolution=ignore-duplicates" }, body: JSON.stringify(rows) });
-    if (!inserted.ok) {
-      const detail = await inserted.text();
-      console.error("campaign_topics insert", inserted.status, detail);
-      await restoreBackup();
-      await finishUsage(usage.event_id, "error", "TOPICS_SAVE_FAILED", selectedModel);
-      await setDocumentStatus(documentId, user.id, "pending");
-      return reply(request, { error: `O edital foi analisado, mas os tópicos não puderam ser salvos (${inserted.status}).`, detail, retryable: true }, 502);
-    }
-    const savedTopics = await inserted.json();
-    if (!Array.isArray(savedTopics) || savedTopics.length === 0) {
-      await restoreBackup();
-      await finishUsage(usage.event_id, "error", "TOPICS_EMPTY", selectedModel);
-      await setDocumentStatus(documentId, user.id, "pending");
-      return reply(request, { error: "O edital foi analisado, mas nenhum tópico foi confirmado no banco.", retryable: true }, 502);
-    }
+    const rows = uniqueTopics.map((item) => ({ subject: item.subject, unit_name: item.unit, topic: item.topic, edital_order: item.edital_order, subject_order: item.subject_order, learning_order: item.learning_order, difficulty: item.difficulty, prerequisite_topic: item.prerequisite_topic || null, pedagogical_reason: item.pedagogical_reason || null }));
     const chunkPct = coverage?.chunks_selected ? Math.round((coverage.chunks_ok / coverage.chunks_selected) * 100) : 100;
     const pagesPct = coverage?.pdf_total_pages && coverage?.pages_with_text ? Math.round((coverage.pages_with_text / coverage.pdf_total_pages) * 100) : 100;
-    await saveEditalCoverage(documentId, user.id, {
-      percent: Math.max(1, Math.min(100, chunkPct, pagesPct)),
-      topics: savedTopics.length,
-      pages: Number(coverage?.pdf_total_pages) || editalPages.length,
-      needsReview: Boolean(coverage?.incomplete) || meta.confidence < 0.65,
-      warnings: meta.warnings,
-    });
-    await setDocumentStatus(documentId, user.id, "ready");
+    // Tópicos, preservação de IDs/progresso e status do documento são uma única
+    // transação. Sem v107, falha fechada: nunca tenta DELETE + POST separados.
+    const persisted = await fetch(`${SUPABASE_URL}/rest/v1/rpc/replace_campaign_topics_atomic`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        p_user_id: user.id,
+        p_campaign_id: campaignId,
+        p_document_id: documentId,
+        p_topics: rows,
+        p_coverage: {
+          percent: Math.max(1, Math.min(100, chunkPct, pagesPct)),
+          summary_count: rows.length,
+          estimated_pages: Number(coverage?.pdf_total_pages) || editalPages.length,
+          needs_review: Boolean(coverage?.incomplete) || meta.confidence < 0.65,
+          incomplete: Boolean(coverage?.incomplete),
+          warnings: meta.warnings.slice(0, 5),
+        },
+      }),
+    }).catch(() => null);
+    const persistedData = persisted ? await persisted.json().catch(() => null) : null;
+    const savedTopics = persistedData?.topics;
+    if (!persisted?.ok || !Array.isArray(savedTopics) || savedTopics.length === 0 || persistedData?.saved !== savedTopics.length) {
+      const missingMigration = persisted?.status === 404 || persistedData?.code === "PGRST202";
+      const partial = String(persistedData?.message || "").includes("PARTIAL_RESULT");
+      const code = missingMigration ? "MAP_STORAGE_MIGRATION_REQUIRED" : partial ? "PARTIAL_RESULT" : "TOPICS_SAVE_FAILED";
+      await finishUsage(usage.event_id, "error", code, selectedModel);
+      await setDocumentStatus(documentId, user.id, "pending");
+      const error = missingMigration
+        ? "Aplique a migração v107 no Supabase para salvar o edital com segurança. O mapa atual foi preservado."
+        : partial
+          ? "A análise parcial encontrou menos tópicos que o mapa atual. O mapa anterior foi preservado; tente novamente."
+          : "Não foi possível confirmar a gravação do mapa. Recarregue o portal antes de tentar novamente; nenhuma substituição parcial é feita.";
+      return reply(request, { error, retryable: !missingMigration, code, coverage, warnings: meta.warnings }, missingMigration || partial ? 503 : 502);
+    }
     await finishUsage(usage.event_id, "success", undefined, selectedModel);
     return reply(request, { topics: uniqueTopics, saved: savedTopics.length, provider: providerUsed, model: selectedModel, key_source: usedKeySource, meta, coverage });
   } catch (error) {

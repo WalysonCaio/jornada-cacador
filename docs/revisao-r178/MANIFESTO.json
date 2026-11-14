@@ -1,0 +1,210 @@
+{
+  "base_commit": "da6df61304f85d8067008f11f716bb79d8c1a46f",
+  "release": "r178",
+  "files": [
+    {
+      "path": ".gitignore",
+      "sha256": "69c1b3002cdcbd7c30da296fe8cf6faaeeec159c9af2443a033a02e7e11e16f2"
+    },
+    {
+      "path": "GUIA-UNIFICADO.md",
+      "sha256": "1a9934e973a9e8e6e47cf492451476ae7ba07bc9b9bfc04383fb40ddc694fe12"
+    },
+    {
+      "path": "README.md",
+      "sha256": "2c8998ad0f95a77ef0936ed60319ea67d95ccfadfac3be2d5d0bba1e64054297"
+    },
+    {
+      "path": "android/app/src/main/java/br/com/jornadadocacador/app/MainActivity.java",
+      "sha256": "a17b42dac238dfd887e8c24c9f98606c1961d35d73050fe6fcea10eba5ce4d6b"
+    },
+    {
+      "path": "desktop/main.js",
+      "sha256": "7ed33bd2ba117c9d3af8dbb3bf04d047a019105a5d9e1087092e86f715d4ea23"
+    },
+    {
+      "path": "dist/content-summaries.js",
+      "sha256": "f397e76641f76071ccbdfc1a7846bfc95bcc16eee4afaddfcf1596c7a99ce47c"
+    },
+    {
+      "path": "dist/index.html",
+      "sha256": "0ae9b39e4ec6b566c80c5be65355eb018cf8effbb88b60eeec2259cffff1e4db"
+    },
+    {
+      "path": "dist/jc-architecture-modules.js",
+      "sha256": "1e6ea8bca95a722ee50918e13d661104321c9b585e0ea194c26fb8184abd5501"
+    },
+    {
+      "path": "dist/native-question-bank.json",
+      "sha256": "32771bf6acf70d1c5d769300e991bde4efd827c659812f3d7a18ccba7bbe8f23"
+    },
+    {
+      "path": "dist/pdf-text-client.js",
+      "sha256": "67f4e37add8c5a9ab40f70bc715bd65971e7418794767380cc414e71040d289c"
+    },
+    {
+      "path": "dist/privacidade.html",
+      "sha256": "55e27a1302cc039fc04576c83d408056aa158979d326b12bb9186cb230ce2d1f"
+    },
+    {
+      "path": "dist/sw.js",
+      "sha256": "0c65dc6bc8ce62ea9074225c65ea68037631f14d99a37b06c6d6acbe8ec6289f"
+    },
+    {
+      "path": "dist/v59-enhancements.js",
+      "sha256": "f38210538cff97966635fb2e47799d5d5f936fe9cd9a9b3566fa0713f3099861"
+    },
+    {
+      "path": "dist/v77-experience.js",
+      "sha256": "5e253d8426418e246e14a797a515a6a50b169890bfb54e2bf4933e9aca101687"
+    },
+    {
+      "path": "dist/v78-smart-notebook.js",
+      "sha256": "52f3e08f336fbdca938cbc98c6b46516c91ad604744aadfe3d6bbaee053df65f"
+    },
+    {
+      "path": "docs/revisao-r178/ARQUIVOS-ALTERADOS.md",
+      "sha256": "140f98c822e2f9737cd5acfb79a0e8a12b72c041780e85c3cf74d660790220c0"
+    },
+    {
+      "path": "docs/revisao-r178/AVALIACAO.md",
+      "sha256": "aa8244ac77f2de2be4ae2b49ff7b65309780672f23f33a412fedbfb21c088f3a"
+    },
+    {
+      "path": "docs/revisao-r178/COMPARACAO.md",
+      "sha256": "0ddd96e9db9d4c4ced21c97aba3ec5ed0215da39871c3be65e3c52bafce2677c"
+    },
+    {
+      "path": "docs/revisao-r178/LEIA-ME.md",
+      "sha256": "2dbdd7ef3989e4ff89fc65e33b358e357a8dacf2f0b483e28537ec5fd1f3c7c3"
+    },
+    {
+      "path": "docs/revisao-r178/VALIDACAO.txt",
+      "sha256": "5b62c710305ce1e65290d45453ca7ea0cf466e01bbaf23a6b677ece64f1ff0e3"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "4a6709fbaf515165c2b5f1b313934ed5eb4d993ac144786066a66f9b73d080f8"
+    },
+    {
+      "path": "package.json",
+      "sha256": "892a79d7c8b48c1e4bb3cf5f051c93505ff4f4ee09e43212753677884759a14d"
+    },
+    {
+      "path": "scripts/integration-profile-privacy.mjs",
+      "sha256": "53be95ec6f4318f4541d62842b27912db6e75d4e26af699f24c79326e2794dc2"
+    },
+    {
+      "path": "scripts/test-attach-answer-key.mjs",
+      "sha256": "96065e1ea74a1045c46301f7039710ca9e7fdd87726d1c28a900c8bcc2df8b55"
+    },
+    {
+      "path": "scripts/test-crud-contracts.mjs",
+      "sha256": "dddf69d4cd7288d38ba61e533da899995170420627a862d4a7cc763325407539"
+    },
+    {
+      "path": "scripts/test-exam-extractor.mjs",
+      "sha256": "94b2e255f2913a2815d1904d62fa80ea7b992edf711b12dfcb7189e13f4574f6"
+    },
+    {
+      "path": "scripts/test-front-study.mjs",
+      "sha256": "6fa84936e225aa6ac78696f35a7d569df6f4836e2f2522b4148c40f0d32512cb"
+    },
+    {
+      "path": "scripts/test-question-bank.mjs",
+      "sha256": "2d55a47cd79836a9aa73679c8b3fea7316a9e2c90d14ac9e20f0fc00e7609fc3"
+    },
+    {
+      "path": "scripts/test-r171-grok.mjs",
+      "sha256": "6f8bb9d945acc172d0509413c4b68cf2d02010c2ad0cd73f6df27de7e4381c20"
+    },
+    {
+      "path": "scripts/test-r174-session-performance.mjs",
+      "sha256": "81776108c0994c45553c1ca4e1e36c908cc2a3ff288083763a24c1c87b8ad765"
+    },
+    {
+      "path": "scripts/test-r176-full-audit.mjs",
+      "sha256": "eb8e58e700755c8e4cc599d56e9f57d61f04962df63e19ad87490c75a353b1ad"
+    },
+    {
+      "path": "scripts/test-r178-backend.mjs",
+      "sha256": "a3557cbfa4f7af40ce1213329855d7e8a9a5f2e50e9d24753ad2ae1402c97f9f"
+    },
+    {
+      "path": "scripts/test-r178-json-import.mjs",
+      "sha256": "030e455cd753be05c632749a8ebfb76a342f290c665c9fa89132581cfea9c7a0"
+    },
+    {
+      "path": "scripts/test-r178-profile.mjs",
+      "sha256": "8cd42385cbab38a435fd5640553429cea0c49ef413258bca9af4c5a4865ff21a"
+    },
+    {
+      "path": "scripts/test-r178-question-navigation.mjs",
+      "sha256": "b33514eeebf4b60fa3c00a20b6a9e4d2262d5476d700eb535ae30cef10aa79b3"
+    },
+    {
+      "path": "scripts/test-r178-sync-scope.mjs",
+      "sha256": "55dd4d7caa61dea194df2511c54627424ffe727d24dcd5e054b9b1fcf2fd190f"
+    },
+    {
+      "path": "scripts/test-r178-telemetry.mjs",
+      "sha256": "3a40f2d2d6a8fe83bfacbbcbbed7f068793e4189f6150524f7749cecf59708af"
+    },
+    {
+      "path": "scripts/test-r178-theory-navigation.mjs",
+      "sha256": "e737c1da153ba52e6b5550d356866284aaa47fef773dc46dd42f58f000d440da"
+    },
+    {
+      "path": "scripts/test-security-contracts.mjs",
+      "sha256": "d9e3ea7ff52b7c1261940b1e6a8f01b3d54d2099616e2b5a5ee4663e74ffaa24"
+    },
+    {
+      "path": "scripts/validate-project.mjs",
+      "sha256": "86983f63b7630345c2f9804e5f935742ab8cb2e469e0e28be05890c555bc0e02"
+    },
+    {
+      "path": "supabase/functions/_shared/cors.ts",
+      "sha256": "65fcabfb9d0bf4467589dab8bd89018a1ceb0efe4a9b04449cb6e19076c0f4cb"
+    },
+    {
+      "path": "supabase/functions/_shared/question-integrity.mjs",
+      "sha256": "67f45373841d01dd15769476a7b280adf2d2cd740f2348a6ee1f51a922b10662"
+    },
+    {
+      "path": "supabase/functions/_shared/solved-keys.mjs",
+      "sha256": "9648f444db9058b826236cfb6c82d6313565ab28e8ca97c32d195bc3567b2cbd"
+    },
+    {
+      "path": "supabase/functions/account-security/index.ts",
+      "sha256": "5f3ba7d89210713e71e1b246bb7cbcece07526ac614f371ccf1b64df4b0ae14f"
+    },
+    {
+      "path": "supabase/functions/assistente-pmpe/index.ts",
+      "sha256": "ec2580cf1a4b9ac231c36058526ee3a4f17ee1bba8396b69431008d04333c66e"
+    },
+    {
+      "path": "supabase/functions/edital-gemini/index.ts",
+      "sha256": "bd8a48d2a458254ec0d483db3ec01cf71022a082b8ec6983e3e6f679e82bd8f8"
+    },
+    {
+      "path": "supabase/functions/material-gemini/index.ts",
+      "sha256": "8bffccda4daecc2291059d1f463c2f378832d754a582c10ed7f73cc0f4b57f93"
+    },
+    {
+      "path": "supabase/functions/redacao-gemini/index.ts",
+      "sha256": "58ba5f55341b7b0abcbb543dbc6d06b77346fadf5a8d9c059f10ace2b8705930"
+    },
+    {
+      "path": "supabase/functions/system-diagnostics/index.ts",
+      "sha256": "2fc9bd9464176a77614622c579b1c6116a8d6f0436397ef734a4f22283546244"
+    },
+    {
+      "path": "supabase/migrations/20261114120000_v108_leaderboard_profile_privacy.sql",
+      "sha256": "df4578c140bcee9510695da7a98f12314f08a8b5fbddadeae798cc5b9770b960"
+    },
+    {
+      "path": "windows-desktop/main.js",
+      "sha256": "7ed33bd2ba117c9d3af8dbb3bf04d047a019105a5d9e1087092e86f715d4ea23"
+    }
+  ]
+}

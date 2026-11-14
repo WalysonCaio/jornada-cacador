@@ -4,12 +4,16 @@ Plataforma pessoal de preparação para concursos públicos, com foco especial n
 
 O projeto transforma o edital enviado pelo usuário em um plano de aprendizagem: disciplinas, sequência pedagógica, missões diárias, trilha de questões, revisões programadas, caderno de erros, cronômetro de foco e acompanhamento de progresso.
 
+## Revisão r178
+
+[Alterações, avaliação e aplicação](docs/revisao-r178/LEIA-ME.md). Inclui correções de disciplinas/gabaritos, retomada, desempenho local e privacidade. Os Manuais do Caçador ficam na ajuda da plataforma; o compartilhamento da biblioteca foi preservado.
+
 ## Principais recursos
 
 - edital convertido em mapa de disciplinas e tópicos;
 - currículo progressivo, com fundamentos antes de conteúdos avançados;
 - missões diárias alternadas entre disciplinas;
-- biblioteca privada de editais, materiais, leis, provas e simulados;
+- biblioteca de editais, materiais, leis, provas e simulados, com o compartilhamento e os controles existentes;
 - PDFs analisados em duas etapas (inventário e geração), com plano reaproveitável, referências de página e controle visível de cobertura;
 - resumos, flashcards e questões com apoio de IA e opção de conferência humana;
 - caderno de erros com prioridade de revisão;

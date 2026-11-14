@@ -8,11 +8,11 @@ const swSrc = readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
 const guiaSrc = readFileSync(new URL("../GUIA-UNIFICADO.md", import.meta.url), "utf8");
 const javaSrc = readFileSync(new URL("../android/app/src/main/java/br/com/jornadadocacador/app/MainActivity.java", import.meta.url), "utf8");
 
-// 1. Validar versão r177 no service worker e guia
-assert(swSrc.includes("r177"), "sw.js deve estar na versao r177");
-assert(guiaSrc.includes("r177"), "GUIA-UNIFICADO.md deve estar na versao r177");
+// 1. Validar versão r178 no service worker e guia
+assert(swSrc.includes("r178"), "sw.js deve estar na versao r178");
+assert(guiaSrc.includes("r178"), "GUIA-UNIFICADO.md deve estar na versao r178");
 
-// 2. Executar e testar as funções do r177 no VM
+// 2. Executar e testar as funções do r178 no VM
 const ctx = {
   window: {},
   state: {
@@ -46,13 +46,14 @@ assert.equal(penalBoss.score, 100);
 assert.equal(penalBoss.ready, false, "Penal tem apenas 5 questões (min 10), chefe deve permanecer bloqueado");
 
 // Teste 2: questionOriginSeal
-assert.equal(ctx.questionOriginSeal({ origin: "oficial" }), "OFICIAL");
+assert.equal(ctx.questionOriginSeal({ origin: "oficial" }), "DOCUMENTO IMPORTADO");
+assert.equal(ctx.questionOriginSeal({ origin: "oficial", source_url: "https://banca.example/prova.pdf" }), "OFICIAL (FONTE INFORMADA)");
 assert.equal(ctx.questionOriginSeal({ origin: "autoral", from_community: true }), "COMUNIDADE");
 assert.equal(ctx.questionOriginSeal({ origin: "autoral", bank: "nativo" }), "NATIVO");
 assert.equal(ctx.questionOriginSeal({ origin: "adaptada_do_pdf" }), "IA DO SEU MATERIAL");
 
 // Teste 3: answerKeyStatus e gradeAnswer
-const qOficial = { origin: "oficial", correct_index: 2 };
+const qOficial = { origin: "oficial", options:["A","B","C","D"], correct_index: 2 };
 assert.equal(ctx.answerKeyStatus(qOficial), "oficial");
 const g1 = ctx.gradeAnswer(qOficial, 2); assert.equal(g1.status, "oficial"); assert.equal(g1.scored, true); assert.equal(g1.ok, true);
 const g2 = ctx.gradeAnswer(qOficial, 0); assert.equal(g2.status, "oficial"); assert.equal(g2.scored, true); assert.equal(g2.ok, false);
@@ -74,4 +75,4 @@ assert(javaSrc.includes("shouldOverrideUrlLoading"), "MainActivity deve tratar s
 assert(idxSrc.includes("disciplineReadyForBoss"), "index.html deve checar disciplineReadyForBoss para liberar o chefe");
 assert(idxSrc.includes("questionOriginSeal"), "index.html deve usar questionOriginSeal para rotular as questoes");
 
-console.log("OK: Todas as melhorias Grok (r177) validadas com 100% de sucesso!");
+console.log("OK: Todas as melhorias Grok (r178) validadas com 100% de sucesso!");
