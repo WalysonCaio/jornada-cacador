@@ -1,0 +1,20 @@
+CORREÇÃO DE PUBLICAÇÃO PELO PAINEL — complemento r178
+
+Erro reproduzido por inspeção: assistente-pmpe/index.ts importa dois módulos
+locais. A publicação da imagem não contém question-integrity.mjs no caminho.
+Solução: cópias autocontidas, com helpers incorporados e fontes preservadas.
+
+node scripts/build-supabase-dashboard.mjs: seis cópias geradas.
+node scripts/test-supabase-dashboard.mjs: aprovado.
+node scripts/test-r178-backend.mjs: aprovado em modo canônico e autocontido.
+npm test: 38/38 scripts passaram.
+git diff --check: aprovado.
+
+A verificação usa Node 24, remoção de tipos para sintaxe e execução isolada
+com serviços simulados. As cópias do painel não recebem helpers do teste.
+Sem imports pendentes, com reprodução exata das fontes e manifesto SHA-256.
+Não houve deploy, teste real no Deno/Supabase ou mudança em Secrets/banco.
+A correção não exige nova migração ou mudança no frontend.
+
+O manifesto da entrega original r178 pertence ao snapshot daquela entrega.
+Este complemento tem seu próprio manifesto dos arquivos autocontidos.

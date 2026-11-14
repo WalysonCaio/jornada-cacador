@@ -45,6 +45,10 @@ npm run test:browser
 
 No GitHub: **Actions → Homologar navegador (manual) → Run workflow**, selecione `entrega/revisao-r178`. A execução visual ficou pendente nesta revisão; a suíte está preparada para desktop e celular. O workflow **Validar projeto** executa Node e as duas integrações SQL.
 
+## Publicação pelo editor do painel Supabase
+
+Se usa o editor e recebeu `Module not found .../_shared/question-integrity.mjs`, use [os arquivos autocontidos do painel](../../supabase/dashboard/README.md). Copie o `index.ts` correspondente inteiro; ele já inclui os validadores. O roteiro CLI abaixo utiliza a árvore modular completa em `supabase/functions`.
+
 ## 3. Atualize banco e funções antes do frontend
 
 Use primeiro um ambiente de homologação e backup do banco. Este pacote não executa migrações automaticamente.
