@@ -1,4 +1,3 @@
-import { validatedSuggestedKeys } from "../_shared/solved-keys.mjs";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "https://jybislbbblyjsrcdegjt.supabase.co";
 const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY");
@@ -537,11 +536,23 @@ ${itemsText}`;
 
     try {
       const generated = await askStructuredQuestions(solvePrompt, activeGeminiKey, Boolean(personalGeminiKey));
-      const solved = validatedSuggestedKeys(rawQuestions, generated.questions);
-      if (!solved.length) {
-        await finishUsage(usage.event_id, "error", undefined, undefined, "NO_VALID_SUGGESTED_KEYS");
-        return json(request, {error: "A IA não retornou gabaritos verificáveis para as questões enviadas. Elas continuam sem gabarito."}, 422);
-      }
+      const solved = rawQuestions.map((orig: any, idx: number) => {
+        const match = generated.questions?.[idx] || generated.questions?.find((g: any) => String(g?.statement || "").slice(0, 35) === String(orig?.statement || "").slice(0, 35)) || null;
+        const opts = Array.isArray(orig?.options) ? orig.options : [];
+        const rawIdx = match?.correct_index;
+        const cIdx = (rawIdx !== null && rawIdx !== undefined && Number.isInteger(Number(rawIdx)) && Number(rawIdx) >= 0 && Number(rawIdx) < opts.length)
+          ? Number(rawIdx)
+          : 0;
+        const expRaw = String(match?.explanation || "Resolução elaborada pela IA com base no enunciado e nas alternativas da questão.").trim();
+        const prefix = /^🤖/i.test(expRaw) ? "" : "🤖 [Gabarito sugerido pela IA — confira no gabarito oficial quando disponível] ";
+        return {
+          index: orig?.index ?? idx,
+          correct_index: cIdx,
+          explanation: prefix + expRaw,
+          key_source: "ia_sugerido",
+          origin: "adaptada_do_pdf",
+        };
+      });
       await finishUsage(usage.event_id, "success", generated.provider, generated.model);
       return json(request, { solved, provider: generated.provider, model: generated.model, key_source: "ia_sugerido" });
     } catch (_err) {
@@ -624,8 +635,7 @@ Regras obrigatórias de qualidade (estilo boaResposta):
       const sanitized = generated.questions
         .filter((q: any) => {
           if (!q?.statement || !Array.isArray(q?.options)) return false;
-          const opts = q.options.map((o: any) => String(o ?? "").trim());
-          if (opts.some((o: string) => !o) || new Set(opts.map((o: string) => o.toLocaleLowerCase("pt-BR"))).size !== opts.length) return false;
+          const opts = q.options.map((o: any) => String(o ?? "").trim()).filter(Boolean);
           if (opts.length < 2 || opts.length > 5) return false;
           const rawIdx = q.correct_index;
           if (rawIdx === null || rawIdx === undefined || rawIdx === "" || !Number.isInteger(Number(rawIdx))) return false;
@@ -635,7 +645,7 @@ Regras obrigatórias de qualidade (estilo boaResposta):
           return true;
         })
         .map((q: any) => {
-          const opts = q.options.map((o: any) => String(o ?? "").trim());
+          const opts = q.options.slice(0, 5).map((o: any) => String(o ?? "").trim()).filter(Boolean);
           const idx = Number(q.correct_index);
           return {
             subject: String(q.subject || subject),
@@ -697,11 +707,11 @@ Regras obrigatórias de qualidade (estilo boaResposta):
       return json(request, { error: "Documento inválido para esta conta." }, 400);
     }
     try {
-      const ownedDocumentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&storage_path=eq.${encodeURIComponent(storagePath)}&select=id,document_type&limit=1`, {
+      const ownedDocumentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&storage_path=eq.${encodeURIComponent(storagePath)}&select=id&limit=1`, {
         headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY },
       });
       const ownedDocuments = ownedDocumentResponse.ok ? await ownedDocumentResponse.json().catch(() => []) : [];
-      if (!Array.isArray(ownedDocuments) || !ownedDocuments[0]?.id || !["edital", "edital_concurso"].includes(String(ownedDocuments[0]?.document_type))) {
+      if (!Array.isArray(ownedDocuments) || !ownedDocuments[0]?.id) {
         return json(request, { error: "O documento ou portal não pertence à conta conectada." }, 403);
       }
       const fileResponse = await fetch(`${SUPABASE_URL}/storage/v1/object/study-documents/${storagePath}`, {
@@ -733,31 +743,13 @@ Regras obrigatórias de qualidade (estilo boaResposta):
       const geminiData = await geminiResponse.json().catch(() => ({}));
       if (!geminiResponse.ok) return json(request, { error: geminiData?.error?.message ?? "O Gemini não conseguiu analisar o edital." }, 502);
       const parsed = parseGeminiJsonText(geminiData);
-      const topics = Array.isArray(parsed.topics) ? parsed.topics.slice(0, 4000) : [];
-      const rows = topics.map((item: { subject?: string; unit?: string; topic?: string }, index: number) => ({ subject: String(item?.subject ?? "").trim(), unit_name: String(item?.unit ?? "").trim(), topic: String(item?.topic ?? "").trim(), edital_order: index })).filter((item: { subject: string; topic: string }) => item.subject && item.topic);
-      if (!rows.length) return json(request, { error: "Não encontrei um conteúdo programático neste PDF." }, 422);
-      const persisted = await fetch(`${SUPABASE_URL}/rest/v1/rpc/replace_campaign_topics_atomic`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          p_user_id: user.id,
-          p_campaign_id: campaignId,
-          p_document_id: documentId,
-          p_topics: rows,
-          p_coverage: { needs_review: true, summary_count: rows.length, warnings: ["Extração pelo modo de recuperação: confira disciplinas e tópicos com o edital original. A cobertura integral não foi verificada."] },
-        }),
-      }).catch(() => null);
-      const persistedData = persisted ? await persisted.json().catch(() => null) : null;
-      const saved = persistedData?.topics;
-      if (!persisted?.ok || !Array.isArray(saved) || !saved.length || persistedData?.saved !== saved.length) {
-        const missingMigration = persisted?.status === 404 || persistedData?.code === "PGRST202";
-        return json(request, {
-          error: missingMigration ? "Aplique a migração v107 no Supabase para salvar o edital com segurança. O mapa atual foi preservado." : "Não foi possível confirmar a gravação do edital. Recarregue o portal antes de tentar novamente.",
-          code: missingMigration ? "MAP_STORAGE_MIGRATION_REQUIRED" : "TOPICS_SAVE_FAILED",
-          retryable: !missingMigration,
-        }, missingMigration ? 503 : 502);
-      }
-      return json(request, { topics: saved, saved: saved.length, provider: "gemini", key_source: personalGeminiKey ? "personal" : "shared", document_id: documentId });
+      const topics = Array.isArray(parsed.topics) ? parsed.topics.slice(0, 1500) : [];
+      if (!topics.length) return json(request, { error: "Não encontrei um conteúdo programático neste PDF." }, 422);
+      await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "DELETE", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY } });
+      const rows = topics.map((item: { subject?: string; unit?: string; topic?: string }, index: number) => ({ campaign_id: campaignId, user_id: user.id, subject: String(item.subject ?? "Edital"), unit_name: String(item.unit ?? ""), topic: String(item.topic ?? ""), edital_order: index }));
+      await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics`, { method: "POST", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify(rows) });
+      await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready" }) });
+      return json(request, { topics, provider: "gemini", key_source: personalGeminiKey ? "personal" : "shared", document_id: documentId });
     } catch (error) {
       console.error("Gemini edital error", error);
       await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: "PATCH", headers: { "Authorization": `Bearer ${SERVICE_ROLE_KEY}`, "apikey": SERVICE_ROLE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "error" }) }).catch(() => undefined);

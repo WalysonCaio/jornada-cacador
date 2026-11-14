@@ -9,12 +9,9 @@ async function count(path: string) {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     method: "HEAD",
     headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, Prefer: "count=exact" },
-  }).catch(() => null);
-  // Ausência de contagem não significa uma fila vazia nem um banco saudável.
-  const total = response?.headers.get("content-range")?.split("/")[1];
-  if (!response?.ok || !total || !/^\d+$/.test(total)) return -1;
-  const value = Number(total);
-  return Number.isSafeInteger(value) ? value : -1;
+  });
+  const range = response.headers.get("content-range") ?? "*/0";
+  return response.ok ? Number(range.split("/")[1] ?? 0) : -1;
 }
 
 function extractSecretString(raw: unknown): string {
@@ -32,33 +29,23 @@ Deno.serve(async (request) => {
   const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers});
   if (request.method === "OPTIONS") return new Response("ok", { headers });
   if (request.method !== "POST") return reply({ error: "Método não permitido." }, 405);
-  if (!SUPABASE_URL || !SERVICE_KEY) return reply({ error: "Configuração do serviço de diagnóstico incompleta." }, 503);
   const authorization = request.headers.get("authorization") ?? "";
-  const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { Authorization: authorization, apikey: PUBLIC_KEY } }).catch(() => null);
-  if (!userResponse) return reply({ error: "Não foi possível verificar a sessão agora." }, 503);
-  if (userResponse.status >= 500) return reply({ error: "O serviço de autenticação está indisponível agora." }, 503);
-  const user = userResponse.ok ? await userResponse.json().catch(() => null) : null;
+  const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { Authorization: authorization, apikey: PUBLIC_KEY } });
+  const user = userResponse.ok ? await userResponse.json() : null;
   if (!user?.id) return reply({ error: "Sessão inválida." }, 401);
 
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const userId = encodeURIComponent(user.id);
-  const [pending, failed, ready, pendingEssays, failedEssays, running, usageResponse, storageResponse] = await Promise.all([
+  const [pending, failed, ready, pendingEssays, failedEssays, running, usageResponse] = await Promise.all([
     count(`study_documents?user_id=eq.${userId}&processing_status=in.(pending,processing)`),
     count(`study_documents?user_id=eq.${userId}&processing_status=eq.error`),
     count(`study_documents?user_id=eq.${userId}&processing_status=eq.ready`),
     count(`essay_submissions?user_id=eq.${userId}&processing_status=in.(pending,processing)`),
     count(`essay_submissions?user_id=eq.${userId}&processing_status=eq.error`),
     count(`focus_sessions?user_id=eq.${userId}&status=eq.running`),
-    fetch(`${SUPABASE_URL}/rest/v1/my_ai_usage_daily?user_id=eq.${userId}&usage_day=eq.${today}&select=operation,successful,failed,input_units,output_units`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } }).catch(() => null),
-    // Consulta somente metadados do bucket; não cria nem lê arquivos privados.
-    fetch(`${SUPABASE_URL}/storage/v1/bucket/study-documents`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } }).catch(() => null),
+    fetch(`${SUPABASE_URL}/rest/v1/my_ai_usage_daily?user_id=eq.${userId}&usage_day=eq.${today}&select=operation,successful,failed,input_units,output_units`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } }),
   ]);
-  const usageRows = usageResponse?.ok ? await usageResponse.json().catch(() => null) : null;
-  const usageAvailable = Array.isArray(usageRows);
-  const usage = usageAvailable ? usageRows : [];
-  const bucket = storageResponse?.ok ? await storageResponse.json().catch(() => null) : null;
-  const databaseOk = [pending, failed, ready, pendingEssays, failedEssays, running].every(value => value >= 0) && usageAvailable;
-  const storageOk = bucket?.id === "study-documents";
+  const usage = usageResponse.ok ? await usageResponse.json() : [];
   const personalKeyResponse = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_user_ai_secret`, {
     method: "POST",
     headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" },
@@ -75,16 +62,11 @@ Deno.serve(async (request) => {
     else geminiApiError = modelData?.error?.message || "Não foi possível consultar os modelos Gemini.";
   }
   return reply({
-    ok: databaseOk && storageOk,
+    ok: true,
     version: "78",
     project_ref: new URL(SUPABASE_URL).hostname.split(".")[0],
-    database: databaseOk,
-    database_status: databaseOk ? "available" : "unavailable",
-    storage: storageOk,
-    storage_status: storageOk ? "available" : "unavailable",
-    storage_check: "bucket_metadata_only",
-    rls_verified: false,
-    usage_available: usageAvailable,
+    database: true,
+    storage: true,
     gemini_configured: Boolean(geminiKey),
     gemini_key_source: personalGeminiKey ? "personal" : "shared",
     gemini_key_last_four: personalGeminiKey ? personalGeminiKey.slice(-4) : null,

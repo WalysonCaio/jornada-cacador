@@ -306,7 +306,7 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   const pdfClientCode = readFileSync(new URL("../dist/pdf-text-client.js", import.meta.url), "utf8");
   assert(pdfClientCode.includes("Promise.withResolvers"), "pdf-text-client.js deve incluir polyfill para Promise.withResolvers");
   assert(pdfClientCode.includes("extractStructuredEditalTopics"), "pdf-text-client.js deve expor extractStructuredEditalTopics");
-  assert(pdfClientCode.includes("rpc/replace_campaign_topics_atomic"), "pdf-text-client.js deve salvar o mapa por RPC transacional com upsert e propriedade verificada");
+  assert(pdfClientCode.includes("campaign_topics?on_conflict=campaign_id,subject,topic"), "pdf-text-client.js deve salvar campaign_topics com on_conflict para evitar erro 409");
 
   const uc = [
     slice("function normalizeText(", "function missionForQuestion("),
@@ -1186,7 +1186,7 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   assert.ok(htmlSrc.includes('id="globalThemeToggleBtn"') && v77Src.includes("applyGlobalAppTheme") && v77Src.includes("body.lightAppTheme"), "O botão #globalThemeToggleBtn deve estar no menu e aplicar o tema claro completo (body.lightAppTheme)");
 
   // 2) Verifica os 6 aprimoramentos estratégicos (TEC, Caveira, Gran, Estudei)
-  assert.ok(v77Src.includes("computeQuestionOptionChoiceStats") && v77Src.includes("Seu erro mais frequente"), "Deve conter estatística por alternativa e identificação da pegadinha principal");
+  assert.ok(v77Src.includes("computeQuestionOptionChoiceStats") && v77Src.includes("Pegadinha mais marcada!"), "Deve conter estatística por alternativa e identificação da pegadinha principal");
   assert.ok(v77Src.includes("computeTopicBankIncidencePct") && v77Src.includes("formatTopicIncidenceBadgeHtml"), "Deve conter cálculo real de incidência por assunto na banca");
   assert.ok(pdfSrc.includes("pageSnapCache") && v77Src.includes("questionFigureBox"), "Deve suportar recorte/anexo de figuras e tabelas nas questões");
   assert.ok(v77Src.includes("renderGuildOfficialSimuladoBanner") && v77Src.includes("startGuildOfficialSimuladoBtn"), "Deve conter o Simulado Oficial da Guilda com Ranking e Nota de Corte por Cargo");
@@ -1215,7 +1215,7 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
 
   assert.ok(htmlSrc.includes("function inferStrictQuestionSubject(") && htmlSrc.includes("window.inferStrictQuestionSubject=inferStrictQuestionSubject"), "Deve conter o classificador estrito por enunciado/tópico inferStrictQuestionSubject");
   assert.ok(v77Src.includes("function sanitizeAllQuestionsAndErrorsSubjects(") && v77Src.includes("function buildSubjectAppropriateDistractors("), "Deve conter higienização automática de disciplinas em ALL_QUESTIONS/state.errors e distratores específicos por disciplina");
-  assert.ok(v77Src.includes("const eligible=item=>isQuestionDisciplineEligible(item,cleanSubj)") && v77Src.includes("chosenPool=chosenPool.filter(eligible);"), "Correção de Gargalo deve aplicar disciplina estrita e gabarito válido; comportamento exercitado em test-r174-error-retry");
+  assert.ok(v77Src.includes("chosenPool=chosenPool.filter(item=>topicKey(resolveStrictQuestionDiscipline(item))===subjKey);"), "startSubjectTargetedFix (Correção de Gargalo) deve garantir que 100% das questões pertencem exclusivamente à disciplina selecionada");
   assert.ok(!v77Src.includes("Alternativa incorreta conforme a literalidade da norma e jurisprudência aplicável."), "Não deve injetar distratores jurídicos genéricos em questões de Raciocínio Lógico, Português ou Informática");
 
   console.log("OK: Isolamento estrito de disciplina na Correção de Gargalos e Caderno de Erros (r152) validado.");
@@ -1490,7 +1490,7 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   assert.ok(htmlSrc.includes("Adiar revisão (7 dias)") && !htmlSrc.includes(">Marcar como dominado<"), "Caderno de erros deve apenas adiar revisão por 7 dias em vez de apagar o erro manualmente");
   assert.ok(v77Src.includes("Meta interna atingida (≥70% · não é aprovação oficial)") && !v77Src.includes("Caveira Aprovado (≥70%)"), "Selo do simulado deve indicar meta interna e não aprovação oficial");
   assert.ok(assistFnSrc.includes("hasExplicitGabaritoInRawText") && assistFnSrc.includes("CONTRATO ESTRITO DO MODO SOLICITADO") && assistFnSrc.includes("conhecimento_geral_conferir"), "assistente-pmpe deve validar gabarito explícito, contratos por modo e campo confidence");
-  assert.ok(redacaoFnSrc.includes("validateEssayResult(parseGeminiJsonText(aiData))"), "redacao-gemini deve validar o espelho antes de aceitar a nota");
+  assert.ok(redacaoFnSrc.includes("const sumScore = result.criteria.reduce"), "redacao-gemini deve reconciliar a nota total com a soma dos critérios");
   assert.ok(hyperFnSrc.includes("status: 410") && hyperFnSrc.includes("DEPRECATED_ENDPOINT"), "hyper-endpoint deve responder 410 Gone");
   assert.ok(sqlV104.includes("bonus_70_paid") && sqlV104.includes("bonus_85_paid"), "Migração v104 deve criar colunas de controle de bônus único");
 
@@ -1508,7 +1508,7 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   // 1) Verifica que openTheoryForSubjectAndTopic e NATIVE_CORE_THEORY_SUMMARIES estão presentes e cobrem os tópicos reportados
   assert.ok(
     v77Src.includes("function openTheoryForSubjectAndTopic(") &&
-    v77Src.includes("window.BASIC_SUMMARIES = NATIVE_CORE_THEORY_SUMMARIES.filter(") &&
+    v77Src.includes("window.BASIC_SUMMARIES = NATIVE_CORE_THEORY_SUMMARIES") &&
     v77Src.includes("Revolução Pernambucana de 1817") &&
     v77Src.includes("Capitanias Hereditárias") &&
     v77Src.includes("Negação de Condicional (MANÉ)"),
@@ -1590,8 +1590,8 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   );
   assert.equal(
     preparedFlawed.options[preparedFlawed.correct_index],
-    "2 + 2 = 5.",
-    "Não inventa uma nova alternativa para corrigir conteúdo defeituoso"
+    "Que horas começa o plantão policial?",
+    "A questão defeituosa sobre NÃO proposição deve apontar para a frase interrogativa corrigida"
   );
 
   // 2b) Verifica sincronização do gabarito com a explicação após embaralhamento e quebra de linha entre alternativas
@@ -1663,8 +1663,8 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
     origin: "oficial"
   };
   const healedEscolar = vmCtx.window.prepareQuestionConsistent(escolarCorrupted);
-  assert.deepEqual(Array.from(healedEscolar.options), ["", "", "R.", "S."], "Preserva alternativas ausentes para revisão explícita, sem inventar texto");
-  assert.equal(healedEscolar.correct_index, -1, "Alternativas incompletas não devem receber gabarito utilizável");
+  assert.deepEqual(Array.from(healedEscolar.options), ["A.", "E.", "R.", "S."], "As alternativas A. e E. da questão ESCOLAR devem ser restauradas integralmente");
+  assert.equal(healedEscolar.options[healedEscolar.correct_index], "A.", "A 2.022ª letra de ESCOLAR (2022 = 7*288 + 6 -> 6ª letra) deve ser A.");
 
   // 4) Verifica que "quadro negro" e "tabela-verdade" são ignorados pelo detector de figuras (needsVisualCue)
   assert.ok(

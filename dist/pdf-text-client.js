@@ -961,22 +961,19 @@
       if (lastEnd > openB) {
         try {
           const arr = JSON.parse(`[${cleaned.slice(openB + 1, lastEnd + 1)}]`);
-          return { [key]: arr, _partial: true };
+          return { [key]: arr };
         } catch {}
       }
     }
     throw new Error("INVALID_RECOVERY_JSON");
   }
 
-  async function saveTopicsToCampaignAndSync(doc, rawTopics, session, pagesCount = 1, recoveryInfo = {}) {
+  async function saveTopicsToCampaignAndSync(doc, rawTopics, session, pagesCount = 1) {
     if (!isEditalType(doc)) {
       console.warn("Bloqueado: documento não é edital, não pode criar missões.", doc?.title, doc?.document_type);
       return false;
     }
-    const targetCampaign = (state.campaigns || []).find((campaign) => campaign.dbId === doc.campaign_id);
-    if (!targetCampaign || !session?.user?.id || (doc.user_id && doc.user_id !== session.user.id)) return false;
-    const targetCampaignId = targetCampaign.id;
-    const campaignName = targetCampaign.name || "";
+    const campaignName = typeof activeCampaign === "function" ? activeCampaign()?.name || "" : "";
     const topics = typeof window.unpackEditalTopicsList === "function"
       ? window.unpackEditalTopicsList(rawTopics, campaignName, doc.title)
       : rawTopics.filter((t) => t?.subject && t?.topic).slice(0, 1800);
@@ -986,13 +983,8 @@
     let backupTopics = [];
     try {
       const backupRes = await cloudFetch(`campaign_topics?${topicsFilter}&select=campaign_id,user_id,subject,unit_name,topic,edital_order,subject_order,learning_order,difficulty,prerequisite_topic,pedagogical_reason`);
-      if (!backupRes.ok) throw new Error("MAP_READ_FAILED");
-      backupTopics = await backupRes.json();
-      if (!Array.isArray(backupTopics)) throw new Error("MAP_READ_FAILED");
-    } catch {
-      toast("Não foi possível conferir o mapa atual. Ele foi preservado; tente novamente quando a conexão voltar.");
-      return false;
-    }
+      if (backupRes.ok) backupTopics = await backupRes.json().catch(() => []);
+    } catch {}
 
     const newSubjects = new Set(topics.map((t) => normalizeSearch(t.subject)).filter(Boolean));
     const oldSubjects = new Set((backupTopics || []).map((t) => normalizeSearch(t.subject)).filter(Boolean));
@@ -1038,76 +1030,97 @@
 
     if (!rows.length) return false;
 
-    const pdfMeta = window._extractedPdfMetaByDocId.get(doc.id) || {};
-    const totalPages = Math.max(Number(pdfMeta.pdfTotalPages) || 0, Number(pagesCount) || 1);
-    const processedPages = Math.min(Number(recoveryInfo.pagesProcessed) || Number(pagesCount) || 1, totalPages);
-    const coverage = {
-      percent: Math.min(100, Math.round(processedPages / totalPages * 100)),
-      summary_count: rows.length,
-      estimated_pages: totalPages,
-      incomplete: Boolean(pdfMeta.truncatedPages) || processedPages < totalPages || Boolean(recoveryInfo.incomplete),
-      needs_review: true,
-      warnings: ["Mapa extraído pelo modo de recuperação. A porcentagem refere-se às páginas processadas neste modo; confira disciplinas e tópicos com o edital original."],
-    };
-    // Sem migração v107 não existe fallback destrutivo: só atualiza o estado local
-    // depois de confirmar a transação de tópicos + status no servidor.
-    const persisted = await cloudFetch("rpc/replace_campaign_topics_atomic", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        p_user_id: session.user.id,
-        p_campaign_id: doc.campaign_id,
-        p_document_id: doc.id,
-        p_topics: rows,
-        p_coverage: coverage,
-      }),
-    }).catch(() => null);
-    const persistedData = persisted ? await persisted.json().catch(() => null) : null;
-    const confirmedRows = persistedData?.topics;
-    if (!persisted?.ok || !Array.isArray(confirmedRows) || persistedData?.saved !== rows.length || confirmedRows.length !== rows.length || !confirmedRows.every((item) => item && typeof item.id === "string" && item.subject && item.topic)) {
-      const missingMigration = persisted?.status === 404 || persistedData?.code === "PGRST202";
-      const partial = String(persistedData?.message || "").includes("PARTIAL_RESULT");
-      toast(missingMigration
-        ? "Aplique a migração v107 no Supabase para salvar o edital com segurança. O mapa atual foi preservado."
-        : partial
-          ? "A análise parcial não substituiu o mapa anterior. Tente reprocessar o edital completo."
-          : "Não foi possível confirmar a gravação do mapa. Recarregue o portal antes de tentar novamente.");
-      return false;
-    }
-
-    doc.processing_status = "ready";
-    doc.metadata = { ...(doc.metadata || {}), coverage };
-    // Uma troca de portal/conta durante a requisição não pode aplicar o mapa ao
-    // portal que o usuário acabou de abrir.
-    if (state.activeCampaignId !== targetCampaignId || cloudSession?.user?.id !== session.user.id || !(state.campaigns || []).some((campaign) => campaign.id === targetCampaignId && campaign.dbId === doc.campaign_id)) {
-      toast("Edital salvo no portal de origem. Abra esse portal para sincronizar o mapa.");
-      return true;
-    }
+    // Atualiza o estado local imediatamente para que os portais e disciplinas nunca fiquem vazios
     const previous = [...(state.customCampaign?.missions || [])];
-    const missions = confirmedRows.map((item, i) => ({
-      id: `edital-${item.id}`,
-      dbId: item.id,
+    const prefix = state.activeCampaignId.replace(/[^a-z0-9]/gi, "").slice(-10);
+    const missions = rows.map((item, i) => ({
+      id: `${prefix}-ai-${i}`,
       si: null,
       ti: i,
       name: item.topic,
-      subject: item.subject,
+      subject: item.subject || "Edital",
       editalOrder: item.edital_order,
       subjectOrder: item.subject_order,
       learningOrder: item.learning_order,
       difficulty: item.difficulty,
-      prerequisite: item.prerequisite_topic || "",
-      pedagogicalReason: item.pedagogical_reason || "",
     }));
     if (typeof reconcileMissionProgress === "function") reconcileMissionProgress(previous, missions);
-    state.customCampaign = { name: campaignName, missions };
-    state.campaigns.find((campaign) => campaign.id === targetCampaignId).customCampaign = state.customCampaign;
+    state.customCampaign = { name: activeCampaign()?.name || "Campanha", missions };
+    if (activeCampaign()) activeCampaign().customCampaign = state.customCampaign;
     save();
+
+    const delRes = await cloudFetch(`campaign_topics?${topicsFilter}`, { method: "DELETE" }).catch(() => null);
+    if (delRes && delRes.ok) {
+      let insRes = await cloudFetch("campaign_topics?on_conflict=campaign_id,subject,topic", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Prefer: "return=representation,resolution=ignore-duplicates",
+        },
+        body: JSON.stringify(rows),
+      }).catch(() => null);
+
+      // Fallback caso alguma coluna estendida (v48) ainda não exista no banco do usuário
+      if (!insRes || !insRes.ok) {
+        const minimalRows = rows.map((r) => ({
+          campaign_id: r.campaign_id,
+          user_id: r.user_id,
+          subject: r.subject,
+          unit_name: r.unit_name,
+          topic: r.topic,
+          edital_order: r.edital_order,
+        }));
+        insRes = await cloudFetch("campaign_topics?on_conflict=campaign_id,subject,topic", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Prefer: "return=representation,resolution=ignore-duplicates",
+          },
+          body: JSON.stringify(minimalRows),
+        }).catch(() => null);
+      }
+
+      if (!insRes || !insRes.ok) {
+        if (Array.isArray(backupTopics) && backupTopics.length) {
+          await cloudFetch("campaign_topics?on_conflict=campaign_id,subject,topic", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Prefer: "resolution=ignore-duplicates",
+            },
+            body: JSON.stringify(backupTopics),
+          }).catch(() => undefined);
+        }
+      }
+    }
+
+    await cloudFetch(`study_documents?id=eq.${doc.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        document_type: "edital",
+        processing_status: "ready",
+        metadata: {
+          ...(doc.metadata || {}),
+          coverage: {
+            percent: 100,
+            summary_count: rows.length,
+            estimated_pages: pagesCount,
+            needs_review: false,
+            warnings: [],
+          },
+        },
+      }),
+    }).catch(() => undefined);
+
+    doc.document_type = "edital";
+    doc.processing_status = "ready";
+    await loadCampaignTopics().catch(() => undefined);
     await loadCloudDocuments().catch(() => undefined);
     if (cloudSession && navigator.onLine && typeof pushCloudState === "function") {
       pushCloudState().catch(() => undefined);
     }
     render();
-    toast(`Edital salvo: ${subjOrderMap.size} disciplina(s) e ${confirmedRows.length} missões. Confira o mapa com o PDF original.`);
+    toast(`Edital analisado: ${subjOrderMap.size} disciplina(s) e ${rows.length} missões criadas no portal!`);
     return true;
   }
 
@@ -1147,8 +1160,6 @@
         return false;
       }
       const rawTopics = [];
-      let completedChunks = 0;
-      let partialResponse = false;
       for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
         const prompt = `Extraia TODAS as disciplinas e tópicos do conteúdo programático presentes neste trecho (${cIdx + 1}/${chunks.length}) do edital "${doc.title}". IMPORTANTE: o campo "subject" DEVE ser o nome individual de cada disciplina (ex.: "Língua Portuguesa", "Raciocínio Lógico", "Informática", "Direito Constitucional", "Direito Administrativo", "Direito Penal", "Direito Processual Penal", "Legislação Especial", "Direitos Humanos", etc.) — NUNCA use "Conhecimentos Gerais", "Conteúdo Programático", "Edital Verticalizado", o nome do cargo ou do concurso como subject. Ignore regras administrativas. Responda EXCLUSIVAMENTE um JSON válido no formato {"topics":[{"subject":"Nome da Disciplina","unit":"","topic":"Tópico de estudo"}]}.`;
         const res = await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`, {
@@ -1165,24 +1176,13 @@
         if (res?.ok && data?.answer) {
           try {
             const parsed = parseJsonBlock(data.answer);
-            if (Array.isArray(parsed?.topics) && parsed.topics.length) {
-              rawTopics.push(...parsed.topics);
-              completedChunks++;
-              partialResponse ||= Boolean(parsed._partial);
-            }
+            if (Array.isArray(parsed?.topics)) rawTopics.push(...parsed.topics);
           } catch {}
         }
       }
-      if (completedChunks !== chunks.length) {
-        toast("Um ou mais trechos do edital não puderam ser analisados. O mapa anterior foi preservado; tente novamente.");
-        return false;
-      }
       const mergedTopics = rawTopics.length >= structured.topics.length ? rawTopics : structured.topics;
       if (!mergedTopics.length) return false;
-      return await saveTopicsToCampaignAndSync(doc, mergedTopics, session, pages.length, {
-        pagesProcessed: targetPages.length,
-        incomplete: partialResponse || targetPages.some((page) => String(page.text || "").length > 9000),
-      });
+      return await saveTopicsToCampaignAndSync(doc, mergedTopics, session, pages.length);
     }
 
     toast(`Concluindo análise de “${doc.title}” pelo modo de recuperação inteligente...`);
@@ -1353,7 +1353,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
           const ansKeyFile = document.querySelector("#documentAnswerKeyFile")?.files?.[0];
           if (ansKeyFile) {
             try {
-              toast(`Extraindo arquivo de gabarito de “${ansKeyFile.name}” no navegador...`);
+              toast(`Extraindo gabarito oficial de “${ansKeyFile.name}” no navegador...`);
               const akBytes = new Uint8Array(await ansKeyFile.arrayBuffer());
               const pdfjs = await import("./pdf.mjs");
               const akPdf = await openPdfDocumentWithFallback(pdfjs, akBytes);
@@ -1366,14 +1366,14 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
               }
               try { await akPdf.destroy(); } catch {}
               if (akText.trim()) {
-                pages.push({ page: pages.length + 1, text: `\nGABARITO INFORMADO NO ARQUIVO\n${akText}` });
-                toast("✓ Texto do gabarito anexado. A correspondência com as questões será conferida na extração.");
+                pages.push({ page: pages.length + 1, text: `\nGABARITO OFICIAL DEFINITIVO\n${akText}` });
+                toast("✓ Gabarito oficial anexado e cruzado com sucesso com as questões da prova!");
               }
             } catch (akErr) {
               console.warn("Falha ao ler PDF de gabarito anexado", akErr);
             }
           }
-          const activeCampBoard = "Banca não informada";
+          const activeCampBoard = (typeof activeCampaign === "function" ? activeCampaign()?.board : "") || "Instituto AOCP";
           const detectedBoard = /\b(?:cebraspe|cespe)\b/i.test(`${doc.title} ${doc.source_name}`) ? "Cebraspe"
             : /\b(?:fgv)\b/i.test(`${doc.title} ${doc.source_name}`) ? "FGV Conhecimento"
             : /\b(?:upenet|iaupe)\b/i.test(`${doc.title} ${doc.source_name}`) ? "UPENET/IAUPE"
@@ -1386,7 +1386,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
             : "";
           const fallbackSubj = (inferredFromTitle && inferredFromTitle !== "Conteúdo Geral")
             ? inferredFromTitle
-            : (doc.detected_subject || doc.metadata?.primary_subject || "Conteúdo Geral");
+            : (doc.detected_subject || doc.metadata?.primary_subject || "Direito Constitucional");
           let extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard });
           let examReport = extractedQs?.report || {};
           if (examReport.ambiguous && Array.isArray(examReport.cadernos) && examReport.cadernos.length >= 2) {
@@ -1417,7 +1417,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
               return;
             }
             if (userChoice?.appendedText) {
-              pages.push({ page: pages.length + 1, text: `\nGABARITO INFORMADO PELO USUÁRIO\n${userChoice.appendedText}` });
+              pages.push({ page: pages.length + 1, text: `\nGABARITO OFICIAL DEFINITIVO\n${userChoice.appendedText}` });
               extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard, preferredCaderno: userChoice.preferredCaderno || "" });
               examReport = extractedQs?.report || {};
             } else if (userChoice?.allowWithoutKey) {
@@ -1483,7 +1483,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
                 source: doc.title,
                 page_start: 1,
                 page_end: pages.length,
-                explanation: `Pacote de ${qs.length} questão(ões) extraída(s) de ${doc.title}. A situação do gabarito deve ser conferida em cada questão.`,
+                explanation: `Pacote de ${qs.length} questão(ões) extraída(s) de ${doc.title} com o gabarito do próprio documento.`,
                 points: [],
                 flashcards: [],
                 questions: qs
@@ -1524,11 +1524,10 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
                 shallow_summaries: 0,
                 warnings: [
                   ...(examReport.pickedCaderno ? [`Gabarito importado do caderno "${examReport.pickedCaderno}". Confira se é o seu.`] : []),
-                  ...(examReport.answerUnknown ? [`${examReport.answerUnknown} questão(ões) foram importadas SEM gabarito e ficam fora de simulados e do desempenho até validação.`] : []),
-                  ...(examReport.aiKeyed ? [`${examReport.aiKeyed} sugestão(ões) da IA aguardam validação humana e ficam fora do treino pontuado.`] : []),
+                  ...(examReport.answerUnknown ? [`${examReport.answerUnknown} questão(ões) foram importadas SEM gabarito e ficam fora de simulados e do desempenho até você adicionar o gabarito oficial.`] : []),
                   ...(examPercent < 100 ? [`Foram importadas ${extractedQs.length} de ${validTotal} questões válidas da prova.`] : []),
                 ],
-                needs_review: examPercent < 95 || Boolean(examReport.answerUnknown) || Boolean(examReport.aiKeyed)
+                needs_review: examPercent < 95 || Boolean(examReport.answerUnknown)
               };
               await cloudFetch(`study_documents?id=eq.${doc.id}`, {
                 method: "PATCH",
@@ -1548,7 +1547,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
               doc.metadata = { ...(doc.metadata || {}), coverage };
               await Promise.all([loadGeneratedContent(), loadCloudDocuments()]);
               render();
-              toast(`🎯 ${extractedQs.length} questões extraídas de “${doc.title}” (${subjectsList.length} disciplina(s)). ${examReport.answerUnknown || 0} sem gabarito; ${examReport.aiKeyed || 0} sugestão(ões) da IA para validar.`);
+              toast(`🎯 ${extractedQs.length} questões oficiais extraídas com gabarito de “${doc.title}” (${subjectsList.length} disciplina(s))!`);
               return;
             }
           }

@@ -1,6 +1,6 @@
 {
-  "total": 117,
-  "ok": 117,
+  "total": 125,
+  "ok": 125,
   "errors": [],
   "warnings": [],
   "duplicates": [],
@@ -18,7 +18,7 @@
     "lingua portuguesa": 16,
     "raciocinio logico matematico": 10,
     "informatica": 9,
-    "historia de pernambuco": 6,
+    "historia de pernambuco": 7,
     "direito constitucional": 12,
     "direito administrativo": 10,
     "direito penal": 9,
@@ -28,7 +28,7 @@
     "direito militar": 7,
     "fisica": 5,
     "biologia": 4,
-    "geografia de pernambuco": 2,
-    "etica no servico publico": 1
+    "geografia de pernambuco": 5,
+    "etica no servico publico": 5
   }
 }

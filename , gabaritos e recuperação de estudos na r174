@@ -1,0 +1,43 @@
+warning: in the working copy of '.github/workflows/validate.yml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'dist/index.html', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'dist/native-question-bank.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'dist/pdf-text-client.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'dist/privacidade.html', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'dist/sw.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'dist/v59-enhancements.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'dist/v77-experience.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/test-attach-answer-key.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/test-crud-contracts.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/test-front-study.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/test-question-bank.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/test-r171-grok.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/validate-project.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'supabase/functions/account-security/index.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'supabase/functions/assistente-pmpe/index.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'supabase/functions/edital-gemini/index.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'supabase/functions/system-diagnostics/index.ts', LF will be replaced by CRLF the next time Git touches it
+ .github/workflows/validate.yml                 |    3 [32m+[m
+ .gitignore                                     |    1 [32m+[m
+ README.md                                      |    9 [32m+[m
+ dist/index.html                                |  101 [32m++[m[31m-[m
+ dist/native-question-bank.json                 |  318 [32m++++[m[31m----[m
+ dist/pdf-text-client.js                        |  185 [32m++[m[31m---[m
+ dist/privacidade.html                          |    5 [32m+[m[31m-[m
+ dist/sw.js                                     |    4 [32m+[m[31m-[m
+ dist/v59-enhancements.js                       |    2 [32m+[m[31m-[m
+ dist/v77-experience.js                         | 1000 [32m++++++++++++++++[m[31m--------[m
+ package.json                                   |   14 [32m+[m[31m-[m
+ scripts/test-attach-answer-key.mjs             |    2 [32m+[m[31m-[m
+ scripts/test-crud-contracts.mjs                |    4 [32m+[m[31m-[m
+ scripts/test-front-study.mjs                   |    4 [32m+[m[31m-[m
+ scripts/test-question-bank.mjs                 |    6 [32m+[m[31m-[m
+ scripts/test-r171-grok.mjs                     |    5 [32m+[m[31m-[m
+ scripts/validate-project.mjs                   |    3 [32m+[m[31m-[m
+ supabase/functions/account-security/index.ts   |   54 [32m+[m[31m-[m
+ supabase/functions/assistente-pmpe/index.ts    |   36 [32m+[m[31m-[m
+ supabase/functions/edital-gemini/index.ts      |  103 [32m+[m[31m--[m
+ supabase/functions/system-diagnostics/index.ts |   40 [32m+[m[31m-[m
+ 21 files changed, 1151 insertions(+), 748 deletions(-)
