@@ -2720,11 +2720,11 @@
         const existingIds=new Set(ALL_SUMMARIES.map(s=>String(s?.id||s?.title||'').toLowerCase()));
         for(const item of baseList){
           const rawCat=item.category||item.subject||'Conteúdo Geral';
-          const isManual=/manuais do ca[cç]ador/i.test(rawCat);
-          const normCat=isManual?'Manuais do Caçador (Método & Estratégia)':canonicalSubjectName(rawCat);
+          const isManual=/manuais do ca[cç]ador|manual oficial do ca[cç]ador/i.test(`${rawCat} ${item.title||''} ${item.source||''}`);
+          if(isManual)continue;
+          const normCat=canonicalSubjectName(rawCat);
           const catKey=subjectKey(normCat);
-          // Só injeta resumo nativo se a disciplina fizer parte do edital ativo (ou for Manual do Caçador)
-          if(!isManual&&allowedKeys.size&&!allowedKeys.has(catKey))continue;
+          if(allowedKeys.size&&!allowedKeys.has(catKey))continue;
           const key=String(item?.id||item?.title||'').toLowerCase();
           if(key&&!existingIds.has(key)){
             existingIds.add(key);
@@ -2736,8 +2736,8 @@
           }
         }
         const sf=typeof document!=='undefined'?document.querySelector('#summaryFilter'):null;
-        if(sf&&![...sf.options].some(o=>/manuais do ca[cç]ador/i.test(o.value))){
-          sf.add(new Option('📚 Manuais do Caçador (Método & Estratégia)','Manuais do Caçador (Método & Estratégia)'));
+        if(sf){
+          [...sf.options].forEach((o,idx)=>{if(/manuais do ca[cç]ador/i.test(o.value||o.textContent))sf.remove(idx);});
         }
       }
       if(typeof ALL_FLASHCARDS!=='undefined'&&Array.isArray(window.ALL_FLASHCARDS)&&baseList.length){
@@ -3073,8 +3073,9 @@
 
   function ensureManuaisCacadorShortcutBar(){
     if(typeof document==='undefined')return;
-    const filters=document.querySelector('#summaries .summaryFilters');
-    if(!filters||document.querySelector('#openManuaisCacadorBtn'))return;
+    const oldBtn=document.querySelector('#openManuaisCacadorBtn');
+    if(oldBtn)oldBtn.remove();
+    return;
     filters.insertAdjacentHTML('beforeend',`<button type="button" class="ghost small" id="openManuaisCacadorBtn" style="white-space:nowrap;border-color:rgba(250,204,21,0.45);color:#fde047;">📚 Manuais do Caçador (Método)</button>`);
     document.querySelector('#openManuaisCacadorBtn')?.addEventListener('click',()=>{
       ensureNativePedagogicalCouplingLoaded();
@@ -5462,7 +5463,7 @@
       const sortedCats = Object.entries(catGroups).sort((a, b) => a[1].order - b[1].order);
       foldersHtml = `<div class="libraryFolders" style="margin-top:10px">${sortedCats.map(([catKey, grp]) => {
         const fKey = `examcat:${state?.activeCampaignId || 'default'}:${catKey}`;
-        const isOpen = examCatalogState.foldersOpen[fKey] !== undefined ? examCatalogState.foldersOpen[fKey] : true;
+        const isOpen = examCatalogState.foldersOpen[fKey] !== undefined ? examCatalogState.foldersOpen[fKey] : Boolean(searchNorm);
         const totalQs = grp.items.reduce((acc, x) => acc + x.qCount, 0);
         const bySubj = {};
         for (const it of grp.items) (bySubj[it.meta.subject] ||= []).push(it);
@@ -5483,7 +5484,7 @@
             <span>${escText(grp.label)}</span>
             <span class="tag">${grp.items.length} arquivo${grp.items.length === 1 ? '' : 's'} · ${totalQs} questões</span>
           </button>
-          <div class="folderBody">${subjBlocks}</div>
+          <div class="folderBody">${isOpen ? subjBlocks : ""}</div>
         </section>`;
       }).join('')}</div>`;
     } else {
@@ -5495,7 +5496,7 @@
       const orderedSubjEntries = allSubjects.filter(s => subjGroups[s]).map(s => [s, subjGroups[s]]);
       foldersHtml = `<div class="libraryFolders" style="margin-top:10px">${orderedSubjEntries.map(([subjName, sItems], sIdx) => {
         const fKey = `examsubj:${state?.activeCampaignId || 'default'}:${subjectKey(subjName)}`;
-        const isOpen = examCatalogState.foldersOpen[fKey] !== undefined ? examCatalogState.foldersOpen[fKey] : (sIdx === 0 || Boolean(searchNorm));
+        const isOpen = examCatalogState.foldersOpen[fKey] !== undefined ? examCatalogState.foldersOpen[fKey] : Boolean(searchNorm);
         const totalQs = sItems.reduce((acc, x) => acc + x.qCount, 0);
         const byCat = {};
         for (const it of sItems) {
@@ -5519,7 +5520,7 @@
             <span><i>${icon}</i>${escText(subjName)}</span>
             <span class="tag">${sItems.length} arquivo${sItems.length === 1 ? '' : 's'} · ${totalQs} questões</span>
           </button>
-          <div class="folderBody">${catBlocks}</div>
+          <div class="folderBody">${isOpen ? catBlocks : ""}</div>
         </section>`;
       }).join('')}</div>`;
     }

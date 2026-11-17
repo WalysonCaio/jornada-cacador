@@ -2501,179 +2501,432 @@
 
 
 // ============================================================================
-// MÓDULO 8 (r179): SUITE COMPLETA CAVEIRA & FRAMEWORKS MODERNOS
-// - Renovação Automática de Vidas da Trilha a cada 20 min com Cronômetro ao Vivo
-// - Novo Hub de Redação Policial (#jcEssayDashboardHub)
-// - Painel Tático Interativo no Perfil Social (#jcTacticalPanelSection)
-// - Novo Hub de Flashcards com Funil de 3 Chevrons (#jcFlashcardsDashboardHub)
-// - Aba "⚖️ Leis & Textos (Lei Seca)" com Vade Mecum Policial, Favoritos e Grifo
-// - Pílulas de Status no Banco de Questões + Breadcrumb e Barra Inferior com Invocador
+// MÓDULO 8 (r180): SUITE COMPLETA JORNADA DO CAÇADOR (PALETA OFICIAL AZUL-ABISSAL & CIANO,
+// PASTAS RETRÁTEIS POR DISCIPLINA, SINCRONIA DE ABAS E BASE EXTERNA COMPLETA DE LEIS & TEXTOS)
 // ============================================================================
 (function initCaveiraFullSuiteR179() {
-  const LAWS_FAV_KEY = 'jc_laws_favorites_v179';
-  const LAWS_HIGHLIGHT_KEY = 'jc_laws_highlights_v179';
+  const LAWS_FAV_KEY = 'jc_laws_favorites_v180';
+  const LAWS_HIGHLIGHT_KEY = 'jc_laws_highlights_v180';
+  const LAWS_FOLDERS_OPEN_KEY = 'jc_laws_folders_open_v180';
+  const LAWS_EXTERNAL_CACHE_KEY = 'jc_external_laws_fulltext_v180';
+  const LAWS_CUSTOM_IMPORTED_KEY = 'jc_custom_external_laws_v180';
 
   const NATIVE_SMART_LAWS = [
+    // 1. DIREITO CONSTITUCIONAL
     {
-      id: 'law-cf88-art5',
+      id: 'law-cf88-art1-5',
       discipline: 'Direito Constitucional',
-      title: 'Lei Seca - Constituição Federal: Art. 1º ao 5º (Fundamentos, Objetivos e Direitos e Deveres Individuais)',
-      badge: 'Essencial PMPE/PPPE',
+      title: 'Constituição Federal de 1988 — Títulos I e II: Princípios Fundamentais e Direitos e Garantias Fundamentais (Arts. 1º ao 17)',
+      badge: 'Texto Integral + Base Externa',
+      wikisourceTitle: 'Constituição_da_República_Federativa_do_Brasil_de_1988',
+      wikipediaTitle: 'Constituição_brasileira_de_1988',
+      officialUrl: 'https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm',
+      sourceName: 'Planalto / Wikisource Jurídico',
       articles: [
-        'Art. 1º A República Federativa do Brasil, formada pela união indissolúvel dos Estados e Municípios e do Distrito Federal, constitui-se em Estado Democrático de Direito e tem como fundamentos: I - a soberania; II - a cidadania; III - a dignidade da pessoa humana; IV - os valores sociais do trabalho e da livre iniciativa; V - o pluralismo político. (Bizu: SO-CI-DI-VA-PLU).',
-        'Art. 3º Constituem objetivos fundamentais da República Federativa do Brasil: I - construir uma sociedade livre, justa e solidária; II - garantir o desenvolvimento nacional; III - erradicar a pobreza e a marginalização e reduzir as desigualdades sociais e regionais; IV - promover o bem de todos, sem preconceitos de origem, raça, sexo, cor, idade e quaisquer outras formas de discriminação. (Bizu: CON-GA-ERRA-PRO).',
-        'Art. 5º, III - ninguém será submetido a tortura nem a tratamento desumano ou degradante.',
+        'Art. 1º A República Federativa do Brasil, formada pela união indissolúvel dos Estados e Municípios e do Distrito Federal, constitui-se em Estado Democrático de Direito e tem como fundamentos: I - a soberania; II - a cidadania; III - a dignidade da pessoa humana; IV - os valores sociais do trabalho e da livre iniciativa; V - o pluralismo político. Parágrafo único. Todo o poder emana do povo, que o exerce por meio de representantes eleitos ou diretamente, nos termos desta Constituição.',
+        'Art. 2º São Poderes da União, independentes e harmônicos entre si, o Legislativo, o Executivo e o Judiciário.',
+        'Art. 3º Constituem objetivos fundamentais da República Federativa do Brasil: I - construir uma sociedade livre, justa e solidária; II - garantir o desenvolvimento nacional; III - erradicar a pobreza e a marginalização e reduzir as desigualdades sociais e regionais; IV - promover o bem de todos, sem preconceitos de origem, raça, sexo, cor, idade e quaisquer outras formas de discriminação.',
+        'Art. 4º A República Federativa do Brasil rege-se nas suas relações internacionais pelos seguintes princípios: I - independência nacional; II - prevalência dos direitos humanos; III - autodeterminação dos povos; IV - não-intervenção; V - igualdade entre os Estados; VI - defesa da paz; VII - solução pacífica dos conflitos; VIII - repúdio ao terrorismo e ao racismo; IX - cooperação entre os povos para o progresso da humanidade; X - concessão de asilo político.',
+        'Art. 5º Todos são iguais perante a lei, sem distinção de qualquer natureza, garantindo-se aos brasileiros e aos estrangeiros residentes no País a inviolabilidade do direito à vida, à liberdade, à igualdade, à segurança e à propriedade: I - homens e mulheres são iguais em direitos e obrigações; II - ninguém será obrigado a fazer ou deixar de fazer alguma coisa senão em virtude de lei; III - ninguém será submetido a tortura nem a tratamento desumano ou degradante.',
         'Art. 5º, XI - a casa é asilo inviolável do indivíduo, ninguém nela podendo penetrar sem consentimento do morador, salvo em caso de flagrante delito ou desastre, ou para prestar socorro, ou, durante o dia, por determinação judicial.',
         'Art. 5º, XII - é inviolável o sigilo da correspondência e das comunicações telegráficas, de dados e das comunicações telefônicas, salvo, no último caso, por ordem judicial, nas hipóteses e na forma que a lei estabelecer para fins de investigação criminal ou instrução processual penal.',
         'Art. 5º, XVI - todos podem reunir-se pacificamente, sem armas, em locais abertos ao público, independentemente de autorização, desde que não frustrem outra reunião anteriormente convocada para o mesmo local, sendo apenas exigido prévio aviso à autoridade competente.',
-        'Art. 5º, XLII - a prática do racismo constitui crime inafiançável e imprescritível, sujeito à pena de reclusão, nos termos da lei.',
-        'Art. 5º, XLIII - a lei considerará crimes inafiançáveis e insuscetíveis de graça ou anistia a prática da tortura, o tráfico ilícito de entorpecentes e drogas afins, o terrorismo e os definidos como crimes hediondos (3TH).',
-        'Art. 5º, XLIV - constitui crime inafiançável e imprescritível a ação de grupos armados, civis ou militares, contra a ordem constitucional e o Estado Democrático (RAÇÃO = Racismo e Ação de Grupos Armados são Imprescritíveis).'
+        'Art. 5º, XXXV - a lei não excluirá da apreciação do Poder Judiciário lesão ou ameaça a direito; XXXIX - não há crime sem lei anterior que o defina, nem pena sem prévia cominação legal; XL - a lei penal não retroagirá, salvo para beneficiar o réu.',
+        'Art. 5º, XLII - a prática do racismo constitui crime inafiançável e imprescritível, sujeito à pena de reclusão; XLIII - a lei considerará crimes inafiançáveis e insuscetíveis de graça ou anistia a prática da tortura, o tráfico ilícito de entorpecentes e drogas afins, o terrorismo e os definidos como crimes hediondos; XLIV - constitui crime inafiançável e imprescritível a ação de grupos armados, civis ou militares, contra a ordem constitucional e o Estado Democrático.',
+        'Art. 5º, LXI - ninguém será preso senão em flagrante delito ou por ordem escrita e fundamentada de autoridade judiciária competente, salvo nos casos de transgressão militar ou crime propriamente militar, definidos em lei.',
+        'Art. 5º, LXIII - o preso será informado de seus direitos, entre os quais o de permanecer calado, sendo-lhe assegurada a assistência da família e de advogado; LXVIII - conceder-se-á habeas corpus sempre que alguém sofrer ou se achar ameaçado de sofrer violência ou coação em sua liberdade de locomoção, por ilegalidade ou abuso de poder.'
       ]
     },
     {
-      id: 'law-cf88-art144',
+      id: 'law-cf88-art37-144',
       discipline: 'Direito Constitucional',
-      title: 'Lei Seca - Constituição Federal: Art. 144 (Segurança Pública e Órgãos Policiais)',
-      badge: 'Top 1 Carreiras Policiais',
+      title: 'Constituição Federal de 1988 — Administração Pública (Arts. 37 a 42) e Segurança Pública (Art. 144)',
+      badge: 'Carreiras Policiais',
+      wikisourceTitle: 'Constituição_da_República_Federativa_do_Brasil_de_1988',
+      wikipediaTitle: 'Segurança_pública_no_Brasil',
+      officialUrl: 'https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm#art144',
+      sourceName: 'Planalto / Wikisource Jurídico',
       articles: [
-        'Art. 144. A segurança pública, dever do Estado, direito e responsabilidade de todos, é exercida para a preservação da ordem pública e da incolumidade das pessoas e do patrimônio, através dos seguintes órgãos (Rol Taxativo): I - polícia federal; II - polícia rodoviária federal; III - polícia ferroviária federal; IV - polícias civis; V - polícias militares e corpos de bombeiros militares; VI - polícias penais federal, estaduais e distrital (EC nº 104/2019).',
+        'Art. 37. A administração pública direta e indireta de qualquer dos Poderes da União, dos Estados, do Distrito Federal e dos Municípios obedecerá aos princípios de legalidade, impessoalidade, moralidade, publicidade e eficiência (LIMPE).',
+        'Art. 37, § 6º As pessoas jurídicas de direito público e as de direito privado prestadoras de serviços públicos responderão pelos danos que seus agentes, nessa qualidade, causarem a terceiros, assegurado o direito de regresso contra o responsável nos casos de dolo ou culpa.',
+        'Art. 42. Os membros das Polícias Militares e Corpos de Bombeiros Militares, instituições organizadas com base na hierarquia e disciplina, são militares dos Estados, do Distrito Federal e dos Territórios.',
+        'Art. 144. A segurança pública, dever do Estado, direito e responsabilidade de todos, é exercida para a preservação da ordem pública e da incolumidade das pessoas e do patrimônio, através dos seguintes órgãos (Rol Taxativo): I - polícia federal; II - polícia rodoviária federal; III - polícia ferroviária federal; IV - polícias civis; V - polícias militares e corpos de bombeiros militares; VI - polícias penais federal, estaduais e distrital.',
         'Art. 144, § 4º Às polícias civis, dirigidas por delegados de polícia de carreira, incumbem, ressalvada a competência da União, as funções de polícia judiciária e a apuração de infrações penais, exceto as militares.',
         'Art. 144, § 5º Às polícias militares cabem a polícia ostensiva e a preservação da ordem pública; aos corpos de bombeiros militares, além das atribuições definidas em lei, incumbe a execução de atividades de defesa civil.',
         'Art. 144, § 5º-A. Às polícias penais, vinculadas ao órgão administrador do sistema penal da unidade federativa a que pertencem, cabe a segurança dos estabelecimentos penais.',
-        'Art. 144, § 6º As polícias militares e os corpos de bombeiros militares, forças auxiliares e reserva do Exército subordinam-se, juntamente com as polícias civis e as polícias penais estaduais e distrital, aos Governadores dos Estados, do Distrito Federal e dos Territórios.',
-        'Art. 144, § 8º Os Municípios poderão constituir guardas municipais destinadas à proteção de seus bens, serviços e instalações, conforme dispuser a lei.'
+        'Art. 144, § 6º As polícias militares e os corpos de bombeiros militares, forças auxiliares e reserva do Exército subordinam-se, juntamente com as polícias civis e as polícias penais estaduais e distrital, aos Governadores dos Estados, do Distrito Federal e dos Territórios.'
       ]
     },
+    // 2. DIREITO ADMINISTRATIVO
     {
       id: 'law-adm-improbidade-8429',
       discipline: 'Direito Administrativo',
-      title: 'Lei Seca - Lei de Improbidade Administrativa: Lei nº 8.429/92 (Atualizada pela Lei nº 14.230/21)',
-      badge: 'Alta Incidência',
+      title: 'Lei nº 8.429/1992 (Atualizada pela Lei nº 14.230/2021) — Lei de Improbidade Administrativa',
+      badge: 'Base Externa Planalto',
+      wikisourceTitle: 'Lei_Federal_do_Brasil_8429_de_1992',
+      wikipediaTitle: 'Improbidade_administrativa',
+      officialUrl: 'https://www.planalto.gov.br/ccivil_03/leis/l8429.htm',
+      sourceName: 'Planalto / Wikisource',
       articles: [
-        'Art. 1º, § 1º Consideram-se atos de improbidade administrativa as condutas dolosas tipificadas nos arts. 9º, 10 e 11 desta Lei, ressalvados tipos previstos em leis especiais. (Atenção: Não existe mais improbidade culposa!).',
-        'Art. 1º, § 2º Considera-se dolo a vontade livre e consciente de alcançar o resultado ilícito tipificado nos arts. 9º, 10 e 11 desta Lei, não bastando a voluntariedade do agente (exige-se dolo específico).',
-        'Art. 9º (Enriquecimento Ilícito - Rol Exemplificativo): Suspensão dos direitos políticos até 14 anos, perda da função, multa equivalente ao valor do acréscimo patrimonial e proibição de contratar até 14 anos.',
-        'Art. 10 (Lesão ao Erário - Rol Exemplificativo): Suspensão dos direitos políticos até 12 anos, perda da função, multa equivalente ao valor do dano e proibição de contratar até 12 anos.',
-        'Art. 11 (Atentado contra os Princípios - Rol TAXATIVO!): Multa até 24 vezes a remuneração e proibição de contratar até 4 anos (Não há perda da função nem suspensão de direitos políticos no Art. 11!).',
+        'Art. 1º O sistema de responsabilização por atos de improbidade administrativa tutelará a probidade na organização do Estado e no exercício de suas funções, como forma de assegurar a integridade do patrimônio público e social, nos termos desta Lei.',
+        'Art. 1º, § 1º Consideram-se atos de improbidade administrativa as condutas dolosas tipificadas nos arts. 9º, 10 e 11 desta Lei, ressalvados tipos previstos em leis especiais. § 2º Considera-se dolo a vontade livre e consciente de alcançar o resultado ilícito tipificado nos arts. 9º, 10 e 11 desta Lei, não bastando a voluntariedade do agente.',
+        'Art. 9º Constitui ato de improbidade administrativa importando em enriquecimento ilícito auferir, mediante a prática de ato doloso, qualquer tipo de vantagem patrimonial indevida em razão do exercício de cargo, de mandato, de função, de emprego ou de atividade nas entidades referidas no art. 1º desta Lei (Penas: perda dos bens/valores acrescidos, perda da função, suspensão dos direitos políticos até 14 anos, multa equivalente ao acréscimo e proibição de contratar até 14 anos).',
+        'Art. 10. Constitui ato de improbidade administrativa que causa lesão ao erário qualquer ação ou omissão dolosa, que enseje, efetiva e comprovadamente, perda patrimonial, desvio, apropriação, malbaratamento ou dilapidação dos bens ou haveres das entidades (Penas: ressarcimento do dano, perda da função, suspensão dos direitos políticos até 12 anos, multa equivalente ao dano e proibição de contratar até 12 anos).',
+        'Art. 11. Constitui ato de improbidade administrativa que atenta contra os princípios da administração pública a ação ou omissão dolosa que viole os deveres de honestidade, de imparcialidade e de legalidade, caracterizada por uma das seguintes condutas (Rol Taxativo — Penas: multa de até 24x a remuneração e proibição de contratar por até 4 anos).',
         'Art. 23. A ação para a aplicação das sanções previstas nesta Lei prescreve em 8 (oito) anos, contados a partir da ocorrência do fato ou, no caso de infrações permanentes, do dia em que cessou a permanência.'
       ]
     },
     {
       id: 'law-adm-licitacoes-14133',
       discipline: 'Direito Administrativo',
-      title: 'Lei Seca - Nova Lei de Licitações e Contratos Administrativos: Lei nº 14.133/21',
-      badge: 'Bancas AOCP/FGV',
+      title: 'Lei nº 14.133/2021 — Nova Lei de Licitações e Contratos Administrativos',
+      badge: 'Base Externa Planalto',
+      wikisourceTitle: 'Lei_Federal_do_Brasil_14133_de_2021',
+      wikipediaTitle: 'Licitação_no_Brasil',
+      officialUrl: 'https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/lei/l14133.htm',
+      sourceName: 'Planalto / Câmara dos Deputados',
       articles: [
-        'Art. 28. São modalidades de licitação: I - pregão; II - concorrência; III - concurso; IV - leilão; V - diálogo competitivo. (Atenção: Tomada de preços, convite e RDC foram extintos!).',
-        'Art. 6º, XLI - pregão: modalidade de licitação obrigatória para aquisição de bens e serviços comuns, cujo critério de julgamento poderá ser o de menor preço ou o de maior desconto.',
-        'Art. 6º, XLII - diálogo competitivo: modalidade de licitação para contratação de obras, serviços e compras em que a Administração Pública realiza diálogos com licitantes previamente selecionados mediante critérios objetivos, com o intuito de desenvolver uma ou mais alternativas capazes de atender às suas necessidades.'
+        'Art. 5º Na aplicação desta Lei, serão observados os princípios da legalidade, da impessoalidade, da moralidade, da publicidade, da eficiência, do interesse público, da probidade administrativa, da igualdade, do planejamento, da transparência, da eficácia, da segregação de funções, da motivação, da vinculação ao edital, do julgamento objetivo, da segurança jurídica, da razoabilidade, da competitividade, da proporcionalidade, da celeridade, da economicidade e do desenvolvimento nacional sustentável.',
+        'Art. 28. São modalidades de licitação: I - pregão; II - concorrência; III - concurso; IV - leilão; V - diálogo competitivo. § 2º É vedada a criação de outras modalidades de licitação ou, ainda, a combinação daquelas referidas no caput deste artigo.',
+        'Art. 74 (Inexigibilidade de Licitação): É inexigível a licitação quando inviável a competição, em especial nos casos de: I - aquisição de materiais, de equipamentos ou de gêneros ou contratação de serviços que só possam ser fornecidos por produtor, empresa ou representante comercial exclusivos; II - contratação de profissional do setor artístico, diretamente ou por meio de empresário exclusivo, desde que consagrado pela crítica especializada ou pela opinião pública; III - serviços técnicos especializados de natureza predominantemente intelectual com profissionais ou empresas de notória especialização.'
       ]
     },
+    // 3. DIREITO PENAL
     {
-      id: 'law-penal-adm-publica',
+      id: 'law-penal-parte-geral-e-adm',
       discipline: 'Direito Penal',
-      title: 'Lei Seca - Código Penal: Crimes Praticados por Funcionário Público Contra a Administração (Arts. 312 a 327)',
-      badge: 'Cai em toda prova',
+      title: 'Código Penal (Decreto-Lei nº 2.848/1940) — Parte Geral (Arts. 1º a 31) e Crimes contra a Administração Pública (Arts. 312 a 337)',
+      badge: 'Base Externa Integral',
+      wikisourceTitle: 'Código_Penal_do_Brasil',
+      wikipediaTitle: 'Código_Penal_brasileiro_de_1940',
+      officialUrl: 'https://www.planalto.gov.br/ccivil_03/decreto-lei/del2848compilado.htm',
+      sourceName: 'Planalto / Wikisource Jurídico',
       articles: [
+        'Art. 1º (Anterioridade da Lei): Não há crime sem lei anterior que o defina. Não há pena sem prévia cominação legal. Art. 2º Ninguém pode ser punido por fato que lei posterior deixa de considerar crime, cessando em virtude dela a execução e os efeitos penais da sentença condenatória.',
+        'Art. 23 (Exclusão de ilicitude): Não há crime quando o agente pratica o fato: I - em estado de necessidade; II - em legítima defesa; III - em estrito cumprimento de dever legal ou no exercício regular de direito. Parágrafo único. O agente, em qualquer das hipóteses deste artigo, responderá pelo excesso doloso ou culposo.',
+        'Art. 25 (Legítima defesa): Entende-se em legítima defesa quem, usando moderadamente dos meios necessários, repele injusta agressão, atual ou iminente, a direito seu ou de outrem. Parágrafo único. Observados os requisitos previstos no caput deste artigo, considera-se também em legítima defesa o agente de segurança pública que repele agressão ou risco de agressão a vítima mantida refém durante a prática de crimes.',
         'Art. 312 (Peculato): Apropriar-se o funcionário público de dinheiro, valor ou qualquer outro bem móvel, público ou particular, de que tem a posse em razão do cargo, ou desviá-lo, em proveito próprio ou alheio. § 2º Peculato culposo: se o funcionário concorre culposamente para o crime de outrem. § 3º No peculato culposo, a reparação do dano, se precede à sentença irrecorrível, extingue a punibilidade; se lhe é posterior, reduz de metade a pena imposta.',
-        'Art. 316 (Concussão): Exigir, para si ou para outrem, direta ou indiretamente, ainda que fora da função ou antes de assumi-la, mas em razão dela, vantagem indevida. Pena: reclusão, de 2 a 12 anos, e multa (Verbo nuclear: EXIGIR).',
-        'Art. 317 (Corrupção Passiva): Solicitar ou receber, para si ou para outrem, direta ou indiretamente, ainda que fora da função ou antes de assumi-la, mas em razão dela, vantagem indevida, ou aceitar promessa de tal vantagem (Verbos: SOLICITAR, RECEBER, ACEITAR PROMESSA).',
+        'Art. 316 (Concussão): Exigir, para si ou para outrem, direta ou indiretamente, ainda que fora da função ou antes de assumi-la, mas em razão dela, vantagem indevida. Pena: reclusão, de 2 a 12 anos, e multa.',
+        'Art. 317 (Corrupção passiva): Solicitar ou receber, para si ou para outrem, direta ou indiretamente, ainda que fora da função ou antes de assumi-la, mas em razão dela, vantagem indevida, ou aceitar promessa de tal vantagem.',
         'Art. 319 (Prevaricação): Retardar ou deixar de praticar, indevidamente, ato de ofício, ou praticá-lo contra disposição expressa de lei, para satisfazer interesse ou sentimento pessoal.',
-        'Art. 320 (Condescendência Criminosa): Deixar o funcionário, por indulgência, de responsabilizar subordinado que cometeu infração no exercício do cargo ou, quando lhe falte competência, não levar o fato ao conhecimento da autoridade competente.'
+        'Art. 320 (Condescendência criminosa): Deixar o funcionário, por indulgência, de responsabilizar subordinado que cometeu infração no exercício do cargo ou, quando lhe falte competência, não levar o fato ao conhecimento da autoridade competente.'
       ]
     },
+    // 4. DIREITO PROCESSUAL PENAL
     {
-      id: 'law-penal-militar-cpm',
-      discipline: 'Direito Penal Militar',
-      title: 'Lei Seca - Código Penal Militar (Decreto-Lei nº 1.001/69): Crimes Militares em Tempo de Paz (Art. 9º), Motim, Insubordinação e Deserção',
-      badge: 'PMPE / CBMPE',
+      id: 'law-cpp-inquerito-prisao',
+      discipline: 'Direito Processual Penal',
+      title: 'Código de Processo Penal (Decreto-Lei nº 3.689/1941) — Inquérito Policial (Arts. 4º a 23), Prova e Prisão em Flagrante (Arts. 282 a 316)',
+      badge: 'Base Externa Integral',
+      wikisourceTitle: 'Código_de_Processo_Penal_do_Brasil',
+      wikipediaTitle: 'Inquérito_policial',
+      officialUrl: 'https://www.planalto.gov.br/ccivil_03/decreto-lei/del3689compilado.htm',
+      sourceName: 'Planalto / Wikisource Jurídico',
       articles: [
-        'Art. 9º Consideram-se crimes militares, em tempo de paz: II - os crimes previstos neste Código e os previstos na legislação penal, quando praticados: a) por militar em situação de atividade ou assemelhado, contra militar na mesma situação ou assemelhado; b) por militar em situação de atividade, em lugar sujeito à administração militar, contra militar da reserva/reformado ou civil; c) por militar em serviço ou atuando em razão da função.',
-        'Art. 149 (Motim): Reunirem-se militares ou assemelhados: I - agindo contra a ordem recebida de superior, ou negando-se a cumpri-la; II - recusando obediência a superior, quando estejam agindo sem ordem ou praticando violência; IV - ocupando quartel, fortaleza, aeródromo ou navio militar.',
-        'Art. 163 (Recusa de Obediência): Recusar obedecer a ordem do superior sobre assunto ou matéria de serviço, ou relativamente a dever imposto em lei, regulamento ou instrução: Pena - detenção, de um a dois anos, se o fato não constitui crime mais grave.',
-        'Art. 187 (Deserção): Ausentar-se o militar, sem licença, da unidade em que serve, ou do lugar em que deve permanecer, por mais de oito dias: Pena - detenção, de seis meses a dois anos; se oficial, a pena é agravada. (Bizu: Mais de 8 dias = consuma no 9º dia!).'
+        'Art. 4º A polícia judiciária será exercida pelas autoridades policiais no território de suas respectivas circunscrições e terá por fim a apuração das infrações penais e da sua autoria.',
+        'Art. 5º Nos crimes de ação pública o inquérito policial será iniciado: I - de ofício; II - mediante requisição da autoridade judiciária ou do Ministério Público, ou a requerimento do ofendido ou de quem tiver qualidade para representá-lo.',
+        'Art. 10. O inquérito deverá terminar no prazo de 10 dias, se o indiciado tiver sido preso em flagrante, ou estiver preso preventivamente, contado o prazo, nesta hipótese, a partir do dia em que se executar a ordem de prisão, ou no prazo de 30 dias, quando estiver solto, mediante fiança ou sem ela.',
+        'Art. 14. O ofendido, ou seu representante legal, e o indiciado poderão requerer qualquer diligência, que será realizada, ou não, a juízo da autoridade (caráter inquisitivo e discricionário).',
+        'Art. 17. A autoridade policial não poderá mandar arquivar autos de inquérito.',
+        'Art. 301. Qualquer do povo poderá e as autoridades policiais e seus agentes deverão prender quem quer que seja encontrado em flagrante delito.',
+        'Art. 302. Considera-se em flagrante delito quem: I - está cometendo a infração penal; II - acaba de cometê-la; III - é perseguido, logo após, pela autoridade, pelo ofendido ou por qualquer pessoa, em situação que faça presumir ser autor da infração; IV - é encontrado, logo depois, com instrumentos, armas, objetos ou papéis que façam presumir ser ele autor da infração.'
       ]
     },
+    // 5. DIREITO MILITAR
     {
-      id: 'law-extrav-abuso-tortura',
+      id: 'law-penal-militar-cpm-cppm',
+      discipline: 'Direito Militar',
+      title: 'Código Penal Militar (Decreto-Lei nº 1.001/69), CPPM (Decreto-Lei nº 1.002/69) e Estatuto PMPE (Lei Estadual nº 6.783/74)',
+      badge: 'PMPE / CBMPE Oficial',
+      wikisourceTitle: 'Código_Penal_Militar_do_Brasil_(1969)',
+      wikipediaTitle: 'Direito_penal_militar',
+      officialUrl: 'https://www.planalto.gov.br/ccivil_03/decreto-lei/del1001.htm',
+      sourceName: 'Planalto / Alepe Legis PE',
+      articles: [
+        'CPM, Art. 9º Consideram-se crimes militares, em tempo de paz: II - os crimes previstos neste Código e os previstos na legislação penal, quando praticados: a) por militar em situação de atividade ou assemelhado, contra militar na mesma situação ou assemelhado; b) por militar em situação de atividade, em lugar sujeito à administração militar, contra militar da reserva, ou reformado, ou contra civil; c) por militar em serviço ou atuando em razão da função.',
+        'CPM, Art. 149 (Motim): Reunirem-se militares ou assemelhados: I - agindo contra a ordem recebida de superior, ou negando-se a cumpri-la; II - recusando obediência a superior, quando estejam agindo sem ordem ou praticando violência; IV - ocupando quartel, fortaleza, aeródromo ou navio militar.',
+        'CPM, Art. 163 (Recusa de Obediência): Recusar obedecer a ordem do superior sobre assunto ou matéria de serviço, ou relativamente a dever imposto em lei, regulamento ou instrução: Pena - detenção, de um a dois anos, se o fato não constitui crime mais grave.',
+        'CPM, Art. 187 (Deserção): Ausentar-se o militar, sem licença, da unidade em que serve, ou do lugar em que deve permanecer, por mais de oito dias: Pena - detenção, de seis meses a dois anos; se oficial, a pena é agravada.',
+        'Lei Estadual PE nº 6.783/74 (Estatuto PMPE), Art. 2º A Polícia Militar de Pernambuco, subordinada operacionalmente à Secretaria de Defesa Social, é uma instituição permanente, força auxiliar e reserva do Exército, organizada com base na hierarquia e na disciplina.',
+        'Lei Estadual PE nº 6.783/74, Art. 12 e 13: A hierarquia policial-militar é a ordenação da autoridade em níveis diferentes (postos para Oficiais e graduações para Praças). A disciplina é a rigorosa observância e o acatamento integral das leis, regulamentos, normas e disposições.'
+      ]
+    },
+    // 6. LEGISLAÇÃO EXTRAVAGANTE
+    {
+      id: 'law-extrav-pacote-policial',
       discipline: 'Legislação Extravagante',
-      title: 'Lei Seca - Abuso de Autoridade (Lei nº 13.869/19) e Lei de Tortura (Lei nº 9.455/97)',
-      badge: 'Foco Policial',
+      title: 'Pacote Policial Completo: Abuso de Autoridade (Lei 13.869/19), Tortura (Lei 9.455/97), Maria da Penha (Lei 11.340/06), Desarmamento (Lei 10.826/03) e Drogas (Lei 11.343/06)',
+      badge: 'Base Externa Planalto',
+      wikisourceTitle: 'Lei_Federal_do_Brasil_11340_de_2006',
+      wikipediaTitle: 'Lei_Maria_da_Penha',
+      officialUrl: 'https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2019/lei/l13869.htm',
+      sourceName: 'Planalto / Wikisource Jurídico',
       articles: [
-        'Lei 13.869/19, Art. 1º, § 1º As condutas descritas nesta Lei constituem crime de abuso de autoridade quando praticadas pelo agente com a finalidade específica de prejudicar outrem ou beneficiar a si mesmo ou a terceiro, ou, ainda, por mero capricho ou satisfação pessoal.',
-        'Lei 13.869/19, Art. 1º, § 2º A divergência na interpretação de lei ou na avaliação de fatos e provas não configura abuso de autoridade (vedação ao crime de hermenêutica).',
-        'Lei 13.869/19, Art. 13 (Constrangimento a exibição do corpo/algemas/submissão a vexame) e Art. 22 (Invasão de domicílio clandestina ou cumprimento de mandado judicial de busca e apreensão domiciliar após as 21h ou antes das 5h).',
-        'Lei 9.455/97 (Tortura), Art. 1º Constitui crime de tortura (crime comum, salvo a tortura-castigo do inciso II que é crime próprio de quem detém guarda/poder/autoridade): I - constranger alguém com emprego de violência ou grave ameaça, causando-lhe sofrimento físico ou mental: a) com o fim de obter informação, declaração ou confissão; b) para provocar ação ou omissão de natureza criminosa; c) em razão de discriminação racial ou religiosa.',
-        'Lei 9.455/97, Art. 1º, § 2º (Tortura Omissiva / Imprópria): Aquele que se omite em face dessas condutas, quando tinha o dever de evitá-las ou apurá-las, incorre na pena de detenção de 1 a 4 anos (Única modalidade punida com detenção e cujo regime inicial não precisa ser o fechado!).'
+        'Lei nº 13.869/19 (Abuso de Autoridade), Art. 1º, § 1º As condutas descritas nesta Lei constituem crime de abuso de autoridade quando praticadas pelo agente com a finalidade específica de prejudicar outrem ou beneficiar a si mesmo ou a terceiro, ou, ainda, por mero capricho ou satisfação pessoal. § 2º A divergência na interpretação de lei ou na avaliação de fatos e provas não configura abuso de autoridade.',
+        'Lei nº 9.455/97 (Tortura), Art. 1º Constitui crime de tortura: I - constranger alguém com emprego de violência ou grave ameaça, causando-lhe sofrimento físico ou mental: a) com o fim de obter informação, declaração ou confissão da vítima ou de terceira pessoa; b) para provocar ação ou omissão de natureza criminosa; c) em razão de discriminação racial ou religiosa. § 2º Aquele que se omite em face dessas condutas, quando tinha o dever de evitá-las ou apurá-las, incorre na pena de detenção de 1 a 4 anos.',
+        'Lei nº 11.340/06 (Maria da Penha), Art. 5º Configura violência doméstica e familiar contra a mulher qualquer ação ou omissão baseada no gênero que lhe cause morte, lesão, sofrimento físico, sexual ou psicológico e dano moral ou patrimonial (Art. 7º: formas física, psicológica, sexual, patrimonial e moral). Art. 16: Nas ações penais públicas condicionadas à representação da ofendida, só será admitida a renúncia à representação perante o juiz, em audiência especialmente designada com tal finalidade, antes do recebimento da denúncia e ouvido o Ministério Público.',
+        'Lei nº 10.826/03 (Estatuto do Desarmamento), Arts. 12, 14 e 16: Posse irregular de arma de uso permitido (Art. 12 — detenção, no interior de residência ou dependência desta, ou no local de trabalho, desde que titular/responsável legal); Porte ilegal de arma de uso permitido (Art. 14 — reclusão, fora de casa/trabalho); Posse ou porte ilegal de arma de fogo de uso restrito ou proibido (Art. 16 — reclusão; equiparado a hediondo quando de uso proibido).',
+        'Lei nº 11.343/06 (Lei de Drogas), Art. 28 (Porte para consumo pessoal — penas: advertência, prestação de serviços à comunidade e medida educativa, sem pena privativa de liberdade!) e Art. 33 (Tráfico de Drogas — 18 verbos nucleares; § 4º Tráfico privilegiado: réu primário, bons antecedentes, não se dedique a atividades criminosas nem integre organização criminosa — redução de 1/6 a 2/3, afastando a hediondez conforme STF).'
       ]
     },
+    // 7. DIREITOS HUMANOS
     {
-      id: 'law-pe-estatuto-pmpe',
-      discipline: 'Legislação Institucional PE',
-      title: 'Lei Seca - Estatuto dos Policiais Militares de Pernambuco (Lei Estadual nº 6.783/74) e Código Disciplinar (Lei nº 11.817/00)',
-      badge: 'Exclusivo PE',
+      id: 'law-dh-dudh-pacto-mandela',
+      discipline: 'Direitos Humanos',
+      title: 'Declaração Universal dos Direitos Humanos (ONU, 1948), Pacto de São José da Costa Rica (Decreto 678/92) e Regras de Mandela',
+      badge: 'ONU / Planalto',
+      wikisourceTitle: 'Declaração_Universal_dos_Direitos_Humanos',
+      wikipediaTitle: 'Declaração_Universal_dos_Direitos_Humanos',
+      officialUrl: 'https://www.planalto.gov.br/ccivil_03/decreto/d0678.htm',
+      sourceName: 'ONU / Wikisource / Planalto',
       articles: [
-        'Lei 6.783/74, Art. 2º A Polícia Militar de Pernambuco, subordinada operacionalmente à Secretaria de Defesa Social, é uma instituição permanente, força auxiliar e reserva do Exército, organizada com base na hierarquia e na disciplina.',
-        'Lei 6.783/74, Art. 12. A hierarquia policial-militar é a ordenação da autoridade em níveis diferentes, dentro da estrutura da Polícia Militar. A ordenação se faz por postos (Oficiais) ou por graduações (Praças).',
-        'Lei 6.783/74, Art. 13. A disciplina é a rigorosa observância e o acatamento integral das leis, regulamentos, normas e disposições que fundamentam o organismo policial-militar e coordenam seu funcionamento regular e harmônico.'
+        'DUDH, Artigo 1º: Todos os seres humanos nascem livres e iguais em dignidade e em direitos. Dotados de razão e de consciência, devem agir uns para com os outros em espírito de fraternidade.',
+        'DUDH, Artigo 3º: Todo indivíduo tem direito à vida, à liberdade e à segurança pessoal. Artigo 5º: Ninguém será submetido a tortura nem a penas ou tratamentos cruéis, desumanos ou degradantes.',
+        'DUDH, Artigo 11: Todo ser humano acusado de um ato delituoso tem o direito de ser presumido inocente até que a sua culpabilidade tenha sido provada de acordo com a lei, em julgamento público no qual lhe tenham sido asseguradas todas as garantias necessárias à sua defesa.',
+        'DUDH, Artigo 14: 1. Toda pessoa, vítima de perseguição, tem o direito de procurar e de gozar asilo em outros países. 2. Este direito não pode ser invocado em caso de perseguição legitimamente motivada por crimes de direito comum ou por atos contrários aos objetivos e princípios das Nações Unidas.',
+        'Pacto de São José da Costa Rica (CADH), Art. 4º (Direito à Vida — protegido, em geral, desde a concepção; não se restabelecerá a pena de morte nos Estados que a hajam abolido) e Art. 7º, item 7 (Ninguém deve ser detido por dívidas, exceto os mandados de autoridade judiciária competente expedidos em virtude de inadimplemento de obrigação alimentar).'
+      ]
+    },
+    // 8. HISTÓRIA DE PERNAMBUCO
+    {
+      id: 'law-hist-pe-ciclos-revolucoes',
+      discipline: 'História de Pernambuco',
+      title: 'Textos-Base Completos: Capitania de Pernambuco, Invasões Holandesas (1630–1654), Guerra dos Mascates (1710), Revoluções de 1817, 1824 e Praieira (1848)',
+      badge: 'Base Externa Wikipedia/Fundaj',
+      wikisourceTitle: '',
+      wikipediaTitle: 'História_de_Pernambuco',
+      officialUrl: 'https://pt.wikipedia.org/wiki/Hist%C3%B3ria_de_Pernambuco',
+      sourceName: 'Wikipedia Acadêmica / Acervo Fundaj PE',
+      articles: [
+        '1. Capitania de Pernambuco (Nova Lusitânia, 1534): Doada a Duarte Coelho Pereira, prosperou graças ao solo de massapê na Zona da Mata, clima tropical úmido, proximidade com os portos europeus e implantação dos engenhos de açúcar com sede político-administrativa em Olinda.',
+        '2. Invasões Holandesas e Brasil Holandês (1630–1654): Motivadas pela União Ibérica (1580–1640) e pelo bloqueio espanhol ao comércio açucareiro flamengo, a WIC invadiu Olinda e Recife em 1630. O governo de Maurício de Nassau (1637–1644) urbanizou a Cidade Maurícia (Recife), concedeu empréstimos aos senhores de engenho e promoveu relativa tolerância religiosa. A cobrança das dívidas após a saída de Nassau desencadeou a Insurreição Pernambucana (1645–1654), culminando nas Batalhas dos Montes Guararapes (1648 e 1649).',
+        '3. Guerra dos Mascates (1710–1711): Conflito nativista entre a aristocracia açucareira de Olinda (endividada) e os comerciantes portugueses do Recife ("mascates") após a Carta Régia que elevou o Recife à condição de vila autônoma com pelourinho e Câmara Municipal própria.',
+        '4. Revolução Pernambucana de 1817 (Revolução dos Padres): Movimento republicano, separatista e antiabsolutista contra o arrocho fiscal da Corte de D. João VI no Rio de Janeiro. Foi o único movimento emancipacionista do período colonial/joanino a superar a fase conspiratória e governar Pernambuco por 74 dias através de um Governo Provisório e da Lei Orgânica de 1817.',
+        '5. Confederação do Equador (1824) e Revolução Praieira (1848–1850): Em 1824, Pernambuco liderou a reação republicana e federalista contra a dissolução da Constituinte e a Constituição Outorgada de D. Pedro I (Poder Moderador), tendo Frei Caneca como principal líder e mártir. Em 1848, a Revolução Praieira (Partido da Praia / Diário Novo) insurgiu-se contra o monopólio político da família Cavalcanti e o monopólio do comércio a retalho pelos portugueses, lançando o Manifesto ao Mundo redigido por Borges da Fonseca.'
+      ]
+    },
+    // 9. GEOGRAFIA DE PERNAMBUCO
+    {
+      id: 'law-geo-pe-mesorregioes-relevo',
+      discipline: 'Geografia de Pernambuco',
+      title: 'Textos-Base Completos: Mesorregiões de Pernambuco, Relevo (Borborema), Clima, Vegetação e Bacias Hidrográficas (IBGE / APAC)',
+      badge: 'Base Externa IBGE/Wikipedia',
+      wikisourceTitle: '',
+      wikipediaTitle: 'Geografia_de_Pernambuco',
+      officialUrl: 'https://cidades.ibge.gov.br/brasil/pe/panorama',
+      sourceName: 'IBGE Cidades / Wikipedia Acadêmica',
+      articles: [
+        '1. Divisão Mesorregional de Pernambuco (IBGE): O estado divide-se em 5 mesorregiões geográficas: Região Metropolitana do Recife (RMR), Zona da Mata (Mata Norte e Mata Sul), Agreste, Sertão Pernambucano e Sertão do São Francisco (onde se situa o polo de fruticultura irrigada de Petrolina). Além do território continental, integra Pernambuco o Arquipélago de Fernando de Noronha (distrito estadual).',
+        '2. Relevo e Clima: Da costa para o interior, sucedem-se a Planície Costeira (clima tropical úmido As, chuvas concentradas no outono-inverno, domínio da Mata Atlântica e manguezais), o Planalto da Borborema no Agreste (clima de transição, brejos de altitude úmidos na encosta oriental de barlavento e sotavento seco devido à barreira orográfica da Borborema) e a Depressão Sertaneja no Sertão (clima semiárido BSh, vegetação de Caatinga xerófila e rios intermitentes/temporários, exceto o Rio São Francisco que é perene).',
+        '3. Hidrografia: Destacam-se as bacias litorâneas (Capibaribe, Beberibe, Ipojuca, Una, Sirinhaém, Goiana) e as bacias sertanejas tributárias do Rio São Francisco (Pajeú, Moxotó, Brígida, Garças).'
+      ]
+    },
+    // 10. INFORMÁTICA
+    {
+      id: 'law-info-marco-civil-lgpd-seguranca',
+      discipline: 'Informática',
+      title: 'Legislação e Segurança Digital: Marco Civil da Internet (Lei 12.965/14), LGPD (Lei 13.709/18) e Cartilha de Segurança CERT.br',
+      badge: 'Base Externa Planalto/CERT.br',
+      wikisourceTitle: 'Lei_Federal_do_Brasil_12965_de_2014',
+      wikipediaTitle: 'Segurança_da_informação',
+      officialUrl: 'https://cartilha.cert.br/fasciculos/',
+      sourceName: 'CERT.br / Planalto / Wikipedia',
+      articles: [
+        '1. Pilares da Segurança da Informação (DICA / CID): Disponibilidade (acesso autorizado sempre que necessário), Integridade (dados não alterados indevidamente), Confidencialidade (acesso restrito a pessoas autorizadas) e Autenticidade (garantia da identidade da origem), somados ao Não-Repúdio (irretratabilidade).',
+        '2. Códigos Maliciosos (Malwares — CERT.br): Vírus (depende de execução de arquivo hospedeiro), Worm (propaga-se automaticamente pela rede explorando vulnerabilidades sem precisar de hospedeiro), Ransomware (sequestra dados via criptografia — Crypto — ou bloqueio de tela — Locker — exigindo resgate), Trojan/Cavalo de Troia (parece legítimo mas executa funções ocultas), Spyware (Keylogger captura teclas digitadas; Screenlogger captura a tela na posição do cursor).',
+        '3. Lei Geral de Proteção de Dados (Lei nº 13.709/2018 — LGPD): Art. 4º, III — A LGPD NÃO se aplica ao tratamento de dados pessoais realizado para fins exclusivos de segurança pública, defesa nacional, segurança do Estado ou atividades de investigação e repressão de infrações penais (que são regidos por legislação específica).'
       ]
     }
   ];
 
   function getFavLaws() {
-    try {
-      return JSON.parse(localStorage.getItem(LAWS_FAV_KEY) || '[]');
-    } catch (_e) {
-      return [];
-    }
+    try { return JSON.parse(localStorage.getItem(LAWS_FAV_KEY) || '[]'); } catch (_e) { return []; }
   }
-
   function setFavLaws(arr) {
-    try {
-      localStorage.setItem(LAWS_FAV_KEY, JSON.stringify(Array.isArray(arr) ? arr : []));
-    } catch (_e) {}
+    try { localStorage.setItem(LAWS_FAV_KEY, JSON.stringify(Array.isArray(arr) ? arr : [])); } catch (_e) {}
   }
-
   function getHighlightedArticles() {
-    try {
-      return JSON.parse(localStorage.getItem(LAWS_HIGHLIGHT_KEY) || '{}');
-    } catch (_e) {
-      return {};
-    }
+    try { return JSON.parse(localStorage.getItem(LAWS_HIGHLIGHT_KEY) || '{}'); } catch (_e) { return {}; }
   }
-
   function toggleHighlightArticle(key) {
     const map = getHighlightedArticles();
-    if (map[key]) delete map[key];
-    else map[key] = true;
-    try {
-      localStorage.setItem(LAWS_HIGHLIGHT_KEY, JSON.stringify(map));
-    } catch (_e) {}
+    if (map[key]) delete map[key]; else map[key] = true;
+    try { localStorage.setItem(LAWS_HIGHLIGHT_KEY, JSON.stringify(map)); } catch (_e) {}
     return Boolean(map[key]);
+  }
+  function getLawsFoldersOpenState() {
+    try { return JSON.parse(localStorage.getItem(LAWS_FOLDERS_OPEN_KEY) || '{}'); } catch (_e) { return {}; }
+  }
+  function setLawsFolderOpenState(discKey, isOpen) {
+    const map = getLawsFoldersOpenState();
+    map[discKey] = Boolean(isOpen);
+    try { localStorage.setItem(LAWS_FOLDERS_OPEN_KEY, JSON.stringify(map)); } catch (_e) {}
+  }
+  function getExternalFullTextCache() {
+    try { return JSON.parse(localStorage.getItem(LAWS_EXTERNAL_CACHE_KEY) || '{}'); } catch (_e) { return {}; }
+  }
+  function saveExternalFullTextCache(lawId, textData) {
+    const map = getExternalFullTextCache();
+    map[lawId] = textData;
+    try { localStorage.setItem(LAWS_EXTERNAL_CACHE_KEY, JSON.stringify(map)); } catch (_e) {}
+  }
+  function getCustomImportedLaws() {
+    try { return JSON.parse(localStorage.getItem(LAWS_CUSTOM_IMPORTED_KEY) || '[]'); } catch (_e) { return []; }
+  }
+  function saveCustomImportedLaw(lawObj) {
+    const list = getCustomImportedLaws().filter(x => x && x.id !== lawObj.id);
+    list.unshift(lawObj);
+    try { localStorage.setItem(LAWS_CUSTOM_IMPORTED_KEY, JSON.stringify(list.slice(0, 40))); } catch (_e) {}
+  }
+  function getAllLawsCombined() {
+    return [...getCustomImportedLaws(), ...NATIVE_SMART_LAWS];
+  }
+
+  // Motor de Busca e Extração de Texto Integral em Bases Externas Públicas (Wikisource Jurídico + Wikipedia + Câmara dos Deputados)
+  async function fetchExternalCompleteLawText(lawItem) {
+    if (!lawItem || typeof fetch !== 'function') return null;
+    const cached = getExternalFullTextCache()[lawItem.id];
+    if (cached && Array.isArray(cached.paragraphs) && cached.paragraphs.length > 0) {
+      return cached;
+    }
+
+    const endpoints = [];
+    if (lawItem.wikisourceTitle) {
+      endpoints.push({
+        source: 'Wikisource Jurídico (Texto Integral)',
+        url: `https://pt.wikisource.org/w/api.php?action=query&prop=extracts&explaintext=1&titles=${encodeURIComponent(lawItem.wikisourceTitle)}&format=json&origin=*`
+      });
+    }
+    if (lawItem.wikipediaTitle) {
+      endpoints.push({
+        source: 'Base Enciclopédica & Jurídica Externa',
+        url: `https://pt.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&titles=${encodeURIComponent(lawItem.wikipediaTitle)}&format=json&origin=*`
+      });
+    }
+
+    for (const ep of endpoints) {
+      try {
+        const res = await fetch(ep.url);
+        if (!res.ok) continue;
+        const data = await res.json();
+        const pages = data?.query?.pages || {};
+        const firstPage = Object.values(pages)[0];
+        const rawExtract = String(firstPage?.extract || '').trim();
+        if (rawExtract && rawExtract.length > 250) {
+          const paragraphs = rawExtract
+            .split(/\n+/)
+            .map(p => p.trim())
+            .filter(p => p.length >= 35 && !/^=+.*=+$/.test(p))
+            .slice(0, 180);
+          if (paragraphs.length > 0) {
+            const payload = {
+              source: ep.source,
+              fetchedAt: new Date().toLocaleDateString('pt-BR'),
+              paragraphs
+            };
+            saveExternalFullTextCache(lawItem.id, payload);
+            return payload;
+          }
+        }
+      } catch (_e) {}
+    }
+    return null;
+  }
+
+  // Busca livre em base externa para o usuário importar qualquer lei ou tema completo
+  async function searchAndImportExternalLawOrText(queryStr, targetDiscipline = 'Legislação Extravagante') {
+    const q = String(queryStr || '').trim();
+    if (!q || typeof fetch !== 'function') return null;
+
+    const searchTargets = [
+      { api: 'https://pt.wikisource.org/w/api.php', label: 'Wikisource Jurídico (Texto Integral)' },
+      { api: 'https://pt.wikipedia.org/w/api.php', label: 'Base Externa Oficial / Acadêmica' }
+    ];
+
+    for (const target of searchTargets) {
+      try {
+        const sUrl = `${target.api}?action=query&list=search&srsearch=${encodeURIComponent(q)}&utf8=1&format=json&origin=*`;
+        const sRes = await fetch(sUrl);
+        if (!sRes.ok) continue;
+        const sData = await sRes.json();
+        const hit = sData?.query?.search?.[0];
+        if (!hit || !hit.title) continue;
+
+        const eUrl = `${target.api}?action=query&prop=extracts&explaintext=1&titles=${encodeURIComponent(hit.title)}&format=json&origin=*`;
+        const eRes = await fetch(eUrl);
+        if (!eRes.ok) continue;
+        const eData = await eRes.json();
+        const page = Object.values(eData?.query?.pages || {})[0];
+        const extract = String(page?.extract || '').trim();
+        if (extract && extract.length > 200) {
+          const articles = extract
+            .split(/\n+/)
+            .map(line => line.trim())
+            .filter(line => line.length >= 35 && !/^=+.*=+$/.test(line))
+            .slice(0, 150);
+          if (articles.length > 0) {
+            const newLaw = {
+              id: 'ext-law-' + Date.now(),
+              discipline: targetDiscipline || 'Legislação Extravagante',
+              title: `${hit.title} (Importado da Base Externa Completa)`,
+              badge: 'Base Externa Integral',
+              wikisourceTitle: target.api.includes('wikisource') ? hit.title : '',
+              wikipediaTitle: target.api.includes('wikipedia') ? hit.title : '',
+              officialUrl: `https://www.google.com/search?q=${encodeURIComponent(hit.title + ' site:planalto.gov.br')}`,
+              sourceName: target.label,
+              articles
+            };
+            saveCustomImportedLaw(newLaw);
+            return newLaw;
+          }
+        }
+      } catch (_e) {}
+    }
+    return null;
   }
 
   function getAppStateSafe() {
-    try {
-      if (typeof state === 'object' && state) return state;
-    } catch (_e) {}
+    try { if (typeof state === 'object' && state) return state; } catch (_e) {}
     return (typeof window !== 'undefined' && window.state) ? window.state : {};
   }
 
-  function getAllQuestionsSafe() {
-    try {
-      if (typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS)) return ALL_QUESTIONS;
-    } catch (_e) {}
-    return (typeof window !== 'undefined' && Array.isArray(window.ALL_QUESTIONS)) ? window.ALL_QUESTIONS : [];
-  }
-
-  function injectR179Styles() {
+  function injectR180HunterStyles() {
     if (typeof document === 'undefined' || !document.head) return;
-    if (document.getElementById('jcCaveiraSuiteR179Styles')) return;
-    const style = document.createElement('style');
-    style.id = 'jcCaveiraSuiteR179Styles';
+    let style = document.getElementById('jcCaveiraSuiteR179Styles');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'jcCaveiraSuiteR179Styles';
+      document.head.appendChild(style);
+    }
     style.textContent = `
-      /* === 1. Efeito Real e Imediato do Modo Visual Limpo (body.jcCleanDashboard) === */
+      /* === 1. Sincronia e Alinhamento das 5 Abas de Estudo (.studyTabs) em Linha Única === */
+      #study .studyTabs,
+      #study .studyTabs.smartEnabled {
+        display: grid !important;
+        grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+        gap: 6px !important;
+        align-items: center !important;
+      }
+      @media (max-width: 640px) {
+        #study .studyTabs,
+        #study .studyTabs.smartEnabled {
+          display: flex !important;
+          overflow-x: auto !important;
+          scrollbar-width: none;
+        }
+        #study .studyTabs .studyTab {
+          flex: 1 0 auto !important;
+          padding: 9px 10px !important;
+          font-size: 0.75rem !important;
+          white-space: nowrap !important;
+        }
+      }
+      /* Nunca exibir Manuais do Caçador na barra de Resumos */
+      #openManuaisCacadorBtn {
+        display: none !important;
+      }
+
+      /* === 2. Efeito Real e Imediato do Modo Visual Limpo (body.jcCleanDashboard) === */
       body.jcCleanDashboard .slBannerCard,
       body.jcCleanDashboard #slTrailHeroBanner,
       body.jcCleanDashboard #slBossesRaidBanner,
@@ -2689,7 +2942,7 @@
         padding: 14px 16px !important;
       }
 
-      /* === 2. Layout Caveira para Redação, Flashcards, Painel Tático, Leis e Questões === */
+      /* === 3. Paleta Oficial Jornada do Caçador (Azul-Abissal #0a1626 + Ciano Elétrico #38bdf8 / #65e7ff) === */
       .jcCaveiraTopCards {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2702,26 +2955,28 @@
         }
       }
       .jcCaveiraActionCard {
-        background: #181b21;
-        border: 1px solid rgba(148, 163, 184, 0.14);
-        border-radius: 10px;
+        background: linear-gradient(155deg, rgba(11, 24, 41, 0.95), rgba(7, 15, 27, 0.98));
+        border: 1px solid rgba(56, 189, 248, 0.24);
+        border-radius: 14px;
         padding: 18px 20px;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
         gap: 12px;
-        transition: border-color 0.18s ease, transform 0.18s ease;
+        box-shadow: 0 10px 26px rgba(2, 8, 20, 0.35);
+        transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
       }
       .jcCaveiraActionCard:hover {
-        border-color: rgba(56, 189, 248, 0.45);
+        border-color: rgba(101, 231, 255, 0.55);
+        box-shadow: 0 12px 28px rgba(14, 165, 233, 0.18);
         transform: translateY(-1px);
       }
       .jcCaveiraActionTitle {
-        font-size: 0.96rem;
+        font-size: 0.95rem;
         font-weight: 800;
         letter-spacing: 0.03em;
         text-transform: uppercase;
-        color: #f8fafc;
+        color: #f0f9ff;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -2730,46 +2985,50 @@
         font-size: 0.75rem;
         text-transform: uppercase;
         letter-spacing: 0.02em;
-        color: #94a3b8;
-        line-height: 1.4;
+        color: #93c5fd;
+        opacity: 0.85;
+        line-height: 1.42;
       }
-      .jcCaveiraActionBtn {
+      .jcCaveiraActionBtn,
+      .jcCaveiraActionBtn.olive {
         align-self: flex-start;
-        min-width: 140px;
+        min-width: 142px;
         padding: 9px 18px;
-        border-radius: 6px;
+        border-radius: 10px;
         font-size: 0.78rem;
         font-weight: 800;
         letter-spacing: 0.04em;
         text-transform: uppercase;
-        border: 1px solid rgba(56, 189, 248, 0.35);
-        background: linear-gradient(135deg, #38bdf8, #0284c7);
-        color: #090d16;
+        border: 1px solid rgba(101, 231, 255, 0.5);
+        background: linear-gradient(135deg, #65e7ff, #34aee9);
+        color: #06131f;
+        box-shadow: 0 6px 18px rgba(52, 174, 233, 0.24);
         cursor: pointer;
         text-align: center;
+        transition: filter 0.15s ease, transform 0.15s ease;
       }
-      .jcCaveiraActionBtn.olive {
-        background: #a3b899;
-        border-color: #b5c9ab;
-        color: #111814;
+      .jcCaveiraActionBtn:hover {
+        filter: brightness(1.08);
+        transform: translateY(-1px);
       }
       .jcCaveiraSectionTitle {
         font-size: 0.98rem;
         font-weight: 800;
         text-transform: uppercase;
         letter-spacing: 0.04em;
-        color: #f8fafc;
+        color: #e0f2fe;
         margin: 18px 0 12px;
         display: flex;
         align-items: center;
         gap: 8px;
       }
       .jcCaveiraOverviewBox {
-        background: #181b21;
-        border: 1px solid rgba(148, 163, 184, 0.14);
-        border-radius: 10px;
+        background: linear-gradient(155deg, rgba(10, 22, 38, 0.95), rgba(6, 14, 25, 0.98));
+        border: 1px solid rgba(56, 189, 248, 0.22);
+        border-radius: 14px;
         padding: 20px;
         margin-bottom: 18px;
+        box-shadow: 0 10px 26px rgba(2, 8, 20, 0.32);
       }
       .jcCaveiraOverviewGrid {
         display: grid;
@@ -2784,14 +3043,15 @@
       }
       .jcCaveiraBigNumber {
         font-size: 3.1rem;
-        font-weight: 800;
+        font-weight: 900;
         line-height: 1;
-        color: #f8fafc;
+        color: #65e7ff;
         margin: 10px 0 16px;
         font-variant-numeric: tabular-nums;
+        text-shadow: 0 0 18px rgba(101, 231, 255, 0.25);
       }
       .jcCaveiraStatBox {
-        border-radius: 8px;
+        border-radius: 12px;
         padding: 18px;
         display: flex;
         flex-direction: column;
@@ -2799,12 +3059,14 @@
         min-height: 132px;
       }
       .jcCaveiraStatBox.green {
-        background: rgba(16, 185, 129, 0.11);
-        border: 1px solid rgba(16, 185, 129, 0.25);
+        background: linear-gradient(145deg, rgba(6, 78, 59, 0.42), rgba(4, 47, 46, 0.65));
+        border: 1px solid rgba(52, 211, 153, 0.38);
+        color: #ecfdf5;
       }
       .jcCaveiraStatBox.blue {
-        background: rgba(56, 189, 248, 0.11);
-        border: 1px solid rgba(56, 189, 248, 0.25);
+        background: linear-gradient(145deg, rgba(12, 74, 110, 0.48), rgba(7, 38, 64, 0.72));
+        border: 1px solid rgba(56, 189, 248, 0.42);
+        color: #f0f9ff;
       }
       .jcCaveiraTwoCols {
         display: grid;
@@ -2818,40 +3080,44 @@
         }
       }
 
-      /* === 3. Painel Tático (Estilo Caveira image_38d38c.png) === */
+      /* === 4. Painel Tático na Identidade Jornada do Caçador === */
       .jcTacticalWrap {
-        background: #14171d;
-        border: 1px solid rgba(148, 163, 184, 0.16);
-        border-radius: 14px;
+        background: linear-gradient(160deg, rgba(9, 20, 36, 0.96), rgba(6, 13, 24, 0.99));
+        border: 1px solid rgba(56, 189, 248, 0.26);
+        border-radius: 16px;
         padding: 20px;
         margin-top: 18px;
+        box-shadow: 0 12px 30px rgba(2, 8, 20, 0.4);
       }
       .jcTacticalSegment {
         display: inline-flex;
-        border: 1px solid rgba(148, 163, 184, 0.25);
-        border-radius: 6px;
+        border: 1px solid rgba(56, 189, 248, 0.28);
+        border-radius: 10px;
         overflow: hidden;
-        background: #0f1217;
+        background: #071220;
+        padding: 3px;
+        gap: 4px;
       }
       .jcTacticalSegBtn {
         background: transparent;
         border: 0;
-        color: #cbd5e1;
-        padding: 8px 18px;
-        font-size: 0.82rem;
-        font-weight: 700;
+        border-radius: 7px;
+        color: #94a3b8;
+        padding: 7px 16px;
+        font-size: 0.81rem;
+        font-weight: 800;
         cursor: pointer;
       }
       .jcTacticalSegBtn.active {
-        background: #334155;
-        color: #ffffff;
+        background: linear-gradient(135deg, #65e7ff, #34aee9);
+        color: #06131f;
       }
       .jcTacticalPeriodBar {
         display: flex;
         flex-wrap: wrap;
         justify-content: center;
         gap: 6px;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+        border-bottom: 1px solid rgba(56, 189, 248, 0.18);
         margin: 16px 0 18px;
         padding-bottom: 2px;
       }
@@ -2868,11 +3134,11 @@
         cursor: pointer;
       }
       .jcTacticalPeriodBtn.active {
-        color: #ffffff;
-        border-bottom-color: #f8fafc;
+        color: #65e7ff;
+        border-bottom-color: #65e7ff;
       }
 
-      /* === 4. Funil de 3 Chevrons dos Flashcards (image_38d0c5.png) === */
+      /* === 5. Funil de 3 Chevrons dos Flashcards na Paleta Ciano/Azul === */
       .jcChevronStageWrap {
         display: flex;
         align-items: center;
@@ -2881,25 +3147,25 @@
         padding: 8px 0;
       }
       .jcChevronColumn {
-        width: 58px;
-        height: 170px;
+        width: 62px;
+        height: 172px;
         border-radius: 8px;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: space-between;
         padding: 12px 4px;
-        font-size: 0.66rem;
+        font-size: 0.68rem;
         font-weight: 800;
         letter-spacing: 0.04em;
         text-transform: uppercase;
-        color: #e2e8f0;
+        color: #f0f9ff;
         position: relative;
         clip-path: polygon(0% 0%, 82% 0%, 100% 50%, 82% 100%, 0% 100%, 18% 50%);
       }
-      .jcChevronColumn.stage1 { background: #2d333b; }
-      .jcChevronColumn.stage2 { background: #465248; }
-      .jcChevronColumn.stage3 { background: #6b7d69; }
+      .jcChevronColumn.stage1 { background: linear-gradient(180deg, #1e293b, #0f172a); border: 1px solid rgba(148,163,184,0.3); }
+      .jcChevronColumn.stage2 { background: linear-gradient(180deg, #0369a1, #0c4a6e); }
+      .jcChevronColumn.stage3 { background: linear-gradient(180deg, #0ea5e9, #0284c7); color: #04101c; }
       .jcChevronVertLabel {
         writing-mode: vertical-rl;
         text-orientation: mixed;
@@ -2908,55 +3174,41 @@
         letter-spacing: 0.06em;
       }
 
-      /* === 5. Central de Leis & Textos (Lei Seca image_38d36d.png) === */
-      .jcLawsAccordionGroup {
-        margin-bottom: 14px;
-      }
-      .jcLawsGroupHeader {
-        width: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        background: transparent;
-        border: 0;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.16);
-        padding: 10px 4px;
-        color: #f8fafc;
-        font-size: 0.98rem;
-        font-weight: 800;
-        cursor: pointer;
-        text-align: left;
-      }
+      /* === 6. Central de Leis & Textos com Pastas Retráteis Idênticas a Resumos (.libraryFolder) === */
       .jcLawRowItem {
-        background: #181b21;
-        border: 1px solid rgba(148, 163, 184, 0.13);
-        border-radius: 8px;
+        background: rgba(11, 25, 43, 0.9);
+        border: 1px solid rgba(56, 189, 248, 0.22);
+        border-radius: 12px;
         padding: 13px 16px;
         margin-top: 8px;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
+        transition: border-color 0.16s ease;
+      }
+      .jcLawRowItem:hover {
+        border-color: rgba(101, 231, 255, 0.55);
       }
       .jcLawStartBtn {
-        background: transparent;
-        border: 1px solid rgba(163, 184, 153, 0.45);
-        color: #a3b899;
-        padding: 6px 12px;
-        border-radius: 6px;
-        font-size: 0.74rem;
+        background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(2, 132, 199, 0.28));
+        border: 1px solid rgba(101, 231, 255, 0.45);
+        color: #65e7ff;
+        padding: 7px 14px;
+        border-radius: 9px;
+        font-size: 0.75rem;
         font-weight: 800;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.04em;
         text-transform: uppercase;
         cursor: pointer;
         white-space: nowrap;
       }
       .jcLawStartBtn:hover {
-        background: #a3b899;
-        color: #0f1411;
+        background: linear-gradient(135deg, #65e7ff, #34aee9);
+        color: #06131f;
       }
 
-      /* === 6. Pílulas Rápidas de Questões e Rodapé Caveira da Questão (image_38d04a.png / image_38d08b.png) === */
+      /* === 7. Pílulas Rápidas de Questões e Rodapé da Questão na Paleta Oficial === */
       .jcQuestionStatusPills {
         display: flex;
         flex-wrap: wrap;
@@ -2964,19 +3216,19 @@
         margin: 10px 0 14px;
       }
       .jcQStatusPill {
-        background: #181b21;
-        border: 1px solid rgba(148, 163, 184, 0.25);
+        background: rgba(10, 23, 39, 0.9);
+        border: 1px solid rgba(56, 189, 248, 0.26);
         color: #cbd5e1;
         padding: 6px 14px;
         border-radius: 999px;
         font-size: 0.78rem;
-        font-weight: 700;
+        font-weight: 800;
         cursor: pointer;
       }
       .jcQStatusPill.active {
-        background: #475569;
-        border-color: #94a3b8;
-        color: #ffffff;
+        background: linear-gradient(135deg, #65e7ff, #34aee9);
+        border-color: #65e7ff;
+        color: #06131f;
       }
       .jcQuestionCaveiraFooter {
         display: flex;
@@ -2985,30 +3237,30 @@
         gap: 8px;
         margin-top: 14px;
         padding-top: 12px;
-        border-top: 1px solid rgba(148, 163, 184, 0.16);
+        border-top: 1px solid rgba(56, 189, 248, 0.2);
       }
       .jcQCaveiraToolBtn {
-        background: transparent;
-        border: 1px solid transparent;
-        color: #94a3b8;
+        background: rgba(12, 26, 44, 0.75);
+        border: 1px solid rgba(56, 189, 248, 0.22);
+        color: #bae6fd;
         font-size: 0.74rem;
         font-weight: 800;
         letter-spacing: 0.04em;
         text-transform: uppercase;
-        padding: 6px 10px;
-        border-radius: 6px;
+        padding: 6px 11px;
+        border-radius: 8px;
         cursor: pointer;
         display: inline-flex;
         align-items: center;
         gap: 6px;
       }
       .jcQCaveiraToolBtn:hover {
-        background: rgba(56, 189, 248, 0.1);
-        border-color: rgba(56, 189, 248, 0.3);
-        color: #f8fafc;
+        background: rgba(56, 189, 248, 0.18);
+        border-color: #65e7ff;
+        color: #ffffff;
       }
 
-      /* === 7. Suporte Total ao Tema Claro (body.lightAppTheme) para Todos os Componentes r179 === */
+      /* === 8. Suporte Completo ao Tema Claro (body.lightAppTheme) === */
       body.lightAppTheme .jcCaveiraActionCard,
       body.lightAppTheme .jcCaveiraOverviewBox,
       body.lightAppTheme .jcTacticalWrap,
@@ -3020,13 +3272,18 @@
       }
       body.lightAppTheme .jcCaveiraActionTitle,
       body.lightAppTheme .jcCaveiraSectionTitle,
-      body.lightAppTheme .jcCaveiraBigNumber,
-      body.lightAppTheme .jcLawsGroupHeader {
-        color: #090d16 !important;
+      body.lightAppTheme .jcCaveiraBigNumber {
+        color: #0369a1 !important;
+        text-shadow: none !important;
       }
       body.lightAppTheme .jcCaveiraActionSub {
-        color: #334155 !important;
+        color: #1e293b !important;
         font-weight: 600 !important;
+      }
+      body.lightAppTheme .jcCaveiraActionBtn {
+        background: #0284c7 !important;
+        border-color: #0369a1 !important;
+        color: #ffffff !important;
       }
       body.lightAppTheme .jcCaveiraStatBox.green {
         background: #ecfdf5 !important;
@@ -3067,17 +3324,16 @@
         color: #ffffff !important;
       }
       body.lightAppTheme .jcLawStartBtn {
-        background: #ecfdf5 !important;
-        border: 1.5px solid #059669 !important;
-        color: #065f46 !important;
+        background: #e0f2fe !important;
+        border: 1.5px solid #0284c7 !important;
+        color: #0369a1 !important;
       }
       body.lightAppTheme .jcQCaveiraToolBtn {
-        color: #1e293b !important;
-        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+        border: 1px solid #94a3b8 !important;
         background: #f8fafc !important;
       }
     `;
-    document.head.appendChild(style);
   }
 
   // 1) Renovação Automática de Vidas da Trilha a cada 20 min + Cronômetro ao Vivo no Selo
@@ -3104,7 +3360,7 @@
     }
   }
 
-  // 2) Hub de Redação Policial Estilo Caveira (image_38d3af.png)
+  // 2) Hub de Redação Policial na Paleta Oficial da Jornada do Caçador
   function mountCaveiraEssayHub() {
     if (typeof document === 'undefined') return;
     const essaySec = document.getElementById('essay');
@@ -3132,7 +3388,6 @@
       }
     }
 
-    // Build SVG chart points for last 10 essays
     const last10 = scores.slice(-10);
     const pts = last10.map((val, idx) => {
       const x = 40 + idx * 36;
@@ -3143,14 +3398,14 @@
     const circlesHtml = last10.map((val, idx) => {
       const x = 40 + idx * 36;
       const y = 140 - Math.round((Math.min(100, Math.max(0, val)) / 100) * 110);
-      return `<circle cx="${x}" cy="${y}" r="4.5" fill="#38bdf8" stroke="#0f172a" stroke-width="1.5"><title>Envio ${idx + 1}: ${val}%</title></circle>`;
+      return `<circle cx="${x}" cy="${y}" r="4.5" fill="#65e7ff" stroke="#06131f" stroke-width="1.5"><title>Envio ${idx + 1}: ${val}%</title></circle>`;
     }).join('');
 
     const recentRows = essays.slice(-4).reverse().map((e, i) => {
       const sc = Number(e.score || 0);
       const pct = sc <= 10 && sc > 0 ? Math.round(sc * 10) : Math.round(sc);
       return `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:8px;background:rgba(148,163,184,0.08);margin-bottom:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:10px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.18);margin-bottom:8px;">
           <div>
             <b style="font-size:.84rem;display:block;">${String(e.title || e.theme || 'Redação #' + (essays.length - i)).slice(0, 48)}</b>
             <span style="font-size:.73rem;color:#94a3b8;">${e.board || 'Padrão Policial'} · ${e.date || 'Registrada'}</span>
@@ -3167,21 +3422,21 @@
             <div class="jcCaveiraActionTitle">✍️ ENVIAR REDAÇÃO</div>
             <div class="jcCaveiraActionSub">ESCOLHA O FORMATO (DIGITADA OU FOTO/PDF) E ENVIE PARA CORREÇÃO</div>
           </div>
-          <button type="button" class="jcCaveiraActionBtn olive" id="jcEssayFocusFormBtn">ACESSAR</button>
+          <button type="button" class="jcCaveiraActionBtn" id="jcEssayFocusFormBtn">ACESSAR</button>
         </div>
         <div class="jcCaveiraActionCard">
           <div>
             <div class="jcCaveiraActionTitle">📋 ACOMPANHAR</div>
             <div class="jcCaveiraActionSub">VEJA STATUS, NOTA POR CRITÉRIO E FEEDBACK DOS SEUS ENVIOS</div>
           </div>
-          <button type="button" class="jcCaveiraActionBtn olive" id="jcEssayFocusHistoryBtn">ACESSAR</button>
+          <button type="button" class="jcCaveiraActionBtn" id="jcEssayFocusHistoryBtn">ACESSAR</button>
         </div>
         <div class="jcCaveiraActionCard">
           <div>
             <div class="jcCaveiraActionTitle">🧙‍♂️ TEMAS DO INVOCADOR</div>
             <div class="jcCaveiraActionSub">SORTEIE TEMA POLICIAL COM TEXTOS MOTIVADORES I E II NA HORA</div>
           </div>
-          <button type="button" class="jcCaveiraActionBtn olive" id="jcEssayTriggerThemeBtn">SORTEAR TEMA</button>
+          <button type="button" class="jcCaveiraActionBtn" id="jcEssayTriggerThemeBtn">SORTEAR TEMA</button>
         </div>
       </div>
 
@@ -3193,9 +3448,9 @@
             <div style="font-size:.72rem;color:#94a3b8;text-transform:uppercase;">TOTAL DE REDAÇÕES ENVIADAS</div>
             <div class="jcCaveiraBigNumber">${totalSent}</div>
             <div style="display:grid;gap:5px;font-size:.76rem;font-weight:700;">
-              <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#3b82f6;margin-right:6px;"></span>${totalSent} ENVIADAS</div>
+              <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#38bdf8;margin-right:6px;"></span>${totalSent} ENVIADAS</div>
               <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#eab308;margin-right:6px;"></span>0 EM CORREÇÃO</div>
-              <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#22c55e;margin-right:6px;"></span>${graded.length} CORRIGIDAS</div>
+              <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#10b981;margin-right:6px;"></span>${graded.length} CORRIGIDAS</div>
             </div>
           </div>
           <div class="jcCaveiraStatBox green">
@@ -3214,13 +3469,13 @@
         <div class="jcCaveiraOverviewBox" style="margin-bottom:0;">
           <div style="font-size:.9rem;font-weight:800;text-transform:uppercase;margin-bottom:10px;">ÚLTIMOS ENVIOS (EVOLUÇÃO 0–100%)</div>
           <svg viewBox="0 0 400 165" style="width:100%;height:160px;overflow:visible;">
-            <line x1="32" y1="30" x2="385" y2="30" stroke="rgba(148,163,184,0.14)" stroke-dasharray="3,3"/>
-            <line x1="32" y1="85" x2="385" y2="85" stroke="rgba(148,163,184,0.14)" stroke-dasharray="3,3"/>
-            <line x1="32" y1="140" x2="385" y2="140" stroke="rgba(148,163,184,0.35)"/>
+            <line x1="32" y1="30" x2="385" y2="30" stroke="rgba(56,189,248,0.16)" stroke-dasharray="3,3"/>
+            <line x1="32" y1="85" x2="385" y2="85" stroke="rgba(56,189,248,0.16)" stroke-dasharray="3,3"/>
+            <line x1="32" y1="140" x2="385" y2="140" stroke="rgba(56,189,248,0.35)"/>
             <text x="6" y="34" fill="#94a3b8" font-size="10">100</text>
             <text x="12" y="88" fill="#94a3b8" font-size="10">50</text>
             <text x="18" y="143" fill="#94a3b8" font-size="10">0</text>
-            ${pts ? `<polyline fill="none" stroke="#38bdf8" stroke-width="2.5" points="${pts}"/>` : ''}
+            ${pts ? `<polyline fill="none" stroke="#65e7ff" stroke-width="2.5" points="${pts}"/>` : ''}
             ${circlesHtml}
           </svg>
         </div>
@@ -3264,9 +3519,9 @@
     }
   }
 
-  // 3) Painel Tático Interativo no Perfil Social (image_38d38c.png)
-  let tacticalTabMode = 'questions'; // 'questions' | 'flashcards' | 'edital'
-  let tacticalPeriodDays = 30; // 1 | 7 | 15 | 30 | 90 | 180 | 365 | 9999
+  // 3) Painel Tático Interativo no Perfil Social
+  let tacticalTabMode = 'questions';
+  let tacticalPeriodDays = 30;
 
   function mountPainelTaticoInProfile() {
     if (typeof document === 'undefined') return;
@@ -3285,11 +3540,11 @@
     const scores = Array.isArray(st.scores) ? st.scores : [];
     const masteryBag = (st.topicMastery && typeof st.topicMastery === 'object') ? st.topicMastery : {};
 
-    // Aggregate discipline stats
     const byDisc = new Map();
     Object.values(masteryBag).forEach((entry) => {
       if (!entry || typeof entry !== 'object') return;
       const dName = String(entry.subject || entry.subjectKey || 'Geral').trim() || 'Geral';
+      if (/manuais do ca[cç]ador/i.test(dName)) return;
       const cur = byDisc.get(dName) || { total: 0, correct: 0, wrong: 0 };
       const att = Number(entry.attempts || 0);
       const cor = Number(entry.correct || 0);
@@ -3302,6 +3557,7 @@
     if (byDisc.size === 0 && scores.length > 0) {
       scores.forEach((sc) => {
         const dName = String(sc.subject || 'Treino Geral');
+        if (/manuais do ca[cç]ador/i.test(dName)) return;
         const cur = byDisc.get(dName) || { total: 0, correct: 0, wrong: 0 };
         const tot = Number(sc.total || 0);
         const cor = Number(sc.correct || 0);
@@ -3312,28 +3568,20 @@
       });
     }
 
-    let totalRight = 0;
-    let totalWrong = 0;
-    byDisc.forEach((v) => {
-      totalRight += v.correct;
-      totalWrong += v.wrong;
-    });
+    let totalRight = 0, totalWrong = 0;
+    byDisc.forEach((v) => { totalRight += v.correct; totalWrong += v.wrong; });
     const grandTotal = totalRight + totalWrong;
     const accPct = grandTotal > 0 ? Math.round((totalRight / grandTotal) * 100) : 0;
 
-    // Build 10 timeline points for ACERTEI x ERREI SVG
     const pointCount = 10;
-    const hitPoints = [];
-    const missPoints = [];
+    const hitPoints = [], missPoints = [];
     for (let i = 0; i < pointCount; i++) {
       const x = 38 + i * 35;
       const sliceSc = scores[scores.length - pointCount + i];
       const rVal = sliceSc ? Number(sliceSc.correct || 0) : (i === pointCount - 1 && totalRight > 0 ? Math.min(20, totalRight) : 0);
       const wVal = sliceSc ? Math.max(0, Number(sliceSc.total || 0) - Number(sliceSc.correct || 0)) : (i === pointCount - 1 && totalWrong > 0 ? Math.min(20, totalWrong) : 0);
-      const yR = 135 - Math.min(105, rVal * 5);
-      const yW = 135 - Math.min(105, wVal * 5);
-      hitPoints.push({ x, y: yR, v: rVal });
-      missPoints.push({ x, y: yW, v: wVal });
+      hitPoints.push({ x, y: 135 - Math.min(105, rVal * 5), v: rVal });
+      missPoints.push({ x, y: 135 - Math.min(105, wVal * 5), v: wVal });
     }
 
     const hitLine = hitPoints.map(p => `${p.x},${p.y}`).join(' ');
@@ -3344,16 +3592,16 @@
       .slice(0, 12)
       .map(([disc, d]) => {
         const pct = d.total > 0 ? Math.round((d.correct / d.total) * 100) : 0;
-        const barColor = pct >= 70 ? '#10b981' : (pct >= 50 ? '#f59e0b' : '#ef4444');
+        const barColor = pct >= 70 ? '#10b981' : (pct >= 50 ? '#38bdf8' : '#f43f5e');
         return `
-          <div style="display:grid;grid-template-columns:2fr 0.7fr 1.1fr 1fr;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(148,163,184,0.12);font-size:.82rem;">
+          <div style="display:grid;grid-template-columns:2fr 0.7fr 1.1fr 1fr;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(56,189,248,0.14);font-size:.82rem;">
             <div style="font-weight:700;">${disc}</div>
             <div style="font-variant-numeric:tabular-nums;">${d.total}</div>
             <div style="font-variant-numeric:tabular-nums;">
-              <span style="color:#38bdf8;font-weight:700;">${d.correct}</span> / <span style="color:#f43f5e;font-weight:700;">${d.wrong}</span>
+              <span style="color:#65e7ff;font-weight:700;">${d.correct}</span> / <span style="color:#f43f5e;font-weight:700;">${d.wrong}</span>
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
-              <div style="flex:1;height:7px;background:rgba(148,163,184,0.2);border-radius:999px;overflow:hidden;">
+              <div style="flex:1;height:7px;background:rgba(56,189,248,0.16);border-radius:999px;overflow:hidden;">
                 <div style="width:${pct}%;height:100%;background:${barColor};"></div>
               </div>
               <b style="font-size:.76rem;min-width:34px;text-align:right;">${pct}%</b>
@@ -3376,13 +3624,13 @@
     sec.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
         <div>
-          <div class="eyebrow" style="color:#38bdf8;">TELEMETRIA DE COMBATE · PADRÃO CAVEIRA</div>
+          <div class="eyebrow" style="color:#65e7ff;">TELEMETRIA DE COMBATE · JORNADA DO CAÇADOR</div>
           <h3 style="margin:2px 0 0;font-size:1.15rem;text-transform:uppercase;letter-spacing:.04em;">📊 PAINEL TÁTICO</h3>
         </div>
         <div class="jcTacticalSegment">
           <button type="button" class="jcTacticalSegBtn ${tacticalTabMode === 'questions' ? 'active' : ''}" data-tact-mode="questions">Questões</button>
           <button type="button" class="jcTacticalSegBtn ${tacticalTabMode === 'flashcards' ? 'active' : ''}" data-tact-mode="flashcards">Flashcards</button>
-          <button type="button" class="jcTacticalSegBtn ${tacticalTabMode === 'edital' ? 'active' : ''}" data-tact-mode="edital">Turmas & Edital</button>
+          <button type="button" class="jcTacticalSegBtn ${tacticalTabMode === 'edital' ? 'active' : ''}" data-tact-mode="edital">Turmas &amp; Edital</button>
         </div>
       </div>
 
@@ -3394,16 +3642,16 @@
         <div class="jcCaveiraOverviewBox" style="margin-bottom:0;">
           <div style="font-size:.86rem;font-weight:800;text-transform:uppercase;margin-bottom:10px;">ACERTEI x ERREI</div>
           <svg viewBox="0 0 390 165" style="width:100%;height:160px;overflow:visible;">
-            <line x1="30" y1="30" x2="370" y2="30" stroke="rgba(148,163,184,0.14)" stroke-dasharray="3,3"/>
-            <line x1="30" y1="82" x2="370" y2="82" stroke="rgba(148,163,184,0.14)" stroke-dasharray="3,3"/>
-            <line x1="30" y1="135" x2="370" y2="135" stroke="rgba(148,163,184,0.35)"/>
-            <polyline fill="none" stroke="#38bdf8" stroke-width="2.2" points="${hitLine}"/>
+            <line x1="30" y1="30" x2="370" y2="30" stroke="rgba(56,189,248,0.16)" stroke-dasharray="3,3"/>
+            <line x1="30" y1="82" x2="370" y2="82" stroke="rgba(56,189,248,0.16)" stroke-dasharray="3,3"/>
+            <line x1="30" y1="135" x2="370" y2="135" stroke="rgba(56,189,248,0.35)"/>
+            <polyline fill="none" stroke="#65e7ff" stroke-width="2.2" points="${hitLine}"/>
             <polyline fill="none" stroke="#f43f5e" stroke-width="2.2" points="${missLine}"/>
-            ${hitPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="#38bdf8"/>`).join('')}
+            ${hitPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="#65e7ff"/>`).join('')}
             ${missPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="#f43f5e"/>`).join('')}
           </svg>
           <div style="display:flex;justify-content:center;gap:18px;font-size:.76rem;font-weight:700;margin-top:6px;">
-            <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#38bdf8;margin-right:5px;"></span>Acertei (${totalRight})</span>
+            <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#65e7ff;margin-right:5px;"></span>Acertei (${totalRight})</span>
             <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#f43f5e;margin-right:5px;"></span>Errei (${totalWrong})</span>
           </div>
         </div>
@@ -3412,23 +3660,23 @@
           <div style="font-size:.86rem;font-weight:800;text-transform:uppercase;margin-bottom:10px;">TOTAL DO PERÍODO</div>
           <div style="display:flex;align-items:center;justify-content:space-around;gap:16px;padding:12px 0;">
             <div style="text-align:center;">
-              <div style="font-size:2.4rem;font-weight:900;font-variant-numeric:tabular-nums;">${grandTotal}</div>
+              <div style="font-size:2.4rem;font-weight:900;color:#65e7ff;font-variant-numeric:tabular-nums;">${grandTotal}</div>
               <div style="font-size:.73rem;color:#94a3b8;text-transform:uppercase;">Resolvidas · ${accPct}% Acerto</div>
             </div>
             <div style="display:grid;gap:8px;font-size:.82rem;font-weight:700;">
-              <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#38bdf8;margin-right:6px;"></span>Acertei: <b>${totalRight}</b></div>
+              <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#65e7ff;margin-right:6px;"></span>Acertei: <b>${totalRight}</b></div>
               <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f43f5e;margin-right:6px;"></span>Errei: <b>${totalWrong}</b></div>
             </div>
           </div>
           <div style="height:10px;border-radius:999px;background:rgba(244,63,94,0.28);overflow:hidden;">
-            <div style="width:${accPct}%;height:100%;background:#38bdf8;"></div>
+            <div style="width:${accPct}%;height:100%;background:linear-gradient(90deg,#38bdf8,#65e7ff);"></div>
           </div>
         </div>
       </div>
 
       <div class="jcCaveiraOverviewBox" style="margin-bottom:0;">
         <div style="font-size:.88rem;font-weight:800;text-transform:uppercase;margin-bottom:10px;">ANÁLISE DE PERFORMANCE</div>
-        <div style="display:grid;grid-template-columns:2fr 0.7fr 1.1fr 1fr;gap:10px;padding:8px 12px;border-bottom:1px solid rgba(148,163,184,0.22);font-size:.75rem;color:#94a3b8;font-weight:800;text-transform:uppercase;">
+        <div style="display:grid;grid-template-columns:2fr 0.7fr 1.1fr 1fr;gap:10px;padding:8px 12px;border-bottom:1px solid rgba(56,189,248,0.22);font-size:.75rem;color:#94a3b8;font-weight:800;text-transform:uppercase;">
           <div>Disciplina / Assunto</div>
           <div>Total</div>
           <div>Acertei / Errei</div>
@@ -3452,7 +3700,7 @@
     });
   }
 
-  // 4) Hub de Flashcards Estilo Caveira com Funil de 3 Chevrons (image_38d0c5.png)
+  // 4) Hub de Flashcards com Funil de 3 Chevrons na Paleta Oficial
   function mountCaveiraFlashcardsHub() {
     if (typeof document === 'undefined') return;
     const cardsPanel = document.getElementById('cards');
@@ -3510,9 +3758,9 @@
             <div style="font-size:.74rem;color:#94a3b8;">Total de flashcards resolvidos</div>
             <div class="jcCaveiraBigNumber">${totalSolved}</div>
             <div style="display:grid;gap:6px;font-size:.76rem;font-weight:700;">
-              <div>🏳️ <b>${inReview}</b> EM REVISÃO</div>
-              <div>🏳️ <b>${shortMem}</b> MEMÓRIA DE CURTO PRAZO</div>
-              <div>🏳️ <b>${longMem}</b> MEMÓRIA DE LONGO PRAZO</div>
+              <div>🔹 <b>${inReview}</b> EM REVISÃO</div>
+              <div>🔹 <b>${shortMem}</b> MEMÓRIA DE CURTO PRAZO</div>
+              <div>🔹 <b>${longMem}</b> MEMÓRIA DE LONGO PRAZO</div>
             </div>
           </div>
           <div class="jcChevronStageWrap" aria-label="Estágios de memória dos flashcards">
@@ -3555,39 +3803,66 @@
     }
   }
 
-  // 5) Central de Leis & Textos (Lei Seca Interativa — image_38d36d.png & image_38d3d1.png)
+  // 5) Central de Leis & Textos (Base Externa Completa + Pastas Retráteis Fechadas por Padrão)
   let lawsFilterFavOnly = false;
   let lawsSearchQuery = '';
   let activeLawModalItem = null;
+  let activeLawExternalLoading = false;
+
+  function switchStudySubtab(targetSubtab) {
+    if (typeof document === 'undefined') return;
+    const studySec = document.getElementById('study');
+    if (!studySec) return;
+    studySec.querySelectorAll('.studyTab').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-study') === targetSubtab);
+    });
+    studySec.querySelectorAll('.studyPanel').forEach(p => {
+      p.classList.toggle('active', p.id === targetSubtab);
+    });
+    if (targetSubtab === 'notebook' && typeof window.setupCanvasNotebook === 'function') {
+      try { window.setupCanvasNotebook(); } catch (_e) {}
+    }
+    if (targetSubtab === 'laws') {
+      renderSmartLawsPanelContent(document.getElementById('laws'));
+    }
+  }
 
   function mountCaveiraSmartLawsHub() {
     if (typeof document === 'undefined') return;
     const studySec = document.getElementById('study');
     if (!studySec) return;
 
-    const tabsWrap = studySec.querySelector('.studyTabs');
-    if (tabsWrap && !document.getElementById('jcStudyLawsTabBtn')) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'studyTab';
-      btn.id = 'jcStudyLawsTabBtn';
-      btn.setAttribute('data-study', 'laws');
-      btn.innerHTML = '⚖️ Leis & Textos';
-      btn.onclick = () => openSmartLawsSubtab();
-      tabsWrap.appendChild(btn);
-    }
+    // Remove qualquer botão antigo de Manuais do Caçador ou duplicata em #summaries
+    const oldManualBtn = document.getElementById('openManuaisCacadorBtn');
+    if (oldManualBtn) oldManualBtn.remove();
+    const oldQuickLawsBtn = document.getElementById('jcQuickOpenLawsFromSummariesBtn');
+    if (oldQuickLawsBtn) oldQuickLawsBtn.remove();
 
-    // Also add a quick shortcut inside #summaries filter bar so users in Resumos see "⚖️ Leis & Textos (Lei Seca)" right away
-    const sumFilters = studySec.querySelector('#summaries .summaryFilters');
-    if (sumFilters && !document.getElementById('jcQuickOpenLawsFromSummariesBtn')) {
-      const qBtn = document.createElement('button');
-      qBtn.type = 'button';
-      qBtn.id = 'jcQuickOpenLawsFromSummariesBtn';
-      qBtn.className = 'ghost small';
-      qBtn.style.cssText = 'white-space:nowrap;font-weight:800;';
-      qBtn.innerHTML = '⚖️ Leis & Textos (Lei Seca)';
-      qBtn.onclick = () => openSmartLawsSubtab();
-      sumFilters.appendChild(qBtn);
+    const tabsWrap = studySec.querySelector('.studyTabs');
+    if (tabsWrap) {
+      tabsWrap.classList.add('smartEnabled');
+      if (!document.getElementById('jcStudyLawsTabBtn')) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'studyTab';
+        btn.id = 'jcStudyLawsTabBtn';
+        btn.setAttribute('data-study', 'laws');
+        btn.innerHTML = '⚖️ Leis &amp; Textos';
+        tabsWrap.appendChild(btn);
+      }
+
+      // Delegação unificada para sincronizar todas as 5 abas (Resumos, Flashcards, Anotações, Caderno IA, Leis & Textos)
+      if (!tabsWrap._jcUnifiedTabsBound) {
+        tabsWrap._jcUnifiedTabsBound = true;
+        tabsWrap.addEventListener('click', (ev) => {
+          const tabBtn = ev.target && ev.target.closest ? ev.target.closest('.studyTab[data-study]') : null;
+          if (!tabBtn) return;
+          const targetId = tabBtn.getAttribute('data-study');
+          if (targetId) {
+            switchStudySubtab(targetId);
+          }
+        });
+      }
     }
 
     let lawsPanel = document.getElementById('laws');
@@ -3604,14 +3879,7 @@
   function openSmartLawsSubtab() {
     if (typeof document === 'undefined') return;
     mountCaveiraSmartLawsHub();
-    const studySec = document.getElementById('study');
-    if (!studySec) return;
-    studySec.querySelectorAll('.studyTab').forEach(b => {
-      b.classList.toggle('active', b.getAttribute('data-study') === 'laws');
-    });
-    studySec.querySelectorAll('.studyPanel').forEach(p => {
-      p.classList.toggle('active', p.id === 'laws');
-    });
+    switchStudySubtab('laws');
   }
   if (typeof window !== 'undefined') window.openSmartLawsSubtab = openSmartLawsSubtab;
 
@@ -3619,13 +3887,15 @@
     if (!lawsPanel) lawsPanel = document.getElementById('laws');
     if (!lawsPanel) return;
 
+    const allLaws = getAllLawsCombined();
     const favs = new Set(getFavLaws());
+    const openMap = getLawsFoldersOpenState();
     const qNorm = String(lawsSearchQuery || '').trim().toLowerCase();
 
-    const filtered = NATIVE_SMART_LAWS.filter((item) => {
+    const filtered = allLaws.filter((item) => {
       if (lawsFilterFavOnly && !favs.has(item.id)) return false;
       if (!qNorm) return true;
-      const hay = `${item.discipline} ${item.title} ${item.articles.join(' ')}`.toLowerCase();
+      const hay = `${item.discipline} ${item.title} ${(item.articles || []).join(' ')}`.toLowerCase();
       return hay.includes(qNorm);
     });
 
@@ -3635,43 +3905,59 @@
       grouped.get(item.discipline).push(item);
     });
 
-    const groupsHtml = Array.from(grouped.entries()).map(([disc, items]) => `
-      <div class="jcLawsAccordionGroup">
-        <div class="jcLawsGroupHeader">
-          <span>${disc}</span>
-          <span style="font-size:.76rem;color:#94a3b8;">${items.length} diploma(s) ▴</span>
-        </div>
-        <div>
-          ${items.map(item => `
-            <div class="jcLawRowItem">
-              <div style="display:flex;align-items:center;gap:10px;">
-                <button type="button" class="ghost small" data-law-fav="${item.id}" style="padding:4px 8px;font-size:.85rem;" title="Favoritar Lei">
-                  ${favs.has(item.id) ? '⭐' : '☆'}
-                </button>
-                <div>
-                  <div style="font-weight:700;font-size:.88rem;">${item.title}</div>
-                  <div style="font-size:.73rem;color:#94a3b8;margin-top:2px;">${item.badge} · ${item.articles.length} artigos/dispositivos táticos</div>
+    // Pastas de disciplinas idênticas à imagem enviada: FECHADAS por padrão, exibindo o conteúdo APENAS quando clicar!
+    const groupsHtml = Array.from(grouped.entries()).map(([disc, items]) => {
+      const discKey = String(disc).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const isOpen = Boolean(openMap[discKey] === true || qNorm.length > 0);
+      return `
+        <section class="libraryFolder ${isOpen ? 'open' : ''}" data-law-folder="${discKey}">
+          <button type="button" class="folderHead" data-law-folder-toggle="${discKey}">
+            <span><i>▤</i> ${disc}</span>
+            <span class="tag">${items.length} ${items.length === 1 ? 'lei / texto' : 'leis &amp; textos'}</span>
+          </button>
+          <div class="folderBody" style="display:${isOpen ? 'block' : 'none'};">
+            ${items.map(item => `
+              <div class="jcLawRowItem">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <button type="button" class="ghost small" data-law-fav="${item.id}" style="padding:4px 8px;font-size:.85rem;" title="Favoritar Lei">
+                    ${favs.has(item.id) ? '⭐' : '☆'}
+                  </button>
+                  <div>
+                    <div style="font-weight:700;font-size:.88rem;">${item.title}</div>
+                    <div style="font-size:.73rem;color:#93c5fd;margin-top:2px;">
+                      🌐 ${item.sourceName || 'Base Externa Oficial'} · ${item.badge || 'Texto Completo'}
+                    </div>
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                  ${item.officialUrl ? `<a href="${item.officialUrl}" target="_blank" rel="noopener noreferrer" class="ghost small" style="padding:6px 10px;font-size:.72rem;text-decoration:none;">🌐 Fonte Oficial ↗</a>` : ''}
+                  <button type="button" class="jcLawStartBtn" data-law-open="${item.id}">📖 LER COMPLETO</button>
                 </div>
               </div>
-              <button type="button" class="jcLawStartBtn" data-law-open="${item.id}">COMEÇAR</button>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    `).join('') || `<p class="small muted" style="padding:16px 0;">Nenhuma lei encontrada para o filtro selecionado.</p>`;
+            `).join('')}
+          </div>
+        </section>
+      `;
+    }).join('') || `<div class="empty">Nenhuma lei encontrada para o filtro selecionado. Use o importador da Base Externa abaixo para buscar qualquer lei!</div>`;
 
     const readerHtml = activeLawModalItem ? renderActiveLawReaderHtml(activeLawModalItem) : '';
 
     lawsPanel.innerHTML = `
-      <div style="display:flex;align-items:center;gap:18px;border-bottom:1px solid rgba(148,163,184,0.18);padding-bottom:10px;margin-bottom:14px;">
-        <button type="button" class="ghost small ${!lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabAllBtn" style="font-weight:800;">📋 Listagem (${NATIVE_SMART_LAWS.length})</button>
-        <button type="button" class="ghost small ${lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabFavBtn" style="font-weight:800;">⭐ Favoritos (${favs.size})</button>
-      </div>
-      <div style="margin-bottom:16px;">
-        <input type="search" id="jcLawsSearchInput" value="${lawsSearchQuery.replace(/"/g, '&quot;')}" placeholder="PESQUISA — Digite lei, número (ex.: 8.429, Art. 5º, Art. 144, Peculato, Deserção)..." style="width:100%;padding:11px 14px;border-radius:8px;">
+      <div class="jcCaveiraOverviewBox" style="padding:14px 16px;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button type="button" class="ghost small ${!lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabAllBtn" style="font-weight:800;">📋 Todas as Disciplinas (${allLaws.length})</button>
+            <button type="button" class="ghost small ${lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabFavBtn" style="font-weight:800;">⭐ Favoritos (${favs.size})</button>
+          </div>
+          <span class="tag">🌐 Conectado: Planalto · Wikisource · Alepe · IBGE · Wikipedia</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:8px;">
+          <input type="search" id="jcLawsSearchInput" value="${lawsSearchQuery.replace(/"/g, '&quot;')}" placeholder="Buscar lei, artigo ou importar da Base Externa (ex.: Lei 12.850, CTB, Lei 8.112, Art. 144)..." style="width:100%;padding:11px 14px;border-radius:10px;">
+          <button type="button" class="jcCaveiraActionBtn" id="jcImportExternalLawBtn" style="min-width:auto;padding:10px 14px;white-space:nowrap;">🌐 Buscar na Base Externa</button>
+        </div>
       </div>
       ${readerHtml}
-      <div id="jcLawsAccordionContainer">
+      <div class="libraryFolders" id="jcLawsAccordionContainer">
         ${groupsHtml}
       </div>
     `;
@@ -3679,6 +3965,8 @@
     const allBtn = document.getElementById('jcLawsTabAllBtn');
     const favBtn = document.getElementById('jcLawsTabFavBtn');
     const sInp = document.getElementById('jcLawsSearchInput');
+    const impBtn = document.getElementById('jcImportExternalLawBtn');
+
     if (allBtn) allBtn.onclick = () => { lawsFilterFavOnly = false; renderSmartLawsPanelContent(lawsPanel); };
     if (favBtn) favBtn.onclick = () => { lawsFilterFavOnly = true; renderSmartLawsPanelContent(lawsPanel); };
     if (sInp) {
@@ -3687,23 +3975,61 @@
         renderSmartLawsPanelContent(lawsPanel);
       };
     }
+    if (impBtn) {
+      impBtn.onclick = async () => {
+        const query = (sInp ? sInp.value : '') || prompt('Digite o nome ou número da Lei/Texto que deseja puxar completo da Base Externa (ex.: Lei 12.850, Código de Trânsito Brasileiro, Lei 8.112):');
+        if (!query || !query.trim()) return;
+        impBtn.disabled = true;
+        impBtn.textContent = '⏳ Buscando Base Externa...';
+        const imported = await searchAndImportExternalLawOrText(query.trim(), 'Legislação Extravagante');
+        impBtn.disabled = false;
+        impBtn.textContent = '🌐 Buscar na Base Externa';
+        if (imported) {
+          activeLawModalItem = imported;
+          setLawsFolderOpenState('legisla-o-extravagante', true);
+          renderSmartLawsPanelContent(lawsPanel);
+          if (typeof window.toast === 'function') {
+            window.toast(`✅ Texto integral de "${imported.title}" importado da Base Externa!`);
+          }
+        } else if (typeof window.toast === 'function') {
+          window.toast('⚠️ Não foi possível importar automaticamente; abrindo consulta externa.');
+        }
+      };
+    }
+
+    // Clique na barra da disciplina (.folderHead): abre/fecha apenas quando o usuário clicar!
+    lawsPanel.querySelectorAll('[data-law-folder-toggle]').forEach((btn) => {
+      btn.onclick = () => {
+        const discKey = btn.getAttribute('data-law-folder-toggle');
+        const folderSec = btn.closest('.libraryFolder');
+        const nextOpen = !(folderSec && folderSec.classList.contains('open'));
+        setLawsFolderOpenState(discKey, nextOpen);
+        renderSmartLawsPanelContent(lawsPanel);
+      };
+    });
 
     lawsPanel.querySelectorAll('[data-law-fav]').forEach((btn) => {
       btn.onclick = () => {
         const id = btn.getAttribute('data-law-fav');
         const cur = new Set(getFavLaws());
-        if (cur.has(id)) cur.delete(id);
-        else cur.add(id);
+        if (cur.has(id)) cur.delete(id); else cur.add(id);
         setFavLaws(Array.from(cur));
         renderSmartLawsPanelContent(lawsPanel);
       };
     });
 
     lawsPanel.querySelectorAll('[data-law-open]').forEach((btn) => {
-      btn.onclick = () => {
+      btn.onclick = async () => {
         const id = btn.getAttribute('data-law-open');
-        activeLawModalItem = NATIVE_SMART_LAWS.find(l => l.id === id) || null;
+        const found = getAllLawsCombined().find(l => l.id === id) || null;
+        activeLawModalItem = found;
+        activeLawExternalLoading = true;
         renderSmartLawsPanelContent(lawsPanel);
+        if (found) {
+          await fetchExternalCompleteLawText(found);
+          activeLawExternalLoading = false;
+          renderSmartLawsPanelContent(lawsPanel);
+        }
       };
     });
 
@@ -3738,25 +4064,32 @@
 
   function renderActiveLawReaderHtml(law) {
     const highlights = getHighlightedArticles();
+    const extCached = getExternalFullTextCache()[law.id];
+    const combinedArticles = [
+      ...(law.articles || []),
+      ...((extCached && Array.isArray(extCached.paragraphs)) ? extCached.paragraphs : [])
+    ];
     return `
-      <div class="jcCaveiraOverviewBox" id="jcActiveLawReaderBox" style="border:1.5px solid #38bdf8;margin-bottom:18px;">
+      <div class="jcCaveiraOverviewBox" id="jcActiveLawReaderBox" style="border:1.5px solid #65e7ff;margin-bottom:18px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
           <div>
-            <span class="tag">${law.discipline}</span>
-            <h3 style="margin:6px 0 0;font-size:1.02rem;">⚖️ ${law.title}</h3>
+            <span class="tag">${law.discipline} · ${extCached ? `🌐 sincronizado com ${extCached.source}` : (law.sourceName || 'Base Oficial')}</span>
+            <h3 style="margin:6px 0 0;font-size:1.04rem;color:#f0f9ff;">⚖️ ${law.title}</h3>
           </div>
-          <div style="display:flex;gap:8px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${law.officialUrl ? `<a href="${law.officialUrl}" target="_blank" rel="noopener noreferrer" class="ghost small" style="text-decoration:none;">🌐 Abrir Texto Integral Oficial (Planalto/Fonte) ↗</a>` : ''}
             <button type="button" class="action small" id="jcInvokeLawAiBtn">🧙‍♂️ Invocar Questões desta Lei</button>
             <button type="button" class="ghost small" id="jcCloseLawReaderBtn">✕ Fechar Leitura</button>
           </div>
         </div>
-        <div style="display:grid;gap:10px;">
-          ${law.articles.map((art, idx) => {
+        ${activeLawExternalLoading ? `<div style="padding:10px 14px;margin-bottom:10px;border-radius:8px;background:rgba(56,189,248,0.12);color:#65e7ff;font-size:.82rem;">🌐 Sincronizando texto completo complementar da Base Externa Oficial (Wikisource / Wikipedia)...</div>` : ''}
+        <div style="display:grid;gap:10px;max-height:540px;overflow-y:auto;padding-right:4px;">
+          ${combinedArticles.map((art, idx) => {
             const hKey = `${law.id}:${idx}`;
             const isHi = Boolean(highlights[hKey]);
             return `
-              <div style="padding:12px 14px;border-radius:8px;border:1px solid ${isHi ? '#eab308' : 'rgba(148,163,184,0.18)'};background:${isHi ? 'rgba(234,179,8,0.15)' : 'rgba(15,23,42,0.35)'};display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
-                <p style="margin:0;line-height:1.55;font-size:.88rem;">${art}</p>
+              <div style="padding:12px 14px;border-radius:10px;border:1px solid ${isHi ? '#eab308' : 'rgba(56,189,248,0.2)'};background:${isHi ? 'rgba(234,179,8,0.16)' : 'rgba(8,19,34,0.75)'};display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+                <p style="margin:0;line-height:1.58;font-size:.88rem;">${art}</p>
                 <button type="button" class="ghost small" data-law-highlight="${hKey}" title="Grifar dispositivo" style="padding:4px 8px;flex-shrink:0;">
                   ${isHi ? '🖍️ Grifado' : '🖍️ Grifar'}
                 </button>
@@ -3768,7 +4101,7 @@
     `;
   }
 
-  // 6) Pílulas Rápidas de Status na Aba Questões (image_38d04a.png) + Barra Inferior da Questão com Invocador (image_38d08b.png)
+  // 6) Pílulas Rápidas de Status na Aba Questões + Barra Inferior da Questão com Invocador
   function mountCaveiraQuestionBankEnhancements() {
     if (typeof document === 'undefined') return;
     const reportSec = document.getElementById('report');
@@ -3793,19 +4126,27 @@
             pillsBar.querySelectorAll('[data-q-status-pill]').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             const status = btn.getAttribute('data-q-status-pill');
+            const histSel = document.getElementById('questionHistoryFilter');
+            if (histSel) {
+              const mapVal = { all: 'all', solved: 'answered', unsolved: 'unanswered', right: 'correct', wrong: 'wrong' };
+              if (mapVal[status] && [...histSel.options].some(o => o.value === mapVal[status])) {
+                histSel.value = mapVal[status];
+                histSel.dispatchEvent(new Event('change'));
+                return;
+              }
+            }
             if (status === 'wrong') {
-              const errBtn = document.getElementById('openErrorNotebookBtn') || document.getElementById('startErrorReviewBtn');
+              const errBtn = document.getElementById('openErrorNotebookBtn') || document.getElementById('startErrorReinforcementBtn');
               if (errBtn) errBtn.click();
-            } else if (typeof window.renderReport === 'function') {
+            } else if (typeof window.updateQuestionPool === 'function') {
               window._jcQuestionStatusFilter = status;
-              try { window.renderReport(); } catch (_e) {}
+              try { window.updateQuestionPool(); } catch (_e) {}
             }
           };
         });
       }
     }
 
-    // Inject Caveira Bottom Toolbar (#jcCaveiraQuestionToolbar) inside #questionDialog (.questionBox)
     const qDialog = document.getElementById('questionDialog');
     const qBox = qDialog ? qDialog.querySelector('.questionBox') : null;
     const qFeedback = document.getElementById('questionFeedback');
@@ -3862,7 +4203,6 @@
       };
     }
 
-    // Rename any remaining "Instrutor IA" inside question modal footer to "🧙‍♂️ Invocador"
     const qapBtn = document.getElementById('askQapInstructorBtn');
     if (qapBtn && !qapBtn.textContent.includes('Invocador')) {
       qapBtn.innerHTML = '🧙‍♂️ Invocador';
@@ -3870,7 +4210,7 @@
   }
 
   function initAllR179() {
-    injectR179Styles();
+    injectR180HunterStyles();
     tickTrailHearts20MinRegen();
     mountCaveiraEssayHub();
     mountPainelTaticoInProfile();
@@ -3889,6 +4229,9 @@
       mountCaveiraFlashcardsHub,
       mountCaveiraSmartLawsHub,
       openSmartLawsSubtab,
+      switchStudySubtab,
+      fetchExternalCompleteLawText,
+      searchAndImportExternalLawOrText,
       mountCaveiraQuestionBankEnhancements,
       NATIVE_SMART_LAWS
     };

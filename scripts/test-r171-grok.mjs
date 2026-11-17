@@ -8,11 +8,11 @@ const swSrc = readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
 const guiaSrc = readFileSync(new URL("../GUIA-UNIFICADO.md", import.meta.url), "utf8");
 const javaSrc = readFileSync(new URL("../android/app/src/main/java/br/com/jornadadocacador/app/MainActivity.java", import.meta.url), "utf8");
 
-// 1. Validar versão r179 no service worker e guia
-assert(swSrc.includes("r179"), "sw.js deve estar na versao r179");
-assert(guiaSrc.includes("r179"), "GUIA-UNIFICADO.md deve estar na versao r179");
+// 1. Validar versão r180 no service worker e guia
+assert(swSrc.includes("r180"), "sw.js deve estar na versao r180");
+assert(guiaSrc.includes("r180"), "GUIA-UNIFICADO.md deve estar na versao r180");
 
-// 2. Executar e testar as funções do r179 no VM
+// 2. Executar e testar as funções do r180 no VM
 const ctx = {
   window: {},
   state: {
@@ -74,4 +74,4 @@ assert(javaSrc.includes("shouldOverrideUrlLoading"), "MainActivity deve tratar s
 assert(idxSrc.includes("disciplineReadyForBoss"), "index.html deve checar disciplineReadyForBoss para liberar o chefe");
 assert(idxSrc.includes("questionOriginSeal"), "index.html deve usar questionOriginSeal para rotular as questoes");
 
-console.log("OK: Todas as melhorias Grok (r179) validadas com 100% de sucesso!");
+console.log("OK: Todas as melhorias Grok (r180) validadas com 100% de sucesso!");
