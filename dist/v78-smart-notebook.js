@@ -10,12 +10,12 @@
   function current(){const key=campaignKey();return smart[key]||(smart[key]={subject:'all',sources:[],cache:{},lastResult:null,manualEmpty:false})}
   function safe(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
   function hash(value){let h=2166136261;for(let i=0;i<value.length;i++){h^=value.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36)}
-  function readySources(){return(cloudDocuments||[]).filter(doc=>!window.isHunterManualArtifact?.(doc)&&doc.document_type!=='edital'&&doc.processing_status==='ready'&&(ALL_SUMMARIES||[]).some(summary=>!window.isHunterManualArtifact?.(summary)&&summary.documentId===doc.id))}
-  function sourceSubject(doc){const own=(ALL_SUMMARIES||[]).find(summary=>!window.isHunterManualArtifact?.(summary)&&summary.documentId===doc.id)?.category;return canonicalSubjectName(own||doc.detected_subject||doc.metadata?.primary_subject||'Conteúdo geral')}
+  function readySources(){return(cloudDocuments||[]).filter(doc=>doc.document_type!=='edital'&&doc.processing_status==='ready'&&(ALL_SUMMARIES||[]).some(summary=>summary.documentId===doc.id))}
+  function sourceSubject(doc){const own=(ALL_SUMMARIES||[]).find(summary=>summary.documentId===doc.id)?.category;return canonicalSubjectName(own||doc.detected_subject||doc.metadata?.primary_subject||'Conteúdo geral')}
   function subjectSources(){const data=current(),sources=readySources();return data.subject==='all'?sources:sources.filter(doc=>subjectKey(sourceSubject(doc))===subjectKey(data.subject))}
   function selectedSources(){const available=subjectSources(),chosen=new Set(current().sources);return available.filter(doc=>chosen.has(doc.id))}
   function ensureSelection(){const data=current(),available=subjectSources();data.sources=data.sources.filter(id=>available.some(doc=>doc.id===id)).slice(0,MAX_SOURCES);if(!data.sources.length&&available.length&&!data.manualEmpty)data.sources=available.slice(0,MAX_SOURCES).map(doc=>doc.id);persist()}
-  function selectedSummaries(){const ids=new Set(selectedSources().map(doc=>doc.id));return(ALL_SUMMARIES||[]).filter(summary=>!window.isHunterManualArtifact?.(summary)&&ids.has(summary.documentId))}
+  function selectedSummaries(){const ids=new Set(selectedSources().map(doc=>doc.id));return(ALL_SUMMARIES||[]).filter(summary=>ids.has(summary.documentId))}
   function contextBlock(){const summaries=selectedSummaries(),parts=summaries.map(item=>[`[FONTE: ${item.source||'PDF'}${item.pageStart?` | PÁGINAS: ${item.pageStart}${item.pageEnd>item.pageStart?`-${item.pageEnd}`:''}`:''}]`,`DISCIPLINA: ${item.category}`,`ASSUNTO: ${item.title}`,item.explanation,(item.points||[]).length?`PONTOS: ${item.points.join('; ')}`:'',item.example?`EXEMPLO: ${item.example}`:'',item.bizu?`BIZU: ${item.bizu}`:'',item.mnemonic?`MNEMÔNICO: ${item.mnemonic}`:'',item.trap?`PEGADINHA: ${item.trap}`:''].filter(Boolean).join('\n'));return parts.join('\n\n').slice(0,22000)}
   function sourceSignature(){return selectedSources().map(doc=>`${doc.id}:${doc.updated_at||doc.created_at||''}`).sort().join('|')}
 

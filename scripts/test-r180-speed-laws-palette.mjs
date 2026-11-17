@@ -8,11 +8,11 @@ const v77Code = fs.readFileSync(path.join(root, 'dist', 'v77-experience.js'), 'u
 const archCode = fs.readFileSync(path.join(root, 'dist', 'jc-architecture-modules.js'), 'utf8');
 const swCode = fs.readFileSync(path.join(root, 'dist', 'sw.js'), 'utf8');
 
-console.log('=== Teste r180: Velocidade O(1) (Questões/Trilha), Pastas Retráteis, Sem Manuais nas Disciplinas, Base Externa de Leis e Paleta Oficial ===');
+console.log('=== Teste r181: Velocidade O(1) (Questões/Trilha), Pastas Retráteis, Sem Manuais nas Disciplinas, Base Externa de Leis e Paleta Oficial ===');
 
-// 1. Service Worker na versão r180
-assert.ok(swCode.includes('r180'), 'sw.js deve estar na versão r180');
-console.log('✓ 1. Service Worker atualizado para r180');
+// 1. Service Worker na versão r181
+assert.ok(swCode.includes('r181'), 'sw.js deve estar na versão r181');
+console.log('✓ 1. Service Worker atualizado para r181');
 
 // 2. Otimização O(1) de questionPool, questionsForMode e learningUnits
 assert.ok(htmlCode.includes('_jcQuestionPoolCache') && htmlCode.includes('_ensureModeBucketsIndex') && htmlCode.includes('_jcLearningUnitsCache'), 'index.html deve ter indexação O(1) para questionPool, questionsForMode e learningUnits');
@@ -43,4 +43,4 @@ assert.ok(!mod8Slice.includes('#a3b899') && !mod8Slice.includes('#181b21'), 'Mó
 assert.ok(mod8Slice.includes('linear-gradient(135deg, #65e7ff, #34aee9)'), 'Botões devem usar o gradiente Ciano Elétrico oficial do site');
 console.log('✓ 7. Paleta de cores oficial da Jornada do Caçador validada');
 
-console.log('=== Todos os testes da r180 passaram com 100% de sucesso! ===');
+console.log('=== Todos os testes da r181 passaram com 100% de sucesso! ===');
