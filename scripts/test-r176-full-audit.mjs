@@ -33,7 +33,7 @@ const ctx = {
     removeItem: (k) => mockStorage.delete(k)
   },
   performance: {
-    now: (() => { let t = 0; return () => t += 17; })(),
+    now: () => Date.now(),
     mark: () => {},
     measure: () => ({ duration: 14.5 })
   },

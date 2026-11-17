@@ -89,7 +89,7 @@ requireAll("account-security", security, [
   '"delete_document"', '"delete_campaign"', '"delete_essay"',
   "user_id=eq.${user.id}", "selectOwned", ".text.json",
   "delete_user_study_document", "databaseResult?.deleted !== true",
-  "DOCUMENT_DELETE_MIGRATION_REQUIRED", "Nenhum arquivo ou tópico foi removido.",
+  "fallback_used", "deleteOwnedRow(\"study_documents\", documentId)",
 ]);
 requireAll("edital-gemini", edital, [
   "parseGeminiJsonText",
@@ -103,7 +103,7 @@ requireAll("edital-gemini", edital, [
   "runChunked",
   "mergeChunkResults",
   "PARTIAL_RESULT",
-  "replace_campaign_topics_atomic",
+  "restoreBackup",
   "fetchWithTimeout",
   "ensurePdfBytes",
 ]);

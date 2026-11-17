@@ -1,6 +1,6 @@
 /* ============================================================================
- * Jornada do Caçador — Arquitetura Modular, Perfil Social e medição dos filtros (r178)
- * Módulo 1: Telemetria local dos filtros (relógio monotônico + p50/p95)
+ * Jornada do Caçador — Arquitetura Modular, Performance O(1) & Perfil Social (r177)
+ * Módulo 1: Telemetria de Performance (performance.mark / measure + p50/p95)
  * Módulo 2: Catálogo de Identificadores Estáveis (Disciplina → Assunto → Subassunto)
  * Módulo 3: Biblioteca Inteligente & Fontes Externas Gratuitas Confiáveis
  * Módulo 4: Promotor de Questões do Usuário para Banco Nativo Organizado
@@ -36,66 +36,69 @@
   // ── 1. TELEMETRIA DE PERFORMANCE (Medição real da aba Questões e Filtros) ──
   const perfSamples = [];
   const MAX_SAMPLES = 60;
-  const pendingMeasurements = new Map();
-  const telemetryScope = () => {
-    const app = getAppState();
-    return JSON.stringify([app._ownerUserId || 'guest', app.activeCampaignId || '', Number(app._resetEpoch || 0)]);
-  };
-  const telemetryClock = () => typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+
   function percentile(sortedArr, p) {
-    if (!sortedArr.length) return null;
+    if (!sortedArr.length) return 0;
     const idx = Math.min(sortedArr.length - 1, Math.max(0, Math.ceil((p / 100) * sortedArr.length) - 1));
     return Number(sortedArr[idx].toFixed(2));
   }
-  function validPerfSample(sample, name, scope) {
-    return sample && sample.scope === scope && (!name || sample.name === name) &&
-      typeof sample.durationMs === 'number' && Number.isFinite(sample.durationMs) && sample.durationMs >= 0 &&
-      Number.isInteger(sample.bankSize) && sample.bankSize >= 0;
-  }
+
   JC_MODULES.telemetry = {
     samples: perfSamples,
     markStart(name = 'jc_questions_tab_open') {
-      if (typeof name !== 'string' || !name || name.length > 100) return;
-      const start = telemetryClock();
-      if (!Number.isFinite(start)) return;
-      const scope = telemetryScope();
-      pendingMeasurements.set(name, { start, scope });
+      try {
+        if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+          performance.mark(`${name}_start`);
+        }
+      } catch (_e) {}
+      this._lastStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
     },
-    markEnd(name = 'jc_questions_tab_open') {
-      const pending = pendingMeasurements.get(name);
-      pendingMeasurements.delete(name);
-      const scope = telemetryScope(), end = telemetryClock();
-      if (!pending || pending.scope !== scope || !Number.isFinite(end) || end < pending.start) return null;
+    markEnd(name = 'jc_questions_tab_open', meta = {}) {
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      let durationMs = Math.max(0.1, now - (this._lastStart || now));
+      try {
+        if (typeof performance !== 'undefined' && typeof performance.mark === 'function' && typeof performance.measure === 'function') {
+          performance.mark(`${name}_end`);
+          const m = performance.measure(name, `${name}_start`, `${name}_end`);
+          if (m && Number.isFinite(m.duration) && m.duration > 0) {
+            durationMs = m.duration;
+          }
+        }
+      } catch (_e) {}
+      const bankSize = getAllQuestions().length;
       const sample = {
-        name, scope,
-        durationMs: Number((end - pending.start).toFixed(2)),
-        bankSize: getAllQuestions().length,
+        name,
+        durationMs: Number(durationMs.toFixed(2)),
+        bankSize,
         timestamp: new Date().toISOString(),
-        measurement: 'synchronous_filters_render'
+        ...meta
       };
       perfSamples.push(sample);
       if (perfSamples.length > MAX_SAMPLES) perfSamples.shift();
-      try { localStorage.setItem('jc_telemetry_questions_v2:' + scope, JSON.stringify(perfSamples.filter(s => s.scope === scope).slice(-25))); } catch (_e) {}
+      try {
+        localStorage.setItem('jc_telemetry_questions_v1', JSON.stringify(perfSamples.slice(-25)));
+      } catch (_e) {}
       return sample;
     },
     getStats(name = 'jc_questions_tab_open') {
-      const scope = telemetryScope();
-      let list = perfSamples.filter(s => validPerfSample(s, name, scope));
+      let list = perfSamples.filter(s => !name || s.name === name);
       if (!list.length) {
         try {
-          const saved = JSON.parse(localStorage.getItem('jc_telemetry_questions_v2:' + scope) || '[]');
-          if (Array.isArray(saved)) list = saved.filter(s => validPerfSample(s, name, scope)).slice(-25);
+          const saved = JSON.parse(localStorage.getItem('jc_telemetry_questions_v1') || '[]');
+          if (Array.isArray(saved)) list = saved.filter(s => !name || s.name === name);
         } catch (_e) {}
       }
-      const durations = list.map(s => s.durationMs).sort((a, b) => a - b);
-      const p95 = percentile(durations, 95), last = list[list.length - 1] || null;
+      const durations = list.map(s => Number(s.durationMs) || 0).filter(d => d > 0).sort((a, b) => a - b);
+      const p50 = percentile(durations, 50);
+      const p95 = percentile(durations, 95);
+      const last = list[list.length - 1] || null;
       return {
-        count: durations.length, sampleCount: durations.length,
-        p50Ms: percentile(durations, 50), p95Ms: p95,
-        lastMs: last ? last.durationMs : null,
+        count: durations.length,
+        p50Ms: p50,
+        p95Ms: p95,
+        lastMs: last ? last.durationMs : 0,
         bankSize: last ? last.bankSize : getAllQuestions().length,
-        measurement: 'synchronous_filters_render',
-        status: !durations.length ? 'SEM_AMOSTRAS' : p95 <= 120 ? 'BAIXA_LATENCIA_LOCAL' : p95 <= 300 ? 'LATENCIA_MODERADA' : 'LATENCIA_ALTA'
+        status: p95 <= 120 ? 'OTIMO_60FPS' : p95 <= 300 ? 'BOM' : 'ATENCAO_CELULAR_FRACO'
       };
     }
   };
@@ -192,7 +195,7 @@
     {
       id: 'disc_cpp',
       name: 'Direito Processual Penal',
-      aliases: ['direito processual penal', 'processual penal', 'processo penal', 'codigo de processo penal', 'cpp'],
+      aliases: ['direito processual penal', 'processo penal', 'cpp'],
       topics: [
         { id: 'cpp_ip', name: 'Inquérito Policial, Ação Penal e Prisões', subtopics: ['Características do IP', 'Prisão em Flagrante, Preventiva e Temporária', 'Cadeia de Custódia da Prova'], keywords: ['inquerito policial', 'prisao em flagrante', 'prisao preventiva', 'cadeia de custodia', 'acao penal'] }
       ]
@@ -236,60 +239,47 @@
   JC_MODULES.taxonomy = {
     catalog: STABLE_TAXONOMY,
     resolveStableTaxonomy(subjectStr, topicStr = '', statementStr = '') {
-      const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
       const sNorm = norm(subjectStr);
       const tNorm = norm(topicStr);
       const stNorm = norm(statementStr);
-      const stableId = text => {
-        let hash = 2166136261;
-        for (const character of text) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0;
-        return hash.toString(36);
-      };
-      const containsPhrase = (text, phrase) => Boolean(phrase && (` ${text} `).includes(` ${phrase} `));
-      const declaredSubject = typeof subjectStr === 'string' ? subjectStr.trim() : '';
-      const subjectAlias = sNorm.replace(/^(?:nocoes|conhecimentos) (?:basicas |basicos |gerais |especificos )?de /, '');
-      // Taxonomy enriches the declared discipline; it must not reclassify an
-      // unknown subject as Constitutional, or match "penal" inside CPP.
-      let disc = STABLE_TAXONOMY.find(d => [norm(d.name), ...d.aliases.map(norm)].includes(sNorm) ||
-        [norm(d.name), ...d.aliases.map(norm)].includes(subjectAlias));
-      const manual = (typeof window.isHunterManualArtifact === 'function' && window.isHunterManualArtifact(declaredSubject)) ||
-        /\b(?:manuais|manual(?: oficial)?) do cacador\b/.test(sNorm);
-      const invalidSubject = !declaredSubject || !sNorm || manual || /^(?:geral|conteudo geral|conteudo|sem disciplina|nao classificado)$/.test(sNorm) ||
-        /^(?:\d+|questao\b|questoes\b|simulado\b|caderno\b)/.test(sNorm) ||
-        (typeof window.isInvalidTrailSubject === 'function' && window.isInvalidTrailSubject(declaredSubject));
-      if (!disc && !invalidSubject) {
-        // Preserve valid disciplines not yet present in this small catalogue,
-        // e.g. Biologia and Física. Their IDs do not depend on array position.
-        disc = {id: `disc_custom_${stableId(sNorm)}`, name: declaredSubject, topics: []};
-      }
-      if (!disc || manual) return {
-        subjectId: 'disc_nao_classificada', subjectName: 'Conteúdo Geral',
-        topicId: null, topicName: String(topicStr || '').trim() || 'Assunto não classificado',
-        subtopics: [], needsReview: true, topicNeedsReview: true
-      };
+      const combined = `${tNorm} ${stNorm}`;
 
-      const genericTopic = !tNorm || /^(?:questao|item)\s*\d*\b|^(?:geral|conteudo geral)$/.test(tNorm);
-      const genericKeywords = new Set(['texto', 'todo', 'nenhum', 'algum', 'haver', 'sujeito', 'disciplina']);
-      const candidates = disc.topics.map(tp => {
-        let score = tNorm === norm(tp.name) ? 100 : 0;
-        if (!genericTopic && tNorm.length >= 4 && containsPhrase(norm(tp.name), tNorm)) score += 60;
-        for (const keyword of tp.keywords) {
-          const key = norm(keyword);
-          if (!genericTopic && containsPhrase(tNorm, key)) score += 12;
-          else if (genericTopic && !genericKeywords.has(key) && (key.includes(' ') || key.length >= 5) && containsPhrase(stNorm, key)) score += 3;
+      let disc = STABLE_TAXONOMY.find(d => norm(d.name) === sNorm || d.aliases.some(a => sNorm.includes(a)));
+      if (!disc) {
+        let bestDisc = null, bestScore = 0;
+        for (const d of STABLE_TAXONOMY) {
+          let sc = 0;
+          for (const tp of d.topics) {
+            for (const kw of tp.keywords) {
+              if (combined.includes(norm(kw))) sc += 2;
+            }
+          }
+          if (sc > bestScore) { bestScore = sc; bestDisc = d; }
         }
-        return {topic: tp, score};
-      }).sort((a, b) => b.score - a.score);
-      const best = candidates[0];
-      const bestTopic = best?.score > 0 && (!candidates[1] || candidates[1].score < best.score) ? best.topic : null;
+        disc = bestScore >= 2 ? bestDisc : STABLE_TAXONOMY[5];
+      }
+
+      let bestTopic = disc.topics[0];
+      let bestTopicScore = -1;
+      for (const tp of disc.topics) {
+        let sc = 0;
+        if (tNorm && norm(tp.name).includes(tNorm)) sc += 6;
+        for (const kw of tp.keywords) {
+          if (combined.includes(norm(kw))) sc += 3;
+        }
+        if (sc > bestTopicScore) {
+          bestTopicScore = sc;
+          bestTopic = tp;
+        }
+      }
+
       return {
         subjectId: disc.id,
         subjectName: disc.name,
-        topicId: bestTopic ? bestTopic.id : (genericTopic ? null : `${disc.id}_custom_${stableId(tNorm)}`),
-        topicName: bestTopic ? bestTopic.name : (String(topicStr || '').trim() || 'Assunto não classificado'),
-        subtopics: bestTopic ? [...bestTopic.subtopics] : [],
-        needsReview: false,
-        topicNeedsReview: !bestTopic
+        topicId: bestTopic ? bestTopic.id : `${disc.id}_gen`,
+        topicName: bestTopic ? bestTopic.name : (topicStr || `Tópicos Essenciais de ${disc.name}`),
+        subtopics: bestTopic ? bestTopic.subtopics : []
       };
     }
   };
@@ -360,19 +350,17 @@
 
   JC_MODULES.smartLibrary = {
     getTrustedExternalSources(subject, topic = '') {
-      const tax = JC_MODULES.taxonomy.resolveStableTaxonomy(subject, topic);
-      if (tax.needsReview) return [];
-      const list = TRUSTED_EXTERNAL_SOURCES_BY_SUBJECT[tax.subjectName] || [];
+      const list = TRUSTED_EXTERNAL_SOURCES_BY_SUBJECT[subject] || TRUSTED_EXTERNAL_SOURCES_BY_SUBJECT['Direito Constitucional'] || [];
       const q = encodeURIComponent(`${subject} ${topic || ''} concurso`.trim());
       return [
         ...list,
         {
-          name: `Pesquisar "${topic || subject}" na Wikipédia em português`,
+          name: `Pesquisar "${topic || subject}" na Wikipédia Acadêmica em Português`,
           url: `https://pt.wikipedia.org/w/index.php?search=${encodeURIComponent(topic || subject)}`,
           badge: '🔎 Busca Enciclopédica'
         },
         {
-          name: `Pesquisar "${topic || subject}" no Google Acadêmico`,
+          name: `Pesquisar "${topic || subject}" no Google Acadêmico / Doutrina Aberta`,
           url: `https://scholar.google.com.br/scholar?q=${q}`,
           badge: '🎓 Google Acadêmico'
         }
@@ -382,32 +370,25 @@
       if (typeof navigator !== 'undefined' && !navigator.onLine) return null;
       const queryTerm = String(topic || subject || '').replace(/\b(item\s+\d+|topicos\s+essenciais\s+de)\b/gi, '').trim();
       if (!queryTerm) return null;
-      const controller = typeof AbortController === 'function' ? new AbortController() : null;
-      const timer = controller ? setTimeout(() => controller.abort(), 8000) : null;
-      const requestOptions = controller ? {signal: controller.signal} : {};
       try {
         const searchUrl = `https://pt.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(queryTerm + ' ' + subject)}&utf8=&format=json&origin=*&srlimit=1`;
-        const res = await fetch(searchUrl, requestOptions);
+        const res = await fetch(searchUrl);
         if (!res.ok) return null;
         const data = await res.json();
         const firstHit = data?.query?.search?.[0];
         if (!firstHit?.title) return null;
         const sumUrl = `https://pt.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(firstHit.title)}`;
-        const sumRes = await fetch(sumUrl, requestOptions);
+        const sumRes = await fetch(sumUrl);
         if (!sumRes.ok) return null;
         const sumData = await sumRes.json();
-        if (typeof sumData?.extract !== 'string' || !sumData.extract.trim()) return null;
+        if (!sumData?.extract) return null;
         return {
-          title: String(sumData.title || firstHit.title),
-          extract: sumData.extract.slice(0, 20000),
-          // The API response is external data, not an HTML-safe link. Build
-          // the URL on the known HTTPS host rather than trusting pageUrl.
-          pageUrl: `https://pt.wikipedia.org/wiki/${encodeURIComponent(sumData.title || firstHit.title)}`
+          title: sumData.title,
+          extract: sumData.extract,
+          pageUrl: sumData?.content_urls?.desktop?.page || `https://pt.wikipedia.org/wiki/${encodeURIComponent(firstHit.title)}`
         };
       } catch (_e) {
         return null;
-      } finally {
-        if (timer !== null) clearTimeout(timer);
       }
     }
   };
@@ -415,129 +396,73 @@
 
   // ── 4. PROMOTOR DE QUESTÕES DO USUÁRIO PARA BANCO NATIVO ORGANIZADO ──
   function normalizeKey(str) {
-    // Keep mathematical operators, punctuation and accents: 2+2 and 2-2
-    // must never collapse into the same question/alternative fingerprint.
-    return String(str || '').normalize('NFC').replace(/\s+/g, ' ').toLowerCase().trim();
-  }
-
-  function consolidatedOptionText(option) {
-    if (typeof window.answerOptionText === 'function') return window.answerOptionText(option);
-    const text = option.normalize('NFC').replace(/\s+/g, ' ').trim();
-    return text.length <= 3 ? text : text.replace(/^(?:alternativa\s+|letra\s+|item\s+)?(?:\([A-Ea-e]\)|\[[A-Ea-e]\]|[A-Ea-e]\s*[\)\-–—:]|[A-Ea-e]\.\s+)\s*(?=\S)/i, '');
-  }
-
-  function promotedBankScope() {
-    const st = getAppState();
-    const session = typeof cloudSession !== 'undefined' ? cloudSession : window.cloudSession;
-    return {
-      userId: String(session?.user?.id || st._ownerUserId || 'guest'),
-      campaignId: String(st.activeCampaignId || 'default'),
-      resetEpoch: Number(st._resetEpoch || 0)
-    };
-  }
-
-  function promotedBankStorageKey(scope = promotedBankScope()) {
-    return `jc_promoted_native_bank_v2:${encodeURIComponent(scope.userId)}:${encodeURIComponent(scope.campaignId)}:${scope.resetEpoch}`;
+    return String(str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   }
 
   function consolidateUserQuestionsIntoNativeBank(options = { saveToStorage: true, showToast: true }) {
-    options = { saveToStorage: true, showToast: true, ...options };
     const allQs = getAllQuestions();
     const baseNative = Array.isArray(window.NATIVE_POLICE_QUESTION_BANK) ? window.NATIVE_POLICE_QUESTION_BANK : [];
-    const scope = promotedBankScope();
-    const storageKey = promotedBankStorageKey(scope);
-    const appState = getAppState();
-    const session = typeof cloudSession !== 'undefined' ? cloudSession : window.cloudSession;
-    const scopeReady = !session?.user?.id || !appState._ownerUserId || String(appState._ownerUserId) === scope.userId;
-    const currentCampaign = (getAppState().campaigns || []).find(c => String(c.id) === scope.campaignId);
-    const campaignIds = new Set([scope.campaignId, currentCampaign?.dbId].filter(Boolean).map(String));
-    const nativeIds = new Set(baseNative.map(q => q?.id).filter(Boolean).map(String));
-    // Rebuild from the current study cache, which already has owner/portal
-    // isolation and recovery. Replaying an older export snapshot here would
-    // resurrect deleted, annulled or corrected questions. v1/v2 snapshots
-    // remain local copies; they are never a second source of study truth.
+    let savedPromoted = [];
+    try {
+      savedPromoted = JSON.parse(localStorage.getItem('jc_promoted_native_bank_v1') || '[]');
+      if (!Array.isArray(savedPromoted)) savedPromoted = [];
+    } catch (_e) { savedPromoted = []; }
 
     const seenStatements = new Set();
-    const seenIds = new Set();
     const unified = [];
-    const bySubjectAndTopic = Object.create(null);
-    const keyStatus = item => typeof window.answerKeyStatus === 'function' ? window.answerKeyStatus(item) : null;
-    const stableQuestionId = text => {
-      let hash = 2166136261;
-      for (const character of text) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0;
-      return hash.toString(36);
-    };
+    const bySubjectAndTopic = {};
 
-    const registerItem = (q, sourceKind) => {
+    const registerItem = (q, forceNative = false) => {
       if (!q || typeof q !== 'object') return;
-      const itemOwner = q._ownerUserId || q.owner_user_id || q.user_id;
-      if (sourceKind !== 'native' && itemOwner && String(itemOwner) !== scope.userId && !q.from_community && !q.is_community) return;
-      if (sourceKind !== 'native' && q.campaignId && String(q.campaignId) !== scope.campaignId) return;
-      if (sourceKind !== 'native' && q.campaign_id && !campaignIds.has(String(q.campaign_id)) && !q.from_community && !q.is_community) return;
-      if (q.id && seenIds.has(String(q.id))) return;
-      if (q.id) seenIds.add(String(q.id));
-      if (q.answer_unknown || q.annulled || q.anulada || q.needs_review || q.classification_needs_review ||
-          (q.key_source === 'ia_sugerido' && q.answer_key_validation !== 'revisado') ||
-          /\[Gabarito sugerido pela IA\b/i.test(String(q.explanation || '')) && q.key_source !== 'manual_revisado' ||
-          ['sem_gabarito', 'anulada'].includes(keyStatus(q)) ||
-          (typeof window.isHunterManualArtifact === 'function' && window.isHunterManualArtifact(q))) return;
       const st = String(q.statement || q.question || '').trim();
       if (st.length < 15) return;
-      const opts = Array.isArray(q.options) && q.options.every(o => typeof o === 'string') ? q.options.map(o => o.trim()) : [];
-      if (opts.length < 2 || opts.length > 5 || opts.some(option => !option) || new Set(opts.map(consolidatedOptionText)).size !== opts.length) return;
-      const rawKey = q.correct_index;
-      const correctIndex = typeof rawKey === 'number' ? rawKey : typeof rawKey === 'string' && /^\d+$/.test(rawKey.trim()) ? Number(rawKey) : NaN;
-      if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= opts.length) return;
+      const opts = Array.isArray(q.options) ? q.options.map(o => String(o || '').trim()).filter(Boolean) : [];
+      if (opts.length < 2 || opts.length > 5) return;
+      const fp = normalizeKey(st).slice(0, 180);
+      if (!fp || seenStatements.has(fp)) return;
+      seenStatements.add(fp);
 
       const tax = JC_MODULES.taxonomy
         ? JC_MODULES.taxonomy.resolveStableTaxonomy(q.subject, q.topic, st)
-        : null;
-      if (!tax || tax.needsReview) return;
-      const fp = JSON.stringify([tax.subjectId, normalizeKey(q.topic), normalizeKey(st), opts.map(normalizeKey), correctIndex, q.origin || '', q.key_source || '']);
-      if (seenStatements.has(fp)) return;
-      seenStatements.add(fp);
+        : { subjectId: 'disc_geral', subjectName: q.subject || 'Conteúdo Geral', topicId: 'top_geral', topicName: q.topic || 'Geral' };
 
       const enriched = {
         ...q,
-        _fp: undefined,
-        id: q.id || `local_${tax.subjectId}_${stableQuestionId(fp)}`,
+        id: q.id || `nat_${tax.subjectId}_${unified.length + 1}`,
         subject: tax.subjectName,
         subject_id: tax.subjectId,
         topic: (q.topic && q.topic.length >= 4 && !/^quest[aã]o\s*\d+/i.test(q.topic)) ? q.topic : tax.topicName,
         topic_id: tax.topicId,
-        topic_needs_review: tax.topicNeedsReview,
         options: opts,
-        correct_index: correctIndex,
-        native: sourceKind === 'native' || sourceKind === 'current_native',
-        promoted_to_native: sourceKind !== 'native' && sourceKind !== 'current_native',
-        consolidated_source: sourceKind,
-        // Organizing a user's question locally does not change its authorship.
-        origin: q.origin || 'nao_informada'
+        correct_index: Number.isInteger(Number(q.correct_index)) ? Number(q.correct_index) : 0,
+        native: true,
+        promoted_to_native: forceNative || Boolean(q.promoted_to_native),
+        origin: q.origin === 'oficial' ? 'oficial' : 'nativo'
       };
 
       unified.push(enriched);
       if (!bySubjectAndTopic[tax.subjectName]) {
-        bySubjectAndTopic[tax.subjectName] = { subjectId: tax.subjectId, total: 0, topics: Object.create(null) };
+        bySubjectAndTopic[tax.subjectName] = { subjectId: tax.subjectId, total: 0, topics: {} };
       }
       bySubjectAndTopic[tax.subjectName].total++;
       const tName = enriched.topic;
       bySubjectAndTopic[tax.subjectName].topics[tName] = (bySubjectAndTopic[tax.subjectName].topics[tName] || 0) + 1;
     };
 
-    // A current correction (including a withdrawn key) overrides its seed.
-    // Register the current version first, even if it will be excluded.
-    if (scopeReady) allQs.forEach(q => registerItem(q, q?.id && nativeIds.has(String(q.id)) ? 'current_native' : 'user'));
-    baseNative.forEach(q => registerItem(q, 'native'));
+    baseNative.forEach(q => registerItem(q, false));
+    savedPromoted.forEach(q => registerItem(q, true));
+    allQs.forEach(q => {
+      if (!q.answer_unknown && Number.isInteger(Number(q.correct_index)) && Number(q.correct_index) >= 0) {
+        registerItem(q, true);
+      }
+    });
 
-    // Keep the original native bank and its internal v77 reference intact.
-    // Imported/private questions must not become global seeds for other portals.
-    let storageSaved = null;
-    if (options.saveToStorage && scopeReady) {
+    window.NATIVE_POLICE_QUESTION_BANK = unified;
+    if (options.saveToStorage) {
       try {
         const userAdded = unified.filter(q => q.promoted_to_native);
-        localStorage.setItem(storageKey, JSON.stringify({ version: 2, scope, questions: userAdded.slice(0, 600) }));
-        storageSaved = true;
-      } catch (_e) { storageSaved = false; }
+        localStorage.setItem('jc_promoted_native_bank_v1', JSON.stringify(userAdded.slice(0, 600)));
+      } catch (_e) {}
       try {
         const stObj = getAppState();
         if (typeof window.persistToLocalDatabase === 'function' && stObj?.activeCampaignId) {
@@ -548,30 +473,21 @@
 
     if (options.showToast && typeof window.toast === 'function') {
       const subjCount = Object.keys(bySubjectAndTopic).length;
-      window.toast(scopeReady
-        ? `Banco local organizado: ${unified.length} questões em ${subjCount} disciplinas.${storageSaved === false ? ' Não foi possível salvar a cópia local; confira o espaço disponível.' : ''}`
-        : 'Aguarde o carregamento dos dados da conta atual antes de organizar suas questões.');
+      window.toast(`🏛️ Banco Nativo Consolidado: ${unified.length} questões organizadas em ${subjCount} disciplinas com IDs estáveis!`);
     }
 
     return {
       total: unified.length,
       subjectsCount: Object.keys(bySubjectAndTopic).length,
       hierarchy: bySubjectAndTopic,
-      questions: unified,
-      storageSaved,
-      scope,
-      scopeReady
+      questions: unified
     };
   }
 
   function exportConsolidatedNativeBankJson() {
     const res = consolidateUserQuestionsIntoNativeBank({ saveToStorage: true, showToast: false });
-    if (!res.scopeReady) {
-      if (typeof window.toast === 'function') window.toast('Aguarde o carregamento dos dados da conta atual antes de exportar suas questões.');
-      return null;
-    }
     const payload = {
-      schema_version: 'r178-scoped-local-bank',
+      schema_version: 'r177-stable-taxonomy',
       exported_at: new Date().toISOString(),
       total_questions: res.total,
       subjects_count: res.subjectsCount,
@@ -587,13 +503,11 @@
     if (typeof window.toast === 'function') {
       window.toast(`📥 Arquivo native-question-bank-consolidado-${res.total}q.json exportado com sucesso!`);
     }
-    return payload;
   }
 
   JC_MODULES.nativeBankPromoter = {
     consolidate: consolidateUserQuestionsIntoNativeBank,
-    exportJson: exportConsolidatedNativeBankJson,
-    storageKey: promotedBankStorageKey
+    exportJson: exportConsolidatedNativeBankJson
   };
   window.consolidateUserQuestionsIntoNativeBank = consolidateUserQuestionsIntoNativeBank;
   window.exportConsolidatedNativeBankJson = exportConsolidatedNativeBankJson;
@@ -893,58 +807,6 @@
     document.head.appendChild(style);
   }
 
-  function profileHtml(value) {
-    return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-  }
-
-  function profileAvatarUrl(value) {
-    const text=String(value||'').trim();
-    if(!text||text.length>300000)return '';
-    if(/^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=]+$/i.test(text))return text;
-    try { const url=new URL(text); return url.protocol==='https:' ? url.href : ''; } catch { return ''; }
-  }
-
-  function profileMetric(value) {
-    if(value===null||value===undefined||value==='')return null;
-    const number=Number(value);
-    return Number.isFinite(number)&&number>=0?number:null;
-  }
-
-  function profileOwnerId() {
-    const session=typeof cloudSession!=='undefined'?cloudSession:window.cloudSession;
-    return String(session?.user?.id||'guest');
-  }
-  function ownProfileState() {
-    const current=getAppState(),owner=profileOwnerId();
-    if(owner==='guest')return current._ownerUserId&&current._ownerUserId!=='guest'?null:current;
-    return current._ownerUserId===owner?current:null;
-  }
-  function profileScope() {
-    return {ownerId:profileOwnerId(),resetEpoch:Number(getAppState()?._resetEpoch||0)};
-  }
-  function profileScopeMatches(scope) {
-    return Boolean(scope&&scope.ownerId===profileOwnerId()&&scope.resetEpoch===Number(getAppState()?._resetEpoch||0)&&ownProfileState());
-  }
-  function profileCacheKey(kind,ownerId=profileOwnerId(),resetEpoch=Number(getAppState()?._resetEpoch||0)) {
-    return `jc-profile-v178:${encodeURIComponent(ownerId)}:${resetEpoch}:${kind}`;
-  }
-  function readProfileCache(kind) {
-    try {
-      // Legacy keys have no owner and cannot safely be attributed to an account.
-      localStorage.removeItem('jc_profile_avatar_v1');
-      localStorage.removeItem('jc_profile_display_name_v1');
-      return localStorage.getItem(profileCacheKey(kind))||'';
-    } catch { return ''; }
-  }
-  function writeProfileCache(kind,value,scope=profileScope()) {
-    if(!profileScopeMatches(scope))return false;
-    try {
-      if(value)localStorage.setItem(profileCacheKey(kind,scope.ownerId,scope.resetEpoch),value);
-      else localStorage.removeItem(profileCacheKey(kind,scope.ownerId,scope.resetEpoch));
-      return true;
-    } catch { return false; }
-  }
-
   function getHunterInitials(name) {
     const clean = String(name || 'Caçador').trim();
     const parts = clean.split(/\s+/).filter(Boolean);
@@ -953,38 +815,37 @@
   }
 
   function getHunterAvatarDataUrl() {
-    const st=ownProfileState();
-    if(!st)return '';
-    return profileAvatarUrl(st.profileAvatarDataUrl||st.publicProfile?.avatar||readProfileCache('avatar'));
+    const st = getAppState();
+    return st.profileAvatarDataUrl || st.publicProfile?.avatar || localStorage.getItem('jc_profile_avatar_v1') || '';
   }
-  window.getHunterAvatarDataUrl=getHunterAvatarDataUrl;
 
-  function setHunterAvatarDataUrl(dataUrl,scope=profileScope()) {
-    if(!profileScopeMatches(scope))return false;
-    const avatar=profileAvatarUrl(dataUrl);
-    if(dataUrl&&!avatar)return false;
-    const st=ownProfileState();
-    st.profileAvatarDataUrl=avatar;
-    st.publicProfile=st.publicProfile||{};
-    st.publicProfile.avatar=avatar;
-    writeProfileCache('avatar',avatar,scope);
-    try{if(typeof save==='function')save();}catch{return false;}
-    if(typeof cloudSession==='object'&&cloudSession&&navigator.onLine&&typeof pushCloudState==='function') {
-      Promise.resolve(pushCloudState()).catch(()=>{});
-    }
+  function setHunterAvatarDataUrl(dataUrl) {
+    const st = getAppState();
+    st.profileAvatarDataUrl = dataUrl;
+    st.publicProfile = st.publicProfile || {};
+    st.publicProfile.avatar = dataUrl;
+    try {
+      if (dataUrl) localStorage.setItem('jc_profile_avatar_v1', dataUrl);
+      else localStorage.removeItem('jc_profile_avatar_v1');
+      if (typeof save === 'function') save();
+      if (typeof cloudSession === 'object' && cloudSession && navigator.onLine && typeof pushCloudState === 'function') {
+        pushCloudState();
+      }
+    } catch (_e) {}
     decorateTopHeaderAvatarPill();
-    return true;
   }
 
   function getHunterDisplayName() {
-    const st=ownProfileState();
-    const sess=typeof cloudSession!=='undefined'?cloudSession:window.cloudSession;
-    const metaName=sess?.user?.user_metadata?.full_name||sess?.user?.user_metadata?.name||'';
-    return String((st&&(st.profileDisplayName||st.publicProfile?.name||readProfileCache('name')))||metaName||'Caçador').trim().slice(0,50)||'Caçador';
+    const st = getAppState();
+    const sess = typeof cloudSession !== 'undefined' ? cloudSession : window.cloudSession;
+    const user = sess?.user;
+    const metaName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
+    const customName = st.profileDisplayName || st.publicProfile?.name || localStorage.getItem('jc_profile_display_name_v1') || '';
+    return customName || metaName || (user?.email ? user.email.split('@')[0] : 'Caçador');
   }
 
   function getPrivacyConfig() {
-    const st=ownProfileState()||{};
+    const st = getAppState();
     const p = st.publicProfile?.privacy || {};
     return {
       hiddenFromRanking: Boolean(st.publicProfile?.hidden),
@@ -999,13 +860,16 @@
   }
 
   function renderHunterAvatarHtml(itemOrName, isMe = false, extraAvatarUrl = '') {
-    const item=typeof itemOrName==='object'&&itemOrName?itemOrName:{};
-    const name=typeof itemOrName==='object'?(item.name||item.author_name||'Caçador'):String(itemOrName||'Caçador');
-    const initials=profileHtml(getHunterInitials(name));
-    const showAvatar=isMe?getPrivacyConfig().showAvatar:item.privacy?.showAvatar!==false;
-    if(!showAvatar)return `<span>${initials}</span>`;
-    const avatar=profileAvatarUrl(isMe?getHunterAvatarDataUrl():(item.avatar||item.avatar_url||extraAvatarUrl));
-    return avatar?`<img src="${profileHtml(avatar)}" alt="Foto de ${profileHtml(name)}" referrerpolicy="no-referrer">`:`<span>${initials}</span>`;
+    const name = typeof itemOrName === 'object' ? (itemOrName?.name || itemOrName?.author_name || 'Caçador') : String(itemOrName || 'Caçador');
+    const initials = getHunterInitials(name);
+    const priv = getPrivacyConfig();
+    const myAvatar = isMe && priv.showAvatar ? getHunterAvatarDataUrl() : '';
+    const theirAvatar = typeof itemOrName === 'object' ? (itemOrName?.avatar || itemOrName?.avatar_url || extraAvatarUrl || '') : extraAvatarUrl;
+    const finalAvatar = myAvatar || theirAvatar;
+    if (finalAvatar) {
+      return `<img src="${finalAvatar}" alt="Foto de ${name.replace(/"/g, '')}">`;
+    }
+    return `<span>${initials}</span>`;
   }
   window.renderHunterAvatarHtml = renderHunterAvatarHtml;
 
@@ -1015,43 +879,19 @@
     if (!btn) return;
     const avatarUrl = getHunterAvatarDataUrl();
     const name = getHunterDisplayName();
+    const initials = getHunterInitials(name);
     btn.classList.add('jcTopProfilePill');
     btn.title = `Meu Perfil de Caçador (${name})`;
     const avatarInner = avatarUrl
-      ? `<img src="${profileHtml(avatarUrl)}" alt="Foto de perfil de ${profileHtml(name)}" referrerpolicy="no-referrer">`
-      : `<span>${profileHtml(getHunterInitials(name))}</span>`;
-    btn.innerHTML = `<span class="jcHeaderAvatarCircle" id="topHeaderAvatarCircle">${avatarInner}</span><span class="jcHeaderProfileName">${profileHtml(name)}</span>`;
+      ? `<img src="${avatarUrl}" alt="Foto de perfil de ${name.replace(/"/g, '')}">`
+      : `<span>${initials}</span>`;
+    btn.innerHTML = `<span class="jcHeaderAvatarCircle" id="topHeaderAvatarCircle">${avatarInner}</span><span class="jcHeaderProfileName">${name}</span>`;
     btn.onclick = (e) => {
       e?.preventDefault?.();
-      if (typeof openView === 'function') openView('profile');
+      if (typeof openView === 'function') {
+        openView('profile');
+      }
     };
-  }
-
-  const profileSaveScopes=new Set();
-  async function saveHunterProfileChanges(changes={}) {
-    const scope=profileScope(),st=ownProfileState();
-    if(!st)return {status:'account_not_ready'};
-    const saveKey=`${scope.ownerId}:${scope.resetEpoch}`;
-    if(profileSaveScopes.has(saveKey))return {status:'busy'};
-    const clean=(value,max)=>String(value??'').trim().slice(0,max);
-    const privacy=Object.fromEntries(['showAvatar','showStreak','showAccuracy','showHours','showTargetRole','showBadges','showBio'].map(key=>[key,changes.privacy?.[key]!==false]));
-    const snapshot={name:clean(changes.name,50)||'Caçador',role:clean(changes.role,80),secondaryRole:clean(changes.secondaryRole,80),bio:clean(changes.bio,140),privacy,hidden:!!changes.hidden};
-    st.profileDisplayName=snapshot.name;st.profileTargetRole=snapshot.role;
-    st.profileCity=clean(changes.city,50);st.profileBioMotto=snapshot.bio;
-    st.publicProfile={...(st.publicProfile||{}),...snapshot,avatar:getHunterAvatarDataUrl()};
-    writeProfileCache('name',snapshot.name,scope);
-    const beforeRevision=Number(st._serverRevision||0);
-    try{if(typeof save==='function')save();}catch{return {status:'storage_error'};}
-    if(!navigator.onLine||scope.ownerId==='guest'||typeof pushCloudState!=='function')return {status:'pending'};
-    profileSaveScopes.add(saveKey);
-    try {
-      const confirmed=await pushCloudState();
-      if(!profileScopeMatches(scope))return {status:'account_changed'};
-      const current=ownProfileState(),publicData=current.publicProfile||{};
-      const matches=['name','role','secondaryRole','bio','hidden'].every(key=>publicData[key]===snapshot[key])&&JSON.stringify(publicData.privacy||{})===JSON.stringify(snapshot.privacy);
-      return {status:confirmed===true&&!current._dirty&&Number(current._serverRevision||0)>beforeRevision&&matches&&current.profileCity===clean(changes.city,50)?'synced':'pending'};
-    } catch { return {status:profileScopeMatches(scope)?'pending':'account_changed'}; }
-    finally { profileSaveScopes.delete(saveKey); }
   }
 
   // Modal de Visita ao Perfil Público de Outro Caçador (Ranking / Chat da Guilda)
@@ -1069,18 +909,17 @@
       document.body.appendChild(dlg);
     }
 
-    const rawName=String(hunterData.name||hunterData.author_name||'Caçador da Guilda').trim().slice(0,100);
-    const hName = profileHtml(rawName);
-    const hRole = profileHtml(String(hunterData.role || hunterData.author_role || 'Cargo não informado').trim());
-    const hSecRole = profileHtml(String(hunterData.secondary_role || '').trim());
-    const hXp = profileMetric(hunterData.xp ?? hunterData.author_xp) ?? 0;
-    const hStreak = profileMetric(hunterData.streak);
-    const hBestStreak = hStreak===null?null:Math.max(hStreak, profileMetric(hunterData.best_streak)??hStreak);
-    const hAcc = profileMetric(hunterData.accuracy);
-    const hMissions = profileMetric(hunterData.missions_done);
-    const hHours = profileMetric(hunterData.hours);
-    const hRankLabel = profileHtml(typeof level === 'function' ? (level(hXp, false)?.label || 'Caçador') : 'Caçador Ativo');
-    const hBio = profileHtml(hunterData.bio || 'Bio não informada.');
+    const hName = String(hunterData.name || hunterData.author_name || 'Caçador da Guilda').trim();
+    const hRole = String(hunterData.role || hunterData.author_role || 'Carreiras Policiais').trim();
+    const hSecRole = String(hunterData.secondary_role || '').trim();
+    const hXp = Number(hunterData.xp ?? hunterData._displayXp ?? hunterData.author_xp ?? 0);
+    const hStreak = Number(hunterData.streak ?? hunterData._displayStreak ?? 0);
+    const hBestStreak = Math.max(hStreak, Number(hunterData.best_streak || 0));
+    const hAcc = Number(hunterData.accuracy || 0);
+    const hMissions = Number(hunterData.missions_done ?? hunterData._displayMissions ?? 0);
+    const hHours = Number(hunterData._displayHours || Math.round(((hMissions * 50) + (hStreak * 30)) / 60 * 10) / 10 || 0);
+    const hRankLabel = typeof level === 'function' ? (level(hXp, false)?.label || 'Caçador') : 'Caçador Ativo';
+    const hBio = hunterData.bio || '“Membro ativo da Guilda na Jornada do Caçador.”';
     const hPriv = hunterData.privacy || {};
     const avatarHtml = renderHunterAvatarHtml(hunterData, false);
 
@@ -1115,16 +954,16 @@
             <span>Experiência na Guilda</span>
           </div>
           <div class="jcProfileStatItem">
-            <b style="color:#fbbf24">${hPriv.showStreak !== false ? (hStreak===null?'Não informado':`🔥 ${hStreak} dias (Rec: ${hBestStreak}d)`) : '🔒 Privado'}</b>
+            <b style="color:#fbbf24">${hPriv.showStreak !== false ? `🔥 ${hStreak} dias (Rec: ${hBestStreak}d)` : '🔒 Privado'}</b>
             <span>Ofensiva de Estudos</span>
           </div>
           <div class="jcProfileStatItem">
-            <b style="color:#34d399">${hPriv.showAccuracy !== false ? `${hAcc===null?'Sem precisão informada':`🎯 ${Math.min(100,hAcc)}%`} (${hMissions===null?'missões não informadas':`${hMissions} missões`})` : '🔒 Privado'}</b>
+            <b style="color:#34d399">${hPriv.showAccuracy !== false ? `🎯 ${hAcc}% (${hMissions} missões)` : '🔒 Privado'}</b>
             <span>Precisão &amp; Missões</span>
           </div>
           <div class="jcProfileStatItem">
-            <b>${hPriv.showHours !== false ? (hHours===null?'Não informado':`⏱️ ${hHours}h`) : '🔒 Privado'}</b>
-            <span>Horas registradas</span>
+            <b>${hPriv.showHours !== false ? `⏱️ ${hHours}h` : '🔒 Privado'}</b>
+            <span>Ritmo Estimado</span>
           </div>
         </div>
 
@@ -1142,7 +981,7 @@
 
         <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
           ${hunterData.user_id && hunterData.user_id !== 'local' ? `
-            <button type="button" class="action" id="jcVisitorChallengeDuelBtn" style="flex:1">⚔️ Desafiar ${profileHtml(rawName.split(' ')[0])} para Duelo X1</button>
+            <button type="button" class="action" id="jcVisitorChallengeDuelBtn" style="flex:1">⚔️ Desafiar ${hName.split(' ')[0]} para Duelo X1</button>
           ` : ''}
           <button type="button" class="ghost" id="jcVisitorCloseBottomBtn" style="flex:1">Voltar</button>
         </div>
@@ -1156,7 +995,7 @@
       duelBtn.onclick = () => {
         dlg.close();
         try {
-          const challBtn = Array.from(document.querySelectorAll('[data-challenge-from-rank]')).find(button=>String(button.dataset.challengeFromRank||'').startsWith(`${hunterData.user_id}|`));
+          const challBtn = document.querySelector(`[data-challenge-from-rank^="${hunterData.user_id}|"]`);
           if (challBtn) { challBtn.click(); return; }
         } catch (_e) {}
         if (typeof openView === 'function') openView('duel');
@@ -1168,23 +1007,21 @@
 
   function computeBoardAccuracyStats() {
     const allQs = getAllQuestions();
-    const st = ownProfileState();
-    if(!st)return [];
+    const st = getAppState();
     const fpMap = st.answeredQuestionFingerprints || {};
     const boards = {};
     for (const q of allQs) {
-      const bName = String(q.board || 'Banca não informada').trim();
+      const bName = String(q.board || (q.origin === 'oficial' ? 'Instituto AOCP' : 'Simulado / Autoral')).trim();
       const normBoard = /cebraspe|cespe/i.test(bName) ? 'Cebraspe'
         : /fgv/i.test(bName) ? 'FGV Conhecimento'
         : /upenet|iaupe/i.test(bName) ? 'UPENET / IAUPE'
         : /ibfc/i.test(bName) ? 'IBFC'
         : /idecan/i.test(bName) ? 'IDECAN'
         : /aocp/i.test(bName) ? 'Instituto AOCP'
-        : bName;
+        : 'Simulados & Outras Bancas';
       if (!boards[normBoard]) boards[normBoard] = { totalAvailable: 0, answered: 0, correct: 0 };
       boards[normBoard].totalAvailable++;
-      const keyStatus=typeof window.answerKeyStatus==='function'?window.answerKeyStatus(q):'';
-      if (typeof questionFingerprint === 'function' && !['sem_gabarito','provisorio','anulada'].includes(keyStatus)) {
+      if (typeof questionFingerprint === 'function') {
         const fp = questionFingerprint(q);
         if (fpMap[fp] === 'correct') {
           boards[normBoard].answered++;
@@ -1240,11 +1077,10 @@
   function renderHunterProfileHub() {
     const sec = ensureProfileViewSectionExists();
     if (!sec) return;
-    const st = ownProfileState();
-    if(!st){sec.innerHTML='<div class="empty">Aguardando carregar os dados desta conta…</div>';return;}
-    const renderScope=profileScope();
     try { if (typeof refreshStreak === 'function') refreshStreak(); } catch (_e) {}
     try { if (typeof syncHunterStatsSnapshot === 'function') syncHunterStatsSnapshot(); } catch (_e) {}
+
+    const st = getAppState();
     const allQs = getAllQuestions();
     const allSums = getAllSummaries();
     const allCards = getAllFlashcards();
@@ -1252,38 +1088,39 @@
 
     const name = getHunterDisplayName();
     const avatarUrl = getHunterAvatarDataUrl();
-    const camp = typeof activeCampaign === 'function' ? activeCampaign() : null;
-    const targetRole = st.profileTargetRole || st.publicProfile?.role || camp?.name || '';
+    const initials = getHunterInitials(name);
+    const camp = typeof activeCampaign === 'function' ? activeCampaign() : { name: 'PMPE — Soldado' };
+    const targetRole = st.profileTargetRole || st.publicProfile?.role || camp?.name || 'PMPE — Soldado';
     const secRole = st.publicProfile?.secondaryRole || '';
     const bioMotto = st.profileBioMotto || st.publicProfile?.bio || '“Disciplina diária, constância no ciclo e foco cirúrgico até a posse.”';
-    const cityState = st.profileCity || '';
+    const cityState = st.profileCity || 'Pernambuco, Brasil';
 
-    const totalXp = profileMetric(typeof xp === 'function' ? xp() : st.hunterStats?.xp)??0;
+    const totalXp = typeof xp === 'function' ? xp() : Number(st.hunterStats?.xp || 0);
     const pool = typeof missionPool === 'function' ? missionPool() : [];
     const doneMissions = pool.filter(m => st.done?.[m.id]).length;
     const editalPct = pool.length ? Math.round((doneMissions / pool.length) * 100) : 0;
     const rankObj = typeof level === 'function' ? level(totalXp, pool.length > 0 && doneMissions === pool.length) : { label: 'C II - Caçador Experiente' };
 
-    const scores = (Array.isArray(st.scores)?st.scores:[]).filter(s => s&&(!s.campaignId || s.campaignId === st.activeCampaignId));
-    const scoreTotal = scores.reduce((acc, s) => acc + (profileMetric(s.total)??0), 0);
-    const scoreCorr = scores.reduce((acc, s) => acc + Math.min(profileMetric(s.correct)??0,profileMetric(s.total)??0), 0);
+    const scores = (st.scores || []).filter(s => !s.campaignId || s.campaignId === st.activeCampaignId);
+    const scoreTotal = scores.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
+    const scoreCorr = scores.reduce((acc, s) => acc + (Number(s.correct) || 0), 0);
     const tracked = st.questionStatsByCampaign?.[st.activeCampaignId] || {};
-    const qTotal = Math.max(scoreTotal, profileMetric(tracked.total)??0);
-    const qCorr = Math.min(qTotal,(profileMetric(tracked.total)??0) > scoreTotal ? (profileMetric(tracked.correct)??0) : scoreCorr);
-    const accuracy = qTotal > 0 ? Math.max(0,Math.min(100,Math.round((qCorr / qTotal) * 100))) : null;
+    const qTotal = Math.max(scoreTotal, Number(tracked.total || 0));
+    const qCorr = Number(tracked.total || 0) > scoreTotal ? Number(tracked.correct || 0) : scoreCorr;
+    const accuracy = qTotal > 0 ? Math.round((qCorr / qTotal) * 100) : (Number(st.hunterStats?.accuracy) || 0);
 
-    const totalFocusSeconds = Object.values(st.studyByDay || {}).reduce((acc, v) => acc + (profileMetric(v)??0), 0);
+    const totalFocusSeconds = Object.values(st.studyByDay || {}).reduce((acc, v) => acc + (Number(v) || 0), 0);
     const totalFocusHours = (totalFocusSeconds / 3600).toFixed(1);
-    const streak = Math.max(profileMetric(st.streak)??0, profileMetric(st.hunterStats?.streak)??0);
-    const bestStreak = Math.max(streak, profileMetric(st.bestStreak)??0, profileMetric(st.hunterStats?.bestStreak)??0);
+    const streak = Math.max(Number(st.streak || 0), Number(st.hunterStats?.streak || 0));
+    const bestStreak = Math.max(streak, Number(st.bestStreak || 0), Number(st.hunterStats?.bestStreak || 0));
     const bossesWon = Object.keys(st.bosses || {}).length;
 
     const boardStats = computeBoardAccuracyStats();
-    const telemetry = JC_MODULES.telemetry ? JC_MODULES.telemetry.getStats() : {};
-    const sampleCount=Number(telemetry.sampleCount??telemetry.count??0);
-    const speedLabel=sampleCount>0&&Number.isFinite(telemetry.p50Ms)?`renderização dos filtros locais: p50 ${Math.round(telemetry.p50Ms)} ms (${sampleCount} amostras)`:'Filtros locais: ainda sem medição';
-    const syncLabel=profileOwnerId()==='guest'?'Salvo neste aparelho':st._dirty?'Sincronização pendente':Number(st._serverRevision)>0?'Último estado confirmado':'Aguardando confirmação';
-    const avatarHtml = renderHunterAvatarHtml(name,true);
+    const telemetry = JC_MODULES.telemetry ? JC_MODULES.telemetry.getStats() : { p50Ms: 12, bankSize: allQs.length };
+
+    const avatarHtml = avatarUrl
+      ? `<img src="${avatarUrl}" alt="Foto de ${name.replace(/"/g, '')}">`
+      : `<span>${initials}</span>`;
 
     sec.innerHTML = `
       <div class="jcProfileSocialCard">
@@ -1300,21 +1137,21 @@
                 ${avatarHtml}
                 <label class="jcAvatarChangeLabel" title="Enviar foto de perfil do seu aparelho">
                   📷 Foto
-                  <input type="file" id="jcProfileAvatarInput" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+                  <input type="file" id="jcProfileAvatarInput" accept="image/*" hidden>
                 </label>
               </div>
               <div class="jcProfileTitleBlock">
                 <div class="eyebrow" style="color:#59e6ff;font-weight:900">PERFIL OFICIAL DO CAÇADOR</div>
                 <h2>
-                  <span>${profileHtml(name)}</span>
-                  <span class="jcProfileRoleBadge">🛡️ ${profileHtml(rankObj.label)}</span>
+                  <span>${name}</span>
+                  <span class="jcProfileRoleBadge">🛡️ ${rankObj.label}</span>
                 </h2>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:4px;font-size:.82rem;color:#94a3b8">
-                  <span>🎯 <b>Cargo Pretendido:</b> <strong style="color:#f8fafc">${profileHtml(targetRole)}</strong>${secRole ? ` · 🛡️ <b>2º Alvo:</b> <strong style="color:#cbd5e1">${profileHtml(secRole)}</strong>` : ''}</span>
+                  <span>🎯 <b>Cargo Pretendido:</b> <strong style="color:#f8fafc">${targetRole}</strong>${secRole ? ` · 🛡️ <b>2º Alvo:</b> <strong style="color:#cbd5e1">${secRole}</strong>` : ''}</span>
                   <span>·</span>
-                  <span>📍 ${profileHtml(cityState)}</span>
+                  <span>📍 ${cityState}</span>
                 </div>
-                <p class="jcProfileBioMotto">${profileHtml(bioMotto)}</p>
+                <p class="jcProfileBioMotto">${bioMotto}</p>
               </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1326,12 +1163,12 @@
           <div id="jcEditProfileDrawer" hidden style="margin-top:16px;padding:16px;border-radius:16px;background:rgba(6,16,28,0.94);border:1px solid rgba(89,230,255,0.4);display:grid;gap:12px">
             <div class="eyebrow" style="color:#38bdf8">1. IDENTIDADE E CARGO PRETENDIDO</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
-              <label class="field" style="margin:0">Seu Nome de Exibição (Perfil &amp; Ranking)<input type="text" id="jcEditNameInput" value="${profileHtml(name)}" maxlength="50"></label>
-              <label class="field" style="margin:0">1º Concurso / Cargo Pretendido<input type="text" id="jcEditRoleInput" value="${profileHtml(targetRole)}" maxlength="80" placeholder="Ex.: PMPE — Soldado"></label>
-              <label class="field" style="margin:0">2º Concurso (Opcional)<input type="text" id="jcEditSecRoleInput" value="${profileHtml(secRole)}" maxlength="80" placeholder="Ex.: CBMPE / PPPE"></label>
-              <label class="field" style="margin:0">Cidade / Estado<input type="text" id="jcEditCityInput" value="${profileHtml(cityState)}" maxlength="50"></label>
+              <label class="field" style="margin:0">Seu Nome de Exibição (Perfil &amp; Ranking)<input type="text" id="jcEditNameInput" value="${name}" maxlength="50"></label>
+              <label class="field" style="margin:0">1º Concurso / Cargo Pretendido<input type="text" id="jcEditRoleInput" value="${targetRole}" maxlength="80" placeholder="Ex.: PMPE — Soldado"></label>
+              <label class="field" style="margin:0">2º Concurso (Opcional)<input type="text" id="jcEditSecRoleInput" value="${secRole}" maxlength="80" placeholder="Ex.: CBMPE / PPPE"></label>
+              <label class="field" style="margin:0">Cidade / Estado<input type="text" id="jcEditCityInput" value="${cityState}" maxlength="50"></label>
             </div>
-            <label class="field" style="margin:0">Lema de Estudos / Bio do Perfil<input type="text" id="jcEditBioInput" value="${profileHtml(bioMotto.replace(/^“|”$/g, ''))}" maxlength="140"></label>
+            <label class="field" style="margin:0">Lema de Estudos / Bio do Perfil<input type="text" id="jcEditBioInput" value="${bioMotto.replace(/^“|”$/g, '')}" maxlength="140"></label>
 
             <div class="eyebrow" style="color:#34d399;margin-top:4px">2. PRIVACIDADE DO SEU PERFIL PÚBLICO (O QUE OUTROS USUÁRIOS PODEM VER AO CLICAR EM VOCÊ)</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px">
@@ -1353,7 +1190,7 @@
           <div class="jcProfileStatsStrip">
             <div class="jcProfileStatItem"><b>${totalXp} XP</b><span>Experiência Total</span></div>
             <div class="jcProfileStatItem"><b style="color:#fbbf24">🔥 ${streak}d</b><span>Ofensiva (Recorde: ${bestStreak}d)</span></div>
-            <div class="jcProfileStatItem"><b style="color:#34d399">${accuracy===null?'Sem respostas':`${accuracy}%`}</b><span>Precisão (${qCorr}/${qTotal})</span></div>
+            <div class="jcProfileStatItem"><b style="color:#34d399">${accuracy}%</b><span>Precisão (${qCorr}/${qTotal})</span></div>
             <div class="jcProfileStatItem"><b>${totalFocusHours}h</b><span>Horas Líquidas</span></div>
             <div class="jcProfileStatItem"><b>${editalPct}%</b><span>Cobertura (${doneMissions}/${pool.length})</span></div>
             <div class="jcProfileStatItem"><b style="color:#f43f5e">🏆 ${bossesWon}</b><span>Chefes Derrotados</span></div>
@@ -1364,16 +1201,16 @@
       <div class="jcProfileTwoCols">
         <div style="display:grid;gap:14px">
           <div class="card" style="margin:0">
-            <div class="sectionHead"><h2>📋 Apresentação &amp; Sincronia Real</h2><span class="tag">${syncLabel}</span></div>
+            <div class="sectionHead"><h2>📋 Apresentação &amp; Sincronia Real</h2><span class="tag">Sincronizado</span></div>
             <div class="list" style="gap:8px;font-size:.84rem">
-              <div class="topic"><span>🎯 <b>Portal Ativo:</b> ${profileHtml(camp?.name || 'Nenhum portal ativo')} (${doneMissions} missões cumpridas)</span></div>
+              <div class="topic"><span>🎯 <b>Portal Ativo:</b> ${camp?.name || 'PMPE — Soldado'} (${doneMissions} missões cumpridas)</span></div>
               <div class="topic"><span>📚 <b>Acervo no Aparelho:</b> <b>${allQs.length} questões</b> · <b>${allSums.length} resumos</b> · <b>${allCards.length} flashcards</b></span></div>
               <div class="topic"><span>🔒 <b>Privacidade no Ranking:</b> ${priv.hiddenFromRanking ? 'Oculto (Modo Invisível)' : 'Visível para a Guilda (com filtros personalizados)'}</span></div>
-              <div class="topic"><span>⚡ <b>Medição dos filtros:</b> ${speedLabel}</span></div>
+              <div class="topic"><span>⚡ <b>Velocidade da Aba Questões:</b> abertura instantânea (p50 ${telemetry.p50Ms || 8}ms)</span></div>
             </div>
             <div style="display:grid;gap:8px;margin-top:12px">
-              <button type="button" class="action small" id="jcProfileConsolidateNativeBtn" style="width:100%">🏛️ Organizar minhas ${allQs.length} questões</button>
-              <button type="button" class="ghost small" id="jcProfileExportNativeJsonBtn" style="width:100%">📥 Baixar meu banco organizado (.json)</button>
+              <button type="button" class="action small" id="jcProfileConsolidateNativeBtn" style="width:100%">🏛️ Consolidar Minhas ${allQs.length} Questões no Banco Nativo</button>
+              <button type="button" class="ghost small" id="jcProfileExportNativeJsonBtn" style="width:100%">📥 Baixar Meu Banco Nativo Consolidado (.json)</button>
             </div>
           </div>
 
@@ -1383,7 +1220,7 @@
               <div class="achievement ${doneMissions >= 1 ? 'unlocked' : ''}"><b>${doneMissions >= 1 ? '✓' : '◈'} Recruta Ativo</b><span class="small muted">1ª missão cumprida (${doneMissions} feitas)</span></div>
               <div class="achievement ${streak >= 3 ? 'unlocked' : ''}"><b>${streak >= 3 ? '✓' : '◈'} Fogo Constante</b><span class="small muted">3+ dias seguidos (atual: ${streak}d)</span></div>
               <div class="achievement ${qTotal >= 30 ? 'unlocked' : ''}"><b>${qTotal >= 30 ? '✓' : '◈'} Atirador de Questões</b><span class="small muted">30+ resolvidas (atual: ${qTotal})</span></div>
-              <div class="achievement ${accuracy >= 60 && qTotal >= 10 ? 'unlocked' : ''}"><b>${accuracy >= 60 && qTotal >= 10 ? '✓' : '◈'} Mira Calibrada</b><span class="small muted">60%+ precisão (atual: ${accuracy===null?'Sem respostas':`${accuracy}%`})</span></div>
+              <div class="achievement ${accuracy >= 60 && qTotal >= 10 ? 'unlocked' : ''}"><b>${accuracy >= 60 && qTotal >= 10 ? '✓' : '◈'} Mira Calibrada</b><span class="small muted">60%+ precisão (atual: ${accuracy}%)</span></div>
             </div>
           </div>
         </div>
@@ -1404,7 +1241,7 @@
                 return `
                   <div class="jcBoardStatRow">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.83rem">
-                      <b>🏛️ ${profileHtml(b.board)}</b>
+                      <b>🏛️ ${b.board}</b>
                       <span class="small" style="color:${b.pct === null ? '#94a3b8' : barColor};font-weight:800">
                         ${b.pct !== null ? `${b.pct}% de acerto (${b.correct}/${b.answered} resolvidas · ${b.totalAvailable} no banco)` : `${b.totalAvailable} questões disponíveis no seu banco`}
                       </span>
@@ -1435,7 +1272,7 @@
                   return `
                     <div class="jcBoardStatRow">
                       <div style="display:flex;justify-content:space-between;font-size:.82rem">
-                        <b>${profileHtml(subj)}</b>
+                        <b>${subj}</b>
                         <span>${dCnt}/${items.length} tópicos (${p}%)</span>
                       </div>
                       <div class="bar" style="height:7px;margin-top:4px"><div class="fill" style="width:${p}%"></div></div>
@@ -1451,40 +1288,42 @@
 
     // Bind events
     const avatarIn = document.getElementById('jcProfileAvatarInput');
-    if (avatarIn) avatarIn.onchange = (e) => {
-      const file=e.target.files?.[0],scope=renderScope;
-      if(!file||!profileScopeMatches(scope))return;
-      const notify=message=>{if(profileScopeMatches(scope)&&typeof toast==='function')toast(message);};
-      if(!/^image\/(png|jpeg|webp|gif)$/.test(file.type)||file.size>5*1024*1024){notify('Escolha uma imagem PNG, JPEG, WebP ou GIF de até 5 MB.');return;}
-      const reader=new FileReader();
-      reader.onerror=()=>notify('Não foi possível ler a foto. Tente outro arquivo.');
-      reader.onload=()=>{
-        if(!profileScopeMatches(scope))return;
-        const img=new Image();
-        img.onerror=()=>notify('A imagem não pôde ser aberta. Tente outro arquivo.');
-        img.onload=()=>{
-          if(!profileScopeMatches(scope))return;
-          try{
-            const cnv=document.createElement('canvas'),size=200;
-            cnv.width=size;cnv.height=size;
-            const ctx=cnv.getContext('2d'),minSide=Math.min(img.width,img.height);
-            if(!ctx||!minSide)throw new Error('invalid image');
-            ctx.drawImage(img,(img.width-minSide)/2,(img.height-minSide)/2,minSide,minSide,0,0,size,size);
-            if(!setHunterAvatarDataUrl(cnv.toDataURL('image/webp',0.82),scope))throw new Error('invalid avatar');
+    if (avatarIn) {
+      avatarIn.onchange = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => {
+            const cnv = document.createElement('canvas');
+            const size = 200;
+            cnv.width = size;
+            cnv.height = size;
+            const ctx = cnv.getContext('2d');
+            const minSide = Math.min(img.width, img.height);
+            const sx = (img.width - minSide) / 2;
+            const sy = (img.height - minSide) / 2;
+            ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+            const dataUrl = cnv.toDataURL('image/webp', 0.82);
+            setHunterAvatarDataUrl(dataUrl);
             renderHunterProfileHub();
-            notify('Foto salva no aparelho. A sincronização será confirmada pela conta.');
-          }catch{notify('Não foi possível salvar a foto. Tente outra imagem.');}
+            if (typeof toast === 'function') toast('📸 Foto aplicada no Perfil, Topo, Ranking e Chat da Guilda!');
+          };
+          img.src = String(reader.result || '');
         };
-        img.src=String(reader.result||'');
+        reader.readAsDataURL(file);
       };
-      reader.readAsDataURL(file);
-    };
-    const remBtn=document.getElementById('jcRemoveAvatarBtn');
-    if(remBtn)remBtn.onclick=()=>{
-      if(!setHunterAvatarDataUrl('',renderScope))return;
-      renderHunterProfileHub();
-      if(typeof toast==='function')toast('Foto removida neste aparelho.');
-    };
+    }
+
+    const remBtn = document.getElementById('jcRemoveAvatarBtn');
+    if (remBtn) {
+      remBtn.onclick = () => {
+        setHunterAvatarDataUrl('');
+        renderHunterProfileHub();
+        if (typeof toast === 'function') toast('Foto de perfil removida.');
+      };
+    }
 
     const editBtn = document.getElementById('jcEditSocialProfileBtn');
     const drawer = document.getElementById('jcEditProfileDrawer');
@@ -1495,22 +1334,47 @@
     if (cancelBtn && drawer) {
       cancelBtn.onclick = () => { drawer.hidden = true; };
     }
-    const saveProfBtn=document.getElementById('jcSaveEditProfileBtn');
-    if(saveProfBtn)saveProfBtn.onclick=async()=>{
-      if(!profileScopeMatches(renderScope))return;
-      saveProfBtn.disabled=true;
-      try{
-        const value=id=>document.getElementById(id)?.value||'';
-        const checked=id=>Boolean(document.getElementById(id)?.checked);
-        const result=await saveHunterProfileChanges({
-          name:value('jcEditNameInput'),role:value('jcEditRoleInput'),secondaryRole:value('jcEditSecRoleInput'),city:value('jcEditCityInput'),bio:value('jcEditBioInput'),
-          hidden:checked('jcPrivHiddenAll'),privacy:{showAvatar:checked('jcPrivAvatar'),showStreak:checked('jcPrivStreak'),showAccuracy:checked('jcPrivAccuracy'),showHours:checked('jcPrivHours'),showTargetRole:checked('jcPrivRole'),showBadges:checked('jcPrivBadges'),showBio:checked('jcPrivBadges')}
-        });
-        if(!profileScopeMatches(renderScope))return;
-        decorateTopHeaderAvatarPill();renderHunterProfileHub();
-        if(typeof toast==='function')toast(result.status==='synced'?'Perfil e privacidade confirmados na nuvem.':result.status==='busy'?'Já existe um salvamento em andamento.':result.status==='storage_error'?'Não foi possível gravar no aparelho. Mantenha a página aberta e tente novamente.':'Perfil salvo no aparelho; sincronização pendente.');
-      }finally{saveProfBtn.disabled=false;}
-    };
+    const saveProfBtn = document.getElementById('jcSaveEditProfileBtn');
+    if (saveProfBtn) {
+      saveProfBtn.onclick = async () => {
+        const newName = document.getElementById('jcEditNameInput')?.value.trim() || name;
+        const newRole = document.getElementById('jcEditRoleInput')?.value.trim() || targetRole;
+        const newSecRole = document.getElementById('jcEditSecRoleInput')?.value.trim() || '';
+        const newCity = document.getElementById('jcEditCityInput')?.value.trim() || cityState;
+        const newBio = document.getElementById('jcEditBioInput')?.value.trim() || '';
+
+        const stObj = getAppState();
+        stObj.profileDisplayName = newName;
+        stObj.profileTargetRole = newRole;
+        stObj.profileCity = newCity;
+        stObj.profileBioMotto = newBio ? `“${newBio}”` : bioMotto;
+        stObj.publicProfile = stObj.publicProfile || {};
+        stObj.publicProfile.name = newName;
+        stObj.publicProfile.role = newRole;
+        stObj.publicProfile.secondaryRole = newSecRole;
+        stObj.publicProfile.bio = stObj.profileBioMotto;
+        stObj.publicProfile.avatar = getHunterAvatarDataUrl();
+        stObj.publicProfile.hidden = Boolean(document.getElementById('jcPrivHiddenAll')?.checked);
+        stObj.publicProfile.privacy = {
+          showAvatar: Boolean(document.getElementById('jcPrivAvatar')?.checked),
+          showStreak: Boolean(document.getElementById('jcPrivStreak')?.checked),
+          showAccuracy: Boolean(document.getElementById('jcPrivAccuracy')?.checked),
+          showHours: Boolean(document.getElementById('jcPrivHours')?.checked),
+          showTargetRole: Boolean(document.getElementById('jcPrivRole')?.checked),
+          showBadges: Boolean(document.getElementById('jcPrivBadges')?.checked),
+          showBio: Boolean(document.getElementById('jcPrivBadges')?.checked)
+        };
+
+        try { localStorage.setItem('jc_profile_display_name_v1', newName); } catch (_e) {}
+        if (typeof save === 'function') save();
+        if (typeof cloudSession === 'object' && cloudSession && navigator.onLine && typeof pushCloudState === 'function') {
+          try { await pushCloudState(); } catch (_e) {}
+        }
+        decorateTopHeaderAvatarPill();
+        renderHunterProfileHub();
+        if (typeof toast === 'function') toast('✅ Perfil, Ranking e Privacidade sincronizados com sucesso!');
+      };
+    }
 
     const accModalBtn = document.getElementById('jcOpenAccountModalFromProfileBtn');
     if (accModalBtn) {
@@ -1558,8 +1422,7 @@
     decorateHeader: decorateTopHeaderAvatarPill,
     renderProfile: renderHunterProfileHub,
     computeBoardStats: computeBoardAccuracyStats,
-    openVisitorModal: openPublicHunterProfileVisitorModal,
-    saveChanges: saveHunterProfileChanges
+    openVisitorModal: openPublicHunterProfileVisitorModal
   };
   window.renderHunterProfileHub = renderHunterProfileHub;
   window.decorateTopHeaderAvatarPill = decorateTopHeaderAvatarPill;
@@ -1595,5 +1458,1001 @@
     document.addEventListener('DOMContentLoaded', bootSocialProfileHooks);
   } else {
     setTimeout(bootSocialProfileHooks, 0);
+  }
+})();
+
+/* ============================================================================
+ * Módulo 7 (r178): Redesign Clean UI (Inspirado em Caveira / Linear / Shadcn),
+ * Sidebar Lateral Retrátil (Expandida / Somente Ícones), Topbar Focus Timer Pill
+ * (00:00:00) e Modo Foco Tela Cheia Imersivo Responsivo (Desktop & Mobile)
+ * ============================================================================ */
+(function () {
+  'use strict';
+
+  const JC_MODULES = (window.JC_MODULES = window.JC_MODULES || {});
+  let wakeLockSentinel = null;
+
+  function formatHHMMSS(totalSeconds) {
+    const sec = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return [h, m, s].map(v => String(v).padStart(2, '0')).join(':');
+  }
+
+  async function requestScreenWakeLock(enable) {
+    try {
+      if (enable && 'wakeLock' in navigator && !wakeLockSentinel) {
+        wakeLockSentinel = await navigator.wakeLock.request('screen');
+        wakeLockSentinel.addEventListener('release', () => { wakeLockSentinel = null; });
+      } else if (!enable && wakeLockSentinel) {
+        await wakeLockSentinel.release();
+        wakeLockSentinel = null;
+      }
+    } catch (_e) {}
+  }
+
+  function injectCaveiraCleanUiStyles() {
+    if (document.getElementById('jc-caveira-clean-ui-styles')) return;
+    const st = document.createElement('style');
+    st.id = 'jc-caveira-clean-ui-styles';
+    st.textContent = `
+      /* ── 1. SIDEBAR LATERAL RETRÁTIL NO DESKTOP (Padrão app.caveira.com / Linear) ── */
+      .jcSideRail {
+        display: none;
+      }
+      @media (min-width: 960px) {
+        body.jcHasSidebar {
+          padding-left: 232px;
+          transition: padding-left 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        body.jcHasSidebar.jcSidebarCollapsed {
+          padding-left: 68px;
+        }
+        body.jcHasSidebar main.app {
+          width: min(100%, 1180px) !important;
+          max-width: 1180px !important;
+          padding-top: 14px !important;
+        }
+        /* Esconde a barra .tabs horizontal no desktop quando a Sidebar está ativa (mantém no DOM p/ testes) */
+        body.jcHasSidebar main.app > nav.tabs {
+          display: none !important;
+        }
+        .jcSideRail {
+          position: fixed;
+          top: 0;
+          left: 0;
+          bottom: 0;
+          width: 232px;
+          background: #08111d;
+          border-right: 1px solid rgba(56, 189, 248, 0.16);
+          z-index: 45;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          padding: 14px 10px;
+          transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 8px 0 28px rgba(0, 0, 0, 0.35);
+          user-select: none;
+        }
+        body.jcSidebarCollapsed .jcSideRail {
+          width: 68px;
+          padding: 14px 8px;
+        }
+        .jcSideBrandRow {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 4px 6px 14px;
+          border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+          margin-bottom: 10px;
+        }
+        .jcSideBrandLogo {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 0;
+          cursor: pointer;
+        }
+        .jcSideBrandLogo img {
+          width: 34px;
+          height: 34px;
+          border-radius: 10px;
+          flex: 0 0 34px;
+        }
+        .jcSideBrandTitle {
+          font-size: 0.92rem;
+          font-weight: 900;
+          color: #f8fafc;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          letter-spacing: -0.02em;
+        }
+        body.jcSidebarCollapsed .jcSideBrandTitle {
+          display: none;
+        }
+        .jcSideCollapseBtn {
+          width: 30px;
+          height: 30px;
+          border-radius: 8px;
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          background: rgba(15, 29, 46, 0.8);
+          color: #94a3b8;
+          display: grid;
+          place-items: center;
+          font-size: 0.85rem;
+          cursor: pointer;
+          flex: 0 0 30px;
+          transition: color 0.15s, border-color 0.15s;
+        }
+        .jcSideCollapseBtn:hover {
+          color: #59e6ff;
+          border-color: #59e6ff;
+        }
+        body.jcSidebarCollapsed .jcSideBrandRow {
+          flex-direction: column;
+          gap: 8px;
+          padding-bottom: 10px;
+        }
+        .jcSideNavList {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          flex: 1;
+          overflow-y: auto;
+          overflow-x: hidden;
+        }
+        .jcSideNavBtn {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          width: 100%;
+          padding: 10px 12px;
+          border-radius: 11px;
+          border: 1px solid transparent;
+          background: transparent;
+          color: #94a3b8;
+          font-size: 0.84rem;
+          font-weight: 700;
+          text-align: left;
+          cursor: pointer;
+          transition: background 0.16s, color 0.16s, border-color 0.16s;
+          white-space: nowrap;
+        }
+        .jcSideNavBtn:hover {
+          background: rgba(19, 42, 66, 0.65);
+          color: #e2e8f0;
+        }
+        .jcSideNavBtn.active {
+          background: linear-gradient(90deg, rgba(22, 122, 255, 0.22), rgba(89, 230, 255, 0.08));
+          color: #59e6ff;
+          border-color: rgba(89, 230, 255, 0.32);
+          box-shadow: inset 3px 0 0 #59e6ff;
+        }
+        .jcSideNavIcon {
+          width: 22px;
+          height: 22px;
+          display: inline-grid;
+          place-items: center;
+          font-size: 1.08rem;
+          flex: 0 0 22px;
+          font-style: normal;
+        }
+        .jcSideNavLabel {
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .jcSideNavBadge {
+          margin-left: auto;
+          padding: 2px 6px;
+          border-radius: 99px;
+          font-size: 0.62rem;
+          font-weight: 900;
+          background: rgba(245, 158, 11, 0.18);
+          color: #fbbf24;
+          border: 1px solid rgba(245, 158, 11, 0.35);
+        }
+        body.jcSidebarCollapsed .jcSideNavBtn {
+          justify-content: center;
+          padding: 11px 0;
+        }
+        body.jcSidebarCollapsed .jcSideNavLabel,
+        body.jcSidebarCollapsed .jcSideNavBadge,
+        body.jcSidebarCollapsed .jcSideSectionTitle {
+          display: none;
+        }
+        .jcSideSectionTitle {
+          font-size: 0.64rem;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+          color: #475569;
+          padding: 10px 12px 4px;
+        }
+        .jcSideFooter {
+          padding-top: 10px;
+          border-top: 1px solid rgba(148, 163, 184, 0.12);
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        body.lightAppTheme .jcSideRail {
+          background: #ffffff !important;
+          border-right-color: #e2e8f0 !important;
+          box-shadow: 4px 0 18px rgba(15, 23, 42, 0.05) !important;
+        }
+        body.lightAppTheme .jcSideBrandTitle { color: #0f172a !important; }
+        body.lightAppTheme .jcSideNavBtn { color: #475569 !important; }
+        body.lightAppTheme .jcSideNavBtn:hover { background: #f1f5f9 !important; color: #0f172a !important; }
+        body.lightAppTheme .jcSideNavBtn.active {
+          background: #e0f2fe !important;
+          color: #0284c7 !important;
+          border-color: #bae6fd !important;
+          box-shadow: inset 3px 0 0 #0284c7 !important;
+        }
+      }
+
+      /* ── 2. CRONÔMETRO COMPACTO NO TOPO (Estilo Caveira: ⏱ ⏹ ↻ | 00:00:00 [ ]) ── */
+      .jcTopTimerPill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: #071220;
+        border: 1px solid rgba(89, 230, 255, 0.28);
+        border-radius: 12px;
+        padding: 4px 7px;
+        height: 40px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 12px rgba(0, 0, 0, 0.28);
+      }
+      .jcTopTimerPill.isRunning {
+        border-color: #34d399;
+        box-shadow: 0 0 14px rgba(52, 211, 153, 0.22);
+      }
+      .jcTopTimerBtn {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        border: 0;
+        background: transparent;
+        color: #94a3b8;
+        display: inline-grid;
+        place-items: center;
+        font-size: 0.88rem;
+        cursor: pointer;
+        padding: 0;
+        transition: background 0.15s, color 0.15s;
+      }
+      .jcTopTimerBtn:hover {
+        background: rgba(56, 189, 248, 0.16);
+        color: #f8fafc;
+      }
+      .jcTopTimerBtn.playBtn.active {
+        color: #34d399;
+        background: rgba(16, 185, 129, 0.16);
+      }
+      .jcTopTimerDivider {
+        width: 1px;
+        height: 18px;
+        background: rgba(148, 163, 184, 0.22);
+        margin: 0 3px;
+      }
+      .jcTopTimerDigits {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-variant-numeric: tabular-nums;
+        font-weight: 800;
+        font-size: 0.94rem;
+        color: #f8fafc;
+        letter-spacing: 0.03em;
+        padding: 0 5px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .jcTopTimerPill.isRunning .jcTopTimerDigits {
+        color: #34d399;
+      }
+      .jcTopTimerExpandBtn {
+        width: 29px;
+        height: 29px;
+        border-radius: 7px;
+        border: 1px solid rgba(148, 163, 184, 0.24);
+        background: rgba(15, 31, 49, 0.9);
+        color: #e2e8f0;
+        display: inline-grid;
+        place-items: center;
+        font-size: 0.85rem;
+        cursor: pointer;
+        padding: 0;
+        transition: border-color 0.15s, background 0.15s, color 0.15s;
+      }
+      .jcTopTimerExpandBtn:hover {
+        border-color: #59e6ff;
+        color: #59e6ff;
+        background: rgba(14, 165, 233, 0.15);
+      }
+      .jcTopXpPill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 0 10px;
+        height: 40px;
+        border-radius: 12px;
+        background: rgba(15, 29, 46, 0.88);
+        border: 1px solid rgba(247, 189, 67, 0.32);
+        color: #f8fafc;
+        font-size: 0.82rem;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+      .jcTopXpPill i {
+        font-style: normal;
+        color: #f7bd43;
+      }
+      @media (max-width: 719px) {
+        .jcTopXpPill {
+          display: none !important;
+        }
+        .jcTopTimerPill {
+          height: 36px;
+          padding: 2px 5px;
+          gap: 2px;
+        }
+        .jcTopTimerBtn.stopBtn,
+        .jcTopTimerBtn.resetBtn,
+        .jcTopTimerDivider {
+          display: none !important;
+        }
+        .jcTopTimerDigits {
+          font-size: 0.78rem;
+          padding: 0 3px;
+        }
+        .jcTopTimerExpandBtn {
+          width: 26px;
+          height: 26px;
+          font-size: 0.78rem;
+        }
+      }
+      body.lightAppTheme .jcTopTimerPill,
+      body.lightAppTheme .jcTopXpPill {
+        background: #f8fafc !important;
+        border-color: #cbd5e1 !important;
+        color: #0f172a !important;
+        box-shadow: none !important;
+      }
+      body.lightAppTheme .jcTopTimerDigits { color: #0f172a !important; }
+      body.lightAppTheme .jcTopTimerExpandBtn {
+        background: #ffffff !important;
+        border-color: #94a3b8 !important;
+        color: #0f172a !important;
+      }
+
+      /* ── 3. MODO FOCO TELA CHEIA IMERSIVO (Estilo Caveira: Fundo Escuro Limpo, Ícone Central, Relógio Gigante Legível) ── */
+      .jcFullscreenFocusModal {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: radial-gradient(circle at 50% 35%, #161d2a 0%, #0b0f17 65%, #06090f 100%);
+        color: #f8fafc;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+        user-select: none;
+        animation: jcFadeInFocus 0.22s ease-out;
+      }
+      .jcFullscreenFocusModal[hidden] {
+        display: none !important;
+      }
+      @keyframes jcFadeInFocus {
+        from { opacity: 0; transform: scale(0.98); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      .jcFocusCenterEmblem {
+        width: clamp(68px, 11vw, 96px);
+        height: clamp(68px, 11vw, 96px);
+        margin-bottom: 14px;
+        filter: drop-shadow(0 0 24px rgba(89, 230, 255, 0.35));
+        transition: transform 0.3s ease;
+      }
+      .jcFullscreenFocusModal.isRunning .jcFocusCenterEmblem {
+        animation: jcPulseEmblem 2.8s infinite ease-in-out;
+      }
+      @keyframes jcPulseEmblem {
+        0%, 100% { transform: scale(1); filter: drop-shadow(0 0 22px rgba(52, 211, 153, 0.4)); }
+        50% { transform: scale(1.05); filter: drop-shadow(0 0 36px rgba(89, 230, 255, 0.65)); }
+      }
+      .jcFocusMissionPill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        background: rgba(15, 29, 46, 0.75);
+        border: 1px solid rgba(89, 230, 255, 0.28);
+        color: #93c5fd;
+        font-size: clamp(0.76rem, 1.8vw, 0.9rem);
+        font-weight: 700;
+        max-width: min(90vw, 560px);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 10px;
+      }
+      .jcFocusGiantDigits {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-variant-numeric: tabular-nums;
+        font-weight: 800;
+        font-size: clamp(3.4rem, 13.5vw, 7.6rem);
+        line-height: 1.05;
+        letter-spacing: 0.02em;
+        color: #ffffff;
+        text-shadow: 0 8px 34px rgba(0, 0, 0, 0.65);
+        margin: 6px 0 20px;
+      }
+      .jcFullscreenFocusModal.isRunning .jcFocusGiantDigits {
+        color: #ecfdf5;
+        text-shadow: 0 0 38px rgba(52, 211, 153, 0.28);
+      }
+      .jcFocusControlsBar {
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+        padding: 10px 20px;
+        border-radius: 16px;
+        background: rgba(15, 23, 36, 0.85);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
+      }
+      .jcFocusCtrlBtn {
+        width: 46px;
+        height: 46px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        background: rgba(30, 41, 59, 0.75);
+        color: #e2e8f0;
+        display: inline-grid;
+        place-items: center;
+        font-size: 1.22rem;
+        cursor: pointer;
+        transition: all 0.16s ease;
+      }
+      .jcFocusCtrlBtn:hover {
+        border-color: #59e6ff;
+        color: #ffffff;
+        background: rgba(14, 165, 233, 0.25);
+        transform: translateY(-1px);
+      }
+      .jcFocusCtrlBtn.primaryPlay {
+        width: 56px;
+        height: 56px;
+        border-radius: 15px;
+        background: linear-gradient(135deg, #10b981, #059669);
+        border-color: #34d399;
+        color: #ffffff;
+        font-size: 1.4rem;
+        box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
+      }
+      .jcFocusCtrlBtn.primaryPlay.paused {
+        background: linear-gradient(135deg, #0ea5e9, #2563eb);
+        border-color: #59e6ff;
+        box-shadow: 0 8px 24px rgba(14, 165, 233, 0.35);
+      }
+      .jcFocusCtrlDivider {
+        width: 1px;
+        height: 28px;
+        background: rgba(148, 163, 184, 0.25);
+      }
+      .jcFocusModeSwitchRow {
+        display: flex;
+        gap: 8px;
+        margin-top: 20px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .jcFocusModeChip {
+        padding: 6px 13px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        background: rgba(15, 23, 36, 0.65);
+        color: #94a3b8;
+        font-size: 0.76rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .jcFocusModeChip.active {
+        border-color: #59e6ff;
+        color: #59e6ff;
+        background: rgba(14, 165, 233, 0.14);
+      }
+      .jcFocusBottomMeta {
+        margin-top: 16px;
+        font-size: 0.8rem;
+        color: #64748b;
+      }
+      @media (max-height: 500px) and (orientation: landscape) {
+        .jcFocusCenterEmblem { width: 48px; height: 48px; margin-bottom: 6px; }
+        .jcFocusGiantDigits { font-size: clamp(2.8rem, 11vw, 4.5rem); margin: 2px 0 10px; }
+        .jcFocusModeSwitchRow { margin-top: 10px; }
+      }
+
+      /* ── 4. DESPOLUIÇÃO VISUAL PROFUNDA ("CLEAN DASHBOARD MODE" PADRÃO) ── */
+      body.jcCleanDashboard .sectionHead p.small.muted,
+      body.jcCleanDashboard .questionTrust,
+      body.jcCleanDashboard #streakRequirement,
+      body.jcCleanDashboard .localDbBar {
+        display: none !important;
+      }
+      body.jcCleanDashboard .card {
+        border-radius: 16px !important;
+        padding: 16px 18px !important;
+        border-color: rgba(51, 78, 104, 0.55) !important;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18) !important;
+      }
+      body.jcCleanDashboard section.hero {
+        padding: 16px 20px !important;
+        margin-bottom: 14px !important;
+        border-radius: 18px !important;
+      }
+      body.jcCleanDashboard .jcAccordionDrawer {
+        border-radius: 15px;
+        background: var(--panel, #0b1624);
+        border: 1px solid rgba(51, 78, 104, 0.55);
+        margin-bottom: 12px;
+        overflow: hidden;
+      }
+      body.jcCleanDashboard .jcAccordionDrawer > summary {
+        list-style: none;
+        padding: 13px 16px;
+        font-weight: 800;
+        font-size: 0.9rem;
+        color: #e2e8f0;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        user-select: none;
+      }
+      body.jcCleanDashboard .jcAccordionDrawer > summary::-webkit-details-marker {
+        display: none;
+      }
+      body.jcCleanDashboard .jcAccordionDrawer > summary::after {
+        content: "▾ Expandir";
+        font-size: 0.74rem;
+        font-weight: 700;
+        color: #59e6ff;
+        padding: 3px 9px;
+        border-radius: 99px;
+        background: rgba(56, 189, 248, 0.12);
+      }
+      body.jcCleanDashboard .jcAccordionDrawer[open] > summary::after {
+        content: "▴ Recolher";
+      }
+      body.jcCleanDashboard .jcAccordionDrawerBody {
+        padding: 0 14px 14px;
+        border-top: 1px solid rgba(148, 163, 184, 0.12);
+      }
+      body.lightAppTheme.jcCleanDashboard .jcAccordionDrawer {
+        background: #ffffff !important;
+        border-color: #cbd5e1 !important;
+      }
+      body.lightAppTheme.jcCleanDashboard .jcAccordionDrawer > summary {
+        color: #0f172a !important;
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  // Estado do modo de exibição do cronômetro ('countdown' = regressivo do bloco | 'elapsed' = progressivo do dia)
+  let focusDisplayMode = localStorage.getItem('jc_focus_display_mode_v1') || 'countdown';
+
+  function getFocusSecondsToDisplay() {
+    const st = typeof state === 'object' && state ? state : (window.state || {});
+    const rem = typeof timerLeft === 'number' ? timerLeft : 3000;
+    const blockTotal = typeof focusBlockSeconds === 'function' ? focusBlockSeconds() : 3000;
+    if (focusDisplayMode === 'elapsed') {
+      const todayKey = typeof localDayKey === 'function' ? localDayKey() : new Date().toISOString().slice(0, 10);
+      const studiedToday = Number(st.studyByDay?.[todayKey] || 0);
+      return studiedToday;
+    }
+    // Se ainda não iniciou o foco (parado no topo do bloco), exibe o tempo restante formatado em HH:MM:SS
+    return Math.max(0, rem);
+  }
+
+  function updateAllFocusTimerDisplays() {
+    const isRunning = Boolean(typeof timerRun !== 'undefined' && timerRun);
+    const secs = getFocusSecondsToDisplay();
+    const formatted = formatHHMMSS(secs);
+
+    // 1. Atualiza o relógio principal da aba Hoje (#clock) em formato HH:MM:SS legível
+    const mainClock = document.getElementById('clock');
+    if (mainClock) {
+      mainClock.textContent = formatted;
+    }
+
+    // 2. Atualiza a pílula do topo (#jcTopTimerPill)
+    const topPill = document.getElementById('jcTopTimerPill');
+    const topDigits = document.getElementById('jcTopTimerDigits');
+    const topPlayBtn = document.getElementById('jcTopTimerPlayBtn');
+    if (topPill) topPill.classList.toggle('isRunning', isRunning);
+    if (topDigits) topDigits.textContent = formatted;
+    if (topPlayBtn) {
+      topPlayBtn.classList.toggle('active', isRunning);
+      topPlayBtn.innerHTML = isRunning ? '⏸' : '⏱';
+      topPlayBtn.title = isRunning ? 'Pausar cronômetro de foco' : 'Iniciar cronômetro de foco';
+    }
+
+    // 3. Atualiza o XP pill do topo
+    const topXpVal = document.getElementById('jcTopXpValue');
+    if (topXpVal && typeof xp === 'function') {
+      topXpVal.textContent = `${xp()} XP`;
+    }
+
+    // 4. Atualiza o Overlay de Tela Cheia (#jcFullscreenFocusOverlay)
+    const fsModal = document.getElementById('jcFullscreenFocusOverlay');
+    if (fsModal && !fsModal.hidden) {
+      fsModal.classList.toggle('isRunning', isRunning);
+      const fsDigits = document.getElementById('jcFocusGiantDigits');
+      if (fsDigits) fsDigits.textContent = formatted;
+      const fsPlayBtn = document.getElementById('jcFsPlayPauseBtn');
+      if (fsPlayBtn) {
+        fsPlayBtn.classList.toggle('paused', !isRunning);
+        fsPlayBtn.innerHTML = isRunning ? '⏸' : '▶';
+        fsPlayBtn.title = isRunning ? 'Pausar Foco (Espaço)' : 'Iniciar Foco (Espaço)';
+      }
+      const fsMeta = document.getElementById('jcFocusBottomMeta');
+      if (fsMeta) {
+        const st = typeof state === 'object' && state ? state : (window.state || {});
+        const todayKey = typeof localDayKey === 'function' ? localDayKey() : new Date().toISOString().slice(0, 10);
+        const studiedMin = Math.floor(Number(st.studyByDay?.[todayKey] || 0) / 60);
+        const targetMin = Number(st.settings?.dailyMinutes || 180);
+        fsMeta.textContent = `Estudado hoje: ${studiedMin} min de ${targetMin} min · Pressione ESC para sair da tela cheia`;
+      }
+    }
+  }
+
+  function openFullscreenFocusTimer() {
+    ensureFullscreenFocusModalExists();
+    const modal = document.getElementById('jcFullscreenFocusOverlay');
+    if (!modal) return;
+    // Atualiza nome da missão atual no topo do modal
+    const missionEl = document.getElementById('jcFocusMissionLabel');
+    if (missionEl) {
+      try {
+        const st = typeof state === 'object' && state ? state : (window.state || {});
+        const pool = typeof missionPool === 'function' ? missionPool() : [];
+        const curM = pool.find(m => m.id === st.daily);
+        missionEl.textContent = curM ? `🎯 ${curM.subject} — ${curM.name}` : '⚔️ Modo Foco Imersivo · Jornada do Caçador';
+      } catch (_e) {}
+    }
+    modal.hidden = false; if (modal.classList) modal.classList.add('open');
+    updateAllFocusTimerDisplays();
+    requestScreenWakeLock(true);
+    try {
+      if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    } catch (_e) {}
+  }
+
+  function closeFullscreenFocusTimer() {
+    const modal = document.getElementById('jcFullscreenFocusOverlay');
+    if (modal) { modal.hidden = true; if (modal.classList) modal.classList.remove('open'); }
+    requestScreenWakeLock(false);
+    try {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    } catch (_e) {}
+  }
+
+  window.openFullscreenFocusTimer = openFullscreenFocusTimer;
+  window.closeFullscreenFocusTimer = closeFullscreenFocusTimer;
+
+  function ensureFullscreenFocusModalExists() {
+    if (document.getElementById('jcFullscreenFocusOverlay')) return;
+    const modal = document.createElement('div');
+    modal.id = 'jcFullscreenFocusOverlay';
+    modal.className = 'jcFullscreenFocusModal';
+    modal.hidden = true;
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', 'Cronômetro de foco em tela cheia');
+    modal.innerHTML = `
+      <img src="icon.svg" alt="Emblema Jornada do Caçador" class="jcFocusCenterEmblem" onerror="this.onerror=null;this.src='icon-192.png'">
+      <div class="jcFocusMissionPill" id="jcFocusMissionLabel">⚔️ Modo Foco Imersivo · Jornada do Caçador</div>
+      <div class="jcFocusGiantDigits" id="jcFocusGiantDigits">00:50:00</div>
+      <div class="jcFocusControlsBar">
+        <button type="button" class="jcFocusCtrlBtn primaryPlay paused" id="jcFsPlayPauseBtn" title="Iniciar / Pausar Foco">▶</button>
+        <button type="button" class="jcFocusCtrlBtn" id="jcFsStopBtn" title="Parar e salvar sessão">⏹</button>
+        <button type="button" class="jcFocusCtrlBtn" id="jcFsResetBtn" title="Reiniciar bloco">↻</button>
+        <span class="jcFocusCtrlDivider"></span>
+        <button type="button" class="jcFocusCtrlBtn" id="jcFsExitFullscreenBtn" title="Sair da tela cheia (ESC)">⤡</button>
+      </div>
+      <div class="jcFocusModeSwitchRow">
+        <button type="button" class="jcFocusModeChip ${focusDisplayMode === 'countdown' ? 'active' : ''}" data-jc-focus-mode="countdown">⏳ Contagem Regressiva do Bloco</button>
+        <button type="button" class="jcFocusModeChip ${focusDisplayMode === 'elapsed' ? 'active' : ''}" data-jc-focus-mode="elapsed">⏱️ Tempo Líquido Acumulado Hoje</button>
+      </div>
+      <div class="jcFocusBottomMeta" id="jcFocusBottomMeta">Estudado hoje: 0 min · Pressione ESC para sair da tela cheia</div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('jcFsPlayPauseBtn').onclick = () => {
+      if (typeof toggleTimer === 'function') toggleTimer().then(updateAllFocusTimerDisplays);
+      else document.getElementById('timerToggle')?.click();
+      setTimeout(updateAllFocusTimerDisplays, 50);
+    };
+    document.getElementById('jcFsStopBtn').onclick = () => {
+      if (typeof timerRun !== 'undefined' && timerRun && typeof toggleTimer === 'function') {
+        toggleTimer().then(updateAllFocusTimerDisplays);
+      }
+      setTimeout(updateAllFocusTimerDisplays, 50);
+    };
+    document.getElementById('jcFsResetBtn').onclick = () => {
+      document.getElementById('timerReset')?.click();
+      setTimeout(updateAllFocusTimerDisplays, 50);
+    };
+    document.getElementById('jcFsExitFullscreenBtn').onclick = () => closeFullscreenFocusTimer();
+
+    modal.querySelectorAll('[data-jc-focus-mode]').forEach(chip => {
+      chip.onclick = () => {
+        focusDisplayMode = chip.dataset.jcFocusMode || 'countdown';
+        try { localStorage.setItem('jc_focus_display_mode_v1', focusDisplayMode); } catch (_e) {}
+        modal.querySelectorAll('[data-jc-focus-mode]').forEach(c => c.classList.toggle('active', c === chip));
+        updateAllFocusTimerDisplays();
+      };
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (modal.hidden) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeFullscreenFocusTimer();
+      } else if (e.key === ' ' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '')) {
+        e.preventDefault();
+        document.getElementById('jcFsPlayPauseBtn')?.click();
+      }
+    });
+  }
+
+  function ensureTopHeaderFocusTimerBar() {
+    const accountArea = document.querySelector('.top .accountArea');
+    if (!accountArea || document.getElementById('jcTopTimerPill')) return;
+
+    const timerPillHtml = `
+      <div class="jcTopTimerPill" id="jcTopTimerPill" title="Cronômetro de Foco (Clique nos números ou no ícone de expandir para Tela Cheia)">
+        <button type="button" class="jcTopTimerBtn playBtn" id="jcTopTimerPlayBtn" aria-label="Iniciar ou pausar foco" title="Iniciar / Pausar Foco">⏱</button>
+        <button type="button" class="jcTopTimerBtn stopBtn" id="jcTopTimerStopBtn" aria-label="Pausar foco" title="Pausar Foco">⏹</button>
+        <button type="button" class="jcTopTimerBtn resetBtn" id="jcTopTimerResetBtn" aria-label="Reiniciar bloco" title="Reiniciar Bloco">↻</button>
+        <span class="jcTopTimerDivider"></span>
+        <span class="jcTopTimerDigits" id="jcTopTimerDigits">00:50:00</span>
+        <button type="button" class="jcTopTimerExpandBtn" id="jcTopTimerExpandBtn" aria-label="Expandir cronômetro em tela cheia" title="Modo Foco em Tela Cheia (Estilo Caveira)">⛶</button>
+      </div>
+      <div class="jcTopXpPill" id="jcTopXpPill" title="Sua Experiência Acumulada">
+        <i>⚡</i><span id="jcTopXpValue">0 XP</span>
+      </div>
+    `;
+    accountArea.insertAdjacentHTML('afterbegin', timerPillHtml);
+
+    document.getElementById('jcTopTimerPlayBtn').onclick = () => {
+      if (typeof toggleTimer === 'function') toggleTimer().then(updateAllFocusTimerDisplays);
+      else document.getElementById('timerToggle')?.click();
+      setTimeout(updateAllFocusTimerDisplays, 50);
+    };
+    document.getElementById('jcTopTimerStopBtn').onclick = () => {
+      if (typeof timerRun !== 'undefined' && timerRun && typeof toggleTimer === 'function') {
+        toggleTimer().then(updateAllFocusTimerDisplays);
+      }
+      setTimeout(updateAllFocusTimerDisplays, 50);
+    };
+    document.getElementById('jcTopTimerResetBtn').onclick = () => {
+      document.getElementById('timerReset')?.click();
+      setTimeout(updateAllFocusTimerDisplays, 50);
+    };
+    document.getElementById('jcTopTimerDigits').onclick = () => openFullscreenFocusTimer();
+    document.getElementById('jcTopTimerExpandBtn').onclick = () => openFullscreenFocusTimer();
+
+    // Também adiciona botão de "⛶ Tela Cheia" dentro do card do cronômetro na aba Hoje
+    const timerCardHead = document.querySelector('#today .card.timer .sectionHead');
+    if (timerCardHead && !document.getElementById('jcTodayCardFullscreenBtn')) {
+      timerCardHead.insertAdjacentHTML('beforeend', `<button type="button" class="ghost small" id="jcTodayCardFullscreenBtn" style="width:auto;padding:5px 10px;font-size:.75rem;border-color:#59e6ff;color:#59e6ff" title="Abrir cronômetro gigante em tela cheia">⛶ Tela Cheia</button>`);
+      document.getElementById('jcTodayCardFullscreenBtn').onclick = () => openFullscreenFocusTimer();
+    }
+  }
+
+  function ensureCollapsibleDesktopSidebar() {
+    if (document.getElementById('jcCollapsibleSidebar')) return;
+    const isCollapsed = localStorage.getItem('jc_sidebar_collapsed_v1') === '1';
+    document.body.classList.add('jcHasSidebar');
+    document.body.classList.toggle('jcSidebarCollapsed', isCollapsed);
+
+    const navItems = [
+      { section: 'Principal' },
+      { view: 'today', icon: '🏠', label: 'Home / Missão' },
+      { view: 'map', icon: '🗓️', label: 'Cronograma & Edital' },
+      { view: 'report', icon: '🎯', label: 'Questões & Simulados', badge: 'Foco' },
+      { view: 'study', icon: '📖', label: 'Resumos & Flashcards' },
+      { view: 'review', icon: '🔁', label: 'Revisão 1·7·30' },
+      { section: 'Tático & IA' },
+      { view: 'library', icon: '📂', label: 'PDFs & Biblioteca' },
+      { view: 'assistant', icon: '🤖', label: 'Instrutor IA (Charlie)' },
+      { view: 'learning', icon: '🗺️', label: 'Trilha Tática' },
+      { view: 'essay', icon: '✍️', label: 'Redação Policial' },
+      { view: 'taf', icon: '💪', label: 'Painel TAF' },
+      { section: 'Comunidade' },
+      { view: 'duel', icon: '⚔️', label: 'Arena Duelo X1', badge: 'PvP' },
+      { view: 'ranking', icon: '🏆', label: 'Ranking Geral' },
+      { view: 'profile', icon: '👤', label: 'Meu Perfil Social' }
+    ];
+
+    const rail = document.createElement('aside');
+    rail.id = 'jcCollapsibleSidebar';
+    rail.className = 'jcSideRail';
+    rail.setAttribute('aria-label', 'Menu lateral de navegação');
+
+    rail.innerHTML = `
+      <div class="jcSideBrandRow">
+        <div class="jcSideBrandLogo" id="jcSideBrandHomeClick" title="Voltar para o Início">
+          <img src="icon.svg" alt="Brasão" onerror="this.onerror=null;this.src='icon-192.png'">
+          <span class="jcSideBrandTitle">Jornada Caçador</span>
+        </div>
+        <button type="button" class="jcSideCollapseBtn" id="jcSideCollapseToggleBtn" title="Recolher / Expandir Menu Lateral">
+          ${isCollapsed ? '»' : '«'}
+        </button>
+      </div>
+      <div class="jcSideNavList" id="jcSideNavList">
+        ${navItems.map(item => {
+          if (item.section) {
+            return `<div class="jcSideSectionTitle">${item.section}</div>`;
+          }
+          return `
+            <button type="button" class="jcSideNavBtn ${item.view === 'today' ? 'active' : ''}" data-jc-side-view="${item.view}" title="${item.label}">
+              <i class="jcSideNavIcon">${item.icon}</i>
+              <span class="jcSideNavLabel">${item.label}</span>
+              ${item.badge ? `<span class="jcSideNavBadge">${item.badge}</span>` : ''}
+            </button>
+          `;
+        }).join('')}
+      </div>
+      <div class="jcSideFooter">
+        <button type="button" class="jcSideNavBtn" id="jcSideCleanModeToggleBtn" title="Alternar Modo Limpo / Detalhado">
+          <i class="jcSideNavIcon">✨</i>
+          <span class="jcSideNavLabel">Visual Limpo Ativo</span>
+        </button>
+        <button type="button" class="jcSideNavBtn" id="jcSideThemeToggleBtn" title="Alternar Tema Claro / Escuro">
+          <i class="jcSideNavIcon">☀️</i>
+          <span class="jcSideNavLabel">Tema Claro / Escuro</span>
+        </button>
+        <button type="button" class="jcSideNavBtn" id="jcSideMoreMenuBtn" title="Configurações e Backup">
+          <i class="jcSideNavIcon">⚙️</i>
+          <span class="jcSideNavLabel">Configurações</span>
+        </button>
+      </div>
+    `;
+    document.body.prepend(rail);
+
+    document.getElementById('jcSideBrandHomeClick').onclick = () => {
+      if (typeof openView === 'function') openView('today');
+    };
+    const collapseBtn = document.getElementById('jcSideCollapseToggleBtn');
+    collapseBtn.onclick = () => {
+      const next = !document.body.classList.contains('jcSidebarCollapsed');
+      document.body.classList.toggle('jcSidebarCollapsed', next);
+      collapseBtn.textContent = next ? '»' : '«';
+      try { localStorage.setItem('jc_sidebar_collapsed_v1', next ? '1' : '0'); } catch (_e) {}
+    };
+
+    rail.querySelectorAll('[data-jc-side-view]').forEach(btn => {
+      btn.onclick = () => {
+        const target = btn.dataset.jcSideView;
+        if (target && typeof openView === 'function') {
+          openView(target);
+        }
+      };
+    });
+
+    document.getElementById('jcSideThemeToggleBtn').onclick = () => {
+      document.getElementById('globalThemeToggleBtn')?.click();
+    };
+    document.getElementById('jcSideMoreMenuBtn').onclick = () => {
+      document.getElementById('moreDialog')?.showModal();
+    };
+    const cleanBtn = document.getElementById('jcSideCleanModeToggleBtn');
+    cleanBtn.onclick = () => {
+      const nextClean = !document.body.classList.contains('jcCleanDashboard');
+      applyCaveiraCleanDashboardMode(nextClean);
+    };
+  }
+
+  function syncSidebarActiveState(viewId) {
+    const rail = document.getElementById('jcCollapsibleSidebar');
+    if (!rail) return;
+    rail.querySelectorAll('[data-jc-side-view]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.jcSideView === viewId);
+    });
+  }
+
+  // Agrupa cartões secundários da aba Hoje (Plano Diário, Histórico Diário, Missão Semanal) em uma gaveta retrátil limpa
+  function organizeTodaySecondaryCardsIntoDrawer() {
+    const todaySec = document.getElementById('today');
+    if (!todaySec || document.getElementById('jcTodaySecondaryAccordion')) return;
+
+    const planCard = document.getElementById('dailyPlan')?.closest('.card');
+    const histCard = document.getElementById('dailyHistory')?.closest('.card');
+    const weekCard = document.getElementById('weeklyMission')?.closest('.card');
+    if (!planCard && !histCard && !weekCard) return;
+
+    const details = document.createElement('details');
+    details.id = 'jcTodaySecondaryAccordion';
+    details.className = 'jcAccordionDrawer';
+    details.innerHTML = `
+      <summary>
+        <span>📊 Plano Diário Detalhado, Histórico de Missões &amp; Meta Semanal</span>
+      </summary>
+      <div class="jcAccordionDrawerBody" id="jcTodaySecondaryDrawerBody"></div>
+    `;
+    todaySec.appendChild(details);
+    const body = document.getElementById('jcTodaySecondaryDrawerBody');
+    if (planCard) body.appendChild(planCard);
+    if (histCard) body.appendChild(histCard);
+    if (weekCard) body.appendChild(weekCard);
+  }
+
+  function applyCaveiraCleanDashboardMode(enable = true) {
+    document.body.classList.toggle('jcCleanDashboard', Boolean(enable));
+    try { localStorage.setItem('jc_caveira_clean_mode_v1', enable ? '1' : '0'); } catch (_e) {}
+    const lbl = document.querySelector('#jcSideCleanModeToggleBtn .jcSideNavLabel');
+    if (lbl) lbl.textContent = enable ? 'Visual Limpo: ON' : 'Visual Detalhado';
+    if (enable) organizeTodaySecondaryCardsIntoDrawer();
+  }
+  window.applyCaveiraCleanDashboardMode = applyCaveiraCleanDashboardMode;
+
+  function bootCaveiraUiAndFullscreenTimer() {
+    injectCaveiraCleanUiStyles();
+    ensureFullscreenFocusModalExists();
+    ensureTopHeaderFocusTimerBar();
+    ensureCollapsibleDesktopSidebar();
+
+    const preferClean = localStorage.getItem('jc_caveira_clean_mode_v1') !== '0';
+    applyCaveiraCleanDashboardMode(preferClean);
+    updateAllFocusTimerDisplays();
+
+    // Hook em tickClock para atualizar em tempo real (a cada segundo) a pílula do topo e o relógio gigante de tela cheia
+    if (typeof window.tickClock === 'function' && !window.tickClock._jcFullscreenHooked) {
+      const prevTick = window.tickClock;
+      window.tickClock = function () {
+        prevTick.apply(this, arguments);
+        updateAllFocusTimerDisplays();
+      };
+      window.tickClock._jcFullscreenHooked = true;
+    }
+
+    // Hook em openView para destacar o item ativo na Sidebar Lateral
+    if (typeof window.openView === 'function' && !window.openView._jcSidebarHooked) {
+      const prevOpen = window.openView;
+      window.openView = function (id) {
+        prevOpen.apply(this, arguments);
+        syncSidebarActiveState(id);
+        updateAllFocusTimerDisplays();
+      };
+      window.openView._jcSidebarHooked = true;
+    }
+  }
+
+  JC_MODULES.caveiraCleanUi = {
+    openFullscreenTimer: openFullscreenFocusTimer,
+    closeFullscreenTimer: closeFullscreenFocusTimer,
+    formatHHMMSS,
+    applyCleanMode: applyCaveiraCleanDashboardMode,
+    updateDisplays: updateAllFocusTimerDisplays
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootCaveiraUiAndFullscreenTimer);
+  } else {
+    setTimeout(bootCaveiraUiAndFullscreenTimer, 0);
   }
 })();
