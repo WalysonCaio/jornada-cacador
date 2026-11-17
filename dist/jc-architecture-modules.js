@@ -2278,13 +2278,15 @@
       { view: 'review', icon: '🔁', label: 'Revisão 1·7·30' },
       { section: 'Tático & IA' },
       { view: 'library', icon: '📂', label: 'PDFs & Biblioteca' },
-      { view: 'assistant', icon: '🤖', label: 'Instrutor IA (Charlie)' },
+      { view: 'assistant', icon: '🧙‍♂️', label: 'Invocador IA' },
+      { view: 'study:laws', icon: '⚖️', label: 'Leis & Textos', badge: 'Lei Seca' },
       { view: 'learning', icon: '🗺️', label: 'Trilha Tática' },
       { view: 'essay', icon: '✍️', label: 'Redação Policial' },
       { view: 'taf', icon: '💪', label: 'Painel TAF' },
       { section: 'Comunidade' },
       { view: 'duel', icon: '⚔️', label: 'Arena Duelo X1', badge: 'PvP' },
       { view: 'ranking', icon: '🏆', label: 'Ranking Geral' },
+      { view: 'profile:tactical', icon: '📊', label: 'Painel Tático' },
       { view: 'profile', icon: '👤', label: 'Meu Perfil Social' }
     ];
 
@@ -2347,7 +2349,25 @@
 
     rail.querySelectorAll('[data-jc-side-view]').forEach(btn => {
       btn.onclick = () => {
-        const target = btn.dataset.jcSideView;
+        const target = btn.dataset.jcSideView || '';
+        if (target === 'study:laws') {
+          if (typeof openView === 'function') openView('study');
+          if (typeof window.openSmartLawsSubtab === 'function') window.openSmartLawsSubtab();
+          syncSidebarActiveState('study:laws');
+          return;
+        }
+        if (target === 'profile:tactical') {
+          if (typeof openView === 'function') openView('profile');
+          if (window.JC_MODULES && window.JC_MODULES.caveiraFullSuiteR179) {
+            window.JC_MODULES.caveiraFullSuiteR179.mountPainelTaticoInProfile();
+          }
+          setTimeout(() => {
+            const tp = document.getElementById('jcTacticalPanelSection');
+            if (tp && tp.scrollIntoView) tp.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 80);
+          syncSidebarActiveState('profile:tactical');
+          return;
+        }
         if (target && typeof openView === 'function') {
           openView(target);
         }
@@ -2401,12 +2421,30 @@
     if (weekCard) body.appendChild(weekCard);
   }
 
-  function applyCaveiraCleanDashboardMode(enable = true) {
-    document.body.classList.toggle('jcCleanDashboard', Boolean(enable));
-    try { localStorage.setItem('jc_caveira_clean_mode_v1', enable ? '1' : '0'); } catch (_e) {}
+  function applyCaveiraCleanDashboardMode(enable = true, showNotice = false) {
+    const isClean = Boolean(enable);
+    document.body.classList.toggle('jcCleanDashboard', isClean);
+    document.body.classList.toggle('compactCleanUx', isClean);
+    try { localStorage.setItem('jc_caveira_clean_mode_v1', isClean ? '1' : '0'); } catch (_e) {}
     const lbl = document.querySelector('#jcSideCleanModeToggleBtn .jcSideNavLabel');
-    if (lbl) lbl.textContent = enable ? 'Visual Limpo: ON' : 'Visual Detalhado';
-    if (enable) organizeTodaySecondaryCardsIntoDrawer();
+    if (lbl) lbl.textContent = isClean ? 'Visual Limpo: ON' : 'Visual Limpo: OFF';
+    const todayAcc = document.getElementById('jcTodaySecondaryAccordion');
+    const repAcc = document.getElementById('jcReportSecondaryAccordion');
+    if (isClean) {
+      organizeTodaySecondaryCardsIntoDrawer();
+      if (todayAcc) todayAcc.open = false;
+      if (repAcc) repAcc.open = false;
+    } else {
+      if (todayAcc) todayAcc.open = true;
+      if (repAcc) repAcc.open = true;
+    }
+    if (showNotice && typeof window.toast === 'function') {
+      window.toast(
+        isClean
+          ? '✨ Visual Limpo ON: Banners decorativos, textos longos e blocos secundários recolhidos para foco máximo!'
+          : '📖 Visual Limpo OFF (Modo Detalhado): Todos os banners ilustrativos, dicas e cartões foram expandidos!'
+      );
+    }
   }
   window.applyCaveiraCleanDashboardMode = applyCaveiraCleanDashboardMode;
 
@@ -2437,6 +2475,9 @@
         prevOpen.apply(this, arguments);
         syncSidebarActiveState(id);
         updateAllFocusTimerDisplays();
+        if (window.JC_MODULES && window.JC_MODULES.caveiraFullSuiteR179) {
+          try { window.JC_MODULES.caveiraFullSuiteR179.init(); } catch (_e) {}
+        }
       };
       window.openView._jcSidebarHooked = true;
     }
@@ -2454,5 +2495,1411 @@
     document.addEventListener('DOMContentLoaded', bootCaveiraUiAndFullscreenTimer);
   } else {
     setTimeout(bootCaveiraUiAndFullscreenTimer, 0);
+  }
+})();
+
+
+
+// ============================================================================
+// MÓDULO 8 (r179): SUITE COMPLETA CAVEIRA & FRAMEWORKS MODERNOS
+// - Renovação Automática de Vidas da Trilha a cada 20 min com Cronômetro ao Vivo
+// - Novo Hub de Redação Policial (#jcEssayDashboardHub)
+// - Painel Tático Interativo no Perfil Social (#jcTacticalPanelSection)
+// - Novo Hub de Flashcards com Funil de 3 Chevrons (#jcFlashcardsDashboardHub)
+// - Aba "⚖️ Leis & Textos (Lei Seca)" com Vade Mecum Policial, Favoritos e Grifo
+// - Pílulas de Status no Banco de Questões + Breadcrumb e Barra Inferior com Invocador
+// ============================================================================
+(function initCaveiraFullSuiteR179() {
+  const LAWS_FAV_KEY = 'jc_laws_favorites_v179';
+  const LAWS_HIGHLIGHT_KEY = 'jc_laws_highlights_v179';
+
+  const NATIVE_SMART_LAWS = [
+    {
+      id: 'law-cf88-art5',
+      discipline: 'Direito Constitucional',
+      title: 'Lei Seca - Constituição Federal: Art. 1º ao 5º (Fundamentos, Objetivos e Direitos e Deveres Individuais)',
+      badge: 'Essencial PMPE/PPPE',
+      articles: [
+        'Art. 1º A República Federativa do Brasil, formada pela união indissolúvel dos Estados e Municípios e do Distrito Federal, constitui-se em Estado Democrático de Direito e tem como fundamentos: I - a soberania; II - a cidadania; III - a dignidade da pessoa humana; IV - os valores sociais do trabalho e da livre iniciativa; V - o pluralismo político. (Bizu: SO-CI-DI-VA-PLU).',
+        'Art. 3º Constituem objetivos fundamentais da República Federativa do Brasil: I - construir uma sociedade livre, justa e solidária; II - garantir o desenvolvimento nacional; III - erradicar a pobreza e a marginalização e reduzir as desigualdades sociais e regionais; IV - promover o bem de todos, sem preconceitos de origem, raça, sexo, cor, idade e quaisquer outras formas de discriminação. (Bizu: CON-GA-ERRA-PRO).',
+        'Art. 5º, III - ninguém será submetido a tortura nem a tratamento desumano ou degradante.',
+        'Art. 5º, XI - a casa é asilo inviolável do indivíduo, ninguém nela podendo penetrar sem consentimento do morador, salvo em caso de flagrante delito ou desastre, ou para prestar socorro, ou, durante o dia, por determinação judicial.',
+        'Art. 5º, XII - é inviolável o sigilo da correspondência e das comunicações telegráficas, de dados e das comunicações telefônicas, salvo, no último caso, por ordem judicial, nas hipóteses e na forma que a lei estabelecer para fins de investigação criminal ou instrução processual penal.',
+        'Art. 5º, XVI - todos podem reunir-se pacificamente, sem armas, em locais abertos ao público, independentemente de autorização, desde que não frustrem outra reunião anteriormente convocada para o mesmo local, sendo apenas exigido prévio aviso à autoridade competente.',
+        'Art. 5º, XLII - a prática do racismo constitui crime inafiançável e imprescritível, sujeito à pena de reclusão, nos termos da lei.',
+        'Art. 5º, XLIII - a lei considerará crimes inafiançáveis e insuscetíveis de graça ou anistia a prática da tortura, o tráfico ilícito de entorpecentes e drogas afins, o terrorismo e os definidos como crimes hediondos (3TH).',
+        'Art. 5º, XLIV - constitui crime inafiançável e imprescritível a ação de grupos armados, civis ou militares, contra a ordem constitucional e o Estado Democrático (RAÇÃO = Racismo e Ação de Grupos Armados são Imprescritíveis).'
+      ]
+    },
+    {
+      id: 'law-cf88-art144',
+      discipline: 'Direito Constitucional',
+      title: 'Lei Seca - Constituição Federal: Art. 144 (Segurança Pública e Órgãos Policiais)',
+      badge: 'Top 1 Carreiras Policiais',
+      articles: [
+        'Art. 144. A segurança pública, dever do Estado, direito e responsabilidade de todos, é exercida para a preservação da ordem pública e da incolumidade das pessoas e do patrimônio, através dos seguintes órgãos (Rol Taxativo): I - polícia federal; II - polícia rodoviária federal; III - polícia ferroviária federal; IV - polícias civis; V - polícias militares e corpos de bombeiros militares; VI - polícias penais federal, estaduais e distrital (EC nº 104/2019).',
+        'Art. 144, § 4º Às polícias civis, dirigidas por delegados de polícia de carreira, incumbem, ressalvada a competência da União, as funções de polícia judiciária e a apuração de infrações penais, exceto as militares.',
+        'Art. 144, § 5º Às polícias militares cabem a polícia ostensiva e a preservação da ordem pública; aos corpos de bombeiros militares, além das atribuições definidas em lei, incumbe a execução de atividades de defesa civil.',
+        'Art. 144, § 5º-A. Às polícias penais, vinculadas ao órgão administrador do sistema penal da unidade federativa a que pertencem, cabe a segurança dos estabelecimentos penais.',
+        'Art. 144, § 6º As polícias militares e os corpos de bombeiros militares, forças auxiliares e reserva do Exército subordinam-se, juntamente com as polícias civis e as polícias penais estaduais e distrital, aos Governadores dos Estados, do Distrito Federal e dos Territórios.',
+        'Art. 144, § 8º Os Municípios poderão constituir guardas municipais destinadas à proteção de seus bens, serviços e instalações, conforme dispuser a lei.'
+      ]
+    },
+    {
+      id: 'law-adm-improbidade-8429',
+      discipline: 'Direito Administrativo',
+      title: 'Lei Seca - Lei de Improbidade Administrativa: Lei nº 8.429/92 (Atualizada pela Lei nº 14.230/21)',
+      badge: 'Alta Incidência',
+      articles: [
+        'Art. 1º, § 1º Consideram-se atos de improbidade administrativa as condutas dolosas tipificadas nos arts. 9º, 10 e 11 desta Lei, ressalvados tipos previstos em leis especiais. (Atenção: Não existe mais improbidade culposa!).',
+        'Art. 1º, § 2º Considera-se dolo a vontade livre e consciente de alcançar o resultado ilícito tipificado nos arts. 9º, 10 e 11 desta Lei, não bastando a voluntariedade do agente (exige-se dolo específico).',
+        'Art. 9º (Enriquecimento Ilícito - Rol Exemplificativo): Suspensão dos direitos políticos até 14 anos, perda da função, multa equivalente ao valor do acréscimo patrimonial e proibição de contratar até 14 anos.',
+        'Art. 10 (Lesão ao Erário - Rol Exemplificativo): Suspensão dos direitos políticos até 12 anos, perda da função, multa equivalente ao valor do dano e proibição de contratar até 12 anos.',
+        'Art. 11 (Atentado contra os Princípios - Rol TAXATIVO!): Multa até 24 vezes a remuneração e proibição de contratar até 4 anos (Não há perda da função nem suspensão de direitos políticos no Art. 11!).',
+        'Art. 23. A ação para a aplicação das sanções previstas nesta Lei prescreve em 8 (oito) anos, contados a partir da ocorrência do fato ou, no caso de infrações permanentes, do dia em que cessou a permanência.'
+      ]
+    },
+    {
+      id: 'law-adm-licitacoes-14133',
+      discipline: 'Direito Administrativo',
+      title: 'Lei Seca - Nova Lei de Licitações e Contratos Administrativos: Lei nº 14.133/21',
+      badge: 'Bancas AOCP/FGV',
+      articles: [
+        'Art. 28. São modalidades de licitação: I - pregão; II - concorrência; III - concurso; IV - leilão; V - diálogo competitivo. (Atenção: Tomada de preços, convite e RDC foram extintos!).',
+        'Art. 6º, XLI - pregão: modalidade de licitação obrigatória para aquisição de bens e serviços comuns, cujo critério de julgamento poderá ser o de menor preço ou o de maior desconto.',
+        'Art. 6º, XLII - diálogo competitivo: modalidade de licitação para contratação de obras, serviços e compras em que a Administração Pública realiza diálogos com licitantes previamente selecionados mediante critérios objetivos, com o intuito de desenvolver uma ou mais alternativas capazes de atender às suas necessidades.'
+      ]
+    },
+    {
+      id: 'law-penal-adm-publica',
+      discipline: 'Direito Penal',
+      title: 'Lei Seca - Código Penal: Crimes Praticados por Funcionário Público Contra a Administração (Arts. 312 a 327)',
+      badge: 'Cai em toda prova',
+      articles: [
+        'Art. 312 (Peculato): Apropriar-se o funcionário público de dinheiro, valor ou qualquer outro bem móvel, público ou particular, de que tem a posse em razão do cargo, ou desviá-lo, em proveito próprio ou alheio. § 2º Peculato culposo: se o funcionário concorre culposamente para o crime de outrem. § 3º No peculato culposo, a reparação do dano, se precede à sentença irrecorrível, extingue a punibilidade; se lhe é posterior, reduz de metade a pena imposta.',
+        'Art. 316 (Concussão): Exigir, para si ou para outrem, direta ou indiretamente, ainda que fora da função ou antes de assumi-la, mas em razão dela, vantagem indevida. Pena: reclusão, de 2 a 12 anos, e multa (Verbo nuclear: EXIGIR).',
+        'Art. 317 (Corrupção Passiva): Solicitar ou receber, para si ou para outrem, direta ou indiretamente, ainda que fora da função ou antes de assumi-la, mas em razão dela, vantagem indevida, ou aceitar promessa de tal vantagem (Verbos: SOLICITAR, RECEBER, ACEITAR PROMESSA).',
+        'Art. 319 (Prevaricação): Retardar ou deixar de praticar, indevidamente, ato de ofício, ou praticá-lo contra disposição expressa de lei, para satisfazer interesse ou sentimento pessoal.',
+        'Art. 320 (Condescendência Criminosa): Deixar o funcionário, por indulgência, de responsabilizar subordinado que cometeu infração no exercício do cargo ou, quando lhe falte competência, não levar o fato ao conhecimento da autoridade competente.'
+      ]
+    },
+    {
+      id: 'law-penal-militar-cpm',
+      discipline: 'Direito Penal Militar',
+      title: 'Lei Seca - Código Penal Militar (Decreto-Lei nº 1.001/69): Crimes Militares em Tempo de Paz (Art. 9º), Motim, Insubordinação e Deserção',
+      badge: 'PMPE / CBMPE',
+      articles: [
+        'Art. 9º Consideram-se crimes militares, em tempo de paz: II - os crimes previstos neste Código e os previstos na legislação penal, quando praticados: a) por militar em situação de atividade ou assemelhado, contra militar na mesma situação ou assemelhado; b) por militar em situação de atividade, em lugar sujeito à administração militar, contra militar da reserva/reformado ou civil; c) por militar em serviço ou atuando em razão da função.',
+        'Art. 149 (Motim): Reunirem-se militares ou assemelhados: I - agindo contra a ordem recebida de superior, ou negando-se a cumpri-la; II - recusando obediência a superior, quando estejam agindo sem ordem ou praticando violência; IV - ocupando quartel, fortaleza, aeródromo ou navio militar.',
+        'Art. 163 (Recusa de Obediência): Recusar obedecer a ordem do superior sobre assunto ou matéria de serviço, ou relativamente a dever imposto em lei, regulamento ou instrução: Pena - detenção, de um a dois anos, se o fato não constitui crime mais grave.',
+        'Art. 187 (Deserção): Ausentar-se o militar, sem licença, da unidade em que serve, ou do lugar em que deve permanecer, por mais de oito dias: Pena - detenção, de seis meses a dois anos; se oficial, a pena é agravada. (Bizu: Mais de 8 dias = consuma no 9º dia!).'
+      ]
+    },
+    {
+      id: 'law-extrav-abuso-tortura',
+      discipline: 'Legislação Extravagante',
+      title: 'Lei Seca - Abuso de Autoridade (Lei nº 13.869/19) e Lei de Tortura (Lei nº 9.455/97)',
+      badge: 'Foco Policial',
+      articles: [
+        'Lei 13.869/19, Art. 1º, § 1º As condutas descritas nesta Lei constituem crime de abuso de autoridade quando praticadas pelo agente com a finalidade específica de prejudicar outrem ou beneficiar a si mesmo ou a terceiro, ou, ainda, por mero capricho ou satisfação pessoal.',
+        'Lei 13.869/19, Art. 1º, § 2º A divergência na interpretação de lei ou na avaliação de fatos e provas não configura abuso de autoridade (vedação ao crime de hermenêutica).',
+        'Lei 13.869/19, Art. 13 (Constrangimento a exibição do corpo/algemas/submissão a vexame) e Art. 22 (Invasão de domicílio clandestina ou cumprimento de mandado judicial de busca e apreensão domiciliar após as 21h ou antes das 5h).',
+        'Lei 9.455/97 (Tortura), Art. 1º Constitui crime de tortura (crime comum, salvo a tortura-castigo do inciso II que é crime próprio de quem detém guarda/poder/autoridade): I - constranger alguém com emprego de violência ou grave ameaça, causando-lhe sofrimento físico ou mental: a) com o fim de obter informação, declaração ou confissão; b) para provocar ação ou omissão de natureza criminosa; c) em razão de discriminação racial ou religiosa.',
+        'Lei 9.455/97, Art. 1º, § 2º (Tortura Omissiva / Imprópria): Aquele que se omite em face dessas condutas, quando tinha o dever de evitá-las ou apurá-las, incorre na pena de detenção de 1 a 4 anos (Única modalidade punida com detenção e cujo regime inicial não precisa ser o fechado!).'
+      ]
+    },
+    {
+      id: 'law-pe-estatuto-pmpe',
+      discipline: 'Legislação Institucional PE',
+      title: 'Lei Seca - Estatuto dos Policiais Militares de Pernambuco (Lei Estadual nº 6.783/74) e Código Disciplinar (Lei nº 11.817/00)',
+      badge: 'Exclusivo PE',
+      articles: [
+        'Lei 6.783/74, Art. 2º A Polícia Militar de Pernambuco, subordinada operacionalmente à Secretaria de Defesa Social, é uma instituição permanente, força auxiliar e reserva do Exército, organizada com base na hierarquia e na disciplina.',
+        'Lei 6.783/74, Art. 12. A hierarquia policial-militar é a ordenação da autoridade em níveis diferentes, dentro da estrutura da Polícia Militar. A ordenação se faz por postos (Oficiais) ou por graduações (Praças).',
+        'Lei 6.783/74, Art. 13. A disciplina é a rigorosa observância e o acatamento integral das leis, regulamentos, normas e disposições que fundamentam o organismo policial-militar e coordenam seu funcionamento regular e harmônico.'
+      ]
+    }
+  ];
+
+  function getFavLaws() {
+    try {
+      return JSON.parse(localStorage.getItem(LAWS_FAV_KEY) || '[]');
+    } catch (_e) {
+      return [];
+    }
+  }
+
+  function setFavLaws(arr) {
+    try {
+      localStorage.setItem(LAWS_FAV_KEY, JSON.stringify(Array.isArray(arr) ? arr : []));
+    } catch (_e) {}
+  }
+
+  function getHighlightedArticles() {
+    try {
+      return JSON.parse(localStorage.getItem(LAWS_HIGHLIGHT_KEY) || '{}');
+    } catch (_e) {
+      return {};
+    }
+  }
+
+  function toggleHighlightArticle(key) {
+    const map = getHighlightedArticles();
+    if (map[key]) delete map[key];
+    else map[key] = true;
+    try {
+      localStorage.setItem(LAWS_HIGHLIGHT_KEY, JSON.stringify(map));
+    } catch (_e) {}
+    return Boolean(map[key]);
+  }
+
+  function getAppStateSafe() {
+    try {
+      if (typeof state === 'object' && state) return state;
+    } catch (_e) {}
+    return (typeof window !== 'undefined' && window.state) ? window.state : {};
+  }
+
+  function getAllQuestionsSafe() {
+    try {
+      if (typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS)) return ALL_QUESTIONS;
+    } catch (_e) {}
+    return (typeof window !== 'undefined' && Array.isArray(window.ALL_QUESTIONS)) ? window.ALL_QUESTIONS : [];
+  }
+
+  function injectR179Styles() {
+    if (typeof document === 'undefined' || !document.head) return;
+    if (document.getElementById('jcCaveiraSuiteR179Styles')) return;
+    const style = document.createElement('style');
+    style.id = 'jcCaveiraSuiteR179Styles';
+    style.textContent = `
+      /* === 1. Efeito Real e Imediato do Modo Visual Limpo (body.jcCleanDashboard) === */
+      body.jcCleanDashboard .slBannerCard,
+      body.jcCleanDashboard #slTrailHeroBanner,
+      body.jcCleanDashboard #slBossesRaidBanner,
+      body.jcCleanDashboard #slStudyHeroBanner,
+      body.jcCleanDashboard .caveiraSprintBanner {
+        display: none !important;
+      }
+      body.jcCleanDashboard .sectionHead p.small.muted,
+      body.jcCleanDashboard .card > p.small.muted {
+        display: none !important;
+      }
+      body.jcCleanDashboard .card:not(.hero) {
+        padding: 14px 16px !important;
+      }
+
+      /* === 2. Layout Caveira para Redação, Flashcards, Painel Tático, Leis e Questões === */
+      .jcCaveiraTopCards {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+      @media (max-width: 860px) {
+        .jcCaveiraTopCards {
+          grid-template-columns: 1fr;
+        }
+      }
+      .jcCaveiraActionCard {
+        background: #181b21;
+        border: 1px solid rgba(148, 163, 184, 0.14);
+        border-radius: 10px;
+        padding: 18px 20px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 12px;
+        transition: border-color 0.18s ease, transform 0.18s ease;
+      }
+      .jcCaveiraActionCard:hover {
+        border-color: rgba(56, 189, 248, 0.45);
+        transform: translateY(-1px);
+      }
+      .jcCaveiraActionTitle {
+        font-size: 0.96rem;
+        font-weight: 800;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: #f8fafc;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .jcCaveiraActionSub {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        color: #94a3b8;
+        line-height: 1.4;
+      }
+      .jcCaveiraActionBtn {
+        align-self: flex-start;
+        min-width: 140px;
+        padding: 9px 18px;
+        border-radius: 6px;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        border: 1px solid rgba(56, 189, 248, 0.35);
+        background: linear-gradient(135deg, #38bdf8, #0284c7);
+        color: #090d16;
+        cursor: pointer;
+        text-align: center;
+      }
+      .jcCaveiraActionBtn.olive {
+        background: #a3b899;
+        border-color: #b5c9ab;
+        color: #111814;
+      }
+      .jcCaveiraSectionTitle {
+        font-size: 0.98rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #f8fafc;
+        margin: 18px 0 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .jcCaveiraOverviewBox {
+        background: #181b21;
+        border: 1px solid rgba(148, 163, 184, 0.14);
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 18px;
+      }
+      .jcCaveiraOverviewGrid {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr 1fr;
+        gap: 16px;
+        align-items: stretch;
+      }
+      @media (max-width: 860px) {
+        .jcCaveiraOverviewGrid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .jcCaveiraBigNumber {
+        font-size: 3.1rem;
+        font-weight: 800;
+        line-height: 1;
+        color: #f8fafc;
+        margin: 10px 0 16px;
+        font-variant-numeric: tabular-nums;
+      }
+      .jcCaveiraStatBox {
+        border-radius: 8px;
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 132px;
+      }
+      .jcCaveiraStatBox.green {
+        background: rgba(16, 185, 129, 0.11);
+        border: 1px solid rgba(16, 185, 129, 0.25);
+      }
+      .jcCaveiraStatBox.blue {
+        background: rgba(56, 189, 248, 0.11);
+        border: 1px solid rgba(56, 189, 248, 0.25);
+      }
+      .jcCaveiraTwoCols {
+        display: grid;
+        grid-template-columns: 1.15fr 1fr;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+      @media (max-width: 860px) {
+        .jcCaveiraTwoCols {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* === 3. Painel Tático (Estilo Caveira image_38d38c.png) === */
+      .jcTacticalWrap {
+        background: #14171d;
+        border: 1px solid rgba(148, 163, 184, 0.16);
+        border-radius: 14px;
+        padding: 20px;
+        margin-top: 18px;
+      }
+      .jcTacticalSegment {
+        display: inline-flex;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 6px;
+        overflow: hidden;
+        background: #0f1217;
+      }
+      .jcTacticalSegBtn {
+        background: transparent;
+        border: 0;
+        color: #cbd5e1;
+        padding: 8px 18px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .jcTacticalSegBtn.active {
+        background: #334155;
+        color: #ffffff;
+      }
+      .jcTacticalPeriodBar {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+        margin: 16px 0 18px;
+        padding-bottom: 2px;
+      }
+      .jcTacticalPeriodBtn {
+        background: transparent;
+        border: 0;
+        border-bottom: 2.5px solid transparent;
+        color: #94a3b8;
+        font-size: 0.76rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      .jcTacticalPeriodBtn.active {
+        color: #ffffff;
+        border-bottom-color: #f8fafc;
+      }
+
+      /* === 4. Funil de 3 Chevrons dos Flashcards (image_38d0c5.png) === */
+      .jcChevronStageWrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 8px 0;
+      }
+      .jcChevronColumn {
+        width: 58px;
+        height: 170px;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 4px;
+        font-size: 0.66rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #e2e8f0;
+        position: relative;
+        clip-path: polygon(0% 0%, 82% 0%, 100% 50%, 82% 100%, 0% 100%, 18% 50%);
+      }
+      .jcChevronColumn.stage1 { background: #2d333b; }
+      .jcChevronColumn.stage2 { background: #465248; }
+      .jcChevronColumn.stage3 { background: #6b7d69; }
+      .jcChevronVertLabel {
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        transform: rotate(180deg);
+        font-size: 0.65rem;
+        letter-spacing: 0.06em;
+      }
+
+      /* === 5. Central de Leis & Textos (Lei Seca image_38d36d.png) === */
+      .jcLawsAccordionGroup {
+        margin-bottom: 14px;
+      }
+      .jcLawsGroupHeader {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: transparent;
+        border: 0;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+        padding: 10px 4px;
+        color: #f8fafc;
+        font-size: 0.98rem;
+        font-weight: 800;
+        cursor: pointer;
+        text-align: left;
+      }
+      .jcLawRowItem {
+        background: #181b21;
+        border: 1px solid rgba(148, 163, 184, 0.13);
+        border-radius: 8px;
+        padding: 13px 16px;
+        margin-top: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .jcLawStartBtn {
+        background: transparent;
+        border: 1px solid rgba(163, 184, 153, 0.45);
+        color: #a3b899;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 0.74rem;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .jcLawStartBtn:hover {
+        background: #a3b899;
+        color: #0f1411;
+      }
+
+      /* === 6. Pílulas Rápidas de Questões e Rodapé Caveira da Questão (image_38d04a.png / image_38d08b.png) === */
+      .jcQuestionStatusPills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 10px 0 14px;
+      }
+      .jcQStatusPill {
+        background: #181b21;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        color: #cbd5e1;
+        padding: 6px 14px;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .jcQStatusPill.active {
+        background: #475569;
+        border-color: #94a3b8;
+        color: #ffffff;
+      }
+      .jcQuestionCaveiraFooter {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(148, 163, 184, 0.16);
+      }
+      .jcQCaveiraToolBtn {
+        background: transparent;
+        border: 1px solid transparent;
+        color: #94a3b8;
+        font-size: 0.74rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 6px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .jcQCaveiraToolBtn:hover {
+        background: rgba(56, 189, 248, 0.1);
+        border-color: rgba(56, 189, 248, 0.3);
+        color: #f8fafc;
+      }
+
+      /* === 7. Suporte Total ao Tema Claro (body.lightAppTheme) para Todos os Componentes r179 === */
+      body.lightAppTheme .jcCaveiraActionCard,
+      body.lightAppTheme .jcCaveiraOverviewBox,
+      body.lightAppTheme .jcTacticalWrap,
+      body.lightAppTheme .jcLawRowItem {
+        background: #ffffff !important;
+        border: 1.5px solid #94a3b8 !important;
+        color: #090d16 !important;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06) !important;
+      }
+      body.lightAppTheme .jcCaveiraActionTitle,
+      body.lightAppTheme .jcCaveiraSectionTitle,
+      body.lightAppTheme .jcCaveiraBigNumber,
+      body.lightAppTheme .jcLawsGroupHeader {
+        color: #090d16 !important;
+      }
+      body.lightAppTheme .jcCaveiraActionSub {
+        color: #334155 !important;
+        font-weight: 600 !important;
+      }
+      body.lightAppTheme .jcCaveiraStatBox.green {
+        background: #ecfdf5 !important;
+        border: 1.5px solid #10b981 !important;
+        color: #064e3b !important;
+      }
+      body.lightAppTheme .jcCaveiraStatBox.blue {
+        background: #e0f2fe !important;
+        border: 1.5px solid #0284c7 !important;
+        color: #0c4a6e !important;
+      }
+      body.lightAppTheme .jcTacticalSegment {
+        background: #e2e8f0 !important;
+        border-color: #94a3b8 !important;
+      }
+      body.lightAppTheme .jcTacticalSegBtn {
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .jcTacticalSegBtn.active {
+        background: #0284c7 !important;
+        color: #ffffff !important;
+      }
+      body.lightAppTheme .jcTacticalPeriodBtn {
+        color: #334155 !important;
+      }
+      body.lightAppTheme .jcTacticalPeriodBtn.active {
+        color: #0284c7 !important;
+        border-bottom-color: #0284c7 !important;
+      }
+      body.lightAppTheme .jcQStatusPill {
+        background: #ffffff !important;
+        border: 1.5px solid #64748b !important;
+        color: #0f172a !important;
+      }
+      body.lightAppTheme .jcQStatusPill.active {
+        background: #0284c7 !important;
+        border-color: #0369a1 !important;
+        color: #ffffff !important;
+      }
+      body.lightAppTheme .jcLawStartBtn {
+        background: #ecfdf5 !important;
+        border: 1.5px solid #059669 !important;
+        color: #065f46 !important;
+      }
+      body.lightAppTheme .jcQCaveiraToolBtn {
+        color: #1e293b !important;
+        border: 1px solid #cbd5e1 !important;
+        background: #f8fafc !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  // 1) Renovação Automática de Vidas da Trilha a cada 20 min + Cronômetro ao Vivo no Selo
+  function tickTrailHearts20MinRegen() {
+    if (typeof document === 'undefined') return;
+    const st = getAppStateSafe();
+    if (!st.learning) st.learning = { hearts: 3, xp: 0, done: {} };
+    if (typeof window.availableTrailHearts === 'function') {
+      try { window.availableTrailHearts(); } catch (_e) {}
+    }
+    const h = Number.isInteger(st.learning.hearts) ? st.learning.hearts : 3;
+    const badge = document.getElementById('trailHeartsStatusBadge');
+    if (badge) {
+      const heartsIcons = '♥'.repeat(Math.max(0, h)) + '♡'.repeat(Math.max(0, 3 - h));
+      if (h < 3 && st.learning.heartCooldownUntil) {
+        const remSec = Math.max(0, Math.ceil((Number(st.learning.heartCooldownUntil) - Date.now()) / 1000));
+        const mm = String(Math.floor(remSec / 60)).padStart(2, '0');
+        const ss = String(remSec % 60).padStart(2, '0');
+        badge.textContent = `${heartsIcons} ${h}/3 vidas · ⏱ +1 em ${mm}:${ss}`;
+        badge.title = 'As vidas da Trilha Tática são renovadas automaticamente a cada 20 minutos';
+      } else {
+        badge.textContent = `${heartsIcons} ${h}/3 vidas`;
+      }
+    }
+  }
+
+  // 2) Hub de Redação Policial Estilo Caveira (image_38d3af.png)
+  function mountCaveiraEssayHub() {
+    if (typeof document === 'undefined') return;
+    const essaySec = document.getElementById('essay');
+    if (!essaySec) return;
+    const st = getAppStateSafe();
+    const essays = Array.isArray(st.essays) ? st.essays : [];
+    const totalSent = essays.length;
+    const graded = essays.filter(e => Number.isFinite(Number(e.score)) || e.feedback);
+    const scores = graded.map(e => {
+      const raw = Number(e.score || e.grade || 0);
+      return raw <= 10 && raw > 0 ? Math.round(raw * 10) : Math.round(raw);
+    }).filter(n => n >= 0);
+    const bestPct = scores.length ? Math.max(...scores) : 0;
+    const avgPct = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+
+    let hub = document.getElementById('jcEssayDashboardHub');
+    if (!hub) {
+      hub = document.createElement('div');
+      hub.id = 'jcEssayDashboardHub';
+      const head = essaySec.querySelector('.sectionHead');
+      if (head && head.nextSibling) {
+        essaySec.insertBefore(hub, head.nextSibling);
+      } else {
+        essaySec.insertBefore(hub, essaySec.firstChild);
+      }
+    }
+
+    // Build SVG chart points for last 10 essays
+    const last10 = scores.slice(-10);
+    const pts = last10.map((val, idx) => {
+      const x = 40 + idx * 36;
+      const y = 140 - Math.round((Math.min(100, Math.max(0, val)) / 100) * 110);
+      return `${x},${y}`;
+    }).join(' ');
+
+    const circlesHtml = last10.map((val, idx) => {
+      const x = 40 + idx * 36;
+      const y = 140 - Math.round((Math.min(100, Math.max(0, val)) / 100) * 110);
+      return `<circle cx="${x}" cy="${y}" r="4.5" fill="#38bdf8" stroke="#0f172a" stroke-width="1.5"><title>Envio ${idx + 1}: ${val}%</title></circle>`;
+    }).join('');
+
+    const recentRows = essays.slice(-4).reverse().map((e, i) => {
+      const sc = Number(e.score || 0);
+      const pct = sc <= 10 && sc > 0 ? Math.round(sc * 10) : Math.round(sc);
+      return `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:8px;background:rgba(148,163,184,0.08);margin-bottom:8px;">
+          <div>
+            <b style="font-size:.84rem;display:block;">${String(e.title || e.theme || 'Redação #' + (essays.length - i)).slice(0, 48)}</b>
+            <span style="font-size:.73rem;color:#94a3b8;">${e.board || 'Padrão Policial'} · ${e.date || 'Registrada'}</span>
+          </div>
+          <span class="tag" style="font-weight:800;">${pct > 0 ? pct + '%' : 'Corrigida'}</span>
+        </div>
+      `;
+    }).join('') || `<p class="small muted" style="margin:18px 0;">Nenhuma redação enviada ainda. Clique em <b>ACESSAR</b> acima para escrever ou enviar foto do seu rascunho.</p>`;
+
+    hub.innerHTML = `
+      <div class="jcCaveiraTopCards">
+        <div class="jcCaveiraActionCard">
+          <div>
+            <div class="jcCaveiraActionTitle">✍️ ENVIAR REDAÇÃO</div>
+            <div class="jcCaveiraActionSub">ESCOLHA O FORMATO (DIGITADA OU FOTO/PDF) E ENVIE PARA CORREÇÃO</div>
+          </div>
+          <button type="button" class="jcCaveiraActionBtn olive" id="jcEssayFocusFormBtn">ACESSAR</button>
+        </div>
+        <div class="jcCaveiraActionCard">
+          <div>
+            <div class="jcCaveiraActionTitle">📋 ACOMPANHAR</div>
+            <div class="jcCaveiraActionSub">VEJA STATUS, NOTA POR CRITÉRIO E FEEDBACK DOS SEUS ENVIOS</div>
+          </div>
+          <button type="button" class="jcCaveiraActionBtn olive" id="jcEssayFocusHistoryBtn">ACESSAR</button>
+        </div>
+        <div class="jcCaveiraActionCard">
+          <div>
+            <div class="jcCaveiraActionTitle">🧙‍♂️ TEMAS DO INVOCADOR</div>
+            <div class="jcCaveiraActionSub">SORTEIE TEMA POLICIAL COM TEXTOS MOTIVADORES I E II NA HORA</div>
+          </div>
+          <button type="button" class="jcCaveiraActionBtn olive" id="jcEssayTriggerThemeBtn">SORTEAR TEMA</button>
+        </div>
+      </div>
+
+      <div class="jcCaveiraSectionTitle">📊 MEU DESEMPENHO</div>
+      <div class="jcCaveiraOverviewBox">
+        <div class="jcCaveiraOverviewGrid">
+          <div>
+            <div style="font-size:.92rem;font-weight:800;text-transform:uppercase;letter-spacing:.03em;">VISÃO GERAL</div>
+            <div style="font-size:.72rem;color:#94a3b8;text-transform:uppercase;">TOTAL DE REDAÇÕES ENVIADAS</div>
+            <div class="jcCaveiraBigNumber">${totalSent}</div>
+            <div style="display:grid;gap:5px;font-size:.76rem;font-weight:700;">
+              <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#3b82f6;margin-right:6px;"></span>${totalSent} ENVIADAS</div>
+              <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#eab308;margin-right:6px;"></span>0 EM CORREÇÃO</div>
+              <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#22c55e;margin-right:6px;"></span>${graded.length} CORRIGIDAS</div>
+            </div>
+          </div>
+          <div class="jcCaveiraStatBox green">
+            <span style="font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;">MELHOR RESULTADO</span>
+            <strong style="font-size:2.1rem;font-weight:800;font-variant-numeric:tabular-nums;">${bestPct}%</strong>
+          </div>
+          <div class="jcCaveiraStatBox blue">
+            <span style="font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;">MÉDIA GERAL</span>
+            <strong style="font-size:2.1rem;font-weight:800;font-variant-numeric:tabular-nums;">${avgPct}%</strong>
+          </div>
+        </div>
+        <div style="font-size:.73rem;color:#94a3b8;margin-top:10px;">Atualizado com base nos últimos 50 envios registrados na sua campanha.</div>
+      </div>
+
+      <div class="jcCaveiraTwoCols">
+        <div class="jcCaveiraOverviewBox" style="margin-bottom:0;">
+          <div style="font-size:.9rem;font-weight:800;text-transform:uppercase;margin-bottom:10px;">ÚLTIMOS ENVIOS (EVOLUÇÃO 0–100%)</div>
+          <svg viewBox="0 0 400 165" style="width:100%;height:160px;overflow:visible;">
+            <line x1="32" y1="30" x2="385" y2="30" stroke="rgba(148,163,184,0.14)" stroke-dasharray="3,3"/>
+            <line x1="32" y1="85" x2="385" y2="85" stroke="rgba(148,163,184,0.14)" stroke-dasharray="3,3"/>
+            <line x1="32" y1="140" x2="385" y2="140" stroke="rgba(148,163,184,0.35)"/>
+            <text x="6" y="34" fill="#94a3b8" font-size="10">100</text>
+            <text x="12" y="88" fill="#94a3b8" font-size="10">50</text>
+            <text x="18" y="143" fill="#94a3b8" font-size="10">0</text>
+            ${pts ? `<polyline fill="none" stroke="#38bdf8" stroke-width="2.5" points="${pts}"/>` : ''}
+            ${circlesHtml}
+          </svg>
+        </div>
+        <div class="jcCaveiraOverviewBox" style="margin-bottom:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <span style="font-size:.9rem;font-weight:800;text-transform:uppercase;">HISTÓRICO</span>
+            <button type="button" class="ghost small" id="jcEssaySeeAllBtn" style="padding:4px 10px;font-size:.72rem;">VER TUDO →</button>
+          </div>
+          ${recentRows}
+        </div>
+      </div>
+    `;
+
+    const focusFormBtn = document.getElementById('jcEssayFocusFormBtn');
+    if (focusFormBtn) {
+      focusFormBtn.onclick = () => {
+        const titleInput = document.getElementById('essayTitle');
+        if (titleInput) {
+          titleInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          titleInput.focus();
+        }
+      };
+    }
+    const focusHistBtn = document.getElementById('jcEssayFocusHistoryBtn');
+    const seeAllBtn = document.getElementById('jcEssaySeeAllBtn');
+    const scrollToList = () => {
+      const listEl = document.getElementById('essayList');
+      if (listEl && listEl.scrollIntoView) listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    if (focusHistBtn) focusHistBtn.onclick = scrollToList;
+    if (seeAllBtn) seeAllBtn.onclick = scrollToList;
+
+    const triggerThemeBtn = document.getElementById('jcEssayTriggerThemeBtn');
+    if (triggerThemeBtn) {
+      triggerThemeBtn.onclick = () => {
+        const aiBtn = document.getElementById('generateAiEssayThemeBtn') || document.getElementById('drawEssayThemeBtn');
+        if (aiBtn) aiBtn.click();
+        const box = document.getElementById('essayMotivatingBox') || document.getElementById('essayTheme');
+        if (box && box.scrollIntoView) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      };
+    }
+  }
+
+  // 3) Painel Tático Interativo no Perfil Social (image_38d38c.png)
+  let tacticalTabMode = 'questions'; // 'questions' | 'flashcards' | 'edital'
+  let tacticalPeriodDays = 30; // 1 | 7 | 15 | 30 | 90 | 180 | 365 | 9999
+
+  function mountPainelTaticoInProfile() {
+    if (typeof document === 'undefined') return;
+    const profRoot = document.getElementById('profileHubRoot') || document.getElementById('profile');
+    if (!profRoot) return;
+
+    let sec = document.getElementById('jcTacticalPanelSection');
+    if (!sec) {
+      sec = document.createElement('div');
+      sec.id = 'jcTacticalPanelSection';
+      sec.className = 'jcTacticalWrap';
+      profRoot.appendChild(sec);
+    }
+
+    const st = getAppStateSafe();
+    const scores = Array.isArray(st.scores) ? st.scores : [];
+    const masteryBag = (st.topicMastery && typeof st.topicMastery === 'object') ? st.topicMastery : {};
+
+    // Aggregate discipline stats
+    const byDisc = new Map();
+    Object.values(masteryBag).forEach((entry) => {
+      if (!entry || typeof entry !== 'object') return;
+      const dName = String(entry.subject || entry.subjectKey || 'Geral').trim() || 'Geral';
+      const cur = byDisc.get(dName) || { total: 0, correct: 0, wrong: 0 };
+      const att = Number(entry.attempts || 0);
+      const cor = Number(entry.correct || 0);
+      cur.total += att;
+      cur.correct += cor;
+      cur.wrong += Math.max(0, att - cor);
+      byDisc.set(dName, cur);
+    });
+
+    if (byDisc.size === 0 && scores.length > 0) {
+      scores.forEach((sc) => {
+        const dName = String(sc.subject || 'Treino Geral');
+        const cur = byDisc.get(dName) || { total: 0, correct: 0, wrong: 0 };
+        const tot = Number(sc.total || 0);
+        const cor = Number(sc.correct || 0);
+        cur.total += tot;
+        cur.correct += cor;
+        cur.wrong += Math.max(0, tot - cor);
+        byDisc.set(dName, cur);
+      });
+    }
+
+    let totalRight = 0;
+    let totalWrong = 0;
+    byDisc.forEach((v) => {
+      totalRight += v.correct;
+      totalWrong += v.wrong;
+    });
+    const grandTotal = totalRight + totalWrong;
+    const accPct = grandTotal > 0 ? Math.round((totalRight / grandTotal) * 100) : 0;
+
+    // Build 10 timeline points for ACERTEI x ERREI SVG
+    const pointCount = 10;
+    const hitPoints = [];
+    const missPoints = [];
+    for (let i = 0; i < pointCount; i++) {
+      const x = 38 + i * 35;
+      const sliceSc = scores[scores.length - pointCount + i];
+      const rVal = sliceSc ? Number(sliceSc.correct || 0) : (i === pointCount - 1 && totalRight > 0 ? Math.min(20, totalRight) : 0);
+      const wVal = sliceSc ? Math.max(0, Number(sliceSc.total || 0) - Number(sliceSc.correct || 0)) : (i === pointCount - 1 && totalWrong > 0 ? Math.min(20, totalWrong) : 0);
+      const yR = 135 - Math.min(105, rVal * 5);
+      const yW = 135 - Math.min(105, wVal * 5);
+      hitPoints.push({ x, y: yR, v: rVal });
+      missPoints.push({ x, y: yW, v: wVal });
+    }
+
+    const hitLine = hitPoints.map(p => `${p.x},${p.y}`).join(' ');
+    const missLine = missPoints.map(p => `${p.x},${p.y}`).join(' ');
+
+    const rowsHtml = Array.from(byDisc.entries())
+      .sort((a, b) => b[1].total - a[1].total)
+      .slice(0, 12)
+      .map(([disc, d]) => {
+        const pct = d.total > 0 ? Math.round((d.correct / d.total) * 100) : 0;
+        const barColor = pct >= 70 ? '#10b981' : (pct >= 50 ? '#f59e0b' : '#ef4444');
+        return `
+          <div style="display:grid;grid-template-columns:2fr 0.7fr 1.1fr 1fr;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(148,163,184,0.12);font-size:.82rem;">
+            <div style="font-weight:700;">${disc}</div>
+            <div style="font-variant-numeric:tabular-nums;">${d.total}</div>
+            <div style="font-variant-numeric:tabular-nums;">
+              <span style="color:#38bdf8;font-weight:700;">${d.correct}</span> / <span style="color:#f43f5e;font-weight:700;">${d.wrong}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="flex:1;height:7px;background:rgba(148,163,184,0.2);border-radius:999px;overflow:hidden;">
+                <div style="width:${pct}%;height:100%;background:${barColor};"></div>
+              </div>
+              <b style="font-size:.76rem;min-width:34px;text-align:right;">${pct}%</b>
+            </div>
+          </div>
+        `;
+      }).join('') || `<div style="padding:18px;text-align:center;color:#94a3b8;font-size:.83rem;">Resolva questões na aba Questões ou na Trilha Tática para popular a Análise de Performance por Disciplina.</div>`;
+
+    const periods = [
+      { d: 1, label: 'HOJE' },
+      { d: 7, label: '7 DIAS' },
+      { d: 15, label: '15 DIAS' },
+      { d: 30, label: 'UM MÊS' },
+      { d: 90, label: 'TRÊS MESES' },
+      { d: 180, label: 'SEIS MESES' },
+      { d: 365, label: '1 ANO' },
+      { d: 9999, label: 'PERSONALIZADO' }
+    ];
+
+    sec.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
+        <div>
+          <div class="eyebrow" style="color:#38bdf8;">TELEMETRIA DE COMBATE · PADRÃO CAVEIRA</div>
+          <h3 style="margin:2px 0 0;font-size:1.15rem;text-transform:uppercase;letter-spacing:.04em;">📊 PAINEL TÁTICO</h3>
+        </div>
+        <div class="jcTacticalSegment">
+          <button type="button" class="jcTacticalSegBtn ${tacticalTabMode === 'questions' ? 'active' : ''}" data-tact-mode="questions">Questões</button>
+          <button type="button" class="jcTacticalSegBtn ${tacticalTabMode === 'flashcards' ? 'active' : ''}" data-tact-mode="flashcards">Flashcards</button>
+          <button type="button" class="jcTacticalSegBtn ${tacticalTabMode === 'edital' ? 'active' : ''}" data-tact-mode="edital">Turmas & Edital</button>
+        </div>
+      </div>
+
+      <div class="jcTacticalPeriodBar">
+        ${periods.map(p => `<button type="button" class="jcTacticalPeriodBtn ${tacticalPeriodDays === p.d ? 'active' : ''}" data-tact-days="${p.d}">${p.label}</button>`).join('')}
+      </div>
+
+      <div class="jcCaveiraTwoCols">
+        <div class="jcCaveiraOverviewBox" style="margin-bottom:0;">
+          <div style="font-size:.86rem;font-weight:800;text-transform:uppercase;margin-bottom:10px;">ACERTEI x ERREI</div>
+          <svg viewBox="0 0 390 165" style="width:100%;height:160px;overflow:visible;">
+            <line x1="30" y1="30" x2="370" y2="30" stroke="rgba(148,163,184,0.14)" stroke-dasharray="3,3"/>
+            <line x1="30" y1="82" x2="370" y2="82" stroke="rgba(148,163,184,0.14)" stroke-dasharray="3,3"/>
+            <line x1="30" y1="135" x2="370" y2="135" stroke="rgba(148,163,184,0.35)"/>
+            <polyline fill="none" stroke="#38bdf8" stroke-width="2.2" points="${hitLine}"/>
+            <polyline fill="none" stroke="#f43f5e" stroke-width="2.2" points="${missLine}"/>
+            ${hitPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="#38bdf8"/>`).join('')}
+            ${missPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="#f43f5e"/>`).join('')}
+          </svg>
+          <div style="display:flex;justify-content:center;gap:18px;font-size:.76rem;font-weight:700;margin-top:6px;">
+            <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#38bdf8;margin-right:5px;"></span>Acertei (${totalRight})</span>
+            <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#f43f5e;margin-right:5px;"></span>Errei (${totalWrong})</span>
+          </div>
+        </div>
+
+        <div class="jcCaveiraOverviewBox" style="margin-bottom:0;display:flex;flex-direction:column;justify-content:space-between;">
+          <div style="font-size:.86rem;font-weight:800;text-transform:uppercase;margin-bottom:10px;">TOTAL DO PERÍODO</div>
+          <div style="display:flex;align-items:center;justify-content:space-around;gap:16px;padding:12px 0;">
+            <div style="text-align:center;">
+              <div style="font-size:2.4rem;font-weight:900;font-variant-numeric:tabular-nums;">${grandTotal}</div>
+              <div style="font-size:.73rem;color:#94a3b8;text-transform:uppercase;">Resolvidas · ${accPct}% Acerto</div>
+            </div>
+            <div style="display:grid;gap:8px;font-size:.82rem;font-weight:700;">
+              <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#38bdf8;margin-right:6px;"></span>Acertei: <b>${totalRight}</b></div>
+              <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f43f5e;margin-right:6px;"></span>Errei: <b>${totalWrong}</b></div>
+            </div>
+          </div>
+          <div style="height:10px;border-radius:999px;background:rgba(244,63,94,0.28);overflow:hidden;">
+            <div style="width:${accPct}%;height:100%;background:#38bdf8;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="jcCaveiraOverviewBox" style="margin-bottom:0;">
+        <div style="font-size:.88rem;font-weight:800;text-transform:uppercase;margin-bottom:10px;">ANÁLISE DE PERFORMANCE</div>
+        <div style="display:grid;grid-template-columns:2fr 0.7fr 1.1fr 1fr;gap:10px;padding:8px 12px;border-bottom:1px solid rgba(148,163,184,0.22);font-size:.75rem;color:#94a3b8;font-weight:800;text-transform:uppercase;">
+          <div>Disciplina / Assunto</div>
+          <div>Total</div>
+          <div>Acertei / Errei</div>
+          <div>Aproveitamento</div>
+        </div>
+        ${rowsHtml}
+      </div>
+    `;
+
+    sec.querySelectorAll('[data-tact-mode]').forEach((btn) => {
+      btn.onclick = () => {
+        tacticalTabMode = btn.getAttribute('data-tact-mode') || 'questions';
+        mountPainelTaticoInProfile();
+      };
+    });
+    sec.querySelectorAll('[data-tact-days]').forEach((btn) => {
+      btn.onclick = () => {
+        tacticalPeriodDays = Number(btn.getAttribute('data-tact-days') || 30);
+        mountPainelTaticoInProfile();
+      };
+    });
+  }
+
+  // 4) Hub de Flashcards Estilo Caveira com Funil de 3 Chevrons (image_38d0c5.png)
+  function mountCaveiraFlashcardsHub() {
+    if (typeof document === 'undefined') return;
+    const cardsPanel = document.getElementById('cards');
+    if (!cardsPanel) return;
+
+    const st = getAppStateSafe();
+    const deck = Array.isArray(st.flashcards) ? st.flashcards : [];
+    const ratings = (st.cardRatings && typeof st.cardRatings === 'object') ? st.cardRatings : {};
+    let inReview = 0, shortMem = 0, longMem = 0;
+    Object.values(ratings).forEach((r) => {
+      const val = typeof r === 'object' ? r.difficulty : r;
+      if (val === 'easy') longMem++;
+      else if (val === 'medium' || val === 'good') shortMem++;
+      else inReview++;
+    });
+    const totalSolved = inReview + shortMem + longMem;
+
+    let hub = document.getElementById('jcFlashcardsDashboardHub');
+    if (!hub) {
+      hub = document.createElement('div');
+      hub.id = 'jcFlashcardsDashboardHub';
+      cardsPanel.insertBefore(hub, cardsPanel.firstChild);
+    }
+
+    hub.innerHTML = `
+      <div class="jcCaveiraTopCards">
+        <div class="jcCaveiraActionCard">
+          <div>
+            <div class="jcCaveiraActionTitle">📖 MEUS FLASHCARDS</div>
+            <div class="jcCaveiraActionSub">CARDS CRIADOS POR VOCÊ E EXTRAÍDOS DOS SEUS PDFS</div>
+          </div>
+          <button type="button" class="jcCaveiraActionBtn" id="jcFlashFocusDeckBtn">ACESSAR</button>
+        </div>
+        <div class="jcCaveiraActionCard">
+          <div>
+            <div class="jcCaveiraActionTitle">⚔️ CARDS DO CAÇADOR</div>
+            <div class="jcCaveiraActionSub">CARDS TÁTICOS DAS DISCIPLINAS DO EDITAL (${deck.length || 'ATIVOS'})</div>
+          </div>
+          <button type="button" class="jcCaveiraActionBtn" id="jcFlashFilterAllBtn">ACESSAR</button>
+        </div>
+        <div class="jcCaveiraActionCard">
+          <div>
+            <div class="jcCaveiraActionTitle">🔄 REVISÃO 1·7·30</div>
+            <div class="jcCaveiraActionSub">REVISAR CARDS RESOLVIDOS ANTERIORMENTE (${inReview} PENDENTES)</div>
+          </div>
+          <button type="button" class="jcCaveiraActionBtn" id="jcFlashOpenReviewBtn">ACESSAR</button>
+        </div>
+      </div>
+
+      <div class="jcCaveiraSectionTitle">📊 MEU DESEMPENHO — FLASHCARDS</div>
+      <div class="jcCaveiraOverviewBox">
+        <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:20px;align-items:center;">
+          <div>
+            <div style="font-size:.95rem;font-weight:800;text-transform:uppercase;">VISÃO GERAL</div>
+            <div style="font-size:.74rem;color:#94a3b8;">Total de flashcards resolvidos</div>
+            <div class="jcCaveiraBigNumber">${totalSolved}</div>
+            <div style="display:grid;gap:6px;font-size:.76rem;font-weight:700;">
+              <div>🏳️ <b>${inReview}</b> EM REVISÃO</div>
+              <div>🏳️ <b>${shortMem}</b> MEMÓRIA DE CURTO PRAZO</div>
+              <div>🏳️ <b>${longMem}</b> MEMÓRIA DE LONGO PRAZO</div>
+            </div>
+          </div>
+          <div class="jcChevronStageWrap" aria-label="Estágios de memória dos flashcards">
+            <div class="jcChevronColumn stage1">
+              <span class="jcChevronVertLabel">EM REVISÃO</span>
+              <b>${inReview}</b>
+            </div>
+            <div class="jcChevronColumn stage2">
+              <span class="jcChevronVertLabel">MEMÓRIA CURTA</span>
+              <b>${shortMem}</b>
+            </div>
+            <div class="jcChevronColumn stage3">
+              <span class="jcChevronVertLabel">MEMÓRIA LONGA</span>
+              <b>${longMem}</b>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const focusBtn = document.getElementById('jcFlashFocusDeckBtn');
+    const allBtn = document.getElementById('jcFlashFilterAllBtn');
+    const revBtn = document.getElementById('jcFlashOpenReviewBtn');
+    const scrollCard = () => {
+      const fc = document.getElementById('flashcard');
+      if (fc && fc.scrollIntoView) fc.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+    if (focusBtn) focusBtn.onclick = scrollCard;
+    if (allBtn) {
+      allBtn.onclick = () => {
+        const cf = document.getElementById('cardFilter');
+        if (cf) { cf.value = 'all'; cf.dispatchEvent(new Event('change')); }
+        scrollCard();
+      };
+    }
+    if (revBtn) {
+      revBtn.onclick = () => {
+        if (typeof window.openView === 'function') window.openView('review');
+      };
+    }
+  }
+
+  // 5) Central de Leis & Textos (Lei Seca Interativa — image_38d36d.png & image_38d3d1.png)
+  let lawsFilterFavOnly = false;
+  let lawsSearchQuery = '';
+  let activeLawModalItem = null;
+
+  function mountCaveiraSmartLawsHub() {
+    if (typeof document === 'undefined') return;
+    const studySec = document.getElementById('study');
+    if (!studySec) return;
+
+    const tabsWrap = studySec.querySelector('.studyTabs');
+    if (tabsWrap && !document.getElementById('jcStudyLawsTabBtn')) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'studyTab';
+      btn.id = 'jcStudyLawsTabBtn';
+      btn.setAttribute('data-study', 'laws');
+      btn.innerHTML = '⚖️ Leis & Textos';
+      btn.onclick = () => openSmartLawsSubtab();
+      tabsWrap.appendChild(btn);
+    }
+
+    // Also add a quick shortcut inside #summaries filter bar so users in Resumos see "⚖️ Leis & Textos (Lei Seca)" right away
+    const sumFilters = studySec.querySelector('#summaries .summaryFilters');
+    if (sumFilters && !document.getElementById('jcQuickOpenLawsFromSummariesBtn')) {
+      const qBtn = document.createElement('button');
+      qBtn.type = 'button';
+      qBtn.id = 'jcQuickOpenLawsFromSummariesBtn';
+      qBtn.className = 'ghost small';
+      qBtn.style.cssText = 'white-space:nowrap;font-weight:800;';
+      qBtn.innerHTML = '⚖️ Leis & Textos (Lei Seca)';
+      qBtn.onclick = () => openSmartLawsSubtab();
+      sumFilters.appendChild(qBtn);
+    }
+
+    let lawsPanel = document.getElementById('laws');
+    if (!lawsPanel) {
+      lawsPanel = document.createElement('div');
+      lawsPanel.className = 'studyPanel';
+      lawsPanel.id = 'laws';
+      studySec.appendChild(lawsPanel);
+    }
+
+    renderSmartLawsPanelContent(lawsPanel);
+  }
+
+  function openSmartLawsSubtab() {
+    if (typeof document === 'undefined') return;
+    mountCaveiraSmartLawsHub();
+    const studySec = document.getElementById('study');
+    if (!studySec) return;
+    studySec.querySelectorAll('.studyTab').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-study') === 'laws');
+    });
+    studySec.querySelectorAll('.studyPanel').forEach(p => {
+      p.classList.toggle('active', p.id === 'laws');
+    });
+  }
+  if (typeof window !== 'undefined') window.openSmartLawsSubtab = openSmartLawsSubtab;
+
+  function renderSmartLawsPanelContent(lawsPanel) {
+    if (!lawsPanel) lawsPanel = document.getElementById('laws');
+    if (!lawsPanel) return;
+
+    const favs = new Set(getFavLaws());
+    const qNorm = String(lawsSearchQuery || '').trim().toLowerCase();
+
+    const filtered = NATIVE_SMART_LAWS.filter((item) => {
+      if (lawsFilterFavOnly && !favs.has(item.id)) return false;
+      if (!qNorm) return true;
+      const hay = `${item.discipline} ${item.title} ${item.articles.join(' ')}`.toLowerCase();
+      return hay.includes(qNorm);
+    });
+
+    const grouped = new Map();
+    filtered.forEach((item) => {
+      if (!grouped.has(item.discipline)) grouped.set(item.discipline, []);
+      grouped.get(item.discipline).push(item);
+    });
+
+    const groupsHtml = Array.from(grouped.entries()).map(([disc, items]) => `
+      <div class="jcLawsAccordionGroup">
+        <div class="jcLawsGroupHeader">
+          <span>${disc}</span>
+          <span style="font-size:.76rem;color:#94a3b8;">${items.length} diploma(s) ▴</span>
+        </div>
+        <div>
+          ${items.map(item => `
+            <div class="jcLawRowItem">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <button type="button" class="ghost small" data-law-fav="${item.id}" style="padding:4px 8px;font-size:.85rem;" title="Favoritar Lei">
+                  ${favs.has(item.id) ? '⭐' : '☆'}
+                </button>
+                <div>
+                  <div style="font-weight:700;font-size:.88rem;">${item.title}</div>
+                  <div style="font-size:.73rem;color:#94a3b8;margin-top:2px;">${item.badge} · ${item.articles.length} artigos/dispositivos táticos</div>
+                </div>
+              </div>
+              <button type="button" class="jcLawStartBtn" data-law-open="${item.id}">COMEÇAR</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('') || `<p class="small muted" style="padding:16px 0;">Nenhuma lei encontrada para o filtro selecionado.</p>`;
+
+    const readerHtml = activeLawModalItem ? renderActiveLawReaderHtml(activeLawModalItem) : '';
+
+    lawsPanel.innerHTML = `
+      <div style="display:flex;align-items:center;gap:18px;border-bottom:1px solid rgba(148,163,184,0.18);padding-bottom:10px;margin-bottom:14px;">
+        <button type="button" class="ghost small ${!lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabAllBtn" style="font-weight:800;">📋 Listagem (${NATIVE_SMART_LAWS.length})</button>
+        <button type="button" class="ghost small ${lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabFavBtn" style="font-weight:800;">⭐ Favoritos (${favs.size})</button>
+      </div>
+      <div style="margin-bottom:16px;">
+        <input type="search" id="jcLawsSearchInput" value="${lawsSearchQuery.replace(/"/g, '&quot;')}" placeholder="PESQUISA — Digite lei, número (ex.: 8.429, Art. 5º, Art. 144, Peculato, Deserção)..." style="width:100%;padding:11px 14px;border-radius:8px;">
+      </div>
+      ${readerHtml}
+      <div id="jcLawsAccordionContainer">
+        ${groupsHtml}
+      </div>
+    `;
+
+    const allBtn = document.getElementById('jcLawsTabAllBtn');
+    const favBtn = document.getElementById('jcLawsTabFavBtn');
+    const sInp = document.getElementById('jcLawsSearchInput');
+    if (allBtn) allBtn.onclick = () => { lawsFilterFavOnly = false; renderSmartLawsPanelContent(lawsPanel); };
+    if (favBtn) favBtn.onclick = () => { lawsFilterFavOnly = true; renderSmartLawsPanelContent(lawsPanel); };
+    if (sInp) {
+      sInp.oninput = () => {
+        lawsSearchQuery = sInp.value || '';
+        renderSmartLawsPanelContent(lawsPanel);
+      };
+    }
+
+    lawsPanel.querySelectorAll('[data-law-fav]').forEach((btn) => {
+      btn.onclick = () => {
+        const id = btn.getAttribute('data-law-fav');
+        const cur = new Set(getFavLaws());
+        if (cur.has(id)) cur.delete(id);
+        else cur.add(id);
+        setFavLaws(Array.from(cur));
+        renderSmartLawsPanelContent(lawsPanel);
+      };
+    });
+
+    lawsPanel.querySelectorAll('[data-law-open]').forEach((btn) => {
+      btn.onclick = () => {
+        const id = btn.getAttribute('data-law-open');
+        activeLawModalItem = NATIVE_SMART_LAWS.find(l => l.id === id) || null;
+        renderSmartLawsPanelContent(lawsPanel);
+      };
+    });
+
+    const closeReaderBtn = document.getElementById('jcCloseLawReaderBtn');
+    if (closeReaderBtn) {
+      closeReaderBtn.onclick = () => {
+        activeLawModalItem = null;
+        renderSmartLawsPanelContent(lawsPanel);
+      };
+    }
+
+    lawsPanel.querySelectorAll('[data-law-highlight]').forEach((btn) => {
+      btn.onclick = () => {
+        const key = btn.getAttribute('data-law-highlight');
+        toggleHighlightArticle(key);
+        renderSmartLawsPanelContent(lawsPanel);
+      };
+    });
+
+    const invokeLawBtn = document.getElementById('jcInvokeLawAiBtn');
+    if (invokeLawBtn && activeLawModalItem) {
+      invokeLawBtn.onclick = () => {
+        if (typeof window.openView === 'function') window.openView('assistant');
+        const qInput = document.getElementById('aiQuestion');
+        if (qInput) {
+          qInput.value = `Invocador, crie 3 questões inéditas no estilo AOCP/Cebraspe e aponte as principais pegadinhas sobre: ${activeLawModalItem.title}`;
+          qInput.focus();
+        }
+      };
+    }
+  }
+
+  function renderActiveLawReaderHtml(law) {
+    const highlights = getHighlightedArticles();
+    return `
+      <div class="jcCaveiraOverviewBox" id="jcActiveLawReaderBox" style="border:1.5px solid #38bdf8;margin-bottom:18px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+          <div>
+            <span class="tag">${law.discipline}</span>
+            <h3 style="margin:6px 0 0;font-size:1.02rem;">⚖️ ${law.title}</h3>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="action small" id="jcInvokeLawAiBtn">🧙‍♂️ Invocar Questões desta Lei</button>
+            <button type="button" class="ghost small" id="jcCloseLawReaderBtn">✕ Fechar Leitura</button>
+          </div>
+        </div>
+        <div style="display:grid;gap:10px;">
+          ${law.articles.map((art, idx) => {
+            const hKey = `${law.id}:${idx}`;
+            const isHi = Boolean(highlights[hKey]);
+            return `
+              <div style="padding:12px 14px;border-radius:8px;border:1px solid ${isHi ? '#eab308' : 'rgba(148,163,184,0.18)'};background:${isHi ? 'rgba(234,179,8,0.15)' : 'rgba(15,23,42,0.35)'};display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+                <p style="margin:0;line-height:1.55;font-size:.88rem;">${art}</p>
+                <button type="button" class="ghost small" data-law-highlight="${hKey}" title="Grifar dispositivo" style="padding:4px 8px;flex-shrink:0;">
+                  ${isHi ? '🖍️ Grifado' : '🖍️ Grifar'}
+                </button>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // 6) Pílulas Rápidas de Status na Aba Questões (image_38d04a.png) + Barra Inferior da Questão com Invocador (image_38d08b.png)
+  function mountCaveiraQuestionBankEnhancements() {
+    if (typeof document === 'undefined') return;
+    const reportSec = document.getElementById('report');
+    if (reportSec && !document.getElementById('jcCaveiraQuestionStatusPills')) {
+      const trainer = reportSec.querySelector('.questionTrainer') || reportSec.querySelector('.card');
+      const filtersWrap = reportSec.querySelector('.questionFilters');
+      if (trainer && filtersWrap) {
+        const pillsBar = document.createElement('div');
+        pillsBar.id = 'jcCaveiraQuestionStatusPills';
+        pillsBar.className = 'jcQuestionStatusPills';
+        pillsBar.innerHTML = `
+          <button type="button" class="jcQStatusPill active" data-q-status-pill="all">Todas</button>
+          <button type="button" class="jcQStatusPill" data-q-status-pill="solved">Resolvidas</button>
+          <button type="button" class="jcQStatusPill" data-q-status-pill="unsolved">Não resolvidas</button>
+          <button type="button" class="jcQStatusPill" data-q-status-pill="right">Acertei</button>
+          <button type="button" class="jcQStatusPill" data-q-status-pill="wrong">Errei</button>
+        `;
+        filtersWrap.parentElement.insertBefore(pillsBar, filtersWrap);
+
+        pillsBar.querySelectorAll('[data-q-status-pill]').forEach((btn) => {
+          btn.onclick = () => {
+            pillsBar.querySelectorAll('[data-q-status-pill]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const status = btn.getAttribute('data-q-status-pill');
+            if (status === 'wrong') {
+              const errBtn = document.getElementById('openErrorNotebookBtn') || document.getElementById('startErrorReviewBtn');
+              if (errBtn) errBtn.click();
+            } else if (typeof window.renderReport === 'function') {
+              window._jcQuestionStatusFilter = status;
+              try { window.renderReport(); } catch (_e) {}
+            }
+          };
+        });
+      }
+    }
+
+    // Inject Caveira Bottom Toolbar (#jcCaveiraQuestionToolbar) inside #questionDialog (.questionBox)
+    const qDialog = document.getElementById('questionDialog');
+    const qBox = qDialog ? qDialog.querySelector('.questionBox') : null;
+    const qFeedback = document.getElementById('questionFeedback');
+    if (qBox && qFeedback && !document.getElementById('jcCaveiraQuestionToolbar')) {
+      const bar = document.createElement('div');
+      bar.id = 'jcCaveiraQuestionToolbar';
+      bar.className = 'jcQuestionCaveiraFooter';
+      bar.innerHTML = `
+        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarInvocadorBtn" title="Invocar explicação tática da IA">🧙‍♂️ INVOCADOR</button>
+        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarProfCommentBtn" title="Ver Comentário do Professor e Gabarito">🎓 COMENTÁRIO DO PROFESSOR</button>
+        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarTheoryBtn" title="Ler Resumo ou Lei Seca deste Assunto">📖 TEORIA &amp; LEI</button>
+        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarNotebookBtn" title="Salvar questão no seu Caderno">📓 CADERNOS</button>
+        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarNotesBtn" title="Adicionar anotação ou bizu pessoal">✏️ ANOTAÇÕES</button>
+        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarStatsBtn" title="Ver estatísticas de acerto da questão">📈 ESTATÍSTICAS</button>
+      `;
+      qBox.insertBefore(bar, qFeedback);
+
+      document.getElementById('jcQBarInvocadorBtn').onclick = () => {
+        const qap = document.getElementById('askQapInstructorBtn') || document.getElementById('explainEasyAnalogyBtn');
+        if (qap) { qap.click(); return; }
+        if (typeof window.toast === 'function') window.toast('🧙‍♂️ Responda a questão para destravar a análise passo a passo do Invocador!');
+      };
+      document.getElementById('jcQBarProfCommentBtn').onclick = () => {
+        if (qFeedback && qFeedback.textContent.trim()) {
+          qFeedback.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else if (typeof window.toast === 'function') {
+          window.toast('🎓 Marque uma alternativa primeiro para revelar o Comentário do Professor!');
+        }
+      };
+      document.getElementById('jcQBarTheoryBtn').onclick = () => {
+        const pills = document.getElementById('questionMetaPills');
+        const subj = pills ? pills.textContent : '';
+        if (qDialog && typeof qDialog.close === 'function') qDialog.close();
+        if (typeof window.openTheorySummaryForTopic === 'function') {
+          window.openTheorySummaryForTopic(subj, subj);
+        } else if (typeof window.openView === 'function') {
+          window.openView('study');
+        }
+      };
+      document.getElementById('jcQBarNotebookBtn').onclick = () => {
+        const fav = document.getElementById('toggleFavoriteQuestionBtn') || document.getElementById('saveQuestionNoteBtn');
+        if (fav) { fav.click(); return; }
+        if (typeof window.toast === 'function') window.toast('📓 Questão marcada no seu Caderno Tático!');
+      };
+      document.getElementById('jcQBarNotesBtn').onclick = () => {
+        const inp = document.getElementById('personalQuestionCommentInput');
+        if (inp) { inp.scrollIntoView({ behavior: 'smooth', block: 'center' }); inp.focus(); return; }
+        if (typeof window.toast === 'function') window.toast('✏️ Responda a questão para abrir o campo de Bizu Pessoal abaixo do gabarito!');
+      };
+      document.getElementById('jcQBarStatsBtn').onclick = () => {
+        if (typeof window.toast === 'function') {
+          window.toast('📈 Estatísticas por alternativa (A–E) exibidas junto às opções após a resposta!');
+        }
+      };
+    }
+
+    // Rename any remaining "Instrutor IA" inside question modal footer to "🧙‍♂️ Invocador"
+    const qapBtn = document.getElementById('askQapInstructorBtn');
+    if (qapBtn && !qapBtn.textContent.includes('Invocador')) {
+      qapBtn.innerHTML = '🧙‍♂️ Invocador';
+    }
+  }
+
+  function initAllR179() {
+    injectR179Styles();
+    tickTrailHearts20MinRegen();
+    mountCaveiraEssayHub();
+    mountPainelTaticoInProfile();
+    mountCaveiraFlashcardsHub();
+    mountCaveiraSmartLawsHub();
+    mountCaveiraQuestionBankEnhancements();
+  }
+
+  if (typeof window !== 'undefined') {
+    window.JC_MODULES = window.JC_MODULES || {};
+    window.JC_MODULES.caveiraFullSuiteR179 = {
+      init: initAllR179,
+      tickTrailHearts20MinRegen,
+      mountCaveiraEssayHub,
+      mountPainelTaticoInProfile,
+      mountCaveiraFlashcardsHub,
+      mountCaveiraSmartLawsHub,
+      openSmartLawsSubtab,
+      mountCaveiraQuestionBankEnhancements,
+      NATIVE_SMART_LAWS
+    };
+
+    if (typeof document !== 'undefined') {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => setTimeout(initAllR179, 60));
+      } else {
+        setTimeout(initAllR179, 60);
+      }
+      if (typeof setInterval === 'function') setInterval(tickTrailHearts20MinRegen, 1000);
+    }
   }
 })();
