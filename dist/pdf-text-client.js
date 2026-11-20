@@ -12,6 +12,7 @@
 
   const MAX_EXTRACT_PAGES = 600;
   const extractionJobs = new Map();
+  const extractionGenerations = new Map();
   const isEditalType = (doc) => ["edital", "edital_concurso"].includes(String(doc?.document_type || ""));
   window._recentUploadedPdfBytes = window._recentUploadedPdfBytes || new Map();
   window._extractedPagesByDocId = window._extractedPagesByDocId || new Map();
@@ -608,6 +609,10 @@
             pages: payload.pages,
             pdfTotalPages: Number(payload.pdf_total_pages || payload.total_pages || payload.pages.length),
             truncatedPages: Boolean(payload.truncated_pages),
+            pagesRead:Number(payload.pages_read||payload.pages.length),
+            failed_pages:Array.isArray(payload.failed_pages)?payload.failed_pages:[],
+            skipped_pages:Array.isArray(payload.skipped_pages)?payload.skipped_pages:[],
+            empty_pages:Array.isArray(payload.empty_pages)?payload.empty_pages:[],
           };
         }
       }
@@ -722,45 +727,78 @@
     }
   }
 
-  async function extractAndUploadText(doc, session) {
-    if (!doc?.storage_path) return false;
-    if (window._extractedPagesByDocId.has(doc.id)) return true;
+  function pdfExtractionScope(doc, session) {
+    const userId=String(session?.user?.id||''), initialState=typeof state==='object'&&state?state:{}, resetEpoch=Number(initialState._resetEpoch||0), portalId=String(initialState.activeCampaignId||'');
+    if(!userId||!doc?.id||!String(doc.storage_path||'').startsWith(`${userId}/`)||(doc.user_id&&String(doc.user_id)!==userId))return null;
+    const current=()=>{
+      const live=typeof state==='object'&&state?state:{};
+      const active=typeof cloudSession!=='undefined'?cloudSession:null;
+      return active?.user?.id===userId&&(!live._ownerUserId||live._ownerUserId===userId)&&Number(live._resetEpoch||0)===resetEpoch&&String(live.activeCampaignId||'')===portalId;
+    };
+    return current()?{userId,resetEpoch,portalId,current}:null;
+  }
 
-    const existingSidecar = await sidecarAlreadyExists(doc.storage_path, session);
+  async function extractAndUploadText(doc, session, options={}) {
+    const scope=pdfExtractionScope(doc,session);
+    if (!scope) return false;
+    const currentScope=()=>scope.current()&&(!options.generation||extractionGenerations.get(doc.id)===options.generation);
+    const forceFresh=options.forceFresh===true, preserveSourceText=forceFresh||['prova','simulado'].includes(String(doc.document_type||''));
+    const cachedMeta=window._extractedPdfMetaByDocId.get(doc.id);
+    if (!forceFresh&&window._extractedPagesByDocId.has(doc.id)&&cachedMeta?.ownerId===scope.userId&&cachedMeta?.resetEpoch===scope.resetEpoch) return true;
+
+    const existingSidecar = forceFresh?null:await sidecarAlreadyExists(doc.storage_path, session);
+    if(!currentScope())return false;
     if (existingSidecar) {
       window._extractedPagesByDocId.set(doc.id, existingSidecar.pages);
       window._extractedPdfMetaByDocId.set(doc.id, {
         pdfTotalPages: existingSidecar.pdfTotalPages,
         truncatedPages: existingSidecar.truncatedPages,
+        truncated: existingSidecar.truncatedPages,
+        totalPages: existingSidecar.pdfTotalPages,
+        pagesRead: existingSidecar.pagesRead,
+        pagesWithText: existingSidecar.pages.length,
+        failed_pages: existingSidecar.failed_pages,
+        skipped_pages: existingSidecar.skipped_pages,
+        empty_pages: existingSidecar.empty_pages,
+        incomplete: existingSidecar.truncatedPages||existingSidecar.failed_pages.length>0,
+        freshSource: false, ownerId:scope.userId,resetEpoch:scope.resetEpoch,
       });
       return true;
     }
 
     toast(`Extraindo texto de “${doc.title}” no navegador...`);
     let bytes;
-    const cachedBlob = window._recentUploadedPdfBytes?.get(doc.id);
+    const cachedBlob = forceFresh?null:window._recentUploadedPdfBytes?.get(doc.id);
     if (cachedBlob) {
       bytes = new Uint8Array(await cachedBlob.arrayBuffer());
+      if(!currentScope())return false;
       window._recentUploadedPdfBytes.delete(doc.id);
     } else {
       const pdfResponse = await storageFetch(doc.storage_path, session);
+      if(!currentScope())return false;
       if (!pdfResponse.ok) throw new Error("Não foi possível abrir o PDF para preparar o texto.");
       bytes = new Uint8Array(await pdfResponse.arrayBuffer());
+      if(!currentScope())return false;
     }
 
     const pdfjs = await import("./pdf.mjs");
+    if(!currentScope())return false;
     const pdf = await openPdfDocumentWithFallback(pdfjs, bytes);
+    if(!currentScope()){try{await pdf.destroy();}catch{}return false;}
 
     const pdfTotalPages = Number(pdf.numPages) || 0;
     const maxPages = Math.min(pdfTotalPages, MAX_EXTRACT_PAGES);
     const truncatedPages = pdfTotalPages > maxPages;
-    const pages = [];
-    let meaningfulCharacters = 0;
+    const pages = [], failed_pages=[], empty_pages=[], skipped_pages=Array.from({length:Math.max(0,pdfTotalPages-maxPages)},(_,i)=>maxPages+i+1);
+    let meaningfulCharacters = 0,pagesRead=0;
 
     for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
       try {
+        if(!currentScope()){try{await pdf.destroy();}catch{}return false;}
         const page = await withTimeout(pdf.getPage(pageNumber), 4500, "PAGE_TIMEOUT");
-        const content = await page.getTextContent();
+        if(!currentScope()){try{page.cleanup();await pdf.destroy();}catch{}return false;}
+        const content = await withTimeout(page.getTextContent(),6500,"PAGE_TEXT_TIMEOUT");
+        if(!currentScope()){try{page.cleanup();await pdf.destroy();}catch{}return false;}
         const rawItems = (content.items || []).filter((it) => it && typeof it.str === "string" && it.str.trim());
         const watermarkZones = [];
         for (const it of rawItems) {
@@ -774,6 +812,7 @@
         }
         const isWatermarkItem = (s) => /@|\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|Leonardo\s+Thom[eé]/i.test(s);
         const filteredItems = rawItems.filter((it) => {
+          if(preserveSourceText)return true;
           const s = it.str.trim();
           const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
           const y = Array.isArray(it.transform) && Number.isFinite(it.transform[5]) ? it.transform[5] : 0;
@@ -834,8 +873,8 @@
           let rowTxt = r.map((i) => i.str).join(" ").replace(/\s+/g, " ").trim();
           if (!rowTxt) continue;
           rowTxt = rowTxt.replace(/(?:^|\n|\s)(\d)\s+(\d)\s*\)/g, " $1$2)").replace(/(?:^|\n|\s)(\d)\s+(\d)\s+(\d)\s*\)/g, " $1$2$3)");
-          rowTxt = stripChrome(rowTxt);
-          if (!rowTxt || /^\d{1,3}$/.test(rowTxt) || isWatermarkItem(rowTxt)) continue;
+          if(!preserveSourceText)rowTxt = stripChrome(rowTxt);
+          if (!rowTxt || (!preserveSourceText&&(/^\d{1,3}$/.test(rowTxt)||isWatermarkItem(rowTxt)))) continue;
           const prevLine = pageLines.length ? pageLines[pageLines.length - 1] : "";
           if (minX >= 47 && minX <= 59 && /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]/.test(rowTxt) && /[.:;]$/.test(prevLine)) {
             pageLines.push(`• ${rowTxt}`);
@@ -845,14 +884,18 @@
         }
         const text = pageLines.join("\n").trim();
         meaningfulCharacters += text.replace(/\s/g, "").length;
-        if (text.length > 0) pages.push({ page: pageNumber, text });
+        pagesRead++;
+        if (text.length > 0) pages.push({ page: pageNumber, text });else empty_pages.push(pageNumber);
         page.cleanup();
       } catch (pageErr) {
-        console.warn("Página ignorada na extração local", pageNumber, pageErr);
+        if(!currentScope()){try{await pdf.destroy();}catch{}return false;}
+        failed_pages.push(pageNumber);
+        console.warn("Página com falha na extração local; revisão obrigatória", pageNumber, pageErr);
       }
       if (pageNumber % 4 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
     }
     try { await pdf.destroy(); } catch {}
+    if(!currentScope())return false;
 
     if (truncatedPages) {
       toast(`Aviso: o PDF possui ${pdfTotalPages} páginas; foram extraídas as primeiras ${maxPages} páginas.`);
@@ -861,15 +904,10 @@
     const avgCharsPerPage = pdfTotalPages > 0 ? Math.round(meaningfulCharacters / pdfTotalPages) : 0;
     const isScannedPdf = !pages.length || meaningfulCharacters < 120 || (pdfTotalPages >= 2 && avgCharsPerPage < 35);
 
+    const extractionMeta={pdfTotalPages,totalPages:pdfTotalPages,pagesRead,pagesWithText:pages.length,failed_pages,skipped_pages,empty_pages,truncatedPages,truncated:truncatedPages,incomplete:truncatedPages||failed_pages.length>0,isScannedPdf,meaningfulCharacters,avgCharsPerPage,freshSource:true,ownerId:scope.userId,resetEpoch:scope.resetEpoch,extracted_at:new Date().toISOString()};
     if (isScannedPdf) {
-      window._extractedPdfMetaByDocId.set(doc.id, {
-        pdfTotalPages,
-        truncatedPages,
-        isScannedPdf: true,
-        meaningfulCharacters,
-        avgCharsPerPage,
-        rawBytes: bytes,
-      });
+      window._extractedPagesByDocId.delete(doc.id);
+      window._extractedPdfMetaByDocId.set(doc.id, {...extractionMeta,rawBytes:bytes});
       doc.metadata = { ...(doc.metadata || {}), pdf_kind: "scanned_image", selectable_chars: meaningfulCharacters };
       console.info("PDF escaneado detectado pelo filtro local.", { pages: pages.length, pdfTotalPages, meaningfulCharacters, avgCharsPerPage });
       return false;
@@ -877,24 +915,29 @@
 
     doc.metadata = { ...(doc.metadata || {}), pdf_kind: "native_text", selectable_chars: meaningfulCharacters };
     window._extractedPagesByDocId.set(doc.id, pages);
-    window._extractedPdfMetaByDocId.set(doc.id, { pdfTotalPages, truncatedPages, isScannedPdf: false, meaningfulCharacters, avgCharsPerPage });
+    window._extractedPdfMetaByDocId.set(doc.id, extractionMeta);
 
     const payload = JSON.stringify({
-      version: 2,
+      version: 3,
       generated_at: new Date().toISOString(),
       total_pages: pages.length,
       pdf_total_pages: pdfTotalPages,
       truncated_pages: truncatedPages,
       meaningful_characters: meaningfulCharacters,
+      pages_read:pagesRead,failed_pages,skipped_pages,empty_pages,
       pages,
     });
+    // Uma extração incompleta não substitui o sidecar usado pelo fluxo normal.
+    if(extractionMeta.incomplete)return true;
     try {
+      if(!currentScope())return false;
       // Tenta application/pdf primeiro (sempre aceito no bucket study-documents), depois text/plain
       let sidecarRes = await storageFetch(`${doc.storage_path}.text.json`, session, {
         method: "POST",
         headers: { "Content-Type": "application/pdf", "x-upsert": "true" },
         body: payload,
       });
+      if(!currentScope())return false;
       if (!sidecarRes.ok) {
         sidecarRes = await storageFetch(`${doc.storage_path}.text.json`, session, {
           method: "POST",
@@ -905,16 +948,20 @@
     } catch (sidecarErr) {
       console.warn("Sidecar opcional não salvo no Storage; usando envio inline.", sidecarErr);
     }
+    if(!currentScope())return false;
     console.info("Texto do PDF preparado no navegador", { pages: pages.length, pdfTotalPages, meaningfulCharacters });
     return true;
   }
 
-  async function prepareDocumentText(doc, session) {
-    if (!doc?.storage_path) return false;
-    if (!extractionJobs.has(doc.id)) {
-      extractionJobs.set(doc.id, extractAndUploadText(doc, session).finally(() => extractionJobs.delete(doc.id)));
-    }
-    return extractionJobs.get(doc.id);
+  async function prepareDocumentText(doc, session, options={}) {
+    const scope=pdfExtractionScope(doc,session);if(!scope)return false;
+    const key=JSON.stringify([scope.userId,scope.resetEpoch,scope.portalId,doc.id,options.forceFresh===true]);
+    if(extractionJobs.has(key))return extractionJobs.get(key);
+    const generation=Number(extractionGenerations.get(doc.id)||0)+1;
+    extractionGenerations.set(doc.id,generation);
+    const job=extractAndUploadText(doc,session,{...options,generation});
+    extractionJobs.set(key,job);
+    try{return await job;}finally{if(extractionJobs.get(key)===job)extractionJobs.delete(key);}
   }
 
   function compactPagesForInlinePayload(pages, maxTotalChars = 115000) {
@@ -1122,10 +1169,12 @@
     const ownerId=session?.user?.id,portalId=state.activeCampaignId,resetEpoch=Number(state._resetEpoch||0);
     const currentScope=()=>!!ownerId&&cloudSession?.user?.id===ownerId&&(!state._ownerUserId||state._ownerUserId===ownerId)&&state.activeCampaignId===portalId&&Number(state._resetEpoch||0)===resetEpoch&&(!doc.user_id||doc.user_id===ownerId)&&(state.campaigns||[]).some(c=>c.id===portalId&&c.dbId===doc.campaign_id);
     if(!currentScope())return false;
+    if(!isEditalType(doc)){
+      toast('O conteúdo anterior foi preservado. Provas e questões usam a conferência de PDFs; materiais devem ser analisados pelo serviço de materiais atualizado.');
+      return false;
+    }
     const scopedCloudFetch=(path,options={})=>{if(!currentScope())return Promise.reject(new Error('DOCUMENT_SCOPE_CANCELLED'));return cloudFetch(path,{...options,headers:{...(options.headers||{}),...authHeaders(session.access_token)}})};
     const pdfMeta = window._extractedPdfMetaByDocId.get(doc.id) || {};
-    const compactPages = compactPagesForInlinePayload(pages, 45000);
-    const fullText = compactPages.map((p) => `[PÁGINA ${p.page}]\n${p.text}`).join("\n\n").slice(0, 45000);
     const realLastPage = Number(pages[pages.length - 1]?.page || pdfMeta.pdfTotalPages || pages.length);
 
     if (isEditalType(doc)) {
@@ -1198,104 +1247,8 @@
       });
     }
 
-    toast(`Concluindo análise de “${doc.title}” pelo modo de recuperação inteligente...`);
-    const isExam = ["prova", "simulado"].includes(String(doc.document_type || ""));
-    const prompt = `Com base no PDF "${doc.title}" (${doc.document_type}), gere um pacote de estudo estruturado. Responda EXCLUSIVAMENTE com um objeto JSON puro (sem blocos markdown) no formato:
-{"summaries":[{"subject":"Disciplina","title":"Título específico do assunto","page_start":1,"page_end":${realLastPage},"explanation":"Aula escrita detalhada e clara para iniciantes explicando todo o conteúdo e regras","points":["Ponto 1","Ponto 2","Ponto 3","Ponto 4","Ponto 5"],"example":"Exemplo prático aplicado explicado passo a passo","bizu":"Dica rápida de memorização para prova","mnemonic":"Mnemônico ou associação","trap":"Pegadinha frequente de banca sobre este tema","flashcards":[{"question":"Pergunta 1?","answer":"Resposta 1"},{"question":"Pergunta 2?","answer":"Resposta 2"},{"question":"Pergunta 3?","answer":"Resposta 3"}],"questions":[{"statement":"Enunciado da questão 1","options":["Opção A","Opção B","Opção C","Opção D"],"correct_index":0,"explanation":"Conceito-chave: ... | ✅ Correta: ... | ❌ Demais alternativas: ... | ⚠️ Pegadinha: ...","difficulty":"facil","topic":"Assunto","origin":"${isExam ? "adaptada_do_pdf" : "autoral"}"}]}]}
-Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 questões de 4 alternativas em cada assunto.`;
-
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`, {
-      method: "POST",
-      headers: { ...authHeaders(session.access_token) },
-      body: JSON.stringify({
-        question: prompt,
-        context: fullText,
-        mode: "aula completa",
-        campaign_id: doc.campaign_id,
-      }),
-    });
-      if(!currentScope())return false;
-    const data = await res.json().catch(() => ({}));
-      if(!currentScope())return false;
-    if (!res.ok || !data?.answer) return false;
-    const parsed = parseJsonBlock(data.answer);
-    const summaries = Array.isArray(parsed?.summaries) ? parsed.summaries.filter((s) => s?.title && s?.explanation) : [];
-    if (!summaries.length) return false;
-
-    const allowFlashcards = ["material", "anotacao", "lei"].includes(String(doc.document_type || "material").toLowerCase());
-    const dbRows = summaries.map((content) => ({
-      campaign_id: doc.campaign_id,
-      user_id: session.user.id,
-      source_document_id: doc.id,
-      content_type: isExam ? "question_pack" : "summary",
-      title: String(content.title || doc.title).slice(0, 200),
-      content: {
-        ...content,
-        is_question_pack: isExam,
-        flashcards: allowFlashcards && Array.isArray(content.flashcards)
-          ? content.flashcards.filter((c) => typeof window.isValidFlashcardItem === "function" ? window.isValidFlashcardItem(c?.question, c?.answer) : Boolean(c?.question && c?.answer))
-          : [],
-        subject: typeof canonicalSubjectName === "function" ? canonicalSubjectName(content.subject || "Conteúdo Geral") : (content.subject || "Conteúdo Geral"),
-        source: doc.title,
-      },
-      source_refs: [{ document_id: doc.id, title: doc.title }],
-    }));
-
-    const saveRes = await scopedCloudFetch("generated_study_content", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Prefer: "return=representation" },
-      body: JSON.stringify(dbRows),
-    });
-      if(!currentScope())return false;
-    if (!saveRes.ok) return false;
-
-    const primarySubject = dbRows[0]?.content?.subject || "Conteúdo Geral";
-    const sentPages = compactPages.length;
-    const totalPages = Math.max(pages.length, Number(pdfMeta.pdfTotalPages) || pages.length);
-    const coveragePercent = Math.max(1, Math.min(100, Math.round((sentPages / Math.max(1, totalPages)) * 100)));
-    const wasSampled = sentPages < pages.length || Boolean(pdfMeta.truncatedPages);
-    const warnings = [];
-    if (pdfMeta.truncatedPages) warnings.push(`O PDF possui ${pdfMeta.pdfTotalPages} páginas; foram lidas as primeiras ${MAX_EXTRACT_PAGES} páginas.`);
-    if (sentPages < pages.length) warnings.push("Conteúdo gerado a partir de uma amostra do PDF; reprocesse para cobertura completa.");
-
-    const coverage = {
-      estimated_pages: totalPages,
-      sections_detected: summaries.map((s) => s.title),
-      sections_covered: summaries.map((s) => s.title),
-      omissions: wasSampled ? [`Modo de recuperação leu ${sentPages} de ${totalPages} páginas.`] : [],
-      confidence: wasSampled ? 0.6 : 0.88,
-      percent: coveragePercent,
-      summary_count: summaries.length,
-      shallow_summaries: 0,
-      warnings,
-      needs_review: wasSampled,
-    };
-
-    await scopedCloudFetch(`study_documents?id=eq.${doc.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        processing_status: "ready",
-        detected_subject: primarySubject,
-        metadata: {
-          ...(doc.metadata || {}),
-          primary_subject: primarySubject,
-          analyzed_at: new Date().toISOString(),
-          analysis_progress: { stage: "completed", percent: 100, completed_sections: summaries.length, total_sections: summaries.length, updated_at: new Date().toISOString() },
-          coverage,
-        },
-      }),
-    });
-      if(!currentScope())return false;
-
-    doc.processing_status = "ready";
-    await Promise.all([loadGeneratedContent(), loadCloudDocuments()]);
-      if(!currentScope())return false;
-    render();
-    toast("Conteúdo, resumos, flashcards e questões gerados com sucesso!");
-    return true;
   }
 
-  // Intercepta chamadas fetch para edital-gemini e material-gemini.
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async function (input, init) {
     const url = typeof input === "string" ? input : input?.url || "";
@@ -1359,6 +1312,13 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
       }
       return false;
     }
+    const isExamCaderno = ["prova", "simulado"].includes(String(doc.document_type || "").toLowerCase()) ||
+      /\b(?:\d+\s*quest[õo]es|caderno\s+de\s+quest[õo]es|banco\s+de\s+quest[õo]es|bateria\s+de\s+quest[õo]es|simulado|prova\s+oficial)\b/i.test(`${doc.title || ""} ${doc.source_name || ""}`);
+    if(isExamCaderno){
+      if(typeof window.JCQuestionReview?.reviewDocument==='function')return await window.JCQuestionReview.reviewDocument(id);
+      toast('Abra a revisão de PDFs na Biblioteca para extrair e conferir este documento. O conteúdo anterior foi preservado.');
+      return false;
+    }
     if (session) {
       try {
         await prepareDocumentText(doc, session);
@@ -1383,254 +1343,6 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
           if (savedOk) return;
         }
 
-        // Fast-path determinístico para Provas Oficiais e Simulados em PDF que já possuem questões numeradas + gabarito no documento
-        const isExamCaderno = ["prova", "simulado"].includes(String(doc.document_type || "").toLowerCase()) ||
-          /\b(?:\d+\s*quest[õo]es|caderno\s+de\s+quest[õo]es|banco\s+de\s+quest[õo]es|bateria\s+de\s+quest[õo]es|simulado|prova\s+oficial)\b/i.test(`${doc.title || ""} ${doc.source_name || ""}`);
-        if (isExamCaderno && typeof window.extractStructuredExamQuestions === "function") {
-          // Se o usuário anexou um PDF de Gabarito Separado (#documentAnswerKeyFile), junta o texto do gabarito ao final das páginas da prova
-          const ansKeyFile = document.querySelector("#documentAnswerKeyFile")?.files?.[0];
-          if (ansKeyFile) {
-            try {
-              toast(`Extraindo arquivo de gabarito de “${ansKeyFile.name}” no navegador...`);
-              const akBytes = new Uint8Array(await ansKeyFile.arrayBuffer());
-      if(!currentScope())return false;
-              const pdfjs = await import("./pdf.mjs");
-      if(!currentScope())return false;
-              const akPdf = await openPdfDocumentWithFallback(pdfjs, akBytes);
-      if(!currentScope())return false;
-              let akText = "";
-              for (let akP = 1; akP <= akPdf.numPages; akP++) {
-                const akPage = await akPdf.getPage(akP);
-      if(!currentScope())return false;
-                const akContent = await akPage.getTextContent();
-      if(!currentScope())return false;
-                akText += "\n" + (akContent.items || []).map((it) => it.str || "").join(" ");
-                akPage.cleanup();
-              }
-              try { await akPdf.destroy();
-      if(!currentScope())return false; } catch {
-      if(!currentScope())return false;}
-              if (akText.trim()) {
-                pages.push({ page: pages.length + 1, text: `\nGABARITO INFORMADO NO ARQUIVO\n${akText}` });
-                toast("✓ Texto do gabarito anexado. A correspondência com as questões será conferida na extração.");
-              }
-            } catch (akErr) {
-      if(!currentScope())return false;
-              console.warn("Falha ao ler PDF de gabarito anexado", akErr);
-            }
-          }
-          const activeCampBoard = "Banca não informada";
-          const detectedBoard = /\b(?:cebraspe|cespe)\b/i.test(`${doc.title} ${doc.source_name}`) ? "Cebraspe"
-            : /\b(?:fgv)\b/i.test(`${doc.title} ${doc.source_name}`) ? "FGV Conhecimento"
-            : /\b(?:upenet|iaupe)\b/i.test(`${doc.title} ${doc.source_name}`) ? "UPENET/IAUPE"
-            : /\b(?:idecan)\b/i.test(`${doc.title} ${doc.source_name}`) ? "IDECAN"
-            : /\b(?:ibfc)\b/i.test(`${doc.title} ${doc.source_name}`) ? "IBFC"
-            : /\b(?:aocp)\b/i.test(`${doc.title} ${doc.source_name}`) ? "Instituto AOCP"
-            : activeCampBoard;
-          const inferredFromTitle = typeof canonicalSubjectName === "function"
-            ? canonicalSubjectName(doc.title || "", doc.title || "")
-            : "";
-          const fallbackSubj = (inferredFromTitle && inferredFromTitle !== "Conteúdo Geral")
-            ? inferredFromTitle
-            : (doc.detected_subject || doc.metadata?.primary_subject || "Conteúdo Geral");
-          let extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard });
-          let examReport = extractedQs?.report || {};
-          if (examReport.ambiguous && Array.isArray(examReport.cadernos) && examReport.cadernos.length >= 2) {
-            const pickedCad = window._isBatchExamImportActive
-              ? examReport.cadernos[0]
-              : typeof window.askUserExamCadernoChoice === "function"
-              ? await window.askUserExamCadernoChoice(doc, examReport.cadernos)
-              : (typeof prompt === "function" ? prompt(`Foram identificados múltiplos gabaritos/cadernos neste PDF (${examReport.cadernos.join(", ")}). Digite qual caderno deseja importar:`, examReport.cadernos[0]) : examReport.cadernos[0]);
-      if(!currentScope())return false;
-            if (pickedCad && pickedCad.trim()) {
-              extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard, preferredCaderno: pickedCad.trim() });
-              examReport = extractedQs?.report || {};
-              examReport.pickedCaderno = pickedCad.trim();
-            }
-          }
-          if (examReport.ambiguous && !window._isBatchExamImportActive) toast(`${examReport.reason} O gabarito oficial não foi importado automaticamente.`);
-
-          // Se o PDF tem questões mas o gabarito oficial não foi encontrado ou está incompleto,
-          // oferece opções claras ao usuário em vez de falhar silenciosamente no backend!
-          let userChoice = null;
-          if ((!Array.isArray(extractedQs) || extractedQs.length === 0 || (extractedQs.length >= 1 && Number(examReport.percent) < 60 && !examReport.noKey) || examReport.ambiguous) && typeof window.askUserExamAnswerKeyOptions === "function") {
-            userChoice = window._isBatchExamImportActive
-              ? { allowWithoutKey: true, resolveWithAi: Boolean(window._batchResolveMissingKeyWithAi) }
-              : await window.askUserExamAnswerKeyOptions(doc, pages, examReport);
-      if(!currentScope())return false;
-            if (userChoice?.cancelled) {
-              doc.processing_status = "pending";
-              renderUserDocuments();
-              if (typeof renderExamBankHub === "function") renderExamBankHub();
-              return;
-            }
-            if (userChoice?.appendedText) {
-              pages.push({ page: pages.length + 1, text: `\nGABARITO INFORMADO PELO USUÁRIO\n${userChoice.appendedText}` });
-              extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard, preferredCaderno: userChoice.preferredCaderno || "" });
-              examReport = extractedQs?.report || {};
-            } else if (userChoice?.allowWithoutKey) {
-              extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard, allowWithoutKey: true });
-              examReport = extractedQs?.report || {};
-              if (userChoice?.resolveWithAi && Array.isArray(extractedQs) && extractedQs.length > 0 && typeof window.solveQuestionsArrayWithAi === "function") {
-                toast("🤖 Resolvendo gabarito e comentários das questões com a IA...");
-                await window.solveQuestionsArrayWithAi(extractedQs, doc);
-      if(!currentScope())return false;
-                examReport.answerUnknown = extractedQs.filter(q => q.answer_unknown || !Number.isInteger(Number(q.correct_index)) || Number(q.correct_index) < 0).length;
-                examReport.aiKeyed = extractedQs.filter(q => q.key_source === "ia_sugerido").length;
-              }
-            }
-          }
-
-          if (Array.isArray(extractedQs) && extractedQs.length >= 1 && (!examReport.ambiguous || userChoice?.allowWithoutKey) && (Number(examReport.percent) >= 50 || examReport.noKey || userChoice?.allowWithoutKey)) {
-            // Aprimoramento 3: Recorte automático de figuras/gráficos/tabelas via canvas (pdf.js) para questões que mencionam elementos visuais
-            try {
-              const visualRe = /\b(?:(?:observe|analise|veja|conforme|segundo|na|no|da|do)\s+(?:a\s+|o\s+)?(?:figura|imagem|gr[áa]fico|tabela|planilha|charge|tirinha)|(?:figura|gr[áa]fico|tabela|quadro)\s+\d+|charge\s+a\s+seguir|tirinha\s+a\s+seguir)\b/i;
-              const visualQs = extractedQs.filter(q => visualRe.test(String(q.statement || "")) && !q.figure_data_url);
-              if (visualQs.length > 0 && pdfBytes && typeof document !== "undefined") {
-                const pdfjs = await import("./pdf.mjs");
-      if(!currentScope())return false;
-                const figPdf = await openPdfDocumentWithFallback(pdfjs, pdfBytes);
-      if(!currentScope())return false;
-                const pageSnapCache = new Map();
-                for (const vq of visualQs.slice(0, 12)) {
-                  const snippet = String(vq.statement || "").replace(/\s+/g, " ").trim().slice(0, 45).toLowerCase();
-                  const matchedPageObj = pages.find(p => String(p.text || "").replace(/\s+/g, " ").toLowerCase().includes(snippet));
-                  const pageNum = matchedPageObj?.page || 1;
-                  if (pageNum >= 1 && pageNum <= figPdf.numPages) {
-                    if (!pageSnapCache.has(pageNum)) {
-                      const pg = await figPdf.getPage(pageNum);
-      if(!currentScope())return false;
-                      const vp = pg.getViewport({ scale: 1.15 });
-                      const cnv = document.createElement("canvas");
-                      cnv.width = Math.floor(vp.width);
-                      cnv.height = Math.floor(vp.height);
-                      const ctx2d = cnv.getContext("2d");
-                      await pg.render({ canvasContext: ctx2d, viewport: vp }).promise;
-      if(!currentScope())return false;
-                      pg.cleanup();
-                      pageSnapCache.set(pageNum, cnv.toDataURL("image/jpeg", 0.68));
-                    }
-                    vq.figure_data_url = pageSnapCache.get(pageNum);
-                    vq.figure_page = pageNum;
-                  }
-                }
-                try { await figPdf.destroy();
-      if(!currentScope())return false; } catch {
-      if(!currentScope())return false;}
-              }
-            } catch (figErr) {
-      if(!currentScope())return false;
-              console.warn("Aviso ao recortar figura de questão do PDF:", figErr);
-            }
-            const bySubj = {};
-            for (const qItem of extractedQs) {
-              const s = qItem.subject || fallbackSubj;
-              (bySubj[s] = bySubj[s] || []).push(qItem);
-            }
-            const dbRows = Object.entries(bySubj).map(([subj, qs]) => ({
-              campaign_id: doc.campaign_id,
-              user_id: session.user.id,
-              source_document_id: doc.id,
-              content_type: "summary",
-              title: `Questões Extraídas (${subj}) — ${doc.title}`.slice(0, 190),
-              content: {
-                is_question_pack: true,
-                subject: subj,
-                source: doc.title,
-                page_start: 1,
-                page_end: pages.length,
-                explanation: `Pacote de ${qs.length} questão(ões) extraída(s) de ${doc.title}. A situação do gabarito deve ser conferida em cada questão.`,
-                points: [],
-                flashcards: [],
-                questions: qs
-              },
-              source_refs: [{ document_id: doc.id, title: doc.title }]
-            }));
-            // Grava primeiro e só apaga o conteúdo antigo depois (evita ficar sem nada se a gravação falhar).
-            let oldIds = [];
-            try {
-              const oldRes = await scopedCloudFetch(`generated_study_content?source_document_id=eq.${encodeURIComponent(doc.id)}&select=id`);
-      if(!currentScope())return false;
-              if (oldRes.ok) oldIds = (await oldRes.json().catch(() => [])).map((row) => row.id).filter(Boolean);
-      if(!currentScope())return false;
-            } catch {
-      if(!currentScope())return false; /* sem backup de ids */ }
-            const saveRes = await scopedCloudFetch("generated_study_content", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Prefer: "return=representation" },
-              body: JSON.stringify(dbRows)
-            });
-      if(!currentScope())return false;
-            if (saveRes.ok && oldIds.length) {
-              await scopedCloudFetch(`generated_study_content?id=in.(${oldIds.map(encodeURIComponent).join(",")})`, { method: "DELETE" }).catch(() => undefined);
-      if(!currentScope())return false;
-            }
-            if (saveRes.ok) {
-              const primarySubject = Object.keys(bySubj)[0] || fallbackSubj;
-              const subjectsList = Object.keys(bySubj);
-              const validTotal = Math.max(0, (examReport.expected || extractedQs.length) - (examReport.annulled || 0));
-              const examPercent = Math.max(1, Math.min(100, Number(examReport.percent) || 100));
-              const omissions = [];
-              if (examReport.missingKey) omissions.push(`${examReport.missingKey} questão(ões) sem gabarito no documento.`);
-              if (examReport.skipped) omissions.push(`${examReport.skipped} questão(ões) em formato não reconhecido.`);
-              if (examReport.annulled) omissions.push(`${examReport.annulled} questão(ões) anulada(s) não foram importadas.`);
-              const coverage = {
-                estimated_pages: pages.length,
-                sections_detected: subjectsList,
-                sections_covered: subjectsList,
-                omissions,
-                confidence: examPercent >= 95 ? 0.95 : 0.75,
-                percent: examPercent,
-                summary_count: extractedQs.length,
-                shallow_summaries: 0,
-                warnings: [
-                  ...(examReport.pickedCaderno ? [`Gabarito importado do caderno "${examReport.pickedCaderno}". Confira se é o seu.`] : []),
-                  ...(examReport.answerUnknown ? [`${examReport.answerUnknown} questão(ões) foram importadas SEM gabarito e ficam fora de simulados e do desempenho até validação.`] : []),
-                  ...(examReport.aiKeyed ? [`${examReport.aiKeyed} sugestão(ões) da IA aguardam validação humana e ficam fora do treino pontuado.`] : []),
-                  ...(examPercent < 100 ? [`Foram importadas ${extractedQs.length} de ${validTotal} questões válidas da prova.`] : []),
-                ],
-                needs_review: examPercent < 95 || Boolean(examReport.answerUnknown) || Boolean(examReport.aiKeyed)
-              };
-              await scopedCloudFetch(`study_documents?id=eq.${doc.id}`, {
-                method: "PATCH",
-                body: JSON.stringify({
-                  processing_status: "ready",
-                  detected_subject: primarySubject,
-                  metadata: {
-                    ...(doc.metadata || {}),
-                    primary_subject: primarySubject,
-                    analyzed_at: new Date().toISOString(),
-                    analysis_progress: { stage: "completed", percent: 100, completed_sections: subjectsList.length, total_sections: subjectsList.length, updated_at: new Date().toISOString() },
-                    coverage
-                  }
-                })
-              });
-      if(!currentScope())return false;
-              doc.processing_status = "ready";
-              doc.metadata = { ...(doc.metadata || {}), coverage };
-              await Promise.all([loadGeneratedContent(), loadCloudDocuments()]);
-      if(!currentScope())return false;
-              render();
-              toast(`🎯 ${extractedQs.length} questões extraídas de “${doc.title}” (${subjectsList.length} disciplina(s)). ${examReport.answerUnknown || 0} sem gabarito; ${examReport.aiKeyed || 0} sugestão(ões) da IA para validar.`);
-              return;
-            }
-          }
-          if (window._isBatchExamImportActive && (!Array.isArray(extractedQs) || extractedQs.length === 0)) {
-            try {
-              await scopedCloudFetch(`study_documents?id=eq.${doc.id}`, {
-                method: "PATCH",
-                body: JSON.stringify({
-                  processing_status: "ready",
-                  metadata: { ...(doc.metadata || {}), note: "Material verificado no lote" }
-                })
-              });
-      if(!currentScope())return false;
-              doc.processing_status = "ready";
-              return;
-            } catch (_err) {
-      if(!currentScope())return false;}
-          }
-        }
       }
 
       const pdfMetaCheck = window._extractedPdfMetaByDocId.get(id);

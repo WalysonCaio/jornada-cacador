@@ -17,8 +17,8 @@
     {
       "function": "material-gemini",
       "path": "supabase/dashboard/material-gemini/index.ts",
-      "bytes": 104901,
-      "sha256": "d1cc4aae888b7f47f5b6344b90154f0d7eaaeded882d54e54a7b2755e27cd6fd"
+      "bytes": 101552,
+      "sha256": "02831fa707e39709b820f713e767b1300bb9771afb14188edb91f5619712bc75"
     },
     {
       "function": "edital-gemini",

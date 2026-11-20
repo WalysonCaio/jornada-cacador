@@ -4482,6 +4482,13 @@
     lawsPanel = lawsPanel || document.getElementById('laws');
     if (!lawsPanel) return;
     const scope = applyLawUiScope(), allLaws = getAllLawsCombined();
+    // A resposta da importação pode repetir os mesmos avisos exibidos no leitor.
+    // Retira apenas cópias exatas; erros e avisos exclusivos permanecem no status.
+    let statusMessage = String(lawsSyncMessage || '');
+    for (const warning of activeLawModalItem?.sourceWarnings || []) {
+      if (typeof warning === 'string' && warning) statusMessage = statusMessage.split(warning).join('');
+    }
+    statusMessage = statusMessage.trim();
     const favs = new Set(getFavLaws()), openMap = getLawsFoldersOpenState();
     const qNorm = String(lawsSearchQuery || '').trim().toLowerCase();
     const grouped = new Map();
@@ -4494,10 +4501,10 @@
     const groupsHtml = [...grouped].map(([disc, items]) => {
       const discKey = disc.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
       const isOpen = Boolean(openMap[discKey] === true || qNorm.length > 0);
-      const rows = isOpen ? items.map(law => `<div class="jcLawRowItem"><div style="display:flex;gap:10px;align-items:center"><button type="button" class="ghost small" data-law-fav="${lawEscape(law.id)}" title="Favoritar seleção">${favs.has(law.id) ? '⭐' : '☆'}</button><div><strong>${lawEscape(law.title)}</strong><div class="small muted">${lawEscape(law.sourceName)} · ${lawEscape(law.badge)}</div></div></div><button type="button" class="jcLawStartBtn" data-law-open="${lawEscape(law.id)}">📖 Ler seleção</button></div>`).join('') : '';
-      return `<section class="libraryFolder ${isOpen ? 'open' : ''}" data-law-folder="${lawEscape(discKey)}"><button type="button" class="folderHead" data-law-folder-toggle="${lawEscape(discKey)}" aria-expanded="${isOpen}"><span>▤ ${lawEscape(disc)}</span><span class="tag">${items.length} seleções</span></button><div class="folderBody" style="display:${isOpen ? 'block' : 'none'}">${rows}</div></section>`;
-    }).join('') || '<div class="empty">Nenhuma seleção encontrada neste filtro.</div>';
-    lawsPanel.innerHTML = `<div class="jcCaveiraOverviewBox" style="padding:14px 16px;margin-bottom:14px"><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between"><div><button type="button" class="ghost small ${!lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabAllBtn">📋 Todas (${allLaws.length})</button><button type="button" class="ghost small ${lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabFavBtn">⭐ Favoritos (${favs.size})</button></div><button type="button" class="ghost small" id="jcSyncAllLawsToDbBtn">💾 Salvar acervo</button></div><p class="small muted">As seleções locais não são edições integrais revisadas. Você pode importar documentos de fontes oficiais; confira a versão e a vigência na referência.</p><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><label for="jcOfficialLawSelect">Documento oficial</label><select id="jcOfficialLawSelect" style="min-width:160px;flex:1">${OFFICIAL_LAW_IMPORTS.map(item=>`<option value="${lawEscape(item.id)}">${lawEscape(item.title)}</option>`).join('')}</select><button type="button" class="ghost small" id="jcImportOfficialLawBtn">Importar documento</button><button type="button" class="ghost small" id="jcImportAllOfficialLawsBtn">Importar catálogo (13)</button></div><p class="small" role="status">${lawEscape(lawsSyncMessage)}</p><div style="display:flex;gap:8px;flex-wrap:wrap"><input type="search" id="jcLawsSearchInput" value="${lawEscape(lawsSearchQuery)}" placeholder="Buscar lei ou dispositivo..." style="min-width:160px;flex:1"><button type="button" class="jcCaveiraActionBtn" id="jcImportExternalLawBtn">🌐 Buscar trecho externo</button></div></div>${activeLawModalItem ? renderActiveLawReaderHtml(activeLawModalItem) : ''}<div class="libraryFolders" id="jcLawsAccordionContainer">${groupsHtml}</div>`;
+      const rows = isOpen ? items.map(law => `<div class="jcLawRowItem"><div class="jcLawRowTitle"><button type="button" class="ghost small" data-law-fav="${lawEscape(law.id)}" title="Favoritar texto" aria-label="${favs.has(law.id) ? 'Remover favorito' : 'Favoritar'}: ${lawEscape(law.title)}">${favs.has(law.id) ? '⭐' : '☆'}</button><div><strong>${lawEscape(law.title)}</strong><div class="small muted">${lawEscape(law.sourceName)} · ${lawEscape(law.badge)}</div></div></div><button type="button" class="jcLawStartBtn" data-law-open="${lawEscape(law.id)}">📖 Ler texto</button></div>`).join('') : '';
+      return `<section class="libraryFolder ${isOpen ? 'open' : ''}" data-law-folder="${lawEscape(discKey)}"><button type="button" class="folderHead" data-law-folder-toggle="${lawEscape(discKey)}" aria-expanded="${isOpen}"><span>▤ ${lawEscape(disc)}</span><span class="tag">${items.length} textos</span></button><div class="folderBody" style="display:${isOpen ? 'block' : 'none'}">${rows}</div></section>`;
+    }).join('') || '<div class="empty">Nenhum texto encontrado neste filtro.</div>';
+    lawsPanel.innerHTML = `<div class="jcCaveiraOverviewBox jcLawsControls"><div class="jcLawsControlsHeader"><div class="jcLawsFilterTabs"><button type="button" class="ghost small ${!lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabAllBtn">📋 Todas (${allLaws.length})</button><button type="button" class="ghost small ${lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabFavBtn">⭐ Favoritos (${favs.size})</button></div><button type="button" class="ghost small" id="jcSyncAllLawsToDbBtn">💾 Salvar acervo</button></div><p class="small muted">As seleções locais não são edições integrais revisadas. Você pode importar documentos de fontes oficiais; confira a versão e a vigência na referência.</p><div class="jcOfficialLawImport"><label for="jcOfficialLawSelect">Documento oficial</label><select id="jcOfficialLawSelect">${OFFICIAL_LAW_IMPORTS.map(item=>`<option value="${lawEscape(item.id)}">${lawEscape(item.title)}</option>`).join('')}</select><button type="button" class="ghost small" id="jcImportOfficialLawBtn">Importar documento</button><button type="button" class="ghost small" id="jcImportAllOfficialLawsBtn">Importar catálogo (13)</button></div><p class="small jcLawsSyncStatus" role="status" aria-live="polite">${lawEscape(statusMessage)}</p><div class="jcLawsSearchRow"><label class="sr-only" for="jcLawsSearchInput">Buscar lei ou dispositivo</label><input type="search" id="jcLawsSearchInput" value="${lawEscape(lawsSearchQuery)}" placeholder="Buscar lei ou dispositivo..."><button type="button" class="jcCaveiraActionBtn" id="jcImportExternalLawBtn">🌐 Buscar trecho externo</button></div></div>${activeLawModalItem ? renderActiveLawReaderHtml(activeLawModalItem) : ''}<div class="libraryFolders" id="jcLawsAccordionContainer">${groupsHtml}</div>`;
     const find = id => lawsPanel.querySelector?.(`#${id}`) || document.getElementById(id);
     const redraw = () => { if (lawScopeCurrent(scope)) renderSmartLawsPanelContent(lawsPanel); };
     const bind = (id, fn) => { const el = find(id); if (el) el.onclick = fn; };
@@ -4579,7 +4586,7 @@
 
   function renderActiveLawReaderHtml(value) {
     const law = materializeLaw(value);
-    if (!law) return '<div class="empty">Seleção indisponível.</div>';
+    if (!law) return '<div class="empty">Texto indisponível.</div>';
     const highlights=getHighlightedArticles(), url=safeLawUrl(law.sourceUrl), extUrl=safeLawUrl(law.external?.sourceUrl);
     const totalPages=Math.max(1,Math.ceil(law.articles.length/LAW_READER_PAGE_SIZE));
     lawReaderPage=Math.min(totalPages-1,Math.max(0,Math.floor(Number(lawReaderPage)||0)));
@@ -4587,18 +4594,28 @@
     const officialActions=officialLawIdsFor(law).map(id=>`<button type="button" class="ghost small" data-law-import-official="${lawEscape(id)}">${law.full_document?'Atualizar':'Importar'} ${lawEscape(OFFICIAL_LAW_IMPORTS.find(item=>item.id===id)?.title||id)} da fonte oficial</button>`).join('');
     const paragraphs=visible.map((article,offset)=>{
       const key=`${law.id}:${first+offset}`, highlighted=!!highlights[key];
-      return `<div style="padding:12px;border-radius:10px;border:1px solid ${highlighted?'#eab308':'rgba(56,189,248,.2)'};background:${highlighted?'rgba(234,179,8,.16)':'rgba(8,19,34,.75)'};display:flex;gap:12px"><p style="margin:0;line-height:1.58;flex:1;white-space:pre-wrap">${lawEscape(article)}</p><button type="button" class="ghost small" data-law-highlight="${lawEscape(key)}">${highlighted?'🖍️ Grifado':'🖍️ Grifar'}</button></div>`;
+      return `<div class="jcLawParagraph${highlighted?' isHighlighted':''}"><p>${lawEscape(article)}</p><button type="button" class="ghost small" data-law-highlight="${lawEscape(key)}" aria-pressed="${highlighted}" aria-label="${highlighted?'Remover grifo do':'Grifar o'} bloco ${first+offset+1}">${highlighted?'🖍️ Grifado':'🖍️ Grifar'}</button></div>`;
     }).join('');
-    return `<div class="jcCaveiraOverviewBox" id="jcActiveLawReaderBox" style="border:1.5px solid #65e7ff;margin-bottom:18px">
-      <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between"><div><span class="tag">${lawEscape(law.discipline)} · ${lawEscape(law.badge)}</span><h3>${lawEscape(law.title)}</h3></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="ghost small" id="jcSaveSingleLawToDbBtn">💾 Salvar texto</button><button type="button" class="action small" id="jcInvokeLawAiBtn">🧙‍♂️ Invocar questões</button><button type="button" class="ghost small" id="jcCloseLawReaderBtn">✕ Fechar leitura</button></div></div>
-      <p class="small muted">${lawEscape(law.coverage)} Versão: ${lawEscape(law.sourceVersion)}.</p>
-      ${law.sourceWarnings?.length?`<p class="small">${law.sourceWarnings.map(lawEscape).join(' ')}</p>`:''}
-      <p class="small">${lawEscape(law.sourceName)} ${url?`<a href="${lawEscape(url)}" target="_blank" rel="noopener noreferrer">Consultar referência</a>`:'· referência documental não informada'}${law.external?`<br>${lawEscape(law.external.source)} · ${lawEscape(law.external.fetchedAt)}${law.external.truncated?' · trecho limitado':''}${extUrl?` · <a href="${lawEscape(extUrl)}" target="_blank" rel="noopener noreferrer">Consultar fonte complementar</a>`:''}`:''}</p>
-      ${law.full_document?`<p class="small" style="overflow-wrap:anywhere">Recuperado em: ${lawEscape(law.fetchedAt)} · SHA-256: ${lawEscape(law.content_hash)}</p>`:''}
-      ${law.contentTruncated?'<p class="small">Conteúdo limitado ao trecho importado.</p>':''}
-      <div style="display:flex;gap:8px;flex-wrap:wrap">${officialActions}${!law.full_document?`<button type="button" class="ghost small" id="jcFetchLawComplementBtn" ${activeLawExternalLoading?'disabled':''}>${activeLawExternalLoading?'Consultando fonte...':'Consultar complemento externo'}</button>`:''}</div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px"><button type="button" class="ghost small" id="jcLawReaderPrevBtn" ${lawReaderPage===0?'disabled':''}>Anterior</button><span role="status">Página ${lawReaderPage+1}/${totalPages} · blocos ${first+1}–${Math.min(first+LAW_READER_PAGE_SIZE,law.articles.length)} de ${law.articles.length}</span><button type="button" class="ghost small" id="jcLawReaderNextBtn" ${lawReaderPage===totalPages-1?'disabled':''}>Próxima</button></div>
-      <div style="display:grid;gap:10px;max-height:540px;overflow-y:auto;margin-top:12px">${paragraphs}</div></div>`;
+    // sourceVersion pode conter o hash. Exibe-o uma vez, no campo de integridade.
+    const version=String(law.sourceVersion||'').replace(/\s*[·|—-]?\s*SHA-256\s*:?\s*[a-f0-9]{64}/ig,'').trim();
+    const warnings=[...new Set((law.sourceWarnings||[]).filter(text=>typeof text==='string'&&text.trim()))];
+    const coverage=law.full_document
+      ? 'Texto extraído da fonte oficial. A extração não certifica vigência ou revisão jurídica. Imagens, OCR e anexos externos não estão incluídos.'
+      : law.coverage;
+    return `<div class="jcCaveiraOverviewBox jcLawReader" id="jcActiveLawReaderBox">
+      <div class="jcLawReaderHeader"><div class="jcLawReaderTitle"><span class="tag">${lawEscape(law.discipline)} · ${lawEscape(law.badge)}</span><h3>${lawEscape(law.title)}</h3></div><div class="jcLawReaderActions"><button type="button" class="ghost small" id="jcSaveSingleLawToDbBtn">💾 Salvar texto</button><button type="button" class="action small" id="jcInvokeLawAiBtn">🧙‍♂️ Invocar questões</button><button type="button" class="ghost small" id="jcCloseLawReaderBtn">✕ Fechar leitura</button></div></div>
+      <p class="small jcLawCoverage">${lawEscape(coverage)}</p>
+      <p class="small jcLawSource">${lawEscape(law.sourceName)} ${url?`· <a href="${lawEscape(url)}" target="_blank" rel="noopener noreferrer">${law.full_document?'Consultar referência oficial':'Consultar referência informada'}</a>`:'· referência documental não informada'}</p>
+      <details class="jcLawSourceDetails"><summary>Fonte, versão e limites da leitura</summary><dl class="jcLawSourceMetadata">
+        <dt>Versão</dt><dd>${lawEscape(version||'Não informada')}</dd>
+        ${law.full_document?`<dt>Recuperado em</dt><dd>${lawEscape(law.fetchedAt||'Não informado')}</dd><dt>SHA-256</dt><dd><code>${lawEscape(law.content_hash)}</code></dd>`:''}
+        <dt>Conteúdo salvo</dt><dd>${law.articles.length} blocos textuais · ${totalPages} páginas de leitura</dd>
+      </dl>${warnings.length?`<ul class="jcLawSourceWarnings">${warnings.map(warning=>`<li>${lawEscape(warning)}</li>`).join('')}</ul>`:''}
+      ${law.external?`<p class="small">${lawEscape(law.external.source)} · ${lawEscape(law.external.fetchedAt)}${law.external.truncated?' · trecho limitado':''}${extUrl?` · <a href="${lawEscape(extUrl)}" target="_blank" rel="noopener noreferrer">Consultar fonte complementar</a>`:''}</p>`:''}
+      ${law.contentTruncated?'<p class="small">Conteúdo limitado ao trecho importado.</p>':''}</details>
+      <div class="jcLawReaderSourceActions">${officialActions}${!law.full_document?`<button type="button" class="ghost small" id="jcFetchLawComplementBtn" ${activeLawExternalLoading?'disabled':''}>${activeLawExternalLoading?'Consultando fonte...':'Consultar complemento externo'}</button>`:''}</div>
+      <nav class="jcLawReaderPagination" aria-label="Paginação do texto"><button type="button" class="ghost small" id="jcLawReaderPrevBtn" ${lawReaderPage===0?'disabled':''}>Anterior</button><span role="status" aria-live="polite">Página ${lawReaderPage+1}/${totalPages} · blocos ${first+1}–${Math.min(first+LAW_READER_PAGE_SIZE,law.articles.length)} de ${law.articles.length}</span><button type="button" class="ghost small" id="jcLawReaderNextBtn" ${lawReaderPage===totalPages-1?'disabled':''}>Próxima</button></nav>
+      <div class="jcLawReaderParagraphs" role="region" aria-label="Texto da lei, página ${lawReaderPage+1}" tabindex="0">${paragraphs}</div></div>`;
   }
 
   // 6) Pílulas Rápidas de Status na Aba Questões + Barra Inferior da Questão com Invocador

@@ -223,7 +223,7 @@ console.log("OK: extrator de provas (19 cenários: Texto I pré-Q01 de Portuguê
 {
   const pdfSrc = readFileSync(new URL("../dist/pdf-text-client.js", import.meta.url), "utf8");
   assert(/resolveAiBtn\.hidden = true/.test(pdfSrc), "o botão 'Resolver com IA' não pode aparecer enquanto não existir");
-  assert(/examReport\.answerUnknown/.test(pdfSrc), "a cobertura deve avisar sobre questões sem gabarito");
+  assert(pdfSrc.includes("JCQuestionReview.reviewDocument") && readFileSync(new URL("../dist/question-review.js", import.meta.url), "utf8").includes("key_conflicts"), "a extração deve entrar na comparação de gabaritos, sem substituir conteúdo automaticamente");
   assert(/Date\.now\(\) - since > 150000/.test(pdfSrc), "a auto-recuperação só pode resetar documentos parados há mais de 150 s");
 }
 console.log("OK: extrator sem gabarito (nunca assume A/CERTO, fora de simulados).");

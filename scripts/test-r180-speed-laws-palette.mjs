@@ -11,7 +11,7 @@ const swCode = fs.readFileSync(path.join(root, 'dist', 'sw.js'), 'utf8');
 console.log('=== Teste r182: Índices de Questões/Trilha, Pastas Retráteis, Sem Manuais nas Disciplinas, Base Externa de Leis e Paleta Oficial ===');
 
 // 1. Service Worker na versão r182
-assert.ok(swCode.includes('r183'), 'sw.js deve estar na versão r183');
+assert.ok(swCode.includes('r184'), 'sw.js deve estar na versão r184');
 console.log('✓ 1. Service Worker atualizado para r182');
 
 // 2. Indexação de consultas de questionPool, questionsForMode e learningUnits

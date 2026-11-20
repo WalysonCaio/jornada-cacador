@@ -3185,32 +3185,36 @@
     const source=String(item?.subject_source||'').toLowerCase();
     const options=Array.isArray(item?.options)?item.options:[];
     const cached=item&&typeof item==='object'?questionDisciplineCache.get(item):null;
-    if(cached&&cached.st===st&&cached.tp===tp&&cached.declaredRaw===declaredRaw&&cached.source===source&&cached.category===item?.category&&cached.id===item?.id&&cached.options.length===options.length&&options.every((o,i)=>cached.options[i]===o))return cached.result;
+    if(cached&&cached.st===st&&cached.tp===tp&&cached.declaredRaw===declaredRaw&&cached.source===source&&cached.review===Boolean(item?.classification_needs_review)&&cached.topicReview===Boolean(item?.topic_classification_needs_review)&&cached.reason===item?.classification_reason&&cached.reviewStatus===item?.review_status&&cached.category===item?.category&&cached.id===item?.id&&cached.options.length===options.length&&options.every((o,i)=>cached.options[i]===o))return cached.result;
     const valid=s=>Boolean(s&&s!=='Conteúdo Geral'&&!isInvalidTrailSubject(s));
     const declared=canonicalSubjectName(declaredRaw);
     let result;
     if((typeof isPlatformManualStudyArtifact==='function'&&isPlatformManualStudyArtifact(item))||/^manual-(?:01-ciclo-estudos|02-dominando-questoes|03-revisao-pos-edital|04-guia-passo-a-passo|ciclo|metodo)$/i.test(String(item?.id||''))||/manuais do ca[cç]ador/i.test(`${declaredRaw} ${item?.category||''}`)){
       result={subject:'Conteúdo Geral',source:'manual_da_plataforma',confidence:0,needs_review:true,reason:'Manual de uso da plataforma; fora dos treinos por disciplina.'};
+    }else if(item?.review_status==='source_not_matched'){
+      result={subject:valid(declared)?declared:'Conteúdo Geral',source:'verificacao_pdf',confidence:0,needs_review:true,reason:'A questão não foi localizada com segurança no PDF; confirme a fonte antes do treino.'};
     }else if(['manual','humano','humana','revisado'].includes(source)&&valid(declared)){
       result={subject:declared,source:'manual',confidence:1,needs_review:false,reason:'Disciplina confirmada por revisão humana.'};
     }else{
       // The grammatical command takes precedence over the subject of a quoted legal text.
       const command=topicKey(st);
       const grammaticalCommand=/\b(?:concordancia (?:verbal|nominal)|regencia (?:verbal|nominal)|correcao gramatical|sinal indicativo de crase|funcao sintatica|classe gramatical|colocacao pronominal|voz passiva|voz ativa|voc[aá]bulo .{0,35}classifica se|conjuncao .{0,45}(?:exprime|expressa|introduz)|pronome .{0,35}(?:refere|retoma))\b/.test(command);
-      const detected=grammaticalCommand?'Língua Portuguesa':(typeof window.inferStrictQuestionSubject==='function'
-        ?window.inferStrictQuestionSubject(st,tp,'Conteúdo Geral',options)
-        :canonicalSubjectName('Conteúdo Geral',`${tp} ${st}`));
+      const inference=grammaticalCommand?{subject:'Língua Portuguesa',ambiguous:false,confidence:0.9}:(typeof window.inferStrictQuestionSubjectDecision==='function'
+        ?window.inferStrictQuestionSubjectDecision(st,tp,'Conteúdo Geral',options)
+        :{subject:typeof window.inferStrictQuestionSubject==='function'?window.inferStrictQuestionSubject(st,tp,'Conteúdo Geral',options):canonicalSubjectName('Conteúdo Geral',`${tp} ${st}`),ambiguous:false,confidence:0.75});
+      const detected=inference.subject;
       const subject=valid(detected)?detected:(valid(declared)?declared:'Conteúdo Geral');
       const conflict=valid(declared)&&valid(detected)&&subjectKey(declared)!==subjectKey(detected);
-      result={subject,source:valid(detected)?'heuristica':'origem',confidence:conflict?0.4:valid(detected)?0.75:valid(declared)?0.65:0,
-        needs_review:conflict||!valid(subject),reason:conflict?`Disciplina declarada: ${declared}; conteúdo identificado: ${detected}. Confirme antes do treino.`:!valid(subject)?'Não foi possível identificar uma disciplina com segurança.':'Classificação automática; sujeita a conferência.'};
+      const ambiguous=inference.ambiguous===true,queued=item?.classification_needs_review===true||item?.topic_classification_needs_review===true;
+      result={subject,source:valid(detected)?'heuristica':'origem',confidence:conflict||ambiguous?0.35:valid(detected)?inference.confidence:valid(declared)?0.65:0,
+        needs_review:queued||conflict||ambiguous||!valid(subject),candidates:inference.candidates||[],reason:queued?(item.classification_reason||'Classificação ou assunto aguardam revisão.'):conflict?`Disciplina declarada: ${declared}; conteúdo identificado: ${detected}. Confirme antes do treino.`:ambiguous?'O conteúdo apresenta sinais de mais de uma disciplina; confirme a classificação antes do treino.':!valid(subject)?'Não foi possível identificar uma disciplina com segurança.':'Classificação automática; sujeita a conferência.'};
     }
-    if(item&&typeof item==='object')questionDisciplineCache.set(item,{st,tp,declaredRaw,source,options:[...options],category:item.category,id:item.id,result});
+    if(item&&typeof item==='object')questionDisciplineCache.set(item,{st,tp,declaredRaw,source,review:Boolean(item?.classification_needs_review),topicReview:Boolean(item?.topic_classification_needs_review),reason:item?.classification_reason,reviewStatus:item?.review_status,options:[...options],category:item.category,id:item.id,result});
     return result;
   }
 
   function isQuestionDisciplineEligible(item,subject='all'){
-    if(!item||item.needs_review)return false;
+    if(!item||item.needs_review||item.review_status==='source_not_matched')return false;
     const decision=questionDisciplineDecision(item);
     return !decision.needs_review&&strictSubjectMatch(decision.subject,subject);
   }
@@ -6149,7 +6153,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     keyMap.ambiguous=false;keyMap.reason='';keyMap.start=-1;keyMap.cadernos=[];
     const heads=[...raw.matchAll(EXAM_KEY_HEADING_RE)].map(m=>m.index);
     const regions=heads.length
-      ?heads.map((h,i)=>({from:h,text:raw.slice(h,Math.min(raw.length,h+8000,i+1<heads.length?heads[i+1]:raw.length))}))
+      ?heads.map((h,i)=>({from:h,text:raw.slice(h,i+1<heads.length?heads[i+1]:raw.length)}))
       :[{from:Math.max(0,raw.length-4000),text:raw.slice(-4000)}];
     const blocks=[];
     for(const region of regions){
@@ -6166,7 +6170,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       };
       while((m=EXAM_KEY_PAIR_RE.exec(region.text))!==null){
         const num=Number(m[1]);
-        if(num<1||num>250)continue;
+        if(num<1||num>10000)continue;
         if(prevEnd>=0&&!/^[\s|;,]*$/.test(region.text.slice(prevEnd,m.index)))flush();
         if(run.some(r=>r.num===num))flush();
         run.push({num,val:m[2],index:m.index});
@@ -6178,10 +6182,14 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     let chosen=hasFinal?blocks.filter(b=>!/preliminar/i.test(b.label)):blocks;
     keyMap.cadernos=[...new Set(chosen.map(b=>b.caderno).filter(Boolean))];
     if(preferredCaderno&&typeof preferredCaderno==='string'&&preferredCaderno.trim()){
-      const want=preferredCaderno.replace(/\s+/g,' ').trim().toUpperCase();
-      const filtered=chosen.filter(b=>b.caderno===want||b.caderno.includes(want)||want.includes(b.caderno));
-      if(filtered.length)chosen=filtered;
-    }
+      const normalizeCaderno=value=>String(value||'').toUpperCase().replace(/\b(?:CADERNO|TIPO|PROVA)\b/g,' ').replace(/\s+/g,' ').trim();
+      const want=normalizeCaderno(preferredCaderno);
+      const filtered=chosen.filter(b=>b.caderno&&normalizeCaderno(b.caderno)===want);
+      if(filtered.length){chosen=filtered;keyMap.selectedCaderno=filtered[0].caderno;}
+      else {keyMap.ambiguous=true;keyMap.reason='O caderno selecionado não foi localizado de forma exata no gabarito.';return keyMap;}
+    }else if(keyMap.cadernos.length>1){
+      keyMap.ambiguous=true;keyMap.reason='Há mais de um caderno no gabarito; selecione explicitamente o correspondente ao PDF.';
+    }else if(keyMap.cadernos.length===1)keyMap.selectedCaderno=keyMap.cadernos[0];
     for(const block of chosen){
       for(const[num,val]of block.pairs){
         const norm=/^(ANULAD[AO]|NULA|X|\*)$/i.test(val)?'ANULADA':/^certo$/i.test(val)?'C':/^errado$/i.test(val)?'E':val.toUpperCase();
@@ -6200,9 +6208,9 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   }
 
   const EXAM_KEY_HEADING_RE=/\b(?:gabaritos?(?:\s+(?:oficia(?:l|is)|definitivos?|preliminares?|comentados?|geral|das\s+quest[õo]es|da\s+prova|do\s+caderno|do\s+simulado))?|respostas?(?:\s+(?:oficia(?:l|is)|do\s+simulado|corretas?|das\s+quest[õo]es|da\s+prova))|folha\s+de\s+respostas|chave\s+de\s+respostas|tabela\s+de\s+respostas|quadro\s+de\s+respostas)\b/gi;
-  const EXAM_KEY_PAIR_RE=/(?:^|[\s|;,(])0*(\d{1,3})\s*(?:[-–—.:)]\s*|\s+)(ANULADA|ANULADO|Anulada|NULA|X|\*|CERTO|ERRADO|Certo|Errado|[A-E])(?=$|[\s|;,.)])/g;
+  const EXAM_KEY_PAIR_RE=/(?:^|[\s|;,(])0*(\d{1,5})\s*(?:[-–—.:)]\s*|\s+)(ANULADA|ANULADO|Anulada|NULA|X|\*|CERTO|ERRADO|Certo|Errado|[A-E])(?=$|[\s|;,.)])/g;
   const EXAM_OPTION_RE=/(?:^|\n|\s)(?:[\(\[]([A-Ea-e])[\)\]]|([A-Ea-e])[ \t]*[0\)\.\-–:])\s*/g;
-  const EXAM_BASE_TEXT_RE=/(?:^|\n)[ \t]*(?:TEXTO\s+(?:[IVX]+|\d+|ASSOCIADO|DE\s+APOIO)\b|Leia\s+(?:atentamente\s+)?(?:o|os|a|as)\s+(?:texto|textos|trecho|fragmento|cr[ôo]nica|poema|artigo|charge|tirinha)|O\s+texto\s+(?:a\s+seguir|abaixo)\s+(?:serve\s+de\s+base|refere-se)|As\s+quest[õo]es\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*\d{1,3}\s*(?:a|at[ée]|e|-|–)\s*0*\d{1,3}\s+referem-se\s+ao\s+texto|Texto\s+para\s+(?:responder\s+)?(?:[àa]s\s+)?(?:quest[õo]es|os\s+itens)\s+(?:de\s+)?0*\d{1,3})/i;
+  const EXAM_BASE_TEXT_RE=/(?:^|\n)[ \t]*(?:TEXTO\s+(?:[IVX]+|\d+|ASSOCIADO|DE\s+APOIO)\b|Leia\s+(?:atentamente\s+)?(?:o|os|a|as)\s+(?:texto|textos|trecho|fragmento|cr[ôo]nica|poema|artigo|charge|tirinha)|O\s+texto\s+(?:a\s+seguir|abaixo)\s+(?:serve\s+de\s+base|refere-se)|As\s+quest[õo]es\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*\d{1,5}\s*(?:a|at[ée]|e|-|–)\s*0*\d{1,5}\s+referem-se\s+ao\s+texto|Texto\s+para\s+(?:responder\s+)?(?:[àa]s\s+)?(?:quest[õo]es|os\s+itens)\s+(?:de\s+)?0*\d{1,5})/i;
 
   function parseBaseTextMeta(rawBaseChunk){
     const raw=String(rawBaseChunk||'').replace(/\r\n/g,'\n').trim();
@@ -6210,12 +6218,12 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     const cleaned=paragraphs.join('\n\n').slice(0,6000);
     let rangeStart=0,rangeEnd=0;
     const headSlice=cleaned.slice(0,550);
-    const rangeMatch=headSlice.match(/(?:quest[õo]es|itens)\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*(\d{1,3})\s*(?:a|at[ée]|-|–)\s*0*(\d{1,3})\b/i);
+    const rangeMatch=headSlice.match(/(?:quest[õo]es|itens)\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*(\d{1,5})\s*(?:a|at[ée]|-|–)\s*0*(\d{1,5})\b/i);
     if(rangeMatch){
       rangeStart=Number(rangeMatch[1])||0;
       rangeEnd=Number(rangeMatch[2])||0;
     }else{
-      const listMatch=headSlice.match(/(?:quest[õo]es|itens)\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*(\d{1,3})(?:\s*,\s*0*\d{1,3})*\s+e\s+0*(\d{1,3})\b/i);
+      const listMatch=headSlice.match(/(?:quest[õo]es|itens)\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*(\d{1,5})(?:\s*,\s*0*\d{1,5})*\s+e\s+0*(\d{1,5})\b/i);
       if(listMatch){
         rangeStart=Number(listMatch[1])||0;
         rangeEnd=Number(listMatch[2])||0;
@@ -6238,10 +6246,10 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   }
   window.isValidExtractedQuestion=isValidExtractedQuestion;
 
-  function cleanExamPages(rawTextOrPages){
+  function cleanExamPages(rawTextOrPages,opts={}){
     const pages=Array.isArray(rawTextOrPages)?rawTextOrPages.map(p=>String(p?.text||'').replace(/\u00a0/g,' ').replace(/(\p{L})-\n(\p{L})/gu,'$1$2')):[String(rawTextOrPages||'').replace(/\u00a0/g,' ').replace(/(\p{L})-\n(\p{L})/gu,'$1$2')];
     const norm=l=>l.trim().replace(/\s+/g,' ').toLowerCase();
-    const pageNumberOnly=/^\s*(?:p[áa]g(?:ina)?\.?\s*\d+(?:\s*(?:de|\/)\s*\d+)?|\d+\s*\/\s*\d+|\d{1,3})\s*$/i;
+    const pageNumberOnly=/^\s*(?:p[áa]g(?:ina)?\.?\s*\d+(?:\s*(?:de|\/)\s*\d+)?|\d+\s*\/\s*\d+|\d{1,5})\s*$/i;
     const trailingPageNumber=/\s+p[áa]g(?:ina)?\.?\s*\d+(?:\s*(?:de|\/)\s*\d+)?\s*$/i;
     const cadernoHeader=/^[^\n]{0,50}\bcaderno\s+(?:[A-Z]|\d{1,2})\s*$/i;
     const isWatermarkLine=l=>/@|\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|Leonardo\s+Thom[eé]/i.test(l);
@@ -6260,19 +6268,20 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       const threshold=Math.max(4,Math.ceil(pages.length*0.4));
       repeated=new Set([...counts].filter(([,n])=>n>=threshold).map(([key])=>key));
     }
-    return pages.map(text=>text.split('\n')
+    const cleaned=pages.map(text=>text.split('\n')
       .map(line=>line.replace(trailingPageNumber,''))
       .map(line=>line.replace(/(?:^|\n|\s)(\d)\s+(\d)\s*\)/g,' $1$2)').replace(/(?:^|\n|\s)(\d)\s+(\d)\s+(\d)\s*\)/g,' $1$2$3)'))
       .map(stripChrome)
       .filter(line=>!pageNumberOnly.test(line)&&!cadernoHeader.test(line)&&!isWatermarkLine(line)&&!repeated.has(norm(line)))
-      .join('\n')).join('\n\n');
+      .join('\n'));
+    return opts.preservePages?cleaned.map((text,index)=>({page:Array.isArray(rawTextOrPages)&&Number.isInteger(Number(rawTextOrPages[index]?.page))&&Number(rawTextOrPages[index].page)>0?Number(rawTextOrPages[index].page):index+1,text})):cleaned.join('\n\n');
   }
 
   function inferQuestionPedagogicalTopic(statement, subject, num = 0) {
     const s = String(statement || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const sub = String(subject || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
-    if (/constitucional/.test(sub) || /constituicao|crfb/.test(s)) {
+    if (/constitucional/.test(sub)) {
       if (/\b(?:habeas corpus|habeas data|mandado de seguranca|mandado de injuncao|acao popular|remedios? constitucionais?)\b/i.test(s)) {
         return "Remédios Constitucionais";
       }
@@ -6306,7 +6315,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       if (/\b(?:preambulo|principios? fundamentais|objetivos? fundamentais|republica federativa|soberania|dignidade da pessoa|art\.?\s*[1-4]\b)\b/i.test(s)) {
         return "Princípios Fundamentais (Art. 1º ao 4º)";
       }
-      if (/\b(?:art\.?\s*5|direitos? individuais|direitos? e garantias|inviolabilidade|liberdade|igualdade|propriedade)\b/i.test(s) || (num > 0 && num <= 40)) {
+      if (/\b(?:art\.?\s*5|direitos? individuais|direitos? e garantias|inviolabilidade|liberdade|igualdade|propriedade)\b/i.test(s)) {
         return "Direitos e Deveres Individuais e Coletivos (Art. 5º)";
       }
       return "Direito Constitucional Geral";
@@ -6360,8 +6369,8 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   function extractStructuredExamQuestions(rawTextOrPages,opts={}){
     const defaultSubject=opts.defaultSubject||'Conteúdo Geral';
     const defaultBoard=opts.defaultBoard||'Prova Oficial';
-    const report={expected:0,extracted:0,annulled:0,skipped:0,missingKey:0,ambiguous:false,reason:'',percent:0};
-    const finish=list=>{Object.defineProperty(list,'report',{value:report,enumerable:false});return list};
+    const report={expected:0,extracted:0,annulled:0,skipped:0,missingKey:0,ambiguous:false,reason:'',percent:0,classificationReviewCount:0,sourceLocatedCount:0,unknownFormatCount:0};
+    const finish=list=>{report.classificationReviewCount=list.filter(item=>item.classification_needs_review===true).length;report.sourceLocatedCount=list.filter(item=>Number.isInteger(item.question_number)&&Number.isInteger(item.source_page)).length;Object.defineProperty(list,'report',{value:report,enumerable:false});return list};
     const rawJoined=Array.isArray(rawTextOrPages)?rawTextOrPages.map(p=>String(p?.text||'')).join('\n\n'):String(rawTextOrPages||'');
     const jsonCandidate=rawJoined.trim();
     if(!jsonCandidate)return finish([]);
@@ -6398,12 +6407,12 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
           if(annulled)item.annulled=true;
           // Metadados explícitos impedem que exportar/importar promova uma
           // sugestão da IA a gabarito oficial ou apague uma revisão humana.
-          for(const key of ['key_source','answer_key_validation','key_reference','source','source_url','source_label','exam_title','associated_text']){
+          for(const key of ['key_source','answer_key_validation','key_reference','source','source_url','source_label','exam_title','associated_text','classification_declared_subject','classification_reason','subject_source','exam_caderno']){
             if(typeof x[key]==='string')item[key]=x[key];
           }
-          if(typeof x.explanation_needs_review==='boolean')item.explanation_needs_review=x.explanation_needs_review;
+          for(const flag of ['explanation_needs_review','classification_needs_review','topic_classification_needs_review'])if(typeof x[flag]==='boolean')item[flag]=x[flag];
           if(Array.isArray(x.answer_key_history))item.answer_key_history=x.answer_key_history.filter(h=>h&&typeof h==='object'&&!Array.isArray(h)).slice(-20).map(h=>({...h}));
-          for(const key of ['exam_year','question_number']){
+          for(const key of ['exam_year','question_number','source_question_number','source_page','source_page_end','page_start','page_end']){
             if((typeof x[key]==='number'||typeof x[key]==='string')&&String(x[key]).trim()!==''&&Number.isInteger(Number(x[key])))item[key]=Number(x[key]);
           }
           out.push(item);
@@ -6415,9 +6424,15 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     }
 
     // 2) Extração determinística de blocos numerados, só com gabarito confiável do próprio documento.
-    const text=cleanExamPages(rawTextOrPages).trim();
+    const cleanPages=cleanExamPages(rawTextOrPages,{preservePages:true});
+    const text=cleanPages.map(page=>page.text).join('\n\n');
+    let pageOffset=0;const pageSpans=cleanPages.map(page=>{const start=pageOffset;pageOffset+=page.text.length+2;return{page:page.page,start,end:start+page.text.length};});
+    const pageAt=offset=>pageSpans.find(page=>offset>=page.start&&offset<page.end)?.page||pageSpans.find(page=>offset<page.start)?.page||pageSpans.at(-1)?.page||1;
+    const sectionPattern=/^(?:(?:NO[CÇ][OÕ]ES|ELEMENTOS)\s+DE\s+)?(?:L[IÍ]NGUA\s+PORTUGUESA|PORTUGU[EÊ]S|RACIOC[IÍ]NIO\s+L[OÓ]GICO(?:[-–\s]+MATEM[AÁ]TICO)?|MATEM[AÁ]TICA|INFORM[AÁ]TICA|DIREITO\s+(?:CONSTITUCIONAL|ADMINISTRATIVO|PROCESSUAL\s+PENAL(?:\s+MILITAR)?|PENAL(?:\s+MILITAR)?|MILITAR)|DIREITOS\s+HUMANOS|LEGISLA[CÇ][AÃ]O\s+EXTRAVAGANTE|EXECU[CÇ][AÃ]O\s+PENAL|HIST[OÓ]RIA(?:\s+DE\s+PERNAMBUCO)?|GEOGRAFIA(?:\s+DE\s+PERNAMBUCO)?|F[IÍ]SICA|BIOLOGIA|QU[IÍ]MICA)$/i;
+    const sections=[];let lineOffset=0;for(const line of text.split('\n')){const label=line.trim().replace(/^\d+[.)-]\s*/, '');if(sectionPattern.test(label))sections.push({index:lineOffset,subject:canonicalSubjectName(label)});else if(/^(?:CONHECIMENTOS|DISCIPLINA|MAT[EÉ]RIA)\s+(?:GERAIS|ESPEC[IÍ]FICOS|B[AÁ]SICOS)$/i.test(label))sections.push({index:lineOffset,subject:''});lineOffset+=line.length+1;}
+    const sectionAt=offset=>sections.filter(section=>section.index<offset).at(-1)?.subject||'';
     const keyMap=parseExamAnswerKeyTable(text,opts.preferredCaderno||'');
-    report.ambiguous=keyMap.ambiguous;report.reason=keyMap.reason;report.cadernos=keyMap.cadernos||[];
+    report.ambiguous=keyMap.ambiguous;report.reason=keyMap.reason;report.cadernos=keyMap.cadernos||[];if(keyMap.selectedCaderno)report.pickedCaderno=keyMap.selectedCaderno;
     const inlineKeys=(text.match(/(?:gabarito(?:\s+(?:oficial|definitivo|preliminar|comentado|da\s+quest[aã]o))?|respostas?(?:\s+(?:oficiais?|do\s+simulado|corretas?|comentadas?))?|alternativa\s+correta|item\s+correto)\s*[:\-–=—]?\s*(?:(?:letra|alternativa|op[cç][aã]o|correta)\s+)?[\(\[]?\s*(ANULADA|ANULADO|CERTO|ERRADO|[A-Ea-e])\s*[\)\]]?/gi)||[]).length;
     const inlineMode=keyMap.size===0&&inlineKeys>=1;
     if(keyMap.ambiguous){if(!opts.allowWithoutKey)return finish([]);keyMap.clear();}
@@ -6427,12 +6442,13 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       return finish([]);
     }
     const body=!inlineMode&&keyMap.start>0?text.slice(0,keyMap.start):text;
-    const isCE=!inlineMode&&[...keyMap.values()].every(v=>v==='C'||v==='E'||v==='ANULADA');
-    const explicitMarks=(body.match(/(?:^|\n)[ \t]*(?:QUEST[AÃ]O|Q\.|Q\b)\s*0*\d{1,3}\b/gi)||[]).length;
+    const declaredCE=/\b(?:julgue(?:\s+os?\s+itens?)?|certo\s*(?:ou|e|\/)\s*errado|verdadeiro\s*(?:ou|e|\/)\s*falso)\b/i.test(body);
+    const isCE=declaredCE;
+    const explicitMarks=(body.match(/(?:^|\n)[ \t]*(?:QUEST[AÃ]O|Q\.|Q\b)\s*0*\d{1,5}\b/gi)||[]).length;
     const explicitMode=explicitMarks>=1;
     const startRe=explicitMode
-      ?/(?:^|\n)[ \t]*(?:QUEST[AÃ]O|Q\.|Q\b)\s*0*(\d{1,3})\b[ \t]*[:.\-–)]?[ \t]*/gi
-      :/(?:^|\n)[ \t]*(?:QUEST[AÃ]O\s*)?0*(\d{1,3})\s*(?:[.)\-–]\s*|\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ“"(]))/gi;
+      ?/(?:^|\n)[ \t]*(?:QUEST[AÃ]O|Q\.|Q\b)\s*0*(\d{1,5})\b[ \t]*[:.\-–)]?[ \t]*/gi
+      :/(?:^|\n)[ \t]*(?:QUEST[AÃ]O\s*)?0*(\d{1,5})\s*(?:[.)\-–]\s*|\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ“"(]))/gi;
     const countOptions=t=>[...t.matchAll(EXAM_OPTION_RE)].length;
     const cands=[];
     let sm;
@@ -6445,8 +6461,9 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       const c=cands[i],end=i+1<cands.length?cands[i+1].index:body.length;
       const last=blocks[blocks.length-1];
       // Numeração de afirmativas dentro do enunciado ("1. ... 2. ...") não abre questão nova.
-      if(last&&(c.num<=last.num||(!explicitMode&&!isCE&&countOptions(last.text)<2))){last.text+='\n'+body.slice(c.index,end).trim();continue}
-      blocks.push({num:c.num,text:body.slice(c.bodyStart,end).trim()});
+      if(last&&(c.num<=last.num||(!explicitMode&&!isCE&&countOptions(last.text)<2))){last.text+='\n'+body.slice(c.index,end).trim();last.end=end;continue}
+      const rawBlock=body.slice(c.bodyStart,end);
+      blocks.push({num:c.num,start:c.bodyStart,end:end-(rawBlock.length-rawBlock.trimEnd().length),sectionSubject:sectionAt(c.bodyStart),text:rawBlock.trim()});
     }
 
     const results=[];
@@ -6518,21 +6535,21 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         }
       }
       let item=null;
-      if(picked.length>=4){
+      if(picked.length>=2&&picked.length<=5){
         let statement=block.slice(0,picked[0].index).replace(/\s+/g,' ').trim();
         statement=statement.replace(/\bAlternativas\s*$/i,'').trim();
         const options=picked.map((o,i)=>block.slice(o.index+o.len,i+1<picked.length?picked[i+1].index:block.length).replace(/\s+/g,' ').trim());
         const correctIdx=unknownKey?-1:picked.findIndex(o=>o.letter===key);
-        if(statement.length>=10&&(correctIdx>=0||unknownKey)&&options.every(Boolean)){
-          const pTopic=inferQuestionPedagogicalTopic(statement,defaultSubject,b.num);
+        if(statement.length>=10&&(correctIdx>=0||unknownKey)&&options.every(Boolean)&&new Set(options.map(option=>answerOptionText(option).toLocaleLowerCase('pt-BR'))).size===options.length){
+          const pTopic='';
           item={statement,options,correct_index:correctIdx,topic:pTopic,difficulty:'medio',
             explanation:inlineComment||(unknownKey?'Questão importada SEM gabarito: ainda não pode ser corrigida. Adicione o gabarito oficial para usá-la em simulados.':`Gabarito do documento: alternativa ${key} ("${options[correctIdx]}").`)};
           if(unknownKey)item.answer_unknown=true;
         }
-      }else if((key==='C'||key==='E'||opts.allowWithoutKey)&&picked.length===0&&(isCE||inlineMode||opts.allowWithoutKey||/\bcerto\b[\s\S]*\berrado\b|\bjulgue\b/i.test(block))){
+      }else if((key==='C'||key==='E'||unknownKey)&&picked.length===0&&(isCE||/\bcerto\b[\s\S]*\berrado\b|\bjulgue\b/i.test(block))){
         let statement=block.replace(/Alternativas\s+Certo\s+Errado[\s\S]*$/i,'').replace(/\(\s*\)\s*Certo[\s\S]*$/i,'').replace(/\s+/g,' ').trim();
         if(statement.length>=12){
-          const pTopic=inferQuestionPedagogicalTopic(statement,defaultSubject,b.num);
+          const pTopic='';
           item={statement:`[Julgue o item em CERTO ou ERRADO] ${statement}`,options:['CERTO','ERRADO'],correct_index:unknownKey?-1:(key==='E'?1:0),
             topic:pTopic,difficulty:'dificil',
             explanation:inlineComment||(unknownKey?'Item C/E importado SEM gabarito: ainda não pode ser corrigido. Adicione o gabarito oficial para usá-lo em simulados.':`Gabarito do documento: ${key==='C'?'CERTO':'ERRADO'}.`)};
@@ -6548,18 +6565,29 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
             item.statement=`Texto-base: ${pendingBase}\n\n${item.statement}`;
           }
         }
-        const inferred=typeof resolveStrictQuestionDiscipline==='function'?resolveStrictQuestionDiscipline(item.statement,item.topic,defaultSubject,item.options):canonicalSubjectName(item.statement,defaultSubject);
-        item.subject=inferred&&inferred!=='Conteúdo Geral'?inferred:canonicalSubjectName(defaultSubject);
+        const declared=b.sectionSubject||'';
+        const input={...item,topic:'',subject:declared||'Conteúdo Geral'};
+        const decision=typeof questionDisciplineDecision==='function'?questionDisciplineDecision(input):{subject:canonicalSubjectName(item.statement,declared||defaultSubject),needs_review:true,reason:'Classificador indisponível; confirme disciplina e assunto.'};
+        item.subject=decision.subject&&decision.subject!=='Conteúdo Geral'?decision.subject:canonicalSubjectName(declared||defaultSubject);
+        item.topic=inferQuestionPedagogicalTopic(item.statement,item.subject);
+        item.classification_declared_subject=declared||item.subject;
+        item.classification_needs_review=decision.needs_review||!decision.subject||decision.subject==='Conteúdo Geral';
+        item.classification_reason=decision.reason;item.classification_confidence=decision.confidence||0;
+        item.subject_source=declared?'cabecalho_pdf':'heuristica';
+        item.question_number=b.num;item.source_question_number=b.num;
+        item.source_page=pageAt(b.start);item.source_page_end=pageAt(Math.max(b.start,b.end-1));
+        item.page_start=item.source_page;item.page_end=item.source_page_end;
+        if(keyMap.selectedCaderno||opts.preferredCaderno)item.exam_caderno=String(keyMap.selectedCaderno||opts.preferredCaderno);
         item.board=defaultBoard;
         item.origin=item.answer_unknown?'adaptada_do_pdf':'oficial';
         if(item.answer_unknown)report.answerUnknown=(report.answerUnknown||0)+1;
         results.push(item);
-      }else report.skipped++;
+      }else {report.skipped++;report.unknownFormatCount++;}
       if(newBase){pendingBase=newBase;baseAge=0;baseRangeStart=newRangeStart;baseRangeEnd=newRangeEnd}else baseAge++;
     }
     report.extracted=results.length;
     const lastNum=blocks.length?blocks[blocks.length-1].num:0;
-    if(!inlineMode)report.expected=Math.max(report.expected,keyMap.size,lastNum);
+    if(!inlineMode)report.expected=Math.max(report.expected,keyMap.size);
     const valid=Math.max(0,report.expected-report.annulled);
     report.percent=valid?Math.min(100,Math.round(results.length/valid*100)):0;
     return finish(results);

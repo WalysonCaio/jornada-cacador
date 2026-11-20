@@ -706,6 +706,7 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
     "function normalizedDifficulty(q){return q?.difficulty||'medio'}",
     "const shortLabel=(t,m=52)=>String(t||'').slice(0,m);",
     v77Src.slice(v77Src.indexOf("function buildLocalCognitiveTwinQuestion("), v77Src.indexOf("async function spawnTwinQuestionForCurrent(")),
+    v77Src.slice(v77Src.indexOf("function answerOptionText("), v77Src.indexOf("function answerOptionsSignature(")),
     v77Src.slice(v77Src.indexOf("function parseExamAnswerKeyTable("), v77Src.indexOf("async function handleImportQuestionJsonFile(")),
   ].join("\n");
 
@@ -1150,7 +1151,7 @@ GABARITO DEFINITIVO
   assert(v77Src.includes("togglePaperReadingMode"), "Modo Papel / Leitura Clara presente");
   assert(htmlSrc.includes("Placar Caveira:") && htmlSrc.includes("Líquido Cebraspe:"), "Cálculo de Placar Líquido Caveira presente");
   assert(pdfSrc.includes("isTwoColumnPage"), "Detector de PDF em duas colunas presente");
-  assert(pdfSrc.includes("preferredCaderno"), "Seleção de caderno pelo usuário presente");
+  assert(v77Src.includes("preferredCaderno") && readFileSync(new URL("../dist/question-review.js", import.meta.url), "utf8").includes("preferredCaderno"), "Seleção explícita de caderno no extrator e na revisão, sem escolher o primeiro automaticamente");
   assert(v77Src.includes("splitQuestionAssociatedText"), "Parser de Texto Associado (estilo Gran Questões) presente");
   assert(v77Src.includes("Ler texto de apoio da questão") && v77Src.includes("Ocultar texto de apoio da questão"), "Botão '📖 Ler texto de apoio da questão' presente");
   assert(v77Src.includes("toggleGranAssociatedText"), "Função de abrir/fechar texto associado presente");
@@ -1164,7 +1165,7 @@ GABARITO DEFINITIVO
   assert(htmlSrc.includes("streakDaysByHalfMission") && v77Src.includes("streakDaysByHalfMission"), "Ofensiva diária é confirmada automaticamente ao atingir 50% das etapas da missão");
   assert(pdfSrc.includes("askUserScannedPdfPermission") && pdfSrc.includes("convertScannedPdfViaBrowserCanvasOcr"), "Detector de PDF escaneado vs. texto digital + conversor OCR com confirmação prévia de tokens presentes");
   assert(htmlSrc.includes("pdfPreScanBox") && pdfSrc.includes("pdfPreScanBox"), "Raio-X Pré-Análise Instantâneo presente");
-  assert(htmlSrc.includes("documentAnswerKeyFile") && pdfSrc.includes("documentAnswerKeyFile"), "Importador de Gabarito Separado em PDF presente");
+  assert(htmlSrc.includes("documentAnswerKeyFile") && v77Src.includes("attachAnswerKeyToExistingDoc"), "Entrada de gabarito separado e fluxo tardio de adição de chave presentes");
   assert(htmlSrc.includes("textStudyModalDialog") && pdfSrc.includes("openTextStudyModalBtn"), "Criação de estudo direto por Texto/Assunto/Lei Seca (sem PDF) presente");
   assert(pdfSrc.includes("askUserExamAnswerKeyOptions"), "Modal interativo de gabarito para provas (Anexar Gabarito / Colar Gabarito / Resolver com IA) presente");
   assert(v77Src.includes("btn.textContent='⏳ Extraindo questões...'"), "Feedback visual de extração imediato e bloqueio de cliques concorrentes no catálogo de provas presente");
@@ -1190,7 +1191,7 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   // 2) Verifica os 6 aprimoramentos estratégicos (TEC, Caveira, Gran, Estudei)
   assert.ok(v77Src.includes("computeQuestionOptionChoiceStats") && v77Src.includes("Seu erro mais frequente"), "Deve conter estatística por alternativa e identificação da pegadinha principal");
   assert.ok(v77Src.includes("computeTopicBankIncidencePct") && v77Src.includes("formatTopicIncidenceBadgeHtml"), "Deve conter cálculo real de incidência por assunto na banca");
-  assert.ok(pdfSrc.includes("pageSnapCache") && v77Src.includes("questionFigureBox"), "Deve suportar recorte/anexo de figuras e tabelas nas questões");
+  assert.ok(pdfSrc.includes("JCQuestionReview.reviewDocument") && readFileSync(new URL("../dist/question-review.js", import.meta.url), "utf8").includes("source_visual_review_required") && v77Src.includes("questionFigureBox"), "Deve preservar figuras existentes e marcar dependência visual para conferência na fonte; não fabrica recorte de página sem vínculo confirmado");
   assert.ok(v77Src.includes("renderGuildOfficialSimuladoBanner") && v77Src.includes("startGuildOfficialSimuladoBtn"), "Deve conter o Simulado Oficial da Guilda com Ranking e Nota de Corte por Cargo");
   assert.ok(v77Src.includes("balanceEstudeiCycleByWeightBtn") && v77Src.includes("getSubjectAccuracyAndWeight"), "Deve conter o balanceamento automático do Ciclo Tático por peso e desempenho (2x)");
   assert.ok(v77Src.includes("scheduleLazyTabHydration"), "Deve conter hidratação sob demanda para performance mobile");
