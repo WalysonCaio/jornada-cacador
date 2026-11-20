@@ -99,6 +99,11 @@ console.log("OK: contratos v100 (autor da biblioteca sem nome real) validados.")
 
   // (a) toda função public.xxx(...) chamada precisa existir em alguma migração (pegou assert_rate_limit/grant_server_xp inexistentes)
   const defined = new Set([...allSql.matchAll(/create (?:or replace )?function public\.(\w+)/gi)].map((m) => m[1]));
+  // ALTER FUNCTION ... RENAME preserves a real function definition (v108 wraps the v97 calculation).
+  for (const m of allSql.matchAll(/alter function\s+public\.(\w+)\([^;]*?\)\s+rename to\s+(\w+)/gi)) {
+    assert(defined.has(m[1]), `função renomeada sem definição: ${m[1]}`);
+    defined.add(m[2]);
+  }
   const tables = new Set([...allSql.matchAll(/create table (?:if not exists )?public\.(\w+)/gi)].map((m) => m[1]));
   const stripped = allSql
     .replace(/(?:create (?:or replace )?function|drop function if exists|alter function|comment on function)\s+public\.\w+/gi, "")

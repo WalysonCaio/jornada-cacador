@@ -1,11 +1,11 @@
 {
   "name": "jornada-cacador",
-  "version": "1.0.178",
+  "version": "1.0.182",
   "private": true,
   "scripts": {
     "test": "node scripts/test-all.mjs",
     "validate": "node scripts/validate-project.mjs",
-    "test:sql": "node scripts/integration-edital-sql.mjs && node scripts/integration-profile-privacy.mjs",
+    "test:sql": "node scripts/integration-edital-sql.mjs && node scripts/integration-profile-privacy.mjs && node scripts/integration-laws-sql.mjs",
     "test:browser": "node scripts/browser-smoke.mjs"
   },
   "engines": {

@@ -1,8 +1,5 @@
-// ARQUIVO AUTOCONTIDO PARA COLAR NO EDITOR DO SUPABASE: system-diagnostics
-// Gerado por: node scripts/build-supabase-dashboard.mjs
-// Fonte: supabase/functions/system-diagnostics/index.ts
-// SHA-256 da fonte: 2fc9bd9464176a77614622c579b1c6116a8d6f0436397ef734a4f22283546244
-// Atualize a fonte e regenere; não exclua os validadores incorporados.
+// Jornada do Caçador — função autocontida para CLI e editor do painel.
+// Cópias para publicação: node scripts/build-supabase-dashboard.mjs
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

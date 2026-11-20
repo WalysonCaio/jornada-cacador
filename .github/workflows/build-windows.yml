@@ -8,8 +8,14 @@ on:
       - "windows-desktop/**"
       - ".github/workflows/build-windows.yml"
 
+permissions:
+  contents: read
+
 jobs:
+  checks:
+    uses: ./.github/workflows/quality-checks.yml
   build-windows:
+    needs: checks
     runs-on: windows-latest
     defaults:
       run:

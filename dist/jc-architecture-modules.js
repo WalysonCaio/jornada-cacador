@@ -1,6 +1,6 @@
 /* ============================================================================
- * Jornada do Caçador — Arquitetura Modular, Performance O(1) & Perfil Social (r177)
- * Módulo 1: Telemetria de Performance (performance.mark / measure + p50/p95)
+ * Jornada do Caçador — Arquitetura Modular, Perfil Social e medição dos filtros (r178)
+ * Módulo 1: Telemetria local dos filtros (relógio monotônico + p50/p95)
  * Módulo 2: Catálogo de Identificadores Estáveis (Disciplina → Assunto → Subassunto)
  * Módulo 3: Biblioteca Inteligente & Fontes Externas Gratuitas Confiáveis
  * Módulo 4: Promotor de Questões do Usuário para Banco Nativo Organizado
@@ -36,69 +36,66 @@
   // ── 1. TELEMETRIA DE PERFORMANCE (Medição real da aba Questões e Filtros) ──
   const perfSamples = [];
   const MAX_SAMPLES = 60;
-
+  const pendingMeasurements = new Map();
+  const telemetryScope = () => {
+    const app = getAppState();
+    return JSON.stringify([app._ownerUserId || 'guest', app.activeCampaignId || '', Number(app._resetEpoch || 0)]);
+  };
+  const telemetryClock = () => typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
   function percentile(sortedArr, p) {
-    if (!sortedArr.length) return 0;
+    if (!sortedArr.length) return null;
     const idx = Math.min(sortedArr.length - 1, Math.max(0, Math.ceil((p / 100) * sortedArr.length) - 1));
     return Number(sortedArr[idx].toFixed(2));
   }
-
+  function validPerfSample(sample, name, scope) {
+    return sample && sample.scope === scope && (!name || sample.name === name) &&
+      typeof sample.durationMs === 'number' && Number.isFinite(sample.durationMs) && sample.durationMs >= 0 &&
+      Number.isInteger(sample.bankSize) && sample.bankSize >= 0;
+  }
   JC_MODULES.telemetry = {
     samples: perfSamples,
     markStart(name = 'jc_questions_tab_open') {
-      try {
-        if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
-          performance.mark(`${name}_start`);
-        }
-      } catch (_e) {}
-      this._lastStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (typeof name !== 'string' || !name || name.length > 100) return;
+      const start = telemetryClock();
+      if (!Number.isFinite(start)) return;
+      const scope = telemetryScope();
+      pendingMeasurements.set(name, { start, scope });
     },
-    markEnd(name = 'jc_questions_tab_open', meta = {}) {
-      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-      let durationMs = Math.max(0.1, now - (this._lastStart || now));
-      try {
-        if (typeof performance !== 'undefined' && typeof performance.mark === 'function' && typeof performance.measure === 'function') {
-          performance.mark(`${name}_end`);
-          const m = performance.measure(name, `${name}_start`, `${name}_end`);
-          if (m && Number.isFinite(m.duration) && m.duration > 0) {
-            durationMs = m.duration;
-          }
-        }
-      } catch (_e) {}
-      const bankSize = getAllQuestions().length;
+    markEnd(name = 'jc_questions_tab_open') {
+      const pending = pendingMeasurements.get(name);
+      pendingMeasurements.delete(name);
+      const scope = telemetryScope(), end = telemetryClock();
+      if (!pending || pending.scope !== scope || !Number.isFinite(end) || end < pending.start) return null;
       const sample = {
-        name,
-        durationMs: Number(durationMs.toFixed(2)),
-        bankSize,
+        name, scope,
+        durationMs: Number((end - pending.start).toFixed(2)),
+        bankSize: getAllQuestions().length,
         timestamp: new Date().toISOString(),
-        ...meta
+        measurement: 'synchronous_filters_render'
       };
       perfSamples.push(sample);
       if (perfSamples.length > MAX_SAMPLES) perfSamples.shift();
-      try {
-        localStorage.setItem('jc_telemetry_questions_v1', JSON.stringify(perfSamples.slice(-25)));
-      } catch (_e) {}
+      try { localStorage.setItem('jc_telemetry_questions_v2:' + scope, JSON.stringify(perfSamples.filter(s => s.scope === scope).slice(-25))); } catch (_e) {}
       return sample;
     },
     getStats(name = 'jc_questions_tab_open') {
-      let list = perfSamples.filter(s => !name || s.name === name);
+      const scope = telemetryScope();
+      let list = perfSamples.filter(s => validPerfSample(s, name, scope));
       if (!list.length) {
         try {
-          const saved = JSON.parse(localStorage.getItem('jc_telemetry_questions_v1') || '[]');
-          if (Array.isArray(saved)) list = saved.filter(s => !name || s.name === name);
+          const saved = JSON.parse(localStorage.getItem('jc_telemetry_questions_v2:' + scope) || '[]');
+          if (Array.isArray(saved)) list = saved.filter(s => validPerfSample(s, name, scope)).slice(-25);
         } catch (_e) {}
       }
-      const durations = list.map(s => Number(s.durationMs) || 0).filter(d => d > 0).sort((a, b) => a - b);
-      const p50 = percentile(durations, 50);
-      const p95 = percentile(durations, 95);
-      const last = list[list.length - 1] || null;
+      const durations = list.map(s => s.durationMs).sort((a, b) => a - b);
+      const p95 = percentile(durations, 95), last = list[list.length - 1] || null;
       return {
-        count: durations.length,
-        p50Ms: p50,
-        p95Ms: p95,
-        lastMs: last ? last.durationMs : 0,
+        count: durations.length, sampleCount: durations.length,
+        p50Ms: percentile(durations, 50), p95Ms: p95,
+        lastMs: last ? last.durationMs : null,
         bankSize: last ? last.bankSize : getAllQuestions().length,
-        status: p95 <= 120 ? 'OTIMO_60FPS' : p95 <= 300 ? 'BOM' : 'ATENCAO_CELULAR_FRACO'
+        measurement: 'synchronous_filters_render',
+        status: !durations.length ? 'SEM_AMOSTRAS' : p95 <= 120 ? 'BAIXA_LATENCIA_LOCAL' : p95 <= 300 ? 'LATENCIA_MODERADA' : 'LATENCIA_ALTA'
       };
     }
   };
@@ -195,7 +192,7 @@
     {
       id: 'disc_cpp',
       name: 'Direito Processual Penal',
-      aliases: ['direito processual penal', 'processo penal', 'cpp'],
+      aliases: ['direito processual penal', 'processual penal', 'processo penal', 'codigo de processo penal', 'cpp'],
       topics: [
         { id: 'cpp_ip', name: 'Inquérito Policial, Ação Penal e Prisões', subtopics: ['Características do IP', 'Prisão em Flagrante, Preventiva e Temporária', 'Cadeia de Custódia da Prova'], keywords: ['inquerito policial', 'prisao em flagrante', 'prisao preventiva', 'cadeia de custodia', 'acao penal'] }
       ]
@@ -239,47 +236,60 @@
   JC_MODULES.taxonomy = {
     catalog: STABLE_TAXONOMY,
     resolveStableTaxonomy(subjectStr, topicStr = '', statementStr = '') {
-      const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+      const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
       const sNorm = norm(subjectStr);
       const tNorm = norm(topicStr);
       const stNorm = norm(statementStr);
-      const combined = `${tNorm} ${stNorm}`;
-
-      let disc = STABLE_TAXONOMY.find(d => norm(d.name) === sNorm || d.aliases.some(a => sNorm.includes(a)));
-      if (!disc) {
-        let bestDisc = null, bestScore = 0;
-        for (const d of STABLE_TAXONOMY) {
-          let sc = 0;
-          for (const tp of d.topics) {
-            for (const kw of tp.keywords) {
-              if (combined.includes(norm(kw))) sc += 2;
-            }
-          }
-          if (sc > bestScore) { bestScore = sc; bestDisc = d; }
-        }
-        disc = bestScore >= 2 ? bestDisc : STABLE_TAXONOMY[5];
+      const stableId = text => {
+        let hash = 2166136261;
+        for (const character of text) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0;
+        return hash.toString(36);
+      };
+      const containsPhrase = (text, phrase) => Boolean(phrase && (` ${text} `).includes(` ${phrase} `));
+      const declaredSubject = typeof subjectStr === 'string' ? subjectStr.trim() : '';
+      const subjectAlias = sNorm.replace(/^(?:nocoes|conhecimentos) (?:basicas |basicos |gerais |especificos )?de /, '');
+      // Taxonomy enriches the declared discipline; it must not reclassify an
+      // unknown subject as Constitutional, or match "penal" inside CPP.
+      let disc = STABLE_TAXONOMY.find(d => [norm(d.name), ...d.aliases.map(norm)].includes(sNorm) ||
+        [norm(d.name), ...d.aliases.map(norm)].includes(subjectAlias));
+      const manual = (typeof window.isHunterManualArtifact === 'function' && window.isHunterManualArtifact(declaredSubject)) ||
+        /\b(?:manuais|manual(?: oficial)?) do cacador\b/.test(sNorm);
+      const invalidSubject = !declaredSubject || !sNorm || manual || /^(?:geral|conteudo geral|conteudo|sem disciplina|nao classificado)$/.test(sNorm) ||
+        /^(?:\d+|questao\b|questoes\b|simulado\b|caderno\b)/.test(sNorm) ||
+        (typeof window.isInvalidTrailSubject === 'function' && window.isInvalidTrailSubject(declaredSubject));
+      if (!disc && !invalidSubject) {
+        // Preserve valid disciplines not yet present in this small catalogue,
+        // e.g. Biologia and Física. Their IDs do not depend on array position.
+        disc = {id: `disc_custom_${stableId(sNorm)}`, name: declaredSubject, topics: []};
       }
+      if (!disc || manual) return {
+        subjectId: 'disc_nao_classificada', subjectName: 'Conteúdo Geral',
+        topicId: null, topicName: String(topicStr || '').trim() || 'Assunto não classificado',
+        subtopics: [], needsReview: true, topicNeedsReview: true
+      };
 
-      let bestTopic = disc.topics[0];
-      let bestTopicScore = -1;
-      for (const tp of disc.topics) {
-        let sc = 0;
-        if (tNorm && norm(tp.name).includes(tNorm)) sc += 6;
-        for (const kw of tp.keywords) {
-          if (combined.includes(norm(kw))) sc += 3;
+      const genericTopic = !tNorm || /^(?:questao|item)\s*\d*\b|^(?:geral|conteudo geral)$/.test(tNorm);
+      const genericKeywords = new Set(['texto', 'todo', 'nenhum', 'algum', 'haver', 'sujeito', 'disciplina']);
+      const candidates = disc.topics.map(tp => {
+        let score = tNorm === norm(tp.name) ? 100 : 0;
+        if (!genericTopic && tNorm.length >= 4 && containsPhrase(norm(tp.name), tNorm)) score += 60;
+        for (const keyword of tp.keywords) {
+          const key = norm(keyword);
+          if (!genericTopic && containsPhrase(tNorm, key)) score += 12;
+          else if (genericTopic && !genericKeywords.has(key) && (key.includes(' ') || key.length >= 5) && containsPhrase(stNorm, key)) score += 3;
         }
-        if (sc > bestTopicScore) {
-          bestTopicScore = sc;
-          bestTopic = tp;
-        }
-      }
-
+        return {topic: tp, score};
+      }).sort((a, b) => b.score - a.score);
+      const best = candidates[0];
+      const bestTopic = best?.score > 0 && (!candidates[1] || candidates[1].score < best.score) ? best.topic : null;
       return {
         subjectId: disc.id,
         subjectName: disc.name,
-        topicId: bestTopic ? bestTopic.id : `${disc.id}_gen`,
-        topicName: bestTopic ? bestTopic.name : (topicStr || `Tópicos Essenciais de ${disc.name}`),
-        subtopics: bestTopic ? bestTopic.subtopics : []
+        topicId: bestTopic ? bestTopic.id : (genericTopic ? null : `${disc.id}_custom_${stableId(tNorm)}`),
+        topicName: bestTopic ? bestTopic.name : (String(topicStr || '').trim() || 'Assunto não classificado'),
+        subtopics: bestTopic ? [...bestTopic.subtopics] : [],
+        needsReview: false,
+        topicNeedsReview: !bestTopic
       };
     }
   };
@@ -350,17 +360,19 @@
 
   JC_MODULES.smartLibrary = {
     getTrustedExternalSources(subject, topic = '') {
-      const list = TRUSTED_EXTERNAL_SOURCES_BY_SUBJECT[subject] || TRUSTED_EXTERNAL_SOURCES_BY_SUBJECT['Direito Constitucional'] || [];
+      const tax = JC_MODULES.taxonomy.resolveStableTaxonomy(subject, topic);
+      if (tax.needsReview) return [];
+      const list = TRUSTED_EXTERNAL_SOURCES_BY_SUBJECT[tax.subjectName] || [];
       const q = encodeURIComponent(`${subject} ${topic || ''} concurso`.trim());
       return [
         ...list,
         {
-          name: `Pesquisar "${topic || subject}" na Wikipédia Acadêmica em Português`,
+          name: `Pesquisar "${topic || subject}" na Wikipédia em português`,
           url: `https://pt.wikipedia.org/w/index.php?search=${encodeURIComponent(topic || subject)}`,
           badge: '🔎 Busca Enciclopédica'
         },
         {
-          name: `Pesquisar "${topic || subject}" no Google Acadêmico / Doutrina Aberta`,
+          name: `Pesquisar "${topic || subject}" no Google Acadêmico`,
           url: `https://scholar.google.com.br/scholar?q=${q}`,
           badge: '🎓 Google Acadêmico'
         }
@@ -370,25 +382,32 @@
       if (typeof navigator !== 'undefined' && !navigator.onLine) return null;
       const queryTerm = String(topic || subject || '').replace(/\b(item\s+\d+|topicos\s+essenciais\s+de)\b/gi, '').trim();
       if (!queryTerm) return null;
+      const controller = typeof AbortController === 'function' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 8000) : null;
+      const requestOptions = controller ? {signal: controller.signal} : {};
       try {
         const searchUrl = `https://pt.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(queryTerm + ' ' + subject)}&utf8=&format=json&origin=*&srlimit=1`;
-        const res = await fetch(searchUrl);
+        const res = await fetch(searchUrl, requestOptions);
         if (!res.ok) return null;
         const data = await res.json();
         const firstHit = data?.query?.search?.[0];
         if (!firstHit?.title) return null;
         const sumUrl = `https://pt.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(firstHit.title)}`;
-        const sumRes = await fetch(sumUrl);
+        const sumRes = await fetch(sumUrl, requestOptions);
         if (!sumRes.ok) return null;
         const sumData = await sumRes.json();
-        if (!sumData?.extract) return null;
+        if (typeof sumData?.extract !== 'string' || !sumData.extract.trim()) return null;
         return {
-          title: sumData.title,
-          extract: sumData.extract,
-          pageUrl: sumData?.content_urls?.desktop?.page || `https://pt.wikipedia.org/wiki/${encodeURIComponent(firstHit.title)}`
+          title: String(sumData.title || firstHit.title),
+          extract: sumData.extract.slice(0, 20000),
+          // The API response is external data, not an HTML-safe link. Build
+          // the URL on the known HTTPS host rather than trusting pageUrl.
+          pageUrl: `https://pt.wikipedia.org/wiki/${encodeURIComponent(sumData.title || firstHit.title)}`
         };
       } catch (_e) {
         return null;
+      } finally {
+        if (timer !== null) clearTimeout(timer);
       }
     }
   };
@@ -396,73 +415,129 @@
 
   // ── 4. PROMOTOR DE QUESTÕES DO USUÁRIO PARA BANCO NATIVO ORGANIZADO ──
   function normalizeKey(str) {
-    return String(str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    // Keep mathematical operators, punctuation and accents: 2+2 and 2-2
+    // must never collapse into the same question/alternative fingerprint.
+    return String(str || '').normalize('NFC').replace(/\s+/g, ' ').toLowerCase().trim();
+  }
+
+  function consolidatedOptionText(option) {
+    if (typeof window.answerOptionText === 'function') return window.answerOptionText(option);
+    const text = option.normalize('NFC').replace(/\s+/g, ' ').trim();
+    return text.length <= 3 ? text : text.replace(/^(?:alternativa\s+|letra\s+|item\s+)?(?:\([A-Ea-e]\)|\[[A-Ea-e]\]|[A-Ea-e]\s*[\)\-–—:]|[A-Ea-e]\.\s+)\s*(?=\S)/i, '');
+  }
+
+  function promotedBankScope() {
+    const st = getAppState();
+    const session = typeof cloudSession !== 'undefined' ? cloudSession : window.cloudSession;
+    return {
+      userId: String(session?.user?.id || st._ownerUserId || 'guest'),
+      campaignId: String(st.activeCampaignId || 'default'),
+      resetEpoch: Number(st._resetEpoch || 0)
+    };
+  }
+
+  function promotedBankStorageKey(scope = promotedBankScope()) {
+    return `jc_promoted_native_bank_v2:${encodeURIComponent(scope.userId)}:${encodeURIComponent(scope.campaignId)}:${scope.resetEpoch}`;
   }
 
   function consolidateUserQuestionsIntoNativeBank(options = { saveToStorage: true, showToast: true }) {
+    options = { saveToStorage: true, showToast: true, ...options };
     const allQs = getAllQuestions();
     const baseNative = Array.isArray(window.NATIVE_POLICE_QUESTION_BANK) ? window.NATIVE_POLICE_QUESTION_BANK : [];
-    let savedPromoted = [];
-    try {
-      savedPromoted = JSON.parse(localStorage.getItem('jc_promoted_native_bank_v1') || '[]');
-      if (!Array.isArray(savedPromoted)) savedPromoted = [];
-    } catch (_e) { savedPromoted = []; }
+    const scope = promotedBankScope();
+    const storageKey = promotedBankStorageKey(scope);
+    const appState = getAppState();
+    const session = typeof cloudSession !== 'undefined' ? cloudSession : window.cloudSession;
+    const scopeReady = !session?.user?.id || !appState._ownerUserId || String(appState._ownerUserId) === scope.userId;
+    const currentCampaign = (getAppState().campaigns || []).find(c => String(c.id) === scope.campaignId);
+    const campaignIds = new Set([scope.campaignId, currentCampaign?.dbId].filter(Boolean).map(String));
+    const nativeIds = new Set(baseNative.map(q => q?.id).filter(Boolean).map(String));
+    // Rebuild from the current study cache, which already has owner/portal
+    // isolation and recovery. Replaying an older export snapshot here would
+    // resurrect deleted, annulled or corrected questions. v1/v2 snapshots
+    // remain local copies; they are never a second source of study truth.
 
     const seenStatements = new Set();
+    const seenIds = new Set();
     const unified = [];
-    const bySubjectAndTopic = {};
+    const bySubjectAndTopic = Object.create(null);
+    const keyStatus = item => typeof window.answerKeyStatus === 'function' ? window.answerKeyStatus(item) : null;
+    const stableQuestionId = text => {
+      let hash = 2166136261;
+      for (const character of text) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0;
+      return hash.toString(36);
+    };
 
-    const registerItem = (q, forceNative = false) => {
+    const registerItem = (q, sourceKind) => {
       if (!q || typeof q !== 'object') return;
+      const itemOwner = q._ownerUserId || q.owner_user_id || q.user_id;
+      if (sourceKind !== 'native' && itemOwner && String(itemOwner) !== scope.userId && !q.from_community && !q.is_community) return;
+      if (sourceKind !== 'native' && q.campaignId && String(q.campaignId) !== scope.campaignId) return;
+      if (sourceKind !== 'native' && q.campaign_id && !campaignIds.has(String(q.campaign_id)) && !q.from_community && !q.is_community) return;
+      if (q.id && seenIds.has(String(q.id))) return;
+      if (q.id) seenIds.add(String(q.id));
+      if (q.answer_unknown || q.annulled || q.anulada || q.needs_review || q.classification_needs_review ||
+          (q.key_source === 'ia_sugerido' && q.answer_key_validation !== 'revisado') ||
+          /\[Gabarito sugerido pela IA\b/i.test(String(q.explanation || '')) && q.key_source !== 'manual_revisado' ||
+          ['sem_gabarito', 'anulada'].includes(keyStatus(q)) ||
+          (typeof window.isHunterManualArtifact === 'function' && window.isHunterManualArtifact(q))) return;
       const st = String(q.statement || q.question || '').trim();
       if (st.length < 15) return;
-      const opts = Array.isArray(q.options) ? q.options.map(o => String(o || '').trim()).filter(Boolean) : [];
-      if (opts.length < 2 || opts.length > 5) return;
-      const fp = normalizeKey(st).slice(0, 180);
-      if (!fp || seenStatements.has(fp)) return;
-      seenStatements.add(fp);
+      const opts = Array.isArray(q.options) && q.options.every(o => typeof o === 'string') ? q.options.map(o => o.trim()) : [];
+      if (opts.length < 2 || opts.length > 5 || opts.some(option => !option) || new Set(opts.map(consolidatedOptionText)).size !== opts.length) return;
+      const rawKey = q.correct_index;
+      const correctIndex = typeof rawKey === 'number' ? rawKey : typeof rawKey === 'string' && /^\d+$/.test(rawKey.trim()) ? Number(rawKey) : NaN;
+      if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= opts.length) return;
 
       const tax = JC_MODULES.taxonomy
         ? JC_MODULES.taxonomy.resolveStableTaxonomy(q.subject, q.topic, st)
-        : { subjectId: 'disc_geral', subjectName: q.subject || 'Conteúdo Geral', topicId: 'top_geral', topicName: q.topic || 'Geral' };
+        : null;
+      if (!tax || tax.needsReview) return;
+      const fp = JSON.stringify([tax.subjectId, normalizeKey(q.topic), normalizeKey(st), opts.map(normalizeKey), correctIndex, q.origin || '', q.key_source || '']);
+      if (seenStatements.has(fp)) return;
+      seenStatements.add(fp);
 
       const enriched = {
         ...q,
-        id: q.id || `nat_${tax.subjectId}_${unified.length + 1}`,
+        _fp: undefined,
+        id: q.id || `local_${tax.subjectId}_${stableQuestionId(fp)}`,
         subject: tax.subjectName,
         subject_id: tax.subjectId,
         topic: (q.topic && q.topic.length >= 4 && !/^quest[aã]o\s*\d+/i.test(q.topic)) ? q.topic : tax.topicName,
         topic_id: tax.topicId,
+        topic_needs_review: tax.topicNeedsReview,
         options: opts,
-        correct_index: Number.isInteger(Number(q.correct_index)) ? Number(q.correct_index) : 0,
-        native: true,
-        promoted_to_native: forceNative || Boolean(q.promoted_to_native),
-        origin: q.origin === 'oficial' ? 'oficial' : 'nativo'
+        correct_index: correctIndex,
+        native: sourceKind === 'native' || sourceKind === 'current_native',
+        promoted_to_native: sourceKind !== 'native' && sourceKind !== 'current_native',
+        consolidated_source: sourceKind,
+        // Organizing a user's question locally does not change its authorship.
+        origin: q.origin || 'nao_informada'
       };
 
       unified.push(enriched);
       if (!bySubjectAndTopic[tax.subjectName]) {
-        bySubjectAndTopic[tax.subjectName] = { subjectId: tax.subjectId, total: 0, topics: {} };
+        bySubjectAndTopic[tax.subjectName] = { subjectId: tax.subjectId, total: 0, topics: Object.create(null) };
       }
       bySubjectAndTopic[tax.subjectName].total++;
       const tName = enriched.topic;
       bySubjectAndTopic[tax.subjectName].topics[tName] = (bySubjectAndTopic[tax.subjectName].topics[tName] || 0) + 1;
     };
 
-    baseNative.forEach(q => registerItem(q, false));
-    savedPromoted.forEach(q => registerItem(q, true));
-    allQs.forEach(q => {
-      if (!q.answer_unknown && Number.isInteger(Number(q.correct_index)) && Number(q.correct_index) >= 0) {
-        registerItem(q, true);
-      }
-    });
+    // A current correction (including a withdrawn key) overrides its seed.
+    // Register the current version first, even if it will be excluded.
+    if (scopeReady) allQs.forEach(q => registerItem(q, q?.id && nativeIds.has(String(q.id)) ? 'current_native' : 'user'));
+    baseNative.forEach(q => registerItem(q, 'native'));
 
-    window.NATIVE_POLICE_QUESTION_BANK = unified;
-    if (options.saveToStorage) {
+    // Keep the original native bank and its internal v77 reference intact.
+    // Imported/private questions must not become global seeds for other portals.
+    let storageSaved = null;
+    if (options.saveToStorage && scopeReady) {
       try {
         const userAdded = unified.filter(q => q.promoted_to_native);
-        localStorage.setItem('jc_promoted_native_bank_v1', JSON.stringify(userAdded.slice(0, 600)));
-      } catch (_e) {}
+        localStorage.setItem(storageKey, JSON.stringify({ version: 2, scope, questions: userAdded.slice(0, 600) }));
+        storageSaved = true;
+      } catch (_e) { storageSaved = false; }
       try {
         const stObj = getAppState();
         if (typeof window.persistToLocalDatabase === 'function' && stObj?.activeCampaignId) {
@@ -473,21 +548,30 @@
 
     if (options.showToast && typeof window.toast === 'function') {
       const subjCount = Object.keys(bySubjectAndTopic).length;
-      window.toast(`🏛️ Banco Nativo Consolidado: ${unified.length} questões organizadas em ${subjCount} disciplinas com IDs estáveis!`);
+      window.toast(scopeReady
+        ? `Banco local organizado: ${unified.length} questões em ${subjCount} disciplinas.${storageSaved === false ? ' Não foi possível salvar a cópia local; confira o espaço disponível.' : ''}`
+        : 'Aguarde o carregamento dos dados da conta atual antes de organizar suas questões.');
     }
 
     return {
       total: unified.length,
       subjectsCount: Object.keys(bySubjectAndTopic).length,
       hierarchy: bySubjectAndTopic,
-      questions: unified
+      questions: unified,
+      storageSaved,
+      scope,
+      scopeReady
     };
   }
 
   function exportConsolidatedNativeBankJson() {
     const res = consolidateUserQuestionsIntoNativeBank({ saveToStorage: true, showToast: false });
+    if (!res.scopeReady) {
+      if (typeof window.toast === 'function') window.toast('Aguarde o carregamento dos dados da conta atual antes de exportar suas questões.');
+      return null;
+    }
     const payload = {
-      schema_version: 'r177-stable-taxonomy',
+      schema_version: 'r178-scoped-local-bank',
       exported_at: new Date().toISOString(),
       total_questions: res.total,
       subjects_count: res.subjectsCount,
@@ -503,11 +587,13 @@
     if (typeof window.toast === 'function') {
       window.toast(`📥 Arquivo native-question-bank-consolidado-${res.total}q.json exportado com sucesso!`);
     }
+    return payload;
   }
 
   JC_MODULES.nativeBankPromoter = {
     consolidate: consolidateUserQuestionsIntoNativeBank,
-    exportJson: exportConsolidatedNativeBankJson
+    exportJson: exportConsolidatedNativeBankJson,
+    storageKey: promotedBankStorageKey
   };
   window.consolidateUserQuestionsIntoNativeBank = consolidateUserQuestionsIntoNativeBank;
   window.exportConsolidatedNativeBankJson = exportConsolidatedNativeBankJson;
@@ -807,6 +893,58 @@
     document.head.appendChild(style);
   }
 
+  function profileHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  }
+
+  function profileAvatarUrl(value) {
+    const text=String(value||'').trim();
+    if(!text||text.length>300000)return '';
+    if(/^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=]+$/i.test(text))return text;
+    try { const url=new URL(text); return url.protocol==='https:' ? url.href : ''; } catch { return ''; }
+  }
+
+  function profileMetric(value) {
+    if(value===null||value===undefined||value==='')return null;
+    const number=Number(value);
+    return Number.isFinite(number)&&number>=0?number:null;
+  }
+
+  function profileOwnerId() {
+    const session=typeof cloudSession!=='undefined'?cloudSession:window.cloudSession;
+    return String(session?.user?.id||'guest');
+  }
+  function ownProfileState() {
+    const current=getAppState(),owner=profileOwnerId();
+    if(owner==='guest')return current._ownerUserId&&current._ownerUserId!=='guest'?null:current;
+    return current._ownerUserId===owner?current:null;
+  }
+  function profileScope() {
+    return {ownerId:profileOwnerId(),resetEpoch:Number(getAppState()?._resetEpoch||0)};
+  }
+  function profileScopeMatches(scope) {
+    return Boolean(scope&&scope.ownerId===profileOwnerId()&&scope.resetEpoch===Number(getAppState()?._resetEpoch||0)&&ownProfileState());
+  }
+  function profileCacheKey(kind,ownerId=profileOwnerId(),resetEpoch=Number(getAppState()?._resetEpoch||0)) {
+    return `jc-profile-v178:${encodeURIComponent(ownerId)}:${resetEpoch}:${kind}`;
+  }
+  function readProfileCache(kind) {
+    try {
+      // Legacy keys have no owner and cannot safely be attributed to an account.
+      localStorage.removeItem('jc_profile_avatar_v1');
+      localStorage.removeItem('jc_profile_display_name_v1');
+      return localStorage.getItem(profileCacheKey(kind))||'';
+    } catch { return ''; }
+  }
+  function writeProfileCache(kind,value,scope=profileScope()) {
+    if(!profileScopeMatches(scope))return false;
+    try {
+      if(value)localStorage.setItem(profileCacheKey(kind,scope.ownerId,scope.resetEpoch),value);
+      else localStorage.removeItem(profileCacheKey(kind,scope.ownerId,scope.resetEpoch));
+      return true;
+    } catch { return false; }
+  }
+
   function getHunterInitials(name) {
     const clean = String(name || 'Caçador').trim();
     const parts = clean.split(/\s+/).filter(Boolean);
@@ -815,37 +953,38 @@
   }
 
   function getHunterAvatarDataUrl() {
-    const st = getAppState();
-    return st.profileAvatarDataUrl || st.publicProfile?.avatar || localStorage.getItem('jc_profile_avatar_v1') || '';
+    const st=ownProfileState();
+    if(!st)return '';
+    return profileAvatarUrl(st.profileAvatarDataUrl||st.publicProfile?.avatar||readProfileCache('avatar'));
   }
+  window.getHunterAvatarDataUrl=getHunterAvatarDataUrl;
 
-  function setHunterAvatarDataUrl(dataUrl) {
-    const st = getAppState();
-    st.profileAvatarDataUrl = dataUrl;
-    st.publicProfile = st.publicProfile || {};
-    st.publicProfile.avatar = dataUrl;
-    try {
-      if (dataUrl) localStorage.setItem('jc_profile_avatar_v1', dataUrl);
-      else localStorage.removeItem('jc_profile_avatar_v1');
-      if (typeof save === 'function') save();
-      if (typeof cloudSession === 'object' && cloudSession && navigator.onLine && typeof pushCloudState === 'function') {
-        pushCloudState();
-      }
-    } catch (_e) {}
+  function setHunterAvatarDataUrl(dataUrl,scope=profileScope()) {
+    if(!profileScopeMatches(scope))return false;
+    const avatar=profileAvatarUrl(dataUrl);
+    if(dataUrl&&!avatar)return false;
+    const st=ownProfileState();
+    st.profileAvatarDataUrl=avatar;
+    st.publicProfile=st.publicProfile||{};
+    st.publicProfile.avatar=avatar;
+    writeProfileCache('avatar',avatar,scope);
+    try{if(typeof save==='function')save();}catch{return false;}
+    if(typeof cloudSession==='object'&&cloudSession&&navigator.onLine&&typeof pushCloudState==='function') {
+      Promise.resolve(pushCloudState()).catch(()=>{});
+    }
     decorateTopHeaderAvatarPill();
+    return true;
   }
 
   function getHunterDisplayName() {
-    const st = getAppState();
-    const sess = typeof cloudSession !== 'undefined' ? cloudSession : window.cloudSession;
-    const user = sess?.user;
-    const metaName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
-    const customName = st.profileDisplayName || st.publicProfile?.name || localStorage.getItem('jc_profile_display_name_v1') || '';
-    return customName || metaName || (user?.email ? user.email.split('@')[0] : 'Caçador');
+    const st=ownProfileState();
+    const sess=typeof cloudSession!=='undefined'?cloudSession:window.cloudSession;
+    const metaName=sess?.user?.user_metadata?.full_name||sess?.user?.user_metadata?.name||'';
+    return String((st&&(st.profileDisplayName||st.publicProfile?.name||readProfileCache('name')))||metaName||'Caçador').trim().slice(0,50)||'Caçador';
   }
 
   function getPrivacyConfig() {
-    const st = getAppState();
+    const st=ownProfileState()||{};
     const p = st.publicProfile?.privacy || {};
     return {
       hiddenFromRanking: Boolean(st.publicProfile?.hidden),
@@ -860,16 +999,13 @@
   }
 
   function renderHunterAvatarHtml(itemOrName, isMe = false, extraAvatarUrl = '') {
-    const name = typeof itemOrName === 'object' ? (itemOrName?.name || itemOrName?.author_name || 'Caçador') : String(itemOrName || 'Caçador');
-    const initials = getHunterInitials(name);
-    const priv = getPrivacyConfig();
-    const myAvatar = isMe && priv.showAvatar ? getHunterAvatarDataUrl() : '';
-    const theirAvatar = typeof itemOrName === 'object' ? (itemOrName?.avatar || itemOrName?.avatar_url || extraAvatarUrl || '') : extraAvatarUrl;
-    const finalAvatar = myAvatar || theirAvatar;
-    if (finalAvatar) {
-      return `<img src="${finalAvatar}" alt="Foto de ${name.replace(/"/g, '')}">`;
-    }
-    return `<span>${initials}</span>`;
+    const item=typeof itemOrName==='object'&&itemOrName?itemOrName:{};
+    const name=typeof itemOrName==='object'?(item.name||item.author_name||'Caçador'):String(itemOrName||'Caçador');
+    const initials=profileHtml(getHunterInitials(name));
+    const showAvatar=isMe?getPrivacyConfig().showAvatar:item.privacy?.showAvatar!==false;
+    if(!showAvatar)return `<span>${initials}</span>`;
+    const avatar=profileAvatarUrl(isMe?getHunterAvatarDataUrl():(item.avatar||item.avatar_url||extraAvatarUrl));
+    return avatar?`<img src="${profileHtml(avatar)}" alt="Foto de ${profileHtml(name)}" referrerpolicy="no-referrer">`:`<span>${initials}</span>`;
   }
   window.renderHunterAvatarHtml = renderHunterAvatarHtml;
 
@@ -879,19 +1015,43 @@
     if (!btn) return;
     const avatarUrl = getHunterAvatarDataUrl();
     const name = getHunterDisplayName();
-    const initials = getHunterInitials(name);
     btn.classList.add('jcTopProfilePill');
     btn.title = `Meu Perfil de Caçador (${name})`;
     const avatarInner = avatarUrl
-      ? `<img src="${avatarUrl}" alt="Foto de perfil de ${name.replace(/"/g, '')}">`
-      : `<span>${initials}</span>`;
-    btn.innerHTML = `<span class="jcHeaderAvatarCircle" id="topHeaderAvatarCircle">${avatarInner}</span><span class="jcHeaderProfileName">${name}</span>`;
+      ? `<img src="${profileHtml(avatarUrl)}" alt="Foto de perfil de ${profileHtml(name)}" referrerpolicy="no-referrer">`
+      : `<span>${profileHtml(getHunterInitials(name))}</span>`;
+    btn.innerHTML = `<span class="jcHeaderAvatarCircle" id="topHeaderAvatarCircle">${avatarInner}</span><span class="jcHeaderProfileName">${profileHtml(name)}</span>`;
     btn.onclick = (e) => {
       e?.preventDefault?.();
-      if (typeof openView === 'function') {
-        openView('profile');
-      }
+      if (typeof openView === 'function') openView('profile');
     };
+  }
+
+  const profileSaveScopes=new Set();
+  async function saveHunterProfileChanges(changes={}) {
+    const scope=profileScope(),st=ownProfileState();
+    if(!st)return {status:'account_not_ready'};
+    const saveKey=`${scope.ownerId}:${scope.resetEpoch}`;
+    if(profileSaveScopes.has(saveKey))return {status:'busy'};
+    const clean=(value,max)=>String(value??'').trim().slice(0,max);
+    const privacy=Object.fromEntries(['showAvatar','showStreak','showAccuracy','showHours','showTargetRole','showBadges','showBio'].map(key=>[key,changes.privacy?.[key]!==false]));
+    const snapshot={name:clean(changes.name,50)||'Caçador',role:clean(changes.role,80),secondaryRole:clean(changes.secondaryRole,80),bio:clean(changes.bio,140),privacy,hidden:!!changes.hidden};
+    st.profileDisplayName=snapshot.name;st.profileTargetRole=snapshot.role;
+    st.profileCity=clean(changes.city,50);st.profileBioMotto=snapshot.bio;
+    st.publicProfile={...(st.publicProfile||{}),...snapshot,avatar:getHunterAvatarDataUrl()};
+    writeProfileCache('name',snapshot.name,scope);
+    const beforeRevision=Number(st._serverRevision||0);
+    try{if(typeof save==='function')save();}catch{return {status:'storage_error'};}
+    if(!navigator.onLine||scope.ownerId==='guest'||typeof pushCloudState!=='function')return {status:'pending'};
+    profileSaveScopes.add(saveKey);
+    try {
+      const confirmed=await pushCloudState();
+      if(!profileScopeMatches(scope))return {status:'account_changed'};
+      const current=ownProfileState(),publicData=current.publicProfile||{};
+      const matches=['name','role','secondaryRole','bio','hidden'].every(key=>publicData[key]===snapshot[key])&&JSON.stringify(publicData.privacy||{})===JSON.stringify(snapshot.privacy);
+      return {status:confirmed===true&&!current._dirty&&Number(current._serverRevision||0)>beforeRevision&&matches&&current.profileCity===clean(changes.city,50)?'synced':'pending'};
+    } catch { return {status:profileScopeMatches(scope)?'pending':'account_changed'}; }
+    finally { profileSaveScopes.delete(saveKey); }
   }
 
   // Modal de Visita ao Perfil Público de Outro Caçador (Ranking / Chat da Guilda)
@@ -909,17 +1069,18 @@
       document.body.appendChild(dlg);
     }
 
-    const hName = String(hunterData.name || hunterData.author_name || 'Caçador da Guilda').trim();
-    const hRole = String(hunterData.role || hunterData.author_role || 'Carreiras Policiais').trim();
-    const hSecRole = String(hunterData.secondary_role || '').trim();
-    const hXp = Number(hunterData.xp ?? hunterData._displayXp ?? hunterData.author_xp ?? 0);
-    const hStreak = Number(hunterData.streak ?? hunterData._displayStreak ?? 0);
-    const hBestStreak = Math.max(hStreak, Number(hunterData.best_streak || 0));
-    const hAcc = Number(hunterData.accuracy || 0);
-    const hMissions = Number(hunterData.missions_done ?? hunterData._displayMissions ?? 0);
-    const hHours = Number(hunterData._displayHours || Math.round(((hMissions * 50) + (hStreak * 30)) / 60 * 10) / 10 || 0);
-    const hRankLabel = typeof level === 'function' ? (level(hXp, false)?.label || 'Caçador') : 'Caçador Ativo';
-    const hBio = hunterData.bio || '“Membro ativo da Guilda na Jornada do Caçador.”';
+    const rawName=String(hunterData.name||hunterData.author_name||'Caçador da Guilda').trim().slice(0,100);
+    const hName = profileHtml(rawName);
+    const hRole = profileHtml(String(hunterData.role || hunterData.author_role || 'Cargo não informado').trim());
+    const hSecRole = profileHtml(String(hunterData.secondary_role || '').trim());
+    const hXp = profileMetric(hunterData.xp ?? hunterData.author_xp) ?? 0;
+    const hStreak = profileMetric(hunterData.streak);
+    const hBestStreak = hStreak===null?null:Math.max(hStreak, profileMetric(hunterData.best_streak)??hStreak);
+    const hAcc = profileMetric(hunterData.accuracy);
+    const hMissions = profileMetric(hunterData.missions_done);
+    const hHours = profileMetric(hunterData.hours);
+    const hRankLabel = profileHtml(typeof level === 'function' ? (level(hXp, false)?.label || 'Caçador') : 'Caçador Ativo');
+    const hBio = profileHtml(hunterData.bio || 'Bio não informada.');
     const hPriv = hunterData.privacy || {};
     const avatarHtml = renderHunterAvatarHtml(hunterData, false);
 
@@ -954,16 +1115,16 @@
             <span>Experiência na Guilda</span>
           </div>
           <div class="jcProfileStatItem">
-            <b style="color:#fbbf24">${hPriv.showStreak !== false ? `🔥 ${hStreak} dias (Rec: ${hBestStreak}d)` : '🔒 Privado'}</b>
+            <b style="color:#fbbf24">${hPriv.showStreak !== false ? (hStreak===null?'Não informado':`🔥 ${hStreak} dias (Rec: ${hBestStreak}d)`) : '🔒 Privado'}</b>
             <span>Ofensiva de Estudos</span>
           </div>
           <div class="jcProfileStatItem">
-            <b style="color:#34d399">${hPriv.showAccuracy !== false ? `🎯 ${hAcc}% (${hMissions} missões)` : '🔒 Privado'}</b>
+            <b style="color:#34d399">${hPriv.showAccuracy !== false ? `${hAcc===null?'Sem precisão informada':`🎯 ${Math.min(100,hAcc)}%`} (${hMissions===null?'missões não informadas':`${hMissions} missões`})` : '🔒 Privado'}</b>
             <span>Precisão &amp; Missões</span>
           </div>
           <div class="jcProfileStatItem">
-            <b>${hPriv.showHours !== false ? `⏱️ ${hHours}h` : '🔒 Privado'}</b>
-            <span>Ritmo Estimado</span>
+            <b>${hPriv.showHours !== false ? (hHours===null?'Não informado':`⏱️ ${hHours}h`) : '🔒 Privado'}</b>
+            <span>Horas registradas</span>
           </div>
         </div>
 
@@ -981,7 +1142,7 @@
 
         <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
           ${hunterData.user_id && hunterData.user_id !== 'local' ? `
-            <button type="button" class="action" id="jcVisitorChallengeDuelBtn" style="flex:1">⚔️ Desafiar ${hName.split(' ')[0]} para Duelo X1</button>
+            <button type="button" class="action" id="jcVisitorChallengeDuelBtn" style="flex:1">⚔️ Desafiar ${profileHtml(rawName.split(' ')[0])} para Duelo X1</button>
           ` : ''}
           <button type="button" class="ghost" id="jcVisitorCloseBottomBtn" style="flex:1">Voltar</button>
         </div>
@@ -995,7 +1156,7 @@
       duelBtn.onclick = () => {
         dlg.close();
         try {
-          const challBtn = document.querySelector(`[data-challenge-from-rank^="${hunterData.user_id}|"]`);
+          const challBtn = Array.from(document.querySelectorAll('[data-challenge-from-rank]')).find(button=>String(button.dataset.challengeFromRank||'').startsWith(`${hunterData.user_id}|`));
           if (challBtn) { challBtn.click(); return; }
         } catch (_e) {}
         if (typeof openView === 'function') openView('duel');
@@ -1007,21 +1168,23 @@
 
   function computeBoardAccuracyStats() {
     const allQs = getAllQuestions();
-    const st = getAppState();
+    const st = ownProfileState();
+    if(!st)return [];
     const fpMap = st.answeredQuestionFingerprints || {};
     const boards = {};
     for (const q of allQs) {
-      const bName = String(q.board || (q.origin === 'oficial' ? 'Instituto AOCP' : 'Simulado / Autoral')).trim();
+      const bName = String(q.board || 'Banca não informada').trim();
       const normBoard = /cebraspe|cespe/i.test(bName) ? 'Cebraspe'
         : /fgv/i.test(bName) ? 'FGV Conhecimento'
         : /upenet|iaupe/i.test(bName) ? 'UPENET / IAUPE'
         : /ibfc/i.test(bName) ? 'IBFC'
         : /idecan/i.test(bName) ? 'IDECAN'
         : /aocp/i.test(bName) ? 'Instituto AOCP'
-        : 'Simulados & Outras Bancas';
+        : bName;
       if (!boards[normBoard]) boards[normBoard] = { totalAvailable: 0, answered: 0, correct: 0 };
       boards[normBoard].totalAvailable++;
-      if (typeof questionFingerprint === 'function') {
+      const keyStatus=typeof window.answerKeyStatus==='function'?window.answerKeyStatus(q):'';
+      if (typeof questionFingerprint === 'function' && !['sem_gabarito','provisorio','anulada'].includes(keyStatus)) {
         const fp = questionFingerprint(q);
         if (fpMap[fp] === 'correct') {
           boards[normBoard].answered++;
@@ -1077,10 +1240,11 @@
   function renderHunterProfileHub() {
     const sec = ensureProfileViewSectionExists();
     if (!sec) return;
+    const st = ownProfileState();
+    if(!st){sec.innerHTML='<div class="empty">Aguardando carregar os dados desta conta…</div>';return;}
+    const renderScope=profileScope();
     try { if (typeof refreshStreak === 'function') refreshStreak(); } catch (_e) {}
     try { if (typeof syncHunterStatsSnapshot === 'function') syncHunterStatsSnapshot(); } catch (_e) {}
-
-    const st = getAppState();
     const allQs = getAllQuestions();
     const allSums = getAllSummaries();
     const allCards = getAllFlashcards();
@@ -1088,39 +1252,38 @@
 
     const name = getHunterDisplayName();
     const avatarUrl = getHunterAvatarDataUrl();
-    const initials = getHunterInitials(name);
-    const camp = typeof activeCampaign === 'function' ? activeCampaign() : { name: 'PMPE — Soldado' };
-    const targetRole = st.profileTargetRole || st.publicProfile?.role || camp?.name || 'PMPE — Soldado';
+    const camp = typeof activeCampaign === 'function' ? activeCampaign() : null;
+    const targetRole = st.profileTargetRole || st.publicProfile?.role || camp?.name || '';
     const secRole = st.publicProfile?.secondaryRole || '';
     const bioMotto = st.profileBioMotto || st.publicProfile?.bio || '“Disciplina diária, constância no ciclo e foco cirúrgico até a posse.”';
-    const cityState = st.profileCity || 'Pernambuco, Brasil';
+    const cityState = st.profileCity || '';
 
-    const totalXp = typeof xp === 'function' ? xp() : Number(st.hunterStats?.xp || 0);
+    const totalXp = profileMetric(typeof xp === 'function' ? xp() : st.hunterStats?.xp)??0;
     const pool = typeof missionPool === 'function' ? missionPool() : [];
     const doneMissions = pool.filter(m => st.done?.[m.id]).length;
     const editalPct = pool.length ? Math.round((doneMissions / pool.length) * 100) : 0;
     const rankObj = typeof level === 'function' ? level(totalXp, pool.length > 0 && doneMissions === pool.length) : { label: 'C II - Caçador Experiente' };
 
-    const scores = (st.scores || []).filter(s => !s.campaignId || s.campaignId === st.activeCampaignId);
-    const scoreTotal = scores.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
-    const scoreCorr = scores.reduce((acc, s) => acc + (Number(s.correct) || 0), 0);
+    const scores = (Array.isArray(st.scores)?st.scores:[]).filter(s => s&&(!s.campaignId || s.campaignId === st.activeCampaignId));
+    const scoreTotal = scores.reduce((acc, s) => acc + (profileMetric(s.total)??0), 0);
+    const scoreCorr = scores.reduce((acc, s) => acc + Math.min(profileMetric(s.correct)??0,profileMetric(s.total)??0), 0);
     const tracked = st.questionStatsByCampaign?.[st.activeCampaignId] || {};
-    const qTotal = Math.max(scoreTotal, Number(tracked.total || 0));
-    const qCorr = Number(tracked.total || 0) > scoreTotal ? Number(tracked.correct || 0) : scoreCorr;
-    const accuracy = qTotal > 0 ? Math.round((qCorr / qTotal) * 100) : (Number(st.hunterStats?.accuracy) || 0);
+    const qTotal = Math.max(scoreTotal, profileMetric(tracked.total)??0);
+    const qCorr = Math.min(qTotal,(profileMetric(tracked.total)??0) > scoreTotal ? (profileMetric(tracked.correct)??0) : scoreCorr);
+    const accuracy = qTotal > 0 ? Math.max(0,Math.min(100,Math.round((qCorr / qTotal) * 100))) : null;
 
-    const totalFocusSeconds = Object.values(st.studyByDay || {}).reduce((acc, v) => acc + (Number(v) || 0), 0);
+    const totalFocusSeconds = Object.values(st.studyByDay || {}).reduce((acc, v) => acc + (profileMetric(v)??0), 0);
     const totalFocusHours = (totalFocusSeconds / 3600).toFixed(1);
-    const streak = Math.max(Number(st.streak || 0), Number(st.hunterStats?.streak || 0));
-    const bestStreak = Math.max(streak, Number(st.bestStreak || 0), Number(st.hunterStats?.bestStreak || 0));
+    const streak = Math.max(profileMetric(st.streak)??0, profileMetric(st.hunterStats?.streak)??0);
+    const bestStreak = Math.max(streak, profileMetric(st.bestStreak)??0, profileMetric(st.hunterStats?.bestStreak)??0);
     const bossesWon = Object.keys(st.bosses || {}).length;
 
     const boardStats = computeBoardAccuracyStats();
-    const telemetry = JC_MODULES.telemetry ? JC_MODULES.telemetry.getStats() : { p50Ms: 12, bankSize: allQs.length };
-
-    const avatarHtml = avatarUrl
-      ? `<img src="${avatarUrl}" alt="Foto de ${name.replace(/"/g, '')}">`
-      : `<span>${initials}</span>`;
+    const telemetry = JC_MODULES.telemetry ? JC_MODULES.telemetry.getStats() : {};
+    const sampleCount=Number(telemetry.sampleCount??telemetry.count??0);
+    const speedLabel=sampleCount>0&&Number.isFinite(telemetry.p50Ms)?`renderização dos filtros locais: p50 ${Math.round(telemetry.p50Ms)} ms (${sampleCount} amostras)`:'Filtros locais: ainda sem medição';
+    const syncLabel=profileOwnerId()==='guest'?'Salvo neste aparelho':st._dirty?'Sincronização pendente':Number(st._serverRevision)>0?'Último estado confirmado':'Aguardando confirmação';
+    const avatarHtml = renderHunterAvatarHtml(name,true);
 
     sec.innerHTML = `
       <div class="jcProfileSocialCard">
@@ -1137,21 +1300,21 @@
                 ${avatarHtml}
                 <label class="jcAvatarChangeLabel" title="Enviar foto de perfil do seu aparelho">
                   📷 Foto
-                  <input type="file" id="jcProfileAvatarInput" accept="image/*" hidden>
+                  <input type="file" id="jcProfileAvatarInput" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
                 </label>
               </div>
               <div class="jcProfileTitleBlock">
                 <div class="eyebrow" style="color:#59e6ff;font-weight:900">PERFIL OFICIAL DO CAÇADOR</div>
                 <h2>
-                  <span>${name}</span>
-                  <span class="jcProfileRoleBadge">🛡️ ${rankObj.label}</span>
+                  <span>${profileHtml(name)}</span>
+                  <span class="jcProfileRoleBadge">🛡️ ${profileHtml(rankObj.label)}</span>
                 </h2>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:4px;font-size:.82rem;color:#94a3b8">
-                  <span>🎯 <b>Cargo Pretendido:</b> <strong style="color:#f8fafc">${targetRole}</strong>${secRole ? ` · 🛡️ <b>2º Alvo:</b> <strong style="color:#cbd5e1">${secRole}</strong>` : ''}</span>
+                  <span>🎯 <b>Cargo Pretendido:</b> <strong style="color:#f8fafc">${profileHtml(targetRole)}</strong>${secRole ? ` · 🛡️ <b>2º Alvo:</b> <strong style="color:#cbd5e1">${profileHtml(secRole)}</strong>` : ''}</span>
                   <span>·</span>
-                  <span>📍 ${cityState}</span>
+                  <span>📍 ${profileHtml(cityState)}</span>
                 </div>
-                <p class="jcProfileBioMotto">${bioMotto}</p>
+                <p class="jcProfileBioMotto">${profileHtml(bioMotto)}</p>
               </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1163,12 +1326,12 @@
           <div id="jcEditProfileDrawer" hidden style="margin-top:16px;padding:16px;border-radius:16px;background:rgba(6,16,28,0.94);border:1px solid rgba(89,230,255,0.4);display:grid;gap:12px">
             <div class="eyebrow" style="color:#38bdf8">1. IDENTIDADE E CARGO PRETENDIDO</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
-              <label class="field" style="margin:0">Seu Nome de Exibição (Perfil &amp; Ranking)<input type="text" id="jcEditNameInput" value="${name}" maxlength="50"></label>
-              <label class="field" style="margin:0">1º Concurso / Cargo Pretendido<input type="text" id="jcEditRoleInput" value="${targetRole}" maxlength="80" placeholder="Ex.: PMPE — Soldado"></label>
-              <label class="field" style="margin:0">2º Concurso (Opcional)<input type="text" id="jcEditSecRoleInput" value="${secRole}" maxlength="80" placeholder="Ex.: CBMPE / PPPE"></label>
-              <label class="field" style="margin:0">Cidade / Estado<input type="text" id="jcEditCityInput" value="${cityState}" maxlength="50"></label>
+              <label class="field" style="margin:0">Seu Nome de Exibição (Perfil &amp; Ranking)<input type="text" id="jcEditNameInput" value="${profileHtml(name)}" maxlength="50"></label>
+              <label class="field" style="margin:0">1º Concurso / Cargo Pretendido<input type="text" id="jcEditRoleInput" value="${profileHtml(targetRole)}" maxlength="80" placeholder="Ex.: PMPE — Soldado"></label>
+              <label class="field" style="margin:0">2º Concurso (Opcional)<input type="text" id="jcEditSecRoleInput" value="${profileHtml(secRole)}" maxlength="80" placeholder="Ex.: CBMPE / PPPE"></label>
+              <label class="field" style="margin:0">Cidade / Estado<input type="text" id="jcEditCityInput" value="${profileHtml(cityState)}" maxlength="50"></label>
             </div>
-            <label class="field" style="margin:0">Lema de Estudos / Bio do Perfil<input type="text" id="jcEditBioInput" value="${bioMotto.replace(/^“|”$/g, '')}" maxlength="140"></label>
+            <label class="field" style="margin:0">Lema de Estudos / Bio do Perfil<input type="text" id="jcEditBioInput" value="${profileHtml(bioMotto.replace(/^“|”$/g, ''))}" maxlength="140"></label>
 
             <div class="eyebrow" style="color:#34d399;margin-top:4px">2. PRIVACIDADE DO SEU PERFIL PÚBLICO (O QUE OUTROS USUÁRIOS PODEM VER AO CLICAR EM VOCÊ)</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px">
@@ -1190,7 +1353,7 @@
           <div class="jcProfileStatsStrip">
             <div class="jcProfileStatItem"><b>${totalXp} XP</b><span>Experiência Total</span></div>
             <div class="jcProfileStatItem"><b style="color:#fbbf24">🔥 ${streak}d</b><span>Ofensiva (Recorde: ${bestStreak}d)</span></div>
-            <div class="jcProfileStatItem"><b style="color:#34d399">${accuracy}%</b><span>Precisão (${qCorr}/${qTotal})</span></div>
+            <div class="jcProfileStatItem"><b style="color:#34d399">${accuracy===null?'Sem respostas':`${accuracy}%`}</b><span>Precisão (${qCorr}/${qTotal})</span></div>
             <div class="jcProfileStatItem"><b>${totalFocusHours}h</b><span>Horas Líquidas</span></div>
             <div class="jcProfileStatItem"><b>${editalPct}%</b><span>Cobertura (${doneMissions}/${pool.length})</span></div>
             <div class="jcProfileStatItem"><b style="color:#f43f5e">🏆 ${bossesWon}</b><span>Chefes Derrotados</span></div>
@@ -1201,16 +1364,16 @@
       <div class="jcProfileTwoCols">
         <div style="display:grid;gap:14px">
           <div class="card" style="margin:0">
-            <div class="sectionHead"><h2>📋 Apresentação &amp; Sincronia Real</h2><span class="tag">Sincronizado</span></div>
+            <div class="sectionHead"><h2>📋 Apresentação &amp; Sincronia Real</h2><span class="tag">${syncLabel}</span></div>
             <div class="list" style="gap:8px;font-size:.84rem">
-              <div class="topic"><span>🎯 <b>Portal Ativo:</b> ${camp?.name || 'PMPE — Soldado'} (${doneMissions} missões cumpridas)</span></div>
+              <div class="topic"><span>🎯 <b>Portal Ativo:</b> ${profileHtml(camp?.name || 'Nenhum portal ativo')} (${doneMissions} missões cumpridas)</span></div>
               <div class="topic"><span>📚 <b>Acervo no Aparelho:</b> <b>${allQs.length} questões</b> · <b>${allSums.length} resumos</b> · <b>${allCards.length} flashcards</b></span></div>
               <div class="topic"><span>🔒 <b>Privacidade no Ranking:</b> ${priv.hiddenFromRanking ? 'Oculto (Modo Invisível)' : 'Visível para a Guilda (com filtros personalizados)'}</span></div>
-              <div class="topic"><span>⚡ <b>Velocidade da Aba Questões:</b> abertura instantânea (p50 ${telemetry.p50Ms || 8}ms)</span></div>
+              <div class="topic"><span>⚡ <b>Medição dos filtros:</b> ${speedLabel}</span></div>
             </div>
             <div style="display:grid;gap:8px;margin-top:12px">
-              <button type="button" class="action small" id="jcProfileConsolidateNativeBtn" style="width:100%">🏛️ Consolidar Minhas ${allQs.length} Questões no Banco Nativo</button>
-              <button type="button" class="ghost small" id="jcProfileExportNativeJsonBtn" style="width:100%">📥 Baixar Meu Banco Nativo Consolidado (.json)</button>
+              <button type="button" class="action small" id="jcProfileConsolidateNativeBtn" style="width:100%">🏛️ Organizar minhas ${allQs.length} questões</button>
+              <button type="button" class="ghost small" id="jcProfileExportNativeJsonBtn" style="width:100%">📥 Baixar meu banco organizado (.json)</button>
             </div>
           </div>
 
@@ -1220,7 +1383,7 @@
               <div class="achievement ${doneMissions >= 1 ? 'unlocked' : ''}"><b>${doneMissions >= 1 ? '✓' : '◈'} Recruta Ativo</b><span class="small muted">1ª missão cumprida (${doneMissions} feitas)</span></div>
               <div class="achievement ${streak >= 3 ? 'unlocked' : ''}"><b>${streak >= 3 ? '✓' : '◈'} Fogo Constante</b><span class="small muted">3+ dias seguidos (atual: ${streak}d)</span></div>
               <div class="achievement ${qTotal >= 30 ? 'unlocked' : ''}"><b>${qTotal >= 30 ? '✓' : '◈'} Atirador de Questões</b><span class="small muted">30+ resolvidas (atual: ${qTotal})</span></div>
-              <div class="achievement ${accuracy >= 60 && qTotal >= 10 ? 'unlocked' : ''}"><b>${accuracy >= 60 && qTotal >= 10 ? '✓' : '◈'} Mira Calibrada</b><span class="small muted">60%+ precisão (atual: ${accuracy}%)</span></div>
+              <div class="achievement ${accuracy >= 60 && qTotal >= 10 ? 'unlocked' : ''}"><b>${accuracy >= 60 && qTotal >= 10 ? '✓' : '◈'} Mira Calibrada</b><span class="small muted">60%+ precisão (atual: ${accuracy===null?'Sem respostas':`${accuracy}%`})</span></div>
             </div>
           </div>
         </div>
@@ -1241,7 +1404,7 @@
                 return `
                   <div class="jcBoardStatRow">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.83rem">
-                      <b>🏛️ ${b.board}</b>
+                      <b>🏛️ ${profileHtml(b.board)}</b>
                       <span class="small" style="color:${b.pct === null ? '#94a3b8' : barColor};font-weight:800">
                         ${b.pct !== null ? `${b.pct}% de acerto (${b.correct}/${b.answered} resolvidas · ${b.totalAvailable} no banco)` : `${b.totalAvailable} questões disponíveis no seu banco`}
                       </span>
@@ -1272,7 +1435,7 @@
                   return `
                     <div class="jcBoardStatRow">
                       <div style="display:flex;justify-content:space-between;font-size:.82rem">
-                        <b>${subj}</b>
+                        <b>${profileHtml(subj)}</b>
                         <span>${dCnt}/${items.length} tópicos (${p}%)</span>
                       </div>
                       <div class="bar" style="height:7px;margin-top:4px"><div class="fill" style="width:${p}%"></div></div>
@@ -1288,42 +1451,40 @@
 
     // Bind events
     const avatarIn = document.getElementById('jcProfileAvatarInput');
-    if (avatarIn) {
-      avatarIn.onchange = (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-          const img = new Image();
-          img.onload = () => {
-            const cnv = document.createElement('canvas');
-            const size = 200;
-            cnv.width = size;
-            cnv.height = size;
-            const ctx = cnv.getContext('2d');
-            const minSide = Math.min(img.width, img.height);
-            const sx = (img.width - minSide) / 2;
-            const sy = (img.height - minSide) / 2;
-            ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
-            const dataUrl = cnv.toDataURL('image/webp', 0.82);
-            setHunterAvatarDataUrl(dataUrl);
+    if (avatarIn) avatarIn.onchange = (e) => {
+      const file=e.target.files?.[0],scope=renderScope;
+      if(!file||!profileScopeMatches(scope))return;
+      const notify=message=>{if(profileScopeMatches(scope)&&typeof toast==='function')toast(message);};
+      if(!/^image\/(png|jpeg|webp|gif)$/.test(file.type)||file.size>5*1024*1024){notify('Escolha uma imagem PNG, JPEG, WebP ou GIF de até 5 MB.');return;}
+      const reader=new FileReader();
+      reader.onerror=()=>notify('Não foi possível ler a foto. Tente outro arquivo.');
+      reader.onload=()=>{
+        if(!profileScopeMatches(scope))return;
+        const img=new Image();
+        img.onerror=()=>notify('A imagem não pôde ser aberta. Tente outro arquivo.');
+        img.onload=()=>{
+          if(!profileScopeMatches(scope))return;
+          try{
+            const cnv=document.createElement('canvas'),size=200;
+            cnv.width=size;cnv.height=size;
+            const ctx=cnv.getContext('2d'),minSide=Math.min(img.width,img.height);
+            if(!ctx||!minSide)throw new Error('invalid image');
+            ctx.drawImage(img,(img.width-minSide)/2,(img.height-minSide)/2,minSide,minSide,0,0,size,size);
+            if(!setHunterAvatarDataUrl(cnv.toDataURL('image/webp',0.82),scope))throw new Error('invalid avatar');
             renderHunterProfileHub();
-            if (typeof toast === 'function') toast('📸 Foto aplicada no Perfil, Topo, Ranking e Chat da Guilda!');
-          };
-          img.src = String(reader.result || '');
+            notify('Foto salva no aparelho. A sincronização será confirmada pela conta.');
+          }catch{notify('Não foi possível salvar a foto. Tente outra imagem.');}
         };
-        reader.readAsDataURL(file);
+        img.src=String(reader.result||'');
       };
-    }
-
-    const remBtn = document.getElementById('jcRemoveAvatarBtn');
-    if (remBtn) {
-      remBtn.onclick = () => {
-        setHunterAvatarDataUrl('');
-        renderHunterProfileHub();
-        if (typeof toast === 'function') toast('Foto de perfil removida.');
-      };
-    }
+      reader.readAsDataURL(file);
+    };
+    const remBtn=document.getElementById('jcRemoveAvatarBtn');
+    if(remBtn)remBtn.onclick=()=>{
+      if(!setHunterAvatarDataUrl('',renderScope))return;
+      renderHunterProfileHub();
+      if(typeof toast==='function')toast('Foto removida neste aparelho.');
+    };
 
     const editBtn = document.getElementById('jcEditSocialProfileBtn');
     const drawer = document.getElementById('jcEditProfileDrawer');
@@ -1334,47 +1495,22 @@
     if (cancelBtn && drawer) {
       cancelBtn.onclick = () => { drawer.hidden = true; };
     }
-    const saveProfBtn = document.getElementById('jcSaveEditProfileBtn');
-    if (saveProfBtn) {
-      saveProfBtn.onclick = async () => {
-        const newName = document.getElementById('jcEditNameInput')?.value.trim() || name;
-        const newRole = document.getElementById('jcEditRoleInput')?.value.trim() || targetRole;
-        const newSecRole = document.getElementById('jcEditSecRoleInput')?.value.trim() || '';
-        const newCity = document.getElementById('jcEditCityInput')?.value.trim() || cityState;
-        const newBio = document.getElementById('jcEditBioInput')?.value.trim() || '';
-
-        const stObj = getAppState();
-        stObj.profileDisplayName = newName;
-        stObj.profileTargetRole = newRole;
-        stObj.profileCity = newCity;
-        stObj.profileBioMotto = newBio ? `“${newBio}”` : bioMotto;
-        stObj.publicProfile = stObj.publicProfile || {};
-        stObj.publicProfile.name = newName;
-        stObj.publicProfile.role = newRole;
-        stObj.publicProfile.secondaryRole = newSecRole;
-        stObj.publicProfile.bio = stObj.profileBioMotto;
-        stObj.publicProfile.avatar = getHunterAvatarDataUrl();
-        stObj.publicProfile.hidden = Boolean(document.getElementById('jcPrivHiddenAll')?.checked);
-        stObj.publicProfile.privacy = {
-          showAvatar: Boolean(document.getElementById('jcPrivAvatar')?.checked),
-          showStreak: Boolean(document.getElementById('jcPrivStreak')?.checked),
-          showAccuracy: Boolean(document.getElementById('jcPrivAccuracy')?.checked),
-          showHours: Boolean(document.getElementById('jcPrivHours')?.checked),
-          showTargetRole: Boolean(document.getElementById('jcPrivRole')?.checked),
-          showBadges: Boolean(document.getElementById('jcPrivBadges')?.checked),
-          showBio: Boolean(document.getElementById('jcPrivBadges')?.checked)
-        };
-
-        try { localStorage.setItem('jc_profile_display_name_v1', newName); } catch (_e) {}
-        if (typeof save === 'function') save();
-        if (typeof cloudSession === 'object' && cloudSession && navigator.onLine && typeof pushCloudState === 'function') {
-          try { await pushCloudState(); } catch (_e) {}
-        }
-        decorateTopHeaderAvatarPill();
-        renderHunterProfileHub();
-        if (typeof toast === 'function') toast('✅ Perfil, Ranking e Privacidade sincronizados com sucesso!');
-      };
-    }
+    const saveProfBtn=document.getElementById('jcSaveEditProfileBtn');
+    if(saveProfBtn)saveProfBtn.onclick=async()=>{
+      if(!profileScopeMatches(renderScope))return;
+      saveProfBtn.disabled=true;
+      try{
+        const value=id=>document.getElementById(id)?.value||'';
+        const checked=id=>Boolean(document.getElementById(id)?.checked);
+        const result=await saveHunterProfileChanges({
+          name:value('jcEditNameInput'),role:value('jcEditRoleInput'),secondaryRole:value('jcEditSecRoleInput'),city:value('jcEditCityInput'),bio:value('jcEditBioInput'),
+          hidden:checked('jcPrivHiddenAll'),privacy:{showAvatar:checked('jcPrivAvatar'),showStreak:checked('jcPrivStreak'),showAccuracy:checked('jcPrivAccuracy'),showHours:checked('jcPrivHours'),showTargetRole:checked('jcPrivRole'),showBadges:checked('jcPrivBadges'),showBio:checked('jcPrivBadges')}
+        });
+        if(!profileScopeMatches(renderScope))return;
+        decorateTopHeaderAvatarPill();renderHunterProfileHub();
+        if(typeof toast==='function')toast(result.status==='synced'?'Perfil e privacidade confirmados na nuvem.':result.status==='busy'?'Já existe um salvamento em andamento.':result.status==='storage_error'?'Não foi possível gravar no aparelho. Mantenha a página aberta e tente novamente.':'Perfil salvo no aparelho; sincronização pendente.');
+      }finally{saveProfBtn.disabled=false;}
+    };
 
     const accModalBtn = document.getElementById('jcOpenAccountModalFromProfileBtn');
     if (accModalBtn) {
@@ -1422,7 +1558,8 @@
     decorateHeader: decorateTopHeaderAvatarPill,
     renderProfile: renderHunterProfileHub,
     computeBoardStats: computeBoardAccuracyStats,
-    openVisitorModal: openPublicHunterProfileVisitorModal
+    openVisitorModal: openPublicHunterProfileVisitorModal,
+    saveChanges: saveHunterProfileChanges
   };
   window.renderHunterProfileHub = renderHunterProfileHub;
   window.decorateTopHeaderAvatarPill = decorateTopHeaderAvatarPill;
@@ -2789,150 +2926,222 @@
     }
   ];
 
-  function getFavLaws() {
-    try { return JSON.parse(localStorage.getItem(LAWS_FAV_KEY) || '[]'); } catch (_e) { return []; }
+  // O acervo de leis é pessoal por conta/reset e pode ser reutilizado nos seus portais.
+  // Chaves antigas sem proprietário permanecem intactas, mas não são atribuídas a outra conta.
+  const LAWS_INTERNAL_KEY = 'jc_internal_laws_db_r182';
+  let lawsMemory = null;
+  let lawsUiScope = '';
+  let lawsSyncMessage = '';
+  function lawSession() {
+    try { if (typeof cloudSession !== 'undefined') return cloudSession; } catch (_e) {}
+    return typeof window !== 'undefined' ? window.cloudSession || null : null;
   }
-  function setFavLaws(arr) {
-    try { localStorage.setItem(LAWS_FAV_KEY, JSON.stringify(Array.isArray(arr) ? arr : [])); } catch (_e) {}
+  function lawScope() {
+    const st = getAppStateSafe(), session = lawSession();
+    const userId = String(session?.user?.id || 'guest');
+    const owner = String(st._ownerUserId || '');
+    return {userId, resetEpoch: Number(st._resetEpoch || 0), campaignId: String(st.activeCampaignId || ''), ready: !owner || owner === userId};
   }
-  function getHighlightedArticles() {
-    try { return JSON.parse(localStorage.getItem(LAWS_HIGHLIGHT_KEY) || '{}'); } catch (_e) { return {}; }
+  function lawScopeKey(scope = lawScope()) { return JSON.stringify([scope.userId, scope.resetEpoch]); }
+  function lawScopeCurrent(scope) {
+    const now = lawScope();
+    return scope.ready && now.ready && now.userId === scope.userId && now.resetEpoch === scope.resetEpoch && now.campaignId === scope.campaignId;
   }
+  function lawStorageKey(base, scope = lawScope()) { return `${base}:r182:${encodeURIComponent(scope.userId)}:${scope.resetEpoch}`; }
+  function readLawStore(base, fallback, scope = lawScope()) {
+    if (!scope.ready) return fallback;
+    try { const value = JSON.parse(localStorage.getItem(lawStorageKey(base, scope)) || 'null'); return value === null ? fallback : value; } catch (_e) { return fallback; }
+  }
+  function writeLawStore(base, value, scope = lawScope()) {
+    if (!lawScopeCurrent(scope)) return false;
+    try { localStorage.setItem(lawStorageKey(base, scope), JSON.stringify(value)); return true; } catch (_e) { return false; }
+  }
+  function lawEscape(value) { return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+  function safeLawUrl(value) {
+    try {
+      const url = new URL(String(value || ''));
+      const host = url.hostname.toLowerCase();
+      if (url.protocol !== 'https:' || url.username || url.password || !(host.endsWith('.gov.br') || host.endsWith('.leg.br') || ['pt.wikipedia.org','pt.wikisource.org','cartilha.cert.br'].includes(host))) return '';
+      return url.href;
+    } catch (_e) { return ''; }
+  }
+  function normalizeLawRecord(value, isNative = false) {
+    if (!value || typeof value !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,179}$/.test(String(value.id || ''))) return null;
+    if (!Array.isArray(value.articles)) return null;
+    const articles = value.articles.filter(text => typeof text === 'string' && text.trim()).slice(0, 1000).map(text => text.slice(0, 20000));
+    if (!articles.length) return null;
+    const external = !isNative && (value.content_kind === 'external_excerpt' || String(value.id).startsWith('ext-law-'));
+    const kind = external ? 'external_excerpt' : 'selection';
+    let title = String(value.title || 'Seleção para estudo').replace(/Textos-Base Completos:/gi, 'Seleção de textos:').replace(/Pacote Policial Completo:/gi, 'Seleção de legislação policial:').replace(/\s*\(Importado da Base Externa Completa\)/gi, '').slice(0, 500);
+    if (String(value.id) === 'law-cf88-art1-5') title = 'Constituição Federal de 1988 — seleção dos arts. 1º a 5º';
+    return {
+      id: String(value.id), discipline: String(value.discipline || 'Legislação Extravagante').slice(0, 150), title,
+      articles, content_kind: kind,
+      badge: external ? 'Trecho externo · conferir fonte' : 'Seleção de dispositivos e notas',
+      coverage: external ? 'Trecho de fonte externa; não é conferência oficial nem garantia de integralidade.' : 'Seleção local de dispositivos e notas; não é texto integral. Confira a vigência e a redação na referência.',
+      sourceName: external ? String(value.sourceName || value.source_name || 'Fonte externa não revisada').slice(0, 200) : 'Seleção local · referência informada',
+      sourceUrl: safeLawUrl(value.sourceUrl || value.source_url || value.officialUrl),
+      sourceVersion: String(value.sourceVersion || value.source_version || 'r182-selection-1').slice(0, 100),
+      fetchedAt: typeof value.fetchedAt === 'string' ? value.fetchedAt.slice(0, 50) : '',
+      wikisourceTitle: String(value.wikisourceTitle || '').slice(0, 250), wikipediaTitle: String(value.wikipediaTitle || '').slice(0, 250),
+      contentTruncated: !!value.contentTruncated || value.articles.length > 1000,
+      updatedAt: String(value.updatedAt || value.updated_at || ''),
+      is_public: typeof value.is_public === 'boolean' ? value.is_public : true,
+      external: value.external && typeof value.external === 'object' ? {source: String(value.external.source || '').slice(0, 200), sourceUrl: safeLawUrl(value.external.sourceUrl), fetchedAt: String(value.external.fetchedAt || '').slice(0, 50), truncated: !!value.external.truncated} : null,
+    };
+  }
+  function getLawMemory(scope = lawScope()) {
+    const key = lawScopeKey(scope);
+    if (!lawsMemory || lawsMemory.key !== key) {
+      const stored = readLawStore(LAWS_INTERNAL_KEY, {}, scope);
+      const custom = readLawStore(LAWS_CUSTOM_IMPORTED_KEY, [], scope);
+      const external = readLawStore(LAWS_EXTERNAL_CACHE_KEY, {}, scope);
+      lawsMemory = {key, laws: Array.isArray(stored?.laws) ? stored.laws.map(law => normalizeLawRecord(law)).filter(Boolean) : [], custom: Array.isArray(custom) ? custom.map(law => normalizeLawRecord(law)).filter(Boolean) : [], external: external && typeof external === 'object' && !Array.isArray(external) ? external : {}, pending: !!stored?.pending, revision: 0, loadPromise: null, loaded: false, lastAttempt: 0, syncing: false};
+    }
+    return lawsMemory;
+  }
+  function getFavLaws() { const v = readLawStore(LAWS_FAV_KEY, []); return Array.isArray(v) ? v.filter(id => typeof id === 'string') : []; }
+  function setFavLaws(arr) { return writeLawStore(LAWS_FAV_KEY, Array.isArray(arr) ? arr.filter(id => typeof id === 'string') : []); }
+  function getHighlightedArticles() { const v = readLawStore(LAWS_HIGHLIGHT_KEY, {}); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
   function toggleHighlightArticle(key) {
     const map = getHighlightedArticles();
-    if (map[key]) delete map[key]; else map[key] = true;
-    try { localStorage.setItem(LAWS_HIGHLIGHT_KEY, JSON.stringify(map)); } catch (_e) {}
+    if (Object.hasOwn(map, key)) delete map[key]; else Object.defineProperty(map, key, {value: true, configurable: true, enumerable: true, writable: true});
+    if (!writeLawStore(LAWS_HIGHLIGHT_KEY, map) && typeof window.toast === 'function') window.toast('O grifo não pôde ser salvo neste aparelho.');
     return Boolean(map[key]);
   }
-  function getLawsFoldersOpenState() {
-    try { return JSON.parse(localStorage.getItem(LAWS_FOLDERS_OPEN_KEY) || '{}'); } catch (_e) { return {}; }
+  function getLawsFoldersOpenState() { const v = readLawStore(LAWS_FOLDERS_OPEN_KEY, {}); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
+  function setLawsFolderOpenState(discKey, isOpen) { const map = getLawsFoldersOpenState(); Object.defineProperty(map, discKey, {value: !!isOpen, configurable: true, enumerable: true, writable: true}); return writeLawStore(LAWS_FOLDERS_OPEN_KEY, map); }
+  function getExternalFullTextCache() { return lawScope().ready ? getLawMemory().external : {}; }
+  function saveExternalFullTextCache(lawId, textData, scope = lawScope()) {
+    if (!lawScopeCurrent(scope)) return false;
+    const mem = getLawMemory(scope);
+    Object.defineProperty(mem.external, lawId, {value: textData, configurable: true, enumerable: true, writable: true});
+    mem.pending = true; mem.revision++;
+    return writeLawStore(LAWS_EXTERNAL_CACHE_KEY, mem.external, scope);
   }
-  function setLawsFolderOpenState(discKey, isOpen) {
-    const map = getLawsFoldersOpenState();
-    map[discKey] = Boolean(isOpen);
-    try { localStorage.setItem(LAWS_FOLDERS_OPEN_KEY, JSON.stringify(map)); } catch (_e) {}
-  }
-  function getExternalFullTextCache() {
-    try { return JSON.parse(localStorage.getItem(LAWS_EXTERNAL_CACHE_KEY) || '{}'); } catch (_e) { return {}; }
-  }
-  function saveExternalFullTextCache(lawId, textData) {
-    const map = getExternalFullTextCache();
-    map[lawId] = textData;
-    try { localStorage.setItem(LAWS_EXTERNAL_CACHE_KEY, JSON.stringify(map)); } catch (_e) {}
-  }
-  function getCustomImportedLaws() {
-    try { return JSON.parse(localStorage.getItem(LAWS_CUSTOM_IMPORTED_KEY) || '[]'); } catch (_e) { return []; }
-  }
-  function saveCustomImportedLaw(lawObj) {
-    const list = getCustomImportedLaws().filter(x => x && x.id !== lawObj.id);
-    list.unshift(lawObj);
-    try { localStorage.setItem(LAWS_CUSTOM_IMPORTED_KEY, JSON.stringify(list.slice(0, 40))); } catch (_e) {}
+  function getCustomImportedLaws() { return lawScope().ready ? getLawMemory().custom.slice() : []; }
+  function saveCustomImportedLaw(lawObj, scope = lawScope()) {
+    const law = normalizeLawRecord(lawObj);
+    if (!law || !lawScopeCurrent(scope)) return false;
+    const mem = getLawMemory(scope);
+    mem.custom = [law, ...mem.custom.filter(item => item.id !== law.id)].slice(0, 80);
+    mem.pending = true; mem.revision++;
+    return writeLawStore(LAWS_CUSTOM_IMPORTED_KEY, mem.custom, scope);
   }
   function getAllLawsCombined() {
-    return [...getCustomImportedLaws(), ...NATIVE_SMART_LAWS];
+    const scope = lawScope(), byId = new Map(NATIVE_SMART_LAWS.map(law => normalizeLawRecord(law, true)).filter(Boolean).map(law => [law.id, law]));
+    if (scope.ready) for (const law of [...getLawMemory(scope).laws, ...getCustomImportedLaws()]) byId.set(law.id, law);
+    return [...byId.values()];
   }
-
-  // Motor de Busca e Extração de Texto Integral em Bases Externas Públicas (Wikisource Jurídico + Wikipedia + Câmara dos Deputados)
+  function materializeLaw(law) {
+    const normalized = normalizeLawRecord(law);
+    if (!normalized) return null;
+    const ext = getExternalFullTextCache()[normalized.id];
+    if (ext && Array.isArray(ext.paragraphs)) {
+      normalized.articles = [...new Set([...normalized.articles, ...ext.paragraphs.filter(text => typeof text === 'string')])].slice(0, 1000);
+      normalized.external = {source: String(ext.source || ''), sourceUrl: safeLawUrl(ext.sourceUrl), fetchedAt: String(ext.fetchedAt || ''), truncated: !!ext.truncated};
+    }
+    return normalized;
+  }
+  function applyLawUiScope() {
+    const scope = lawScope(), key = `${lawScopeKey(scope)}|${scope.campaignId}|${scope.ready}`;
+    if (lawsUiScope !== key) { lawsUiScope = key; activeLawModalItem = null; activeLawExternalLoading = false; lawsSearchQuery = ''; lawsFilterFavOnly = false; lawsSyncMessage = ''; }
+    return scope;
+  }
+  async function loadLawsFromUserDatabase(force = false) {
+    const scope = lawScope(), session = lawSession();
+    if (!scope.ready || scope.userId === 'guest' || !session?.access_token || typeof cloudFetch !== 'function' || (typeof navigator !== 'undefined' && !navigator.onLine)) return false;
+    const mem = getLawMemory(scope);
+    if (mem.loadPromise) return mem.loadPromise;
+    if (!force && (mem.loaded || Date.now() - mem.lastAttempt < 30000)) return false;
+    mem.lastAttempt = Date.now();
+    const revision = mem.revision;
+    const job = (async () => {
+      try {
+        const res = await cloudFetch(`study_laws_bank?user_id=eq.${encodeURIComponent(scope.userId)}&select=id,user_id,discipline,title,badge,source_name,source_url,source_version,content_kind,metadata,articles,is_public,updated_at&order=id&limit=500`, {headers: typeof authHeaders === 'function' ? authHeaders(session.access_token) : {Authorization: `Bearer ${session.access_token}`}});
+        if (!lawScopeCurrent(scope)) return false;
+        if (!res?.ok) throw new Error('Não foi possível recuperar suas leis.');
+        const rows = await res.json();
+        if (!lawScopeCurrent(scope)) return false;
+        if (!Array.isArray(rows)) throw new Error('Resposta inválida ao carregar leis.');
+        const incoming = rows.filter(row => row.user_id === scope.userId).map(row => normalizeLawRecord({...row, ...(row.metadata || {}), sourceUrl: row.source_url, sourceVersion: row.source_version, sourceName: row.source_name, content_kind: row.content_kind, updatedAt: row.updated_at})).filter(Boolean);
+        const byId = new Map((mem.pending || mem.revision !== revision ? [...incoming, ...mem.laws, ...mem.custom] : [...mem.laws, ...incoming]).map(law => [law.id, law]));
+        mem.laws = [...byId.values()]; mem.loaded = true;
+        const localSaved = writeLawStore(LAWS_INTERNAL_KEY, {laws: mem.laws, pending: mem.pending}, scope);
+        lawsSyncMessage = localSaved ? 'Leis da sua conta carregadas; cópia local disponível.' : 'Leis da sua conta carregadas; não foi possível gravar a cópia local.';
+        if (typeof document !== 'undefined') { const panel = document.getElementById('laws'); if (panel) renderSmartLawsPanelContent(panel); }
+        return true;
+      } catch (_e) {
+        if (lawScopeCurrent(scope)) lawsSyncMessage = 'Não foi possível recuperar as leis da conta; a seleção local continua disponível. Confira a conexão e a migração v109.';
+        return false;
+      }
+    })();
+    mem.loadPromise = job;
+    try { return await job; } finally { if (mem.loadPromise === job) mem.loadPromise = null; }
+  }
+  // Busca complementar: fonte e limite de cobertura explícitos; nenhuma resposta é chamada de integral.
+  async function withLawFetchDeadline(run) {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const deadline = Date.now() + 8000;
+    const timer = typeof setTimeout === 'function' ? setTimeout(() => controller?.abort(), 8000) : null;
+    const request = async url => {
+      if (Date.now() >= deadline) throw new Error('Tempo de consulta excedido.');
+      const response = await fetch(url, {signal: controller?.signal});
+      if (!response.ok) throw new Error('Fonte externa indisponível.');
+      const data = await response.json();
+      if (Date.now() >= deadline) throw new Error('Tempo de consulta excedido.');
+      return data;
+    };
+    try { return await run(request); } finally { if (timer !== null && typeof clearTimeout === 'function') clearTimeout(timer); }
+  }
+  function lawParagraphs(extract, max = 180) {
+    const all = String(extract || '').split(/\n+/).map(line => line.trim()).filter(line => line.length >= 35 && !/^=+.*=+$/.test(line));
+    return {paragraphs: all.slice(0, max).map(line => line.slice(0, 20000)), truncated: all.length > max || all.some(line => line.length > 20000)};
+  }
   async function fetchExternalCompleteLawText(lawItem) {
-    if (!lawItem || typeof fetch !== 'function') return null;
+    const scope = lawScope();
+    if (!scope.ready || !lawItem || typeof fetch !== 'function') return null;
     const cached = getExternalFullTextCache()[lawItem.id];
-    if (cached && Array.isArray(cached.paragraphs) && cached.paragraphs.length > 0) {
-      return cached;
-    }
-
-    const endpoints = [];
-    if (lawItem.wikisourceTitle) {
-      endpoints.push({
-        source: 'Wikisource Jurídico (Texto Integral)',
-        url: `https://pt.wikisource.org/w/api.php?action=query&prop=extracts&explaintext=1&titles=${encodeURIComponent(lawItem.wikisourceTitle)}&format=json&origin=*`
-      });
-    }
-    if (lawItem.wikipediaTitle) {
-      endpoints.push({
-        source: 'Base Enciclopédica & Jurídica Externa',
-        url: `https://pt.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&titles=${encodeURIComponent(lawItem.wikipediaTitle)}&format=json&origin=*`
-      });
-    }
-
-    for (const ep of endpoints) {
-      try {
-        const res = await fetch(ep.url);
-        if (!res.ok) continue;
-        const data = await res.json();
-        const pages = data?.query?.pages || {};
-        const firstPage = Object.values(pages)[0];
-        const rawExtract = String(firstPage?.extract || '').trim();
-        if (rawExtract && rawExtract.length > 250) {
-          const paragraphs = rawExtract
-            .split(/\n+/)
-            .map(p => p.trim())
-            .filter(p => p.length >= 35 && !/^=+.*=+$/.test(p))
-            .slice(0, 180);
-          if (paragraphs.length > 0) {
-            const payload = {
-              source: ep.source,
-              fetchedAt: new Date().toLocaleDateString('pt-BR'),
-              paragraphs
-            };
-            saveExternalFullTextCache(lawItem.id, payload);
-            return payload;
-          }
-        }
-      } catch (_e) {}
-    }
-    return null;
+    if (cached && Array.isArray(cached.paragraphs) && cached.paragraphs.length) return cached;
+    const sources = [];
+    if (lawItem.wikisourceTitle) sources.push({host: 'pt.wikisource.org', title: lawItem.wikisourceTitle, source: 'Wikisource · texto complementar não revisado'});
+    if (lawItem.wikipediaTitle) sources.push({host: 'pt.wikipedia.org', title: lawItem.wikipediaTitle, source: 'Wikipédia · texto enciclopédico não revisado'});
+    return withLawFetchDeadline(async request => {
+      for (const item of sources) {
+        try {
+          const data = await request(`https://${item.host}/w/api.php?action=query&prop=extracts&explaintext=1&titles=${encodeURIComponent(item.title)}&format=json&origin=*`);
+          if (!lawScopeCurrent(scope)) return null;
+          const first = Object.values(data?.query?.pages || {})[0], parsed = lawParagraphs(first?.extract);
+          if (!parsed.paragraphs.length) continue;
+          const payload = {...parsed, source: item.source, sourceUrl: `https://${item.host}/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}`, fetchedAt: new Date().toISOString()};
+          payload.localSaved = saveExternalFullTextCache(lawItem.id, payload, scope);
+          return payload;
+        } catch (_e) { if (!lawScopeCurrent(scope)) return null; }
+      }
+      return null;
+    });
   }
-
-  // Busca livre em base externa para o usuário importar qualquer lei ou tema completo
   async function searchAndImportExternalLawOrText(queryStr, targetDiscipline = 'Legislação Extravagante') {
-    const q = String(queryStr || '').trim();
-    if (!q || typeof fetch !== 'function') return null;
-
-    const searchTargets = [
-      { api: 'https://pt.wikisource.org/w/api.php', label: 'Wikisource Jurídico (Texto Integral)' },
-      { api: 'https://pt.wikipedia.org/w/api.php', label: 'Base Externa Oficial / Acadêmica' }
-    ];
-
-    for (const target of searchTargets) {
-      try {
-        const sUrl = `${target.api}?action=query&list=search&srsearch=${encodeURIComponent(q)}&utf8=1&format=json&origin=*`;
-        const sRes = await fetch(sUrl);
-        if (!sRes.ok) continue;
-        const sData = await sRes.json();
-        const hit = sData?.query?.search?.[0];
-        if (!hit || !hit.title) continue;
-
-        const eUrl = `${target.api}?action=query&prop=extracts&explaintext=1&titles=${encodeURIComponent(hit.title)}&format=json&origin=*`;
-        const eRes = await fetch(eUrl);
-        if (!eRes.ok) continue;
-        const eData = await eRes.json();
-        const page = Object.values(eData?.query?.pages || {})[0];
-        const extract = String(page?.extract || '').trim();
-        if (extract && extract.length > 200) {
-          const articles = extract
-            .split(/\n+/)
-            .map(line => line.trim())
-            .filter(line => line.length >= 35 && !/^=+.*=+$/.test(line))
-            .slice(0, 150);
-          if (articles.length > 0) {
-            const newLaw = {
-              id: 'ext-law-' + Date.now(),
-              discipline: targetDiscipline || 'Legislação Extravagante',
-              title: `${hit.title} (Importado da Base Externa Completa)`,
-              badge: 'Base Externa Integral',
-              wikisourceTitle: target.api.includes('wikisource') ? hit.title : '',
-              wikipediaTitle: target.api.includes('wikipedia') ? hit.title : '',
-              officialUrl: `https://www.google.com/search?q=${encodeURIComponent(hit.title + ' site:planalto.gov.br')}`,
-              sourceName: target.label,
-              articles
-            };
-            saveCustomImportedLaw(newLaw);
-            return newLaw;
-          }
-        }
-      } catch (_e) {}
-    }
-    return null;
+    const query = String(queryStr || '').trim(), scope = lawScope();
+    if (!query || !scope.ready || typeof fetch !== 'function') return null;
+    return withLawFetchDeadline(async request => {
+      for (const target of [{host: 'pt.wikisource.org', label: 'Wikisource · fonte externa não revisada'}, {host: 'pt.wikipedia.org', label: 'Wikipédia · fonte enciclopédica não revisada'}]) {
+        try {
+          const search = await request(`https://${target.host}/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&utf8=1&format=json&origin=*`);
+          if (!lawScopeCurrent(scope)) return null;
+          const hit = search?.query?.search?.[0];
+          if (!hit?.title) continue;
+          const data = await request(`https://${target.host}/w/api.php?action=query&prop=extracts&explaintext=1&titles=${encodeURIComponent(hit.title)}&format=json&origin=*`);
+          if (!lawScopeCurrent(scope)) return null;
+          const parsed = lawParagraphs(Object.values(data?.query?.pages || {})[0]?.extract, 150);
+          if (!parsed.paragraphs.length) continue;
+          const law = normalizeLawRecord({id: `ext-law-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, discipline: targetDiscipline, title: String(hit.title), content_kind: 'external_excerpt', sourceName: target.label, sourceUrl: `https://${target.host}/wiki/${encodeURIComponent(String(hit.title).replace(/ /g, '_'))}`, fetchedAt: new Date().toISOString(), articles: parsed.paragraphs, contentTruncated: parsed.truncated, wikisourceTitle: target.host.includes('wikisource') ? hit.title : '', wikipediaTitle: target.host.includes('wikipedia') ? hit.title : ''});
+          const localSaved = saveCustomImportedLaw(law, scope);
+          return {...law, localSaved};
+        } catch (_e) { if (!lawScopeCurrent(scope)) return null; }
+      }
+      return null;
+    });
   }
 
   function getAppStateSafe() {
@@ -3469,20 +3678,157 @@
   }
 
   // 2) Hub de Redação Policial na Paleta Oficial da Jornada do Caçador
+  // Dados dos hubs: cada indicador declara sua fonte, período e unidade de contagem.
+  const caveiraMetricHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  function caveiraMetricScope() {
+    const st = getAppStateSafe();
+    let session, knownSession = false;
+    try { if (typeof cloudSession !== 'undefined') { session = cloudSession; knownSession = true; } } catch (_e) {}
+    if (!knownSession && typeof window !== 'undefined' && Object.prototype.hasOwnProperty.call(window, 'cloudSession')) { session = window.cloudSession; knownSession = true; }
+    const userId = session?.user?.id || st._ownerUserId || 'guest';
+    const ready = !(session?.user?.id && st._ownerUserId !== session.user.id) && !(knownSession && !session?.user?.id && st._ownerUserId);
+    let campaign = null;
+    try { if (typeof activeCampaign === 'function') campaign = activeCampaign(); } catch (_e) {}
+    campaign = campaign || (st.campaigns || []).find(item => item.id === st.activeCampaignId) || null;
+    const campaignIds = new Set([st.activeCampaignId, campaign?.id, campaign?.dbId].filter(Boolean).map(String));
+    return { st, userId: String(userId), ready, campaignIds, singleCampaign: Array.isArray(st.campaigns) && st.campaigns.length === 1 };
+  }
+  function caveiraMetricBelongs(item, scope, allowLegacy = false) {
+    if (!scope.ready || !item || typeof item !== 'object') return false;
+    const owner = item.user_id || item.userId || item._ownerUserId;
+    if (owner && String(owner) !== scope.userId) return false;
+    const campaignId = item.campaign_id || item.campaignId;
+    return campaignId ? scope.campaignIds.has(String(campaignId)) : Boolean(allowLegacy && scope.singleCampaign);
+  }
+  function caveiraMetricDate(value) {
+    if (typeof value !== 'string' || !value.trim()) return null;
+    const stamp = Date.parse(value);
+    return Number.isFinite(stamp) ? stamp : null;
+  }
+  function caveiraMetricPeriod(days, now = Date.now()) {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    if (days !== 9999) start.setDate(start.getDate() - Math.max(0, Number(days || 1) - 1));
+    return { start: days === 9999 ? -Infinity : start.getTime(), end: now };
+  }
+  function caveiraMetricInPeriod(value, range) {
+    const at = caveiraMetricDate(value);
+    return at !== null && at >= range.start && at <= range.end;
+  }
+  function caveiraMetricMissions(scope) {
+    if (!scope.ready) return [];
+    try { if (typeof missionPool === 'function') return missionPool() || []; } catch (_e) {}
+    return Array.isArray(scope.st.customCampaign?.missions) ? scope.st.customCampaign.missions : [];
+  }
+  function caveiraMetricFlashcards(scope) {
+    let deck = [];
+    try { if (typeof ALL_FLASHCARDS !== 'undefined' && Array.isArray(ALL_FLASHCARDS)) deck = ALL_FLASHCARDS; } catch (_e) {}
+    if (!deck.length && Array.isArray(window.ALL_FLASHCARDS)) deck = window.ALL_FLASHCARDS;
+    const progress = scope.st.flashProgress && typeof scope.st.flashProgress === 'object' ? scope.st.flashProgress : {};
+    const seen = new Set(), cards = [];
+    let unscoped = 0;
+    if (!scope.ready) return { cards, unscoped, deckCount: 0 };
+    deck.forEach((card, index) => {
+      if (!Array.isArray(card) || card.length < 3 || !String(card[1] || '').trim() || !String(card[2] || '').trim() || /manuais do ca[cç]ador/i.test(String(card[0] || ''))) return;
+      let key;
+      try { if (typeof fcKey === 'function') key = fcKey(card); } catch (_e) {}
+      if (!key) { const text = String(card[1]).toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 160); let hash = 5381; for (let k = 0; k < text.length; k++) hash = ((hash << 5) + hash + text.charCodeAt(k)) >>> 0; key = 'f' + hash.toString(36); }
+      if (seen.has(key)) return;
+      seen.add(key);
+      const item = progress[key] || progress[index];
+      let rating = null;
+      if (item && caveiraMetricBelongs(item, scope, true) && ['hard','medium','easy'].includes(item.level)) rating = item;
+      else if (item) unscoped++;
+      cards.push({ key, subject: String(card[0] || 'Disciplina não informada'), rating });
+    });
+    return { cards, unscoped, deckCount: cards.length };
+  }
+  function caveiraMetricEssays(scope) {
+    if (!scope.ready) return [];
+    let rows = [];
+    try { if (typeof cloudEssays !== 'undefined' && Array.isArray(cloudEssays)) rows = cloudEssays; } catch (_e) {}
+    if (!rows.length && Array.isArray(window.cloudEssays)) rows = window.cloudEssays;
+    return rows.filter(item => caveiraMetricBelongs(item, scope, true)).map(item => {
+      const raw = item.result?.score;
+      const score = item.processing_status === 'ready' && typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 && raw <= 100 ? raw : null;
+      return { ...item, metricScore: score };
+    }).sort((left, right) => (caveiraMetricDate(right.created_at) || 0) - (caveiraMetricDate(left.created_at) || 0));
+  }
+  function caveiraMetricTactical(scope, mode, days) {
+    const range = caveiraMetricPeriod(days), rows = [], missions = caveiraMetricMissions(scope);
+    let omitted = 0;
+    if (!scope.ready) return { rows, omitted };
+    if (mode === 'flashcards') {
+      const flash = caveiraMetricFlashcards(scope);
+      omitted += flash.unscoped;
+      flash.cards.forEach(card => {
+        if (!card.rating) return;
+        if (!caveiraMetricDate(card.rating.date)) { omitted++; return; }
+        if (caveiraMetricInPeriod(card.rating.date, range)) rows.push({ subject: card.subject, total: 1, correct: card.rating.level === 'easy' ? 1 : 0, date: card.rating.date });
+      });
+    } else if (mode === 'edital') {
+      missions.forEach(mission => {
+        const completedAt = scope.st.done?.[mission.id];
+        if (!completedAt) return;
+        if (!caveiraMetricDate(completedAt)) { omitted++; return; }
+        if (caveiraMetricInPeriod(completedAt, range)) rows.push({ subject: mission.subject || 'Disciplina não informada', total: 1, correct: 1, date: completedAt });
+      });
+    } else {
+      const byMission = new Map(missions.map(mission => [String(mission.id), mission]));
+      (Array.isArray(scope.st.scores) ? scope.st.scores : []).forEach(score => {
+        const legacyMission = byMission.get(String(score?.id));
+        if (!caveiraMetricBelongs(score, scope, Boolean(legacyMission))) { omitted++; return; }
+        const total = score.total, correct = score.correct;
+        if (!Number.isInteger(total) || total <= 0 || !Number.isInteger(correct) || correct < 0 || correct > total || !caveiraMetricDate(score.date)) { omitted++; return; }
+        if (caveiraMetricInPeriod(score.date, range)) rows.push({ subject: score.subject || legacyMission?.subject || 'Disciplina não informada', total, correct, date: score.date });
+      });
+    }
+    return { rows: rows.filter(row => !/manuais do ca[cç]ador/i.test(String(row.subject))), omitted };
+  }
+  let caveiraMetricsRefreshQueued = false;
+  function ensureCaveiraMetricsHooks() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const refresh = () => {
+      if (caveiraMetricsRefreshQueued) return;
+      caveiraMetricsRefreshQueued = true;
+      const run = () => {
+        caveiraMetricsRefreshQueued = false;
+        const active = document.querySelector?.('.view.active')?.id;
+        if (active === 'essay') mountCaveiraEssayHub();
+        if (active === 'profile') mountPainelTaticoInProfile();
+        if (active === 'study') mountCaveiraFlashcardsHub();
+      };
+      if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(run);
+      else Promise.resolve().then(run);
+    };
+    if (!window._jcCaveiraMetricsEventsBound) {
+      window._jcCaveiraMetricsEventsBound = true;
+      document.addEventListener?.('flashcards:graded', refresh);
+      document.addEventListener?.('visibilitychange', refresh);
+      window.addEventListener?.('storage', refresh);
+    }
+    for (const name of ['renderEssays','renderCard','render','renderViewById','applyServerState','save']) {
+      const base = window[name];
+      if (typeof base !== 'function' || base._jcCaveiraMetricsHooked) continue;
+      const wrapped = function(...args) { const result = base.apply(this, args); refresh(); return result; };
+      wrapped._jcCaveiraMetricsHooked = true;
+      window[name] = wrapped;
+    }
+  }
+
   function mountCaveiraEssayHub() {
     if (typeof document === 'undefined') return;
     const essaySec = document.getElementById('essay');
     if (!essaySec) return;
-    const st = getAppStateSafe();
-    const essays = Array.isArray(st.essays) ? st.essays : [];
+    ensureCaveiraMetricsHooks();
+    const scope = caveiraMetricScope();
+    const essays = caveiraMetricEssays(scope);
     const totalSent = essays.length;
-    const graded = essays.filter(e => Number.isFinite(Number(e.score)) || e.feedback);
-    const scores = graded.map(e => {
-      const raw = Number(e.score || e.grade || 0);
-      return raw <= 10 && raw > 0 ? Math.round(raw * 10) : Math.round(raw);
-    }).filter(n => n >= 0);
-    const bestPct = scores.length ? Math.max(...scores) : 0;
-    const avgPct = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+    const graded = essays.filter(e => e.metricScore !== null);
+    const scores = graded.map(e => e.metricScore);
+    const inProcessing = essays.filter(e => ['pending','processing'].includes(e.processing_status)).length;
+    const bestPct = scores.length ? Math.max(...scores) : null;
+    const avgPct = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
 
     let hub = document.getElementById('jcEssayDashboardHub');
     if (!hub) {
@@ -3496,7 +3842,7 @@
       }
     }
 
-    const last10 = scores.slice(-10);
+    const last10 = scores.slice(0, 10).reverse();
     const pts = last10.map((val, idx) => {
       const x = 40 + idx * 36;
       const y = 140 - Math.round((Math.min(100, Math.max(0, val)) / 100) * 110);
@@ -3509,19 +3855,20 @@
       return `<circle cx="${x}" cy="${y}" r="4.5" fill="#65e7ff" stroke="#06131f" stroke-width="1.5"><title>Envio ${idx + 1}: ${val}%</title></circle>`;
     }).join('');
 
-    const recentRows = essays.slice(-4).reverse().map((e, i) => {
-      const sc = Number(e.score || 0);
-      const pct = sc <= 10 && sc > 0 ? Math.round(sc * 10) : Math.round(sc);
+    const recentRows = essays.slice(0, 4).map((e, i) => {
+      const pct = e.metricScore;
+      const statuses = {pending:'Aguardando correção',processing:'Em correção',ready:'Conferir resultado',error:'Falha na correção'};
+      const status = pct !== null ? pct + '/100' : (statuses[e.processing_status] || 'Situação não informada');
       return `
         <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:10px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.18);margin-bottom:8px;">
           <div>
-            <b style="font-size:.84rem;display:block;">${String(e.title || e.theme || 'Redação #' + (essays.length - i)).slice(0, 48)}</b>
-            <span style="font-size:.73rem;color:#94a3b8;">${e.board || 'Padrão Policial'} · ${e.date || 'Registrada'}</span>
+            <b style="font-size:.84rem;display:block;">${caveiraMetricHtml(String(e.title || e.theme || 'Redação #' + (essays.length - i)).slice(0, 48))}</b>
+            <span style="font-size:.73rem;color:#94a3b8;">${caveiraMetricHtml(e.board || 'Critérios gerais')} · ${caveiraMetricHtml(caveiraMetricDate(e.created_at) !== null ? new Date(e.created_at).toLocaleDateString('pt-BR') : 'Data não informada')}</span>
           </div>
-          <span class="tag" style="font-weight:800;">${pct > 0 ? pct + '%' : 'Corrigida'}</span>
+          <span class="tag" style="font-weight:800;">${caveiraMetricHtml(status)}</span>
         </div>
       `;
-    }).join('') || `<p class="small muted" style="margin:18px 0;">Nenhuma redação enviada ainda. Clique em <b>ACESSAR</b> acima para escrever ou enviar foto do seu rascunho.</p>`;
+    }).join('') || `<p class="small muted" style="margin:18px 0;">${scope.ready ? 'Nenhuma redação enviada neste portal. Clique em ACESSAR para escrever ou enviar seu rascunho.' : 'Aguarde o carregamento da conta atual.'}</p>`;
 
     hub.innerHTML = `
       <div class="jcCaveiraTopCards">
@@ -3557,20 +3904,20 @@
             <div class="jcCaveiraBigNumber">${totalSent}</div>
             <div style="display:grid;gap:5px;font-size:.76rem;font-weight:700;">
               <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#38bdf8;margin-right:6px;"></span>${totalSent} ENVIADAS</div>
-              <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#eab308;margin-right:6px;"></span>0 EM CORREÇÃO</div>
+              <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#eab308;margin-right:6px;"></span>${inProcessing} AGUARDANDO / EM CORREÇÃO</div>
               <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#10b981;margin-right:6px;"></span>${graded.length} CORRIGIDAS</div>
             </div>
           </div>
           <div class="jcCaveiraStatBox green">
-            <span style="font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;">MELHOR RESULTADO</span>
-            <strong style="font-size:2.1rem;font-weight:800;font-variant-numeric:tabular-nums;">${bestPct}%</strong>
+            <span style="font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;">MELHOR NOTA ESTIMADA</span>
+            <strong style="font-size:2.1rem;font-weight:800;font-variant-numeric:tabular-nums;">${bestPct === null ? '—' : bestPct + '/100'}</strong>
           </div>
           <div class="jcCaveiraStatBox blue">
             <span style="font-size:.74rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;">MÉDIA GERAL</span>
-            <strong style="font-size:2.1rem;font-weight:800;font-variant-numeric:tabular-nums;">${avgPct}%</strong>
+            <strong style="font-size:2.1rem;font-weight:800;font-variant-numeric:tabular-nums;">${avgPct === null ? '—' : avgPct + '/100'}</strong>
           </div>
         </div>
-        <div style="font-size:.73rem;color:#94a3b8;margin-top:10px;">Atualizado com base nos últimos 50 envios registrados na sua campanha.</div>
+        <div style="font-size:.73rem;color:#94a3b8;margin-top:10px;">${graded.length} correção(ões) com nota válida, entre ${totalSent} envio(s) carregados deste portal. Notas estimadas para fins pedagógicos.</div>
       </div>
 
       <div class="jcCaveiraTwoCols">
@@ -3644,89 +3991,51 @@
       profRoot.appendChild(sec);
     }
 
-    const st = getAppStateSafe();
-    const scores = Array.isArray(st.scores) ? st.scores : [];
-    const masteryBag = (st.topicMastery && typeof st.topicMastery === 'object') ? st.topicMastery : {};
-
+    ensureCaveiraMetricsHooks();
+    const scope = caveiraMetricScope();
+    const snapshot = caveiraMetricTactical(scope, tacticalTabMode, tacticalPeriodDays);
     const byDisc = new Map();
-    Object.values(masteryBag).forEach((entry) => {
-      if (!entry || typeof entry !== 'object') return;
-      const dName = String(entry.subject || entry.subjectKey || 'Geral').trim() || 'Geral';
-      if (/manuais do ca[cç]ador/i.test(dName)) return;
-      const cur = byDisc.get(dName) || { total: 0, correct: 0, wrong: 0 };
-      const att = Number(entry.attempts || 0);
-      const cor = Number(entry.correct || 0);
-      cur.total += att;
-      cur.correct += cor;
-      cur.wrong += Math.max(0, att - cor);
+    snapshot.rows.forEach(entry => {
+      const dName = String(entry.subject || 'Disciplina não informada');
+      const cur = byDisc.get(dName) || {total:0,correct:0,wrong:0};
+      cur.total += entry.total; cur.correct += entry.correct; cur.wrong += entry.total - entry.correct;
       byDisc.set(dName, cur);
     });
-
-    if (byDisc.size === 0 && scores.length > 0) {
-      scores.forEach((sc) => {
-        const dName = String(sc.subject || 'Treino Geral');
-        if (/manuais do ca[cç]ador/i.test(dName)) return;
-        const cur = byDisc.get(dName) || { total: 0, correct: 0, wrong: 0 };
-        const tot = Number(sc.total || 0);
-        const cor = Number(sc.correct || 0);
-        cur.total += tot;
-        cur.correct += cor;
-        cur.wrong += Math.max(0, tot - cor);
-        byDisc.set(dName, cur);
-      });
-    }
-
     let totalRight = 0, totalWrong = 0;
-    byDisc.forEach((v) => { totalRight += v.correct; totalWrong += v.wrong; });
+    byDisc.forEach(value => { totalRight += value.correct; totalWrong += value.wrong; });
     const grandTotal = totalRight + totalWrong;
-    const accPct = grandTotal > 0 ? Math.round((totalRight / grandTotal) * 100) : 0;
-
-    const pointCount = 10;
-    const hitPoints = [], missPoints = [];
-    for (let i = 0; i < pointCount; i++) {
-      const x = 38 + i * 35;
-      const sliceSc = scores[scores.length - pointCount + i];
-      const rVal = sliceSc ? Number(sliceSc.correct || 0) : (i === pointCount - 1 && totalRight > 0 ? Math.min(20, totalRight) : 0);
-      const wVal = sliceSc ? Math.max(0, Number(sliceSc.total || 0) - Number(sliceSc.correct || 0)) : (i === pointCount - 1 && totalWrong > 0 ? Math.min(20, totalWrong) : 0);
-      hitPoints.push({ x, y: 135 - Math.min(105, rVal * 5), v: rVal });
-      missPoints.push({ x, y: 135 - Math.min(105, wVal * 5), v: wVal });
-    }
-
-    const hitLine = hitPoints.map(p => `${p.x},${p.y}`).join(' ');
-    const missLine = missPoints.map(p => `${p.x},${p.y}`).join(' ');
-
-    const rowsHtml = Array.from(byDisc.entries())
-      .sort((a, b) => b[1].total - a[1].total)
-      .slice(0, 12)
-      .map(([disc, d]) => {
-        const pct = d.total > 0 ? Math.round((d.correct / d.total) * 100) : 0;
-        const barColor = pct >= 70 ? '#10b981' : (pct >= 50 ? '#38bdf8' : '#f43f5e');
-        return `
-          <div style="display:grid;grid-template-columns:2fr 0.7fr 1.1fr 1fr;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(56,189,248,0.14);font-size:.82rem;">
-            <div style="font-weight:700;">${disc}</div>
-            <div style="font-variant-numeric:tabular-nums;">${d.total}</div>
-            <div style="font-variant-numeric:tabular-nums;">
-              <span style="color:#65e7ff;font-weight:700;">${d.correct}</span> / <span style="color:#f43f5e;font-weight:700;">${d.wrong}</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <div style="flex:1;height:7px;background:rgba(56,189,248,0.16);border-radius:999px;overflow:hidden;">
-                <div style="width:${pct}%;height:100%;background:${barColor};"></div>
-              </div>
-              <b style="font-size:.76rem;min-width:34px;text-align:right;">${pct}%</b>
-            </div>
-          </div>
-        `;
-      }).join('') || `<div style="padding:18px;text-align:center;color:#94a3b8;font-size:.83rem;">Resolva questões na aba Questões ou na Trilha Tática para popular a Análise de Performance por Disciplina.</div>`;
+    const accPct = grandTotal > 0 ? Math.round(totalRight / grandTotal * 100) : null;
+    const isFlash = tacticalTabMode === 'flashcards', isEdital = tacticalTabMode === 'edital';
+    const rightLabel = isFlash ? 'Marcados fáceis' : isEdital ? 'Concluídas' : 'Acertadas';
+    const wrongLabel = isFlash ? 'Médios / difíceis' : isEdital ? 'Sem avaliação de acerto' : 'Não acertadas';
+    const unitLabel = isFlash ? 'Cartões avaliados' : isEdital ? 'Missões concluídas' : 'Itens em treinos concluídos';
+    const rateLabel = isFlash ? 'marcados fáceis' : isEdital ? 'conclusões, sem nota de domínio' : 'de acerto';
+    const sourceNote = isFlash
+      ? 'Conta cartões únicos do portal cuja última avaliação está no período; não soma revisões anteriores nem comprova retenção.'
+      : isEdital ? 'Conclusões de missões do portal com data registrada. Concluir uma missão não comprova domínio do conteúdo.'
+      : 'Usa treinos concluídos com data e portal identificados. Repetições podem estar incluídas; este histórico não distingue a primeira tentativa. Itens não acertados podem incluir respostas em branco.';
+    const timeline = [...snapshot.rows].sort((a,b) => Date.parse(a.date) - Date.parse(b.date)).slice(-10);
+    const graphMax = Math.max(1, ...timeline.map(row => Math.max(row.correct, row.total - row.correct)));
+    const hitPoints = timeline.map((row,index) => ({x:38 + index * 35, y:135 - row.correct / graphMax * 105, v:row.correct}));
+    const missPoints = timeline.map((row,index) => ({x:38 + index * 35, y:135 - (row.total - row.correct) / graphMax * 105, v:row.total - row.correct}));
+    const hitLine = hitPoints.map(point => `${point.x},${point.y}`).join(' ');
+    const missLine = missPoints.map(point => `${point.x},${point.y}`).join(' ');
+    const rowsHtml = [...byDisc.entries()].sort((a,b) => b[1].total - a[1].total).slice(0,12).map(([disc,data]) => {
+      const pct = Math.round(data.correct / data.total * 100);
+      return `<div style="display:grid;grid-template-columns:2fr 0.7fr 1.1fr 1fr;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(56,189,248,0.14);font-size:.82rem;">
+        <div style="font-weight:700;">${caveiraMetricHtml(disc)}</div><div>${data.total}</div>
+        <div>${data.correct}${isEdital ? '' : ' / ' + data.wrong}</div><div>${isEdital ? 'Concluídas' : pct + '%'}</div></div>`;
+    }).join('') || `<div style="padding:18px;text-align:center;color:#94a3b8;font-size:.83rem;">${scope.ready ? 'Sem registros válidos desta modalidade no período e portal selecionados.' : 'Aguarde o carregamento da conta atual.'}</div>`;
 
     const periods = [
       { d: 1, label: 'HOJE' },
       { d: 7, label: '7 DIAS' },
       { d: 15, label: '15 DIAS' },
-      { d: 30, label: 'UM MÊS' },
+      { d: 30, label: '30 DIAS' },
       { d: 90, label: 'TRÊS MESES' },
       { d: 180, label: 'SEIS MESES' },
       { d: 365, label: '1 ANO' },
-      { d: 9999, label: 'PERSONALIZADO' }
+      { d: 9999, label: 'TODO O HISTÓRICO' }
     ];
 
     sec.innerHTML = `
@@ -3748,7 +4057,7 @@
 
       <div class="jcCaveiraTwoCols">
         <div class="jcCaveiraOverviewBox" style="margin-bottom:0;">
-          <div style="font-size:.86rem;font-weight:800;text-transform:uppercase;margin-bottom:10px;">ACERTEI x ERREI</div>
+          <div style="font-size:.86rem;font-weight:800;text-transform:uppercase;margin-bottom:10px;">${caveiraMetricHtml(rightLabel)}${isEdital ? '' : ' × ' + caveiraMetricHtml(wrongLabel)}</div>
           <svg viewBox="0 0 390 165" style="width:100%;height:160px;overflow:visible;">
             <line x1="30" y1="30" x2="370" y2="30" stroke="rgba(56,189,248,0.16)" stroke-dasharray="3,3"/>
             <line x1="30" y1="82" x2="370" y2="82" stroke="rgba(56,189,248,0.16)" stroke-dasharray="3,3"/>
@@ -3759,8 +4068,8 @@
             ${missPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="#f43f5e"/>`).join('')}
           </svg>
           <div style="display:flex;justify-content:center;gap:18px;font-size:.76rem;font-weight:700;margin-top:6px;">
-            <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#65e7ff;margin-right:5px;"></span>Acertei (${totalRight})</span>
-            <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#f43f5e;margin-right:5px;"></span>Errei (${totalWrong})</span>
+            <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#65e7ff;margin-right:5px;"></span>${caveiraMetricHtml(rightLabel)} (${totalRight})</span>
+            <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#f43f5e;margin-right:5px;"></span>${caveiraMetricHtml(wrongLabel)}${isEdital ? '' : ' (' + totalWrong + ')'}</span>
           </div>
         </div>
 
@@ -3769,15 +4078,15 @@
           <div style="display:flex;align-items:center;justify-content:space-around;gap:16px;padding:12px 0;">
             <div style="text-align:center;">
               <div style="font-size:2.4rem;font-weight:900;color:#65e7ff;font-variant-numeric:tabular-nums;">${grandTotal}</div>
-              <div style="font-size:.73rem;color:#94a3b8;text-transform:uppercase;">Resolvidas · ${accPct}% Acerto</div>
+              <div style="font-size:.73rem;color:#94a3b8;text-transform:uppercase;">${caveiraMetricHtml(unitLabel)} · ${accPct === null ? 'sem amostra' : isEdital ? 'sem nota de domínio' : accPct + '% ' + caveiraMetricHtml(rateLabel)}</div>
             </div>
             <div style="display:grid;gap:8px;font-size:.82rem;font-weight:700;">
-              <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#65e7ff;margin-right:6px;"></span>Acertei: <b>${totalRight}</b></div>
-              <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f43f5e;margin-right:6px;"></span>Errei: <b>${totalWrong}</b></div>
+              <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#65e7ff;margin-right:6px;"></span>${caveiraMetricHtml(rightLabel)}: <b>${totalRight}</b></div>
+              <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f43f5e;margin-right:6px;"></span>${caveiraMetricHtml(wrongLabel)}${isEdital ? '' : ': <b>' + totalWrong + '</b>'}</div>
             </div>
           </div>
           <div style="height:10px;border-radius:999px;background:rgba(244,63,94,0.28);overflow:hidden;">
-            <div style="width:${accPct}%;height:100%;background:linear-gradient(90deg,#38bdf8,#65e7ff);"></div>
+            <div style="width:${accPct === null || isEdital ? 0 : accPct}%;height:100%;background:linear-gradient(90deg,#38bdf8,#65e7ff);"></div>
           </div>
         </div>
       </div>
@@ -3787,10 +4096,11 @@
         <div style="display:grid;grid-template-columns:2fr 0.7fr 1.1fr 1fr;gap:10px;padding:8px 12px;border-bottom:1px solid rgba(56,189,248,0.22);font-size:.75rem;color:#94a3b8;font-weight:800;text-transform:uppercase;">
           <div>Disciplina / Assunto</div>
           <div>Total</div>
-          <div>Acertei / Errei</div>
-          <div>Aproveitamento</div>
+          <div>${caveiraMetricHtml(rightLabel)}${isEdital ? '' : ' / ' + caveiraMetricHtml(wrongLabel)}</div>
+          <div>${isEdital ? 'Registro' : 'Proporção'}</div>
         </div>
         ${rowsHtml}
+        <p class="small muted" style="padding:10px 12px;margin:0;">${caveiraMetricHtml(sourceNote)}${snapshot.omitted ? ' ' + snapshot.omitted + ' registro(s) sem data, escopo ou estrutura válida ficaram fora do indicador.' : ''}</p>
       </div>
     `;
 
@@ -3814,14 +4124,14 @@
     const cardsPanel = document.getElementById('cards');
     if (!cardsPanel) return;
 
-    const st = getAppStateSafe();
-    const deck = Array.isArray(st.flashcards) ? st.flashcards : [];
-    const ratings = (st.cardRatings && typeof st.cardRatings === 'object') ? st.cardRatings : {};
+    ensureCaveiraMetricsHooks();
+    const scope = caveiraMetricScope(), flash = caveiraMetricFlashcards(scope);
+    const deck = flash.cards;
     let inReview = 0, shortMem = 0, longMem = 0;
-    Object.values(ratings).forEach((r) => {
-      const val = typeof r === 'object' ? r.difficulty : r;
-      if (val === 'easy') longMem++;
-      else if (val === 'medium' || val === 'good') shortMem++;
+    deck.forEach(({rating}) => {
+      if (!rating) return;
+      if (rating.level === 'easy') longMem++;
+      else if (rating.level === 'medium') shortMem++;
       else inReview++;
     });
     const totalSolved = inReview + shortMem + longMem;
@@ -3845,7 +4155,7 @@
         <div class="jcCaveiraActionCard">
           <div>
             <div class="jcCaveiraActionTitle">⚔️ CARDS DO CAÇADOR</div>
-            <div class="jcCaveiraActionSub">CARDS TÁTICOS DAS DISCIPLINAS DO EDITAL (${deck.length || 'ATIVOS'})</div>
+            <div class="jcCaveiraActionSub">CARDS TÁTICOS DAS DISCIPLINAS DO EDITAL (${deck.length})</div>
           </div>
           <button type="button" class="jcCaveiraActionBtn" id="jcFlashFilterAllBtn">ACESSAR</button>
         </div>
@@ -3863,29 +4173,30 @@
         <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:20px;align-items:center;">
           <div>
             <div style="font-size:.95rem;font-weight:800;text-transform:uppercase;">VISÃO GERAL</div>
-            <div style="font-size:.74rem;color:#94a3b8;">Total de flashcards resolvidos</div>
+            <div style="font-size:.74rem;color:#94a3b8;">Cartões distintos com avaliação registrada</div>
             <div class="jcCaveiraBigNumber">${totalSolved}</div>
             <div style="display:grid;gap:6px;font-size:.76rem;font-weight:700;">
               <div>🔹 <b>${inReview}</b> EM REVISÃO</div>
-              <div>🔹 <b>${shortMem}</b> MEMÓRIA DE CURTO PRAZO</div>
-              <div>🔹 <b>${longMem}</b> MEMÓRIA DE LONGO PRAZO</div>
+              <div>🔹 <b>${shortMem}</b> MARCADOS MÉDIOS</div>
+              <div>🔹 <b>${longMem}</b> MARCADOS FÁCEIS</div>
             </div>
           </div>
-          <div class="jcChevronStageWrap" aria-label="Estágios de memória dos flashcards">
+          <div class="jcChevronStageWrap" aria-label="Última autoavaliação dos flashcards">
             <div class="jcChevronColumn stage1">
               <span class="jcChevronVertLabel">EM REVISÃO</span>
               <b>${inReview}</b>
             </div>
             <div class="jcChevronColumn stage2">
-              <span class="jcChevronVertLabel">MEMÓRIA CURTA</span>
+              <span class="jcChevronVertLabel">MÉDIOS</span>
               <b>${shortMem}</b>
             </div>
             <div class="jcChevronColumn stage3">
-              <span class="jcChevronVertLabel">MEMÓRIA LONGA</span>
+              <span class="jcChevronVertLabel">FÁCEIS</span>
               <b>${longMem}</b>
             </div>
           </div>
         </div>
+        <p class="small muted" style="margin:10px 0 0;">${scope.ready ? 'Última autoavaliação dos cartões deste portal; fácil, médio e difícil não comprovam retenção.' : 'Aguarde o carregamento da conta atual.'}${flash.unscoped ? ' ' + flash.unscoped + ' avaliação(ões) antiga(s) sem escopo compatível não foram atribuídas a este portal.' : ''}</p>
       </div>
     `;
 
@@ -3911,7 +4222,7 @@
     }
   }
 
-  // 5) Central de Leis & Textos (Base Externa Completa + Pastas Retráteis Fechadas por Padrão)
+  // 5) Central de Leis & Textos (seleções e trechos externos identificados)
   let lawsFilterFavOnly = false;
   let lawsSearchQuery = '';
   let activeLawModalItem = null;
@@ -3939,278 +4250,127 @@
     if (typeof document === 'undefined') return;
     const studySec = document.getElementById('study');
     if (!studySec) return;
-
-    // Remove qualquer botão antigo de Manuais do Caçador ou duplicata em #summaries
-    const oldManualBtn = document.getElementById('openManuaisCacadorBtn');
-    if (oldManualBtn) oldManualBtn.remove();
-    const oldQuickLawsBtn = document.getElementById('jcQuickOpenLawsFromSummariesBtn');
-    if (oldQuickLawsBtn) oldQuickLawsBtn.remove();
-
+    applyLawUiScope();
+    document.getElementById('openManuaisCacadorBtn')?.remove();
+    document.getElementById('jcQuickOpenLawsFromSummariesBtn')?.remove();
     const tabsWrap = studySec.querySelector('.studyTabs');
     if (tabsWrap) {
       tabsWrap.classList.add('smartEnabled');
       if (!document.getElementById('jcStudyLawsTabBtn')) {
         const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'studyTab';
-        btn.id = 'jcStudyLawsTabBtn';
-        btn.setAttribute('data-study', 'laws');
-        btn.innerHTML = '⚖️ Leis &amp; Textos';
-        tabsWrap.appendChild(btn);
+        btn.type = 'button'; btn.className = 'studyTab'; btn.id = 'jcStudyLawsTabBtn';
+        btn.setAttribute('data-study', 'laws'); btn.textContent = '⚖️ Leis & Textos'; tabsWrap.appendChild(btn);
       }
-
-      // Delegação unificada para sincronizar todas as 5 abas (Resumos, Flashcards, Anotações, Caderno IA, Leis & Textos)
       if (!tabsWrap._jcUnifiedTabsBound) {
         tabsWrap._jcUnifiedTabsBound = true;
-        tabsWrap.addEventListener('click', (ev) => {
-          const tabBtn = ev.target && ev.target.closest ? ev.target.closest('.studyTab[data-study]') : null;
-          if (!tabBtn) return;
-          const targetId = tabBtn.getAttribute('data-study');
-          if (targetId) {
-            switchStudySubtab(targetId);
-          }
+        tabsWrap.addEventListener('click', ev => {
+          const button = ev.target?.closest?.('.studyTab[data-study]');
+          if (button) switchStudySubtab(button.getAttribute('data-study'));
         });
       }
     }
-
-    let lawsPanel = document.getElementById('laws');
-    if (!lawsPanel) {
-      lawsPanel = document.createElement('div');
-      lawsPanel.className = 'studyPanel';
-      lawsPanel.id = 'laws';
-      studySec.appendChild(lawsPanel);
-    }
-
-    renderSmartLawsPanelContent(lawsPanel);
+    let panel = document.getElementById('laws');
+    if (!panel) { panel = document.createElement('div'); panel.className = 'studyPanel'; panel.id = 'laws'; studySec.appendChild(panel); }
+    renderSmartLawsPanelContent(panel);
+    loadLawsFromUserDatabase(false);
   }
-
   function openSmartLawsSubtab() {
     if (typeof document === 'undefined') return;
-    mountCaveiraSmartLawsHub();
-    switchStudySubtab('laws');
+    mountCaveiraSmartLawsHub(); switchStudySubtab('laws');
   }
   if (typeof window !== 'undefined') window.openSmartLawsSubtab = openSmartLawsSubtab;
 
   function renderSmartLawsPanelContent(lawsPanel) {
-    if (!lawsPanel) lawsPanel = document.getElementById('laws');
+    if (typeof document === 'undefined') return;
+    lawsPanel = lawsPanel || document.getElementById('laws');
     if (!lawsPanel) return;
-
-    const allLaws = getAllLawsCombined();
-    const favs = new Set(getFavLaws());
-    const openMap = getLawsFoldersOpenState();
+    const scope = applyLawUiScope(), allLaws = getAllLawsCombined();
+    const favs = new Set(getFavLaws()), openMap = getLawsFoldersOpenState();
     const qNorm = String(lawsSearchQuery || '').trim().toLowerCase();
-
-    const filtered = allLaws.filter((item) => {
-      if (lawsFilterFavOnly && !favs.has(item.id)) return false;
-      if (!qNorm) return true;
-      const hay = `${item.discipline} ${item.title} ${(item.articles || []).join(' ')}`.toLowerCase();
-      return hay.includes(qNorm);
-    });
-
     const grouped = new Map();
-    filtered.forEach((item) => {
-      if (!grouped.has(item.discipline)) grouped.set(item.discipline, []);
-      grouped.get(item.discipline).push(item);
-    });
-
-    // Pastas de disciplinas idênticas à imagem enviada: FECHADAS por padrão, exibindo o conteúdo APENAS quando clicar!
-    const groupsHtml = Array.from(grouped.entries()).map(([disc, items]) => {
-      const discKey = String(disc).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    for (const law of allLaws) {
+      if (lawsFilterFavOnly && !favs.has(law.id)) continue;
+      if (qNorm && !`${law.discipline} ${law.title} ${law.articles.join(' ')}`.toLowerCase().includes(qNorm)) continue;
+      if (!grouped.has(law.discipline)) grouped.set(law.discipline, []);
+      grouped.get(law.discipline).push(law);
+    }
+    const groupsHtml = [...grouped].map(([disc, items]) => {
+      const discKey = disc.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
       const isOpen = Boolean(openMap[discKey] === true || qNorm.length > 0);
-      return `
-        <section class="libraryFolder ${isOpen ? 'open' : ''}" data-law-folder="${discKey}">
-          <button type="button" class="folderHead" data-law-folder-toggle="${discKey}">
-            <span><i>▤</i> ${disc}</span>
-            <span class="tag">${items.length} ${items.length === 1 ? 'lei / texto' : 'leis &amp; textos'}</span>
-          </button>
-          <div class="folderBody" style="display:${isOpen ? 'block' : 'none'};">
-            ${items.map(item => `
-              <div class="jcLawRowItem">
-                <div style="display:flex;align-items:center;gap:10px;">
-                  <button type="button" class="ghost small" data-law-fav="${item.id}" style="padding:4px 8px;font-size:.85rem;" title="Favoritar Lei">
-                    ${favs.has(item.id) ? '⭐' : '☆'}
-                  </button>
-                  <div>
-                    <div style="font-weight:700;font-size:.88rem;">${item.title}</div>
-                    <div style="font-size:.73rem;color:#93c5fd;margin-top:2px;">
-                      🌐 ${item.sourceName || 'Base Externa Oficial'} · ${item.badge || 'Texto Completo'}
-                    </div>
-                  </div>
-                </div>
-                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                  <span class="tag" style="font-size:.7rem;">🗄️ No Banco Interno</span>
-                  <button type="button" class="jcLawStartBtn" data-law-open="${item.id}">📖 LER COMPLETO</button>
-                </div>
-              </div>
-            `).join('')}
-          </div>
-        </section>
-      `;
-    }).join('') || `<div class="empty">Nenhuma lei encontrada para o filtro selecionado. Use o importador da Base Externa abaixo para buscar qualquer lei!</div>`;
-
-    const readerHtml = activeLawModalItem ? renderActiveLawReaderHtml(activeLawModalItem) : '';
-
-    lawsPanel.innerHTML = `
-      <div class="jcCaveiraOverviewBox" style="padding:14px 16px;margin-bottom:14px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <button type="button" class="ghost small ${!lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabAllBtn" style="font-weight:800;">📋 Todas as Disciplinas (${allLaws.length})</button>
-            <button type="button" class="ghost small ${lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabFavBtn" style="font-weight:800;">⭐ Favoritos (${favs.size})</button>
-          </div>
-          <button type="button" class="ghost small" id="jcSyncAllLawsToDbBtn" style="font-weight:800;border-color:rgba(101,231,255,0.45);color:#65e7ff;">💾 Inserir / Sincronizar Tudo no Meu Banco de Dados</button>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr auto;gap:8px;">
-          <input type="search" id="jcLawsSearchInput" value="${lawsSearchQuery.replace(/"/g, '&quot;')}" placeholder="Buscar lei, artigo ou importar da Base Externa (ex.: Lei 12.850, CTB, Lei 8.112, Art. 144)..." style="width:100%;padding:11px 14px;border-radius:10px;">
-          <button type="button" class="jcCaveiraActionBtn" id="jcImportExternalLawBtn" style="min-width:auto;padding:10px 14px;white-space:nowrap;">🌐 Buscar na Base Externa</button>
-        </div>
-      </div>
-      ${readerHtml}
-      <div class="libraryFolders" id="jcLawsAccordionContainer">
-        ${groupsHtml}
-      </div>
-    `;
-
-    const allBtn = document.getElementById('jcLawsTabAllBtn');
-    const favBtn = document.getElementById('jcLawsTabFavBtn');
-    const sInp = document.getElementById('jcLawsSearchInput');
-    const impBtn = document.getElementById('jcImportExternalLawBtn');
-    const syncDbBtn = document.getElementById('jcSyncAllLawsToDbBtn');
-    if (syncDbBtn) syncDbBtn.onclick = () => syncAllLawsToUserDatabase(true);
-    const saveSingleBtn = document.getElementById('jcSaveSingleLawToDbBtn');
-    if (saveSingleBtn) saveSingleBtn.onclick = () => syncAllLawsToUserDatabase(true);
-
-    if (allBtn) allBtn.onclick = () => { lawsFilterFavOnly = false; renderSmartLawsPanelContent(lawsPanel); };
-    if (favBtn) favBtn.onclick = () => { lawsFilterFavOnly = true; renderSmartLawsPanelContent(lawsPanel); };
-    if (sInp) {
-      sInp.oninput = () => {
-        lawsSearchQuery = sInp.value || '';
-        renderSmartLawsPanelContent(lawsPanel);
-      };
-    }
-    if (impBtn) {
-      impBtn.onclick = async () => {
-        const query = (sInp ? sInp.value : '') || prompt('Digite o nome ou número da Lei/Texto que deseja puxar completo da Base Externa (ex.: Lei 12.850, Código de Trânsito Brasileiro, Lei 8.112):');
-        if (!query || !query.trim()) return;
-        impBtn.disabled = true;
-        impBtn.textContent = '⏳ Buscando Base Externa...';
-        const imported = await searchAndImportExternalLawOrText(query.trim(), 'Legislação Extravagante');
-        impBtn.disabled = false;
-        impBtn.textContent = '🌐 Buscar na Base Externa';
-        if (imported) {
-          activeLawModalItem = imported;
-          setLawsFolderOpenState('legisla-o-extravagante', true);
-          renderSmartLawsPanelContent(lawsPanel);
-          if (typeof window.toast === 'function') {
-            window.toast(`✅ Texto integral de "${imported.title}" importado da Base Externa!`);
-          }
-        } else if (typeof window.toast === 'function') {
-          window.toast('⚠️ Não foi possível importar automaticamente; abrindo consulta externa.');
-        }
-      };
-    }
-
-    // Clique na barra da disciplina (.folderHead): abre/fecha apenas quando o usuário clicar!
-    lawsPanel.querySelectorAll('[data-law-folder-toggle]').forEach((btn) => {
-      btn.onclick = () => {
-        const discKey = btn.getAttribute('data-law-folder-toggle');
-        const folderSec = btn.closest('.libraryFolder');
-        const nextOpen = !(folderSec && folderSec.classList.contains('open'));
-        setLawsFolderOpenState(discKey, nextOpen);
-        renderSmartLawsPanelContent(lawsPanel);
-      };
+      const rows = isOpen ? items.map(law => `<div class="jcLawRowItem"><div style="display:flex;gap:10px;align-items:center"><button type="button" class="ghost small" data-law-fav="${lawEscape(law.id)}" title="Favoritar seleção">${favs.has(law.id) ? '⭐' : '☆'}</button><div><strong>${lawEscape(law.title)}</strong><div class="small muted">${lawEscape(law.sourceName)} · ${lawEscape(law.badge)}</div></div></div><button type="button" class="jcLawStartBtn" data-law-open="${lawEscape(law.id)}">📖 Ler seleção</button></div>`).join('') : '';
+      return `<section class="libraryFolder ${isOpen ? 'open' : ''}" data-law-folder="${lawEscape(discKey)}"><button type="button" class="folderHead" data-law-folder-toggle="${lawEscape(discKey)}" aria-expanded="${isOpen}"><span>▤ ${lawEscape(disc)}</span><span class="tag">${items.length} seleções</span></button><div class="folderBody" style="display:${isOpen ? 'block' : 'none'}">${rows}</div></section>`;
+    }).join('') || '<div class="empty">Nenhuma seleção encontrada neste filtro.</div>';
+    lawsPanel.innerHTML = `<div class="jcCaveiraOverviewBox" style="padding:14px 16px;margin-bottom:14px"><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between"><div><button type="button" class="ghost small ${!lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabAllBtn">📋 Todas (${allLaws.length})</button><button type="button" class="ghost small ${lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabFavBtn">⭐ Favoritos (${favs.size})</button></div><button type="button" class="ghost small" id="jcSyncAllLawsToDbBtn">💾 Salvar seleções</button></div><p class="small muted">Seleções de dispositivos e notas. Confira a redação e a vigência nas referências; o acervo não é uma edição integral revisada.</p><p class="small" role="status">${lawEscape(lawsSyncMessage)}</p><div style="display:flex;gap:8px;flex-wrap:wrap"><input type="search" id="jcLawsSearchInput" value="${lawEscape(lawsSearchQuery)}" placeholder="Buscar lei ou dispositivo..." style="min-width:160px;flex:1"><button type="button" class="jcCaveiraActionBtn" id="jcImportExternalLawBtn">🌐 Buscar trecho externo</button></div></div>${activeLawModalItem ? renderActiveLawReaderHtml(activeLawModalItem) : ''}<div class="libraryFolders" id="jcLawsAccordionContainer">${groupsHtml}</div>`;
+    const find = id => lawsPanel.querySelector?.(`#${id}`) || document.getElementById(id);
+    const redraw = () => { if (lawScopeCurrent(scope)) renderSmartLawsPanelContent(lawsPanel); };
+    const bind = (id, fn) => { const el = find(id); if (el) el.onclick = fn; };
+    bind('jcLawsTabAllBtn', () => { lawsFilterFavOnly = false; redraw(); });
+    bind('jcLawsTabFavBtn', () => { lawsFilterFavOnly = true; redraw(); });
+    bind('jcSyncAllLawsToDbBtn', async () => { await syncAllLawsToUserDatabase(true); redraw(); });
+    bind('jcSaveSingleLawToDbBtn', async () => { await syncAllLawsToUserDatabase(true, activeLawModalItem?.id); redraw(); });
+    const search = find('jcLawsSearchInput');
+    if (search) search.oninput = () => {
+      const pos = search.selectionStart; lawsSearchQuery = search.value; redraw();
+      const next = find('jcLawsSearchInput'); next?.focus?.(); try { next?.setSelectionRange?.(pos, pos); } catch (_e) {}
+    };
+    bind('jcImportExternalLawBtn', async () => {
+      const query = String(find('jcLawsSearchInput')?.value || (typeof prompt === 'function' ? prompt('Informe a lei ou o texto que deseja consultar em fonte externa:') || '' : '')).trim();
+      if (!query || !lawScopeCurrent(scope)) return;
+      lawsSyncMessage = 'Consultando fonte externa...'; redraw();
+      const imported = await searchAndImportExternalLawOrText(query, 'Legislação Extravagante');
+      if (!lawScopeCurrent(scope)) return;
+      if (imported) {
+        activeLawModalItem = imported;
+        lawsSyncMessage = imported.localSaved ? 'Trecho externo importado e salvo neste aparelho; confira a fonte.' : 'Trecho externo disponível nesta sessão; a cópia local não pôde ser gravada.';
+      } else lawsSyncMessage = 'Não foi possível consultar a fonte externa. Tente novamente.';
+      redraw();
     });
-
-    lawsPanel.querySelectorAll('[data-law-fav]').forEach((btn) => {
-      btn.onclick = () => {
-        const id = btn.getAttribute('data-law-fav');
-        const cur = new Set(getFavLaws());
-        if (cur.has(id)) cur.delete(id); else cur.add(id);
-        setFavLaws(Array.from(cur));
-        renderSmartLawsPanelContent(lawsPanel);
-      };
+    lawsPanel.querySelectorAll('[data-law-folder-toggle]').forEach(btn => { btn.onclick = () => {
+      if (!lawScopeCurrent(scope)) return;
+      const key = btn.getAttribute('data-law-folder-toggle');
+      if (!setLawsFolderOpenState(key, !getLawsFoldersOpenState()[key])) lawsSyncMessage = 'Não foi possível salvar a preferência neste aparelho.';
+      redraw();
+    }; });
+    lawsPanel.querySelectorAll('[data-law-fav]').forEach(btn => { btn.onclick = () => {
+      if (!lawScopeCurrent(scope)) return;
+      const id = btn.getAttribute('data-law-fav'), current = new Set(getFavLaws());
+      if (current.has(id)) current.delete(id); else current.add(id);
+      if (!setFavLaws([...current])) lawsSyncMessage = 'Não foi possível salvar o favorito neste aparelho.';
+      redraw();
+    }; });
+    lawsPanel.querySelectorAll('[data-law-open]').forEach(btn => { btn.onclick = () => {
+      if (!lawScopeCurrent(scope)) return;
+      activeLawModalItem = getAllLawsCombined().find(law => law.id === btn.getAttribute('data-law-open')) || null;
+      activeLawExternalLoading = false; redraw();
+    }; });
+    bind('jcCloseLawReaderBtn', () => { activeLawModalItem = null; activeLawExternalLoading = false; redraw(); });
+    bind('jcFetchLawComplementBtn', async () => {
+      const item = activeLawModalItem;
+      if (!item || !lawScopeCurrent(scope) || activeLawExternalLoading) return;
+      activeLawExternalLoading = true; redraw();
+      try {
+        const result = await fetchExternalCompleteLawText(item);
+        if (!lawScopeCurrent(scope)) return;
+        lawsSyncMessage = result ? (result.localSaved ? 'Trecho complementar salvo neste aparelho; confira a fonte.' : 'Trecho complementar disponível nesta sessão; não foi possível gravá-lo no aparelho.') : 'A fonte externa não retornou um trecho disponível. Tente novamente.';
+      } finally {
+        if (lawScopeCurrent(scope)) { activeLawExternalLoading = false; redraw(); }
+      }
     });
-
-    lawsPanel.querySelectorAll('[data-law-open]').forEach((btn) => {
-      btn.onclick = async () => {
-        const id = btn.getAttribute('data-law-open');
-        const found = getAllLawsCombined().find(l => l.id === id) || null;
-        activeLawModalItem = found;
-        activeLawExternalLoading = true;
-        renderSmartLawsPanelContent(lawsPanel);
-        if (found) {
-          await fetchExternalCompleteLawText(found);
-          activeLawExternalLoading = false;
-          renderSmartLawsPanelContent(lawsPanel);
-        }
-      };
+    lawsPanel.querySelectorAll('[data-law-highlight]').forEach(btn => { btn.onclick = () => { if (lawScopeCurrent(scope)) { toggleHighlightArticle(btn.getAttribute('data-law-highlight')); redraw(); } }; });
+    bind('jcInvokeLawAiBtn', () => {
+      const item = activeLawModalItem;
+      if (!item || !lawScopeCurrent(scope)) return;
+      if (typeof window.openView === 'function') window.openView('assistant');
+      const input = document.getElementById('aiQuestion');
+      if (input) { input.value = `Crie questões autorais sobre a seleção "${item.title}". Identifique sugestões de gabarito e cite os dispositivos utilizados; não as apresente como questões oficiais.`; input.focus(); }
     });
-
-    const closeReaderBtn = document.getElementById('jcCloseLawReaderBtn');
-    if (closeReaderBtn) {
-      closeReaderBtn.onclick = () => {
-        activeLawModalItem = null;
-        renderSmartLawsPanelContent(lawsPanel);
-      };
-    }
-
-    lawsPanel.querySelectorAll('[data-law-highlight]').forEach((btn) => {
-      btn.onclick = () => {
-        const key = btn.getAttribute('data-law-highlight');
-        toggleHighlightArticle(key);
-        renderSmartLawsPanelContent(lawsPanel);
-      };
-    });
-
-    const invokeLawBtn = document.getElementById('jcInvokeLawAiBtn');
-    if (invokeLawBtn && activeLawModalItem) {
-      invokeLawBtn.onclick = () => {
-        if (typeof window.openView === 'function') window.openView('assistant');
-        const qInput = document.getElementById('aiQuestion');
-        if (qInput) {
-          qInput.value = `Invocador, crie 3 questões inéditas no estilo AOCP/Cebraspe e aponte as principais pegadinhas sobre: ${activeLawModalItem.title}`;
-          qInput.focus();
-        }
-      };
-    }
   }
 
-  function renderActiveLawReaderHtml(law) {
-    const highlights = getHighlightedArticles();
-    const extCached = getExternalFullTextCache()[law.id];
-    const combinedArticles = [
-      ...(law.articles || []),
-      ...((extCached && Array.isArray(extCached.paragraphs)) ? extCached.paragraphs : [])
-    ];
-    return `
-      <div class="jcCaveiraOverviewBox" id="jcActiveLawReaderBox" style="border:1.5px solid #65e7ff;margin-bottom:18px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-          <div>
-            <span class="tag">${law.discipline} · ${extCached ? `🌐 sincronizado com ${extCached.source}` : (law.sourceName || 'Base Oficial')}</span>
-            <h3 style="margin:6px 0 0;font-size:1.04rem;color:#f0f9ff;">⚖️ ${law.title}</h3>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button type="button" class="ghost small" id="jcSaveSingleLawToDbBtn">💾 Salvar no Meu Banco</button>
-            <button type="button" class="action small" id="jcInvokeLawAiBtn">🧙‍♂️ Invocar Questões desta Lei</button>
-            <button type="button" class="ghost small" id="jcCloseLawReaderBtn">✕ Fechar Leitura</button>
-          </div>
-        </div>
-        ${activeLawExternalLoading ? `<div style="padding:10px 14px;margin-bottom:10px;border-radius:8px;background:rgba(56,189,248,0.12);color:#65e7ff;font-size:.82rem;">🌐 Sincronizando texto completo complementar da Base Externa Oficial (Wikisource / Wikipedia)...</div>` : ''}
-        <div style="display:grid;gap:10px;max-height:540px;overflow-y:auto;padding-right:4px;">
-          ${combinedArticles.map((art, idx) => {
-            const hKey = `${law.id}:${idx}`;
-            const isHi = Boolean(highlights[hKey]);
-            return `
-              <div style="padding:12px 14px;border-radius:10px;border:1px solid ${isHi ? '#eab308' : 'rgba(56,189,248,0.2)'};background:${isHi ? 'rgba(234,179,8,0.16)' : 'rgba(8,19,34,0.75)'};display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
-                <p style="margin:0;line-height:1.58;font-size:.88rem;">${art}</p>
-                <button type="button" class="ghost small" data-law-highlight="${hKey}" title="Grifar dispositivo" style="padding:4px 8px;flex-shrink:0;">
-                  ${isHi ? '🖍️ Grifado' : '🖍️ Grifar'}
-                </button>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      </div>
-    `;
+  function renderActiveLawReaderHtml(value) {
+    const law = materializeLaw(value);
+    if (!law) return '<div class="empty">Seleção indisponível.</div>';
+    const highlights = getHighlightedArticles(), url = safeLawUrl(law.sourceUrl), extUrl = safeLawUrl(law.external?.sourceUrl);
+    return `<div class="jcCaveiraOverviewBox" id="jcActiveLawReaderBox" style="border:1.5px solid #65e7ff;margin-bottom:18px"><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between"><div><span class="tag">${lawEscape(law.discipline)} · ${lawEscape(law.badge)}</span><h3>${lawEscape(law.title)}</h3></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="ghost small" id="jcSaveSingleLawToDbBtn">💾 Salvar seleção</button><button type="button" class="action small" id="jcInvokeLawAiBtn">🧙‍♂️ Invocar questões</button><button type="button" class="ghost small" id="jcCloseLawReaderBtn">✕ Fechar leitura</button></div></div><p class="small muted">${lawEscape(law.coverage)} Versão da seleção: ${lawEscape(law.sourceVersion)}.</p><p class="small">${lawEscape(law.sourceName)} ${url ? `<a href="${lawEscape(url)}" target="_blank" rel="noopener noreferrer">Consultar referência</a>` : '· referência documental não informada'}${law.external ? `<br>${lawEscape(law.external.source)} · ${lawEscape(law.external.fetchedAt)}${law.external.truncated ? ' · trecho limitado' : ''}${extUrl ? ` · <a href="${lawEscape(extUrl)}" target="_blank" rel="noopener noreferrer">Consultar fonte complementar</a>` : ''}` : ''}</p>${law.contentTruncated ? '<p class="small">Conteúdo limitado ao trecho importado.</p>' : ''}<button type="button" class="ghost small" id="jcFetchLawComplementBtn" ${activeLawExternalLoading ? 'disabled' : ''}>${activeLawExternalLoading ? 'Consultando fonte...' : 'Consultar complemento externo'}</button><div style="display:grid;gap:10px;max-height:540px;overflow-y:auto;margin-top:12px">${law.articles.map((article, idx) => { const key = `${law.id}:${idx}`, highlighted = !!highlights[key]; return `<div style="padding:12px;border-radius:10px;border:1px solid ${highlighted ? '#eab308' : 'rgba(56,189,248,.2)'};background:${highlighted ? 'rgba(234,179,8,.16)' : 'rgba(8,19,34,.75)'};display:flex;gap:12px"><p style="margin:0;line-height:1.58;flex:1;white-space:pre-wrap">${lawEscape(article)}</p><button type="button" class="ghost small" data-law-highlight="${lawEscape(key)}">${highlighted ? '🖍️ Grifado' : '🖍️ Grifar'}</button></div>`; }).join('')}</div></div>`;
   }
 
   // 6) Pílulas Rápidas de Status na Aba Questões + Barra Inferior da Questão com Invocador
@@ -4323,132 +4483,140 @@
 
 
   // ==========================================================================
-  // r181: 1) SINCRONIZAÇÃO E INSERÇÃO DIRETA DAS LEIS NO BANCO DE DADOS DO USUÁRIO
-  //          (Supabase study_laws_bank + generated_study_content + IndexedDB Local)
-  //       2) AUDITORIA E ENRIQUECIMENTO PEDAGÓGICO DE 100% DAS QUESTÕES EXTRAÍDAS
-  //       3) RESPONSIVIDADE MOBILE-FIRST COMPLETA (SEM SOBREPOSIÇÃO NO TOPO/PERFIL/RODAPÉ)
+  // r182: salvamento confirmado das seleções por conta e carregamento protegido.
+  // A conferência das questões abaixo não altera conteúdo ou comprova revisão factual.
   // ==========================================================================
-  async function syncAllLawsToUserDatabase(showToast = true) {
-    const allLaws = getAllLawsCombined();
-    // 1. Salva no Banco Local do Aplicativo (localStorage + IndexedDB)
+  async function syncAllLawsToUserDatabase(showToast = true, lawId = null) {
+    const scope = lawScope(), session = lawSession();
+    if (!scope.ready) return {status: 'cancelled', total: 0, localSaved: false, cloudSaved: 0};
+    const mem = getLawMemory(scope);
+    if (mem.syncing) return {status: 'busy', total: 0, localSaved: false, cloudSaved: 0};
+    const selected = getAllLawsCombined().filter(law => !lawId || law.id === lawId).map(materializeLaw).filter(Boolean);
+    if (!selected.length) return {status: 'empty', total: 0, localSaved: false, cloudSaved: 0};
+    mem.syncing = true;
+    let cloudSaved = 0, localSaved = false, cloudError = '';
+    const merged = new Map([...mem.laws, ...selected].map(law => [law.id, law]));
+    mem.laws = [...merged.values()]; mem.pending = true; mem.revision++;
+    const revision = mem.revision;
+    localSaved = writeLawStore(LAWS_INTERNAL_KEY, {laws: mem.laws, pending: true}, scope);
     try {
-      localStorage.setItem('jc_internal_laws_db_v181', JSON.stringify(allLaws));
-    } catch (_e) {}
-
-    let cloudSaved = 0;
-    // 2. Se o usuário estiver autenticado no Supabase, insere diretamente no banco de dados (study_laws_bank / user_state)
-    try {
-      const sess = typeof cloudSession !== 'undefined' ? cloudSession : (window.cloudSession || null);
-      if (sess && sess.access_token && typeof cloudFetch === 'function') {
-        const rows = allLaws.map(law => ({
-          id: String(law.id),
-          user_id: sess.user?.id || null,
-          discipline: String(law.discipline || 'Geral'),
-          title: String(law.title || ''),
-          badge: String(law.badge || 'Base Interna do Banco'),
-          source_name: 'Banco de Dados Interno · Jornada do Caçador',
-          articles: Array.isArray(law.articles) ? law.articles : [],
-          is_public: true,
-          updated_at: new Date().toISOString()
+      if (scope.userId !== 'guest' && session?.access_token && typeof cloudFetch === 'function' && (typeof navigator === 'undefined' || navigator.onLine)) {
+        const rows = selected.map(law => ({
+          id: law.id, user_id: scope.userId, discipline: law.discipline, title: law.title,
+          badge: law.badge, source_name: law.sourceName, source_url: law.sourceUrl,
+          source_version: law.sourceVersion, content_kind: law.content_kind,
+          metadata: {coverage: law.coverage, fetchedAt: law.fetchedAt, external: law.external, contentTruncated: law.contentTruncated, wikisourceTitle: law.wikisourceTitle, wikipediaTitle: law.wikipediaTitle},
+          articles: law.articles, is_public: law.is_public, updated_at: new Date().toISOString()
         }));
-        const res = await cloudFetch('study_laws_bank?on_conflict=id', {
-          method: 'POST',
-          headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-          body: JSON.stringify(rows)
+        const response = await cloudFetch('study_laws_bank?on_conflict=user_id,id', {
+          method: 'POST', headers: {...(typeof authHeaders === 'function' ? authHeaders(session.access_token) : {Authorization: `Bearer ${session.access_token}`}), Prefer: 'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify(rows)
         });
-        if (res && res.ok) cloudSaved = rows.length;
+        if (!lawScopeCurrent(scope)) return {status: 'cancelled', total: selected.length, localSaved, cloudSaved: 0};
+        if (!response?.ok) throw new Error('A gravação na conta não foi confirmada.');
+        cloudSaved = rows.length;
+        if (mem.revision === revision) {
+          mem.pending = false;
+          const confirmedIds = new Set(rows.map(row => row.id));
+          mem.custom = mem.custom.filter(law => !confirmedIds.has(law.id));
+          writeLawStore(LAWS_CUSTOM_IMPORTED_KEY, mem.custom, scope);
+          localSaved = writeLawStore(LAWS_INTERNAL_KEY, {laws: mem.laws, pending: false}, scope) || localSaved;
+        }
       }
-    } catch (_e) {}
-
-    // 3. Também injeta os dispositivos legais nos Resumos/Banco do Estado para funcionamento 100% offline
-    try {
-      const st = getAppStateSafe();
-      st.internalLawsBankCount = allLaws.length;
-      st.internalLawsLastSyncedAt = new Date().toISOString();
-      if (typeof window.persistToLocalDatabase === 'function') {
-        window.persistToLocalDatabase(st.activeCampaignId || 'default');
-      }
-    } catch (_e) {}
-
-    if (showToast && typeof window.toast === 'function') {
-      window.toast(
-        cloudSaved > 0
-          ? `✅ ${cloudSaved} leis e textos completos sincronizados diretamente na tabela study_laws_bank do seu Supabase e no Banco Local!`
-          : `✅ Todas as ${allLaws.length} leis e textos completos estão salvos diretamente no Banco de Dados Interno do aplicativo (100% sem links externos)!`
-      );
-    }
-    return { total: allLaws.length, cloudSaved };
+    } catch (_e) {
+      if (!lawScopeCurrent(scope)) return {status: 'cancelled', total: selected.length, localSaved, cloudSaved: 0};
+      cloudError = 'Confira a conexão e se a migração v109 foi aplicada.';
+    } finally { mem.syncing = false; }
+    if (!lawScopeCurrent(scope)) return {status: 'cancelled', total: selected.length, localSaved, cloudSaved};
+    const status = cloudSaved ? (localSaved ? 'synced' : 'cloud_only') : localSaved ? 'local_pending' : 'failed';
+    lawsSyncMessage = status === 'synced' ? `${cloudSaved} seleções salvas na conta e neste aparelho.`
+      : status === 'cloud_only' ? `${cloudSaved} seleções salvas na conta; a cópia local não pôde ser gravada.`
+      : status === 'local_pending' ? `${selected.length} seleções salvas neste aparelho; sincronização pendente. ${cloudError}`
+      : `Não foi possível salvar as seleções. Confira o espaço disponível e a conexão. ${cloudError}`;
+    if (showToast && typeof window.toast === 'function') window.toast(lawsSyncMessage);
+    return {status, total: selected.length, cloudSaved, localSaved, pending: !cloudSaved};
   }
-  if (typeof window !== 'undefined') window.syncAllLawsToUserDatabase = syncAllLawsToUserDatabase;
+  if (typeof window !== 'undefined') {
+    window.syncAllLawsToUserDatabase = syncAllLawsToUserDatabase;
+    window.loadLawsFromUserDatabase = loadLawsFromUserDatabase;
+  }
 
-  // Auditoria e Cura Pedagógica Automática de Todas as Questões do Banco (Extraídas, Compartilhadas e Nativas)
+  // Conferência estrutural e de metadados. Não altera questões nem comprova a verdade do conteúdo.
+  // O nome público anterior permanece para compatibilidade com os atalhos existentes.
   function auditAndEnrichAllQuestionsPedagogy(questionsList) {
     const list = Array.isArray(questionsList)
       ? questionsList
-      : (typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS) ? ALL_QUESTIONS : []);
-    let enrichedCount = 0;
-    let fixedSubjectCount = 0;
-    let fixedTopicCount = 0;
-    let validCount = 0;
-
-    for (let i = 0; i < list.length; i++) {
-      const q = list[i];
-      if (!q || typeof q !== 'object') continue;
-      const opts = Array.isArray(q.options) ? q.options : [];
-      if (opts.length < 2) continue;
-
-      // 1. Garante índice de gabarito válido
-      let cIdx = Number(q.correct_index);
-      if (!Number.isInteger(cIdx) || cIdx < 0 || cIdx >= opts.length) {
-        cIdx = 0;
-        q.correct_index = 0;
-      }
-
-      // 2. Garante disciplina estrita e limpa (nunca nome de arquivo PDF)
-      if (!q.subject || /simulado|prova|quest[oõ]es|caderno|manuais do ca[cç]ador/i.test(String(q.subject))) {
-        if (typeof window.resolveStrictQuestionDiscipline === 'function') {
-          const resolved = window.resolveStrictQuestionDiscipline(q);
-          if (resolved && resolved !== q.subject) {
-            q.subject = resolved;
-            fixedSubjectCount++;
-          }
-        }
-      }
-
-      // 3. Garante tópico pedagógico real (nunca genérico "Questão 01" ou vazio)
-      if (!q.topic || /^(?:quest[aã]o\s*\d+|item\s*\d+|geral|simulado.*|conte[uú]do.*)$/i.test(String(q.topic).trim())) {
-        if (typeof window.inferQuestionPedagogicalTopic === 'function') {
-          q.topic = window.inferQuestionPedagogicalTopic(q.statement || '', q.subject || 'Geral');
-          fixedTopicCount++;
-        } else {
-          q.topic = `Tópicos Essenciais de ${q.subject || 'Concurso'}`;
-        }
-      }
-
-      // 4. Garante comentário pedagógico completo em todas as questões extraídas de PDF
-      const exp = String(q.explanation || q.comment || '').trim();
-      if (exp.length < 28) {
-        const correctLetter = String.fromCharCode(65 + cIdx);
-        const correctText = String(opts[cIdx] || '').trim();
-        const subjName = String(q.subject || 'Disciplina do Edital');
-        const topicName = String(q.topic || 'Conteúdo Programático');
-        q.explanation = `Gabarito Oficial: Alternativa ${correctLetter} ("${correctText}"). Fundamentação Pedagógica (${subjName} · ${topicName}): A alternativa ${correctLetter} responde corretamente ao comando da questão conforme a norma e a doutrina aplicáveis a ${topicName}. As demais alternativas contêm desvios conceituais, generalizações indevidas ou troca de hipóteses legais.`;
-        enrichedCount++;
-      }
-      validCount++;
-    }
-
+      : (typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS)
+        ? ALL_QUESTIONS : (typeof window !== 'undefined' && Array.isArray(window.ALL_QUESTIONS) ? window.ALL_QUESTIONS : []));
     const report = {
-      total: list.length,
-      validCount,
-      enrichedCount,
-      fixedSubjectCount,
-      fixedTopicCount,
-      pedagogicallyReadyPct: list.length > 0 ? 100 : 100
+      total: list.length, structurallyValidCount: 0, validCount: 0, readyCount: 0,
+      pendingKeyCount: 0, suggestedKeyCount: 0, annulledCount: 0,
+      invalidStructureCount: 0, excludedManualCount: 0,
+      classificationReviewCount: 0, missingExplanationCount: 0,
+      explanationReviewCount: 0, issueCount: 0, questionIssueCount: 0,
+      // A conferência é somente leitura: nenhum conteúdo é enriquecido ou corrigido automaticamente.
+      enrichedCount: 0, fixedSubjectCount: 0, fixedTopicCount: 0,
+      issues: [], issuesTruncated: false,
+      scope: 'structural_metadata', factualReviewVerified: false,
+      label: 'Conferência estrutural e de metadados — revisão factual não comprovada'
     };
-    if (typeof window !== 'undefined') {
-      window._lastQuestionPedagogyAudit = report;
+    const normalize = value => String(value ?? '').normalize('NFC').replace(/\s+/g, ' ').trim();
+    const optionText = value => (typeof value === 'string' || typeof value === 'number')
+      ? normalize(value).replace(/^(?:\(?[A-E]\)|[A-E][.)])\s*/i, '').toLocaleLowerCase('pt-BR') : '';
+    const genericSubject = value => typeof value !== 'string' || !normalize(value) || /^(?:simulado|prova|quest[oõ]es|caderno|conte[uú]do geral)(?:\b|\s)/i.test(normalize(value));
+    const genericTopic = value => typeof value !== 'string' || !normalize(value) || /^(?:quest[aã]o\s*\d+|item\s*\d+|geral|simulado.*|conte[uú]do geral)$/i.test(normalize(value));
+    const isManual = item => {
+      if (typeof window !== 'undefined' && typeof window.isPlatformManualStudyArtifact === 'function') return Boolean(window.isPlatformManualStudyArtifact(item));
+      return /manuais do ca[cç]ador/i.test([item?.subject, item?.category, item?.title].join(' '));
+    };
+    for (let index = 0; index < list.length; index++) {
+      const item = list[index], problems = [];
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        report.invalidStructureCount++;
+        problems.push('invalid_question');
+      } else if (isManual(item)) {
+        report.excludedManualCount++;
+        problems.push('platform_manual');
+      } else {
+        const options = Array.isArray(item.options) ? item.options : [];
+        const normalizedOptions = options.map(optionText);
+        const validStructure = typeof item.statement === 'string' && Boolean(normalize(item.statement)) && options.length >= 2 && options.length <= 5 &&
+          normalizedOptions.every(Boolean) && new Set(normalizedOptions).size === options.length;
+        if (validStructure) report.structurallyValidCount++;
+        else { report.invalidStructureCount++; problems.push('invalid_structure'); }
+
+        const raw = item.correct_index;
+        const validIndex = (typeof raw === 'number' || typeof raw === 'string') && normalize(raw) !== '' &&
+          Number.isInteger(Number(raw)) && Number(raw) >= 0 && Number(raw) < options.length;
+        const manuallyReviewed = item.key_source === 'manual_revisado' && item.answer_key_validation === 'revisado';
+        const suggested = !manuallyReviewed && ((item.key_source === 'ia_sugerido' && item.answer_key_validation !== 'revisado') ||
+          /^\s*(?:🤖\s*)?\[?Gabarito sugerido (?:pela|por) IA\b/i.test(String(item.explanation || '')));
+        const annulled = Boolean(item.annulled || item.anulada);
+        const usableKey = validStructure && validIndex && !item.answer_unknown && !suggested && !annulled;
+        if (annulled) { report.annulledCount++; problems.push('annulled'); }
+        else if (validStructure && !usableKey) { report.pendingKeyCount++; problems.push('pending_answer_key'); }
+        if (suggested) { report.suggestedKeyCount++; problems.push('suggested_answer_key'); }
+        if (usableKey) report.validCount++;
+
+        const needsClassification = genericSubject(item.subject) || genericTopic(item.topic) || item.classification_needs_review === true;
+        if (needsClassification) { report.classificationReviewCount++; problems.push('classification_review'); }
+        const missingExplanation = !normalize(item.explanation || item.comment);
+        if (missingExplanation) { report.missingExplanationCount++; problems.push('missing_explanation'); }
+        const explanationReview = item.explanation_needs_review === true;
+        if (explanationReview) { report.explanationReviewCount++; problems.push('explanation_review'); }
+        if (usableKey && !needsClassification && !missingExplanation && !explanationReview) report.readyCount++;
+      }
+      if (problems.length) {
+        report.issueCount += problems.length;
+        report.questionIssueCount++;
+        if (report.issues.length < 200) report.issues.push({ index, questionId: normalize(item?.id).slice(0, 160), problems });
+        else report.issuesTruncated = true;
+      }
     }
+    report.structurallyReadyPct = list.length ? Math.round(report.readyCount * 10000 / list.length) / 100 : 0;
+    // Compatibilidade: porcentagem de estrutura/metadados completos, nunca um selo de revisão pedagógica.
+    report.pedagogicallyReadyPct = report.structurallyReadyPct;
+    report.status = !list.length ? 'sem_questoes' : report.questionIssueCount ? 'pendencias_identificadas' : 'estrutura_completa';
+    if (typeof window !== 'undefined') window._lastQuestionPedagogyAudit = report;
     return report;
   }
   if (typeof window !== 'undefined') {
@@ -4465,7 +4633,7 @@
     mountCaveiraSmartLawsHub();
     mountCaveiraQuestionBankEnhancements();
     auditAndEnrichAllQuestionsPedagogy();
-    syncAllLawsToUserDatabase(false);
+    loadLawsFromUserDatabase(false);
   }
 
   if (typeof window !== 'undefined') {
