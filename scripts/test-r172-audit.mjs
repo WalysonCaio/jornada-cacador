@@ -60,4 +60,4 @@ const start=material.indexOf('function sanitizeQuestions('), end=material.indexO
 const sanitizer={cleanGeneratedText:(v,max=4000)=>String(v??'').trim().slice(0,max)};
 vm.createContext(sanitizer);vm.runInContext(stripTypeScriptTypes(material.slice(start,end)),sanitizer);
 assert.equal(sanitizer.sanitizeQuestions([{statement:'Qual alternativa representa o resultado correto?',options:['opção 1','','opção 3'],correct_index:1,explanation:'Justificativa do resultado.'}],'Teste').length,0);
-assert.equal(sanitizer.sanitizeQuestions([{statement:'Qual alternativa representa o resultado correto?',options:['opção 1','opção 2','opção 3'],correct_index:2,explanation:'Justificativa do resultado.'}],'Teste')[0].correct_index,2);
+assert.equal(sanitizer.sanitizeQuestions([{statement:'Qual alternativa representa o resultado correto?',options:['opção 1','opção 2','opção 3'],correct_index:2,explanation:'Justificativa do resultado.'}],'Teste')[0].suggested_correct_index,2);

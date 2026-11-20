@@ -16,6 +16,10 @@ O projeto transforma o edital enviado pelo usuário em um plano de aprendizagem:
 
 [Aplicação e GitHub](docs/revisao-r183/LEIA-ME.md) · [Conferência das promessas e avaliação](docs/revisao-r183/CONFERENCIA-GEMINI.md) · [Verificações](docs/revisao-r183/VALIDACAO.txt). Inclui a revisão r182, corrige fluxos incompletos e acrescenta importação autenticada de documentos legais oficiais. A biblioteca compartilhada foi preservada; os Manuais continuam na ajuda.
 
+## Revisão r184 — PDFs e disciplinas
+
+[Aplicação e GitHub](docs/revisao-r184/LEIA-ME.md) · [Correções e limites](docs/revisao-r184/REVISAO.md) · [Validação](docs/revisao-r184/VALIDACAO.txt). Releitura dos PDFs originais em lote, propostas de revisão e aplicação atômica, classificação conservadora e ajustes responsivos. Inclui r182/r183.
+
 ## Principais recursos
 
 - edital convertido em mapa de disciplinas e tópicos;

@@ -1,4 +1,5 @@
-# Jornada do Caçador — Guia Unificado (r183)
+> Versão atual r184: [aplicação, reanálise dos PDFs e GitHub](docs/revisao-r184/LEIA-ME.md). O conteúdo abaixo registra os recursos anteriores preservados.
+# Jornada do Caçador — Guia Unificado (r184)
 
 Revisão de 20/11/2026. [Aplicação da versão, GitHub e Supabase](docs/revisao-r183/LEIA-ME.md) · [Conferência do texto do Gemini](docs/revisao-r183/CONFERENCIA-GEMINI.md) · [Validação](docs/revisao-r183/VALIDACAO.txt).
 

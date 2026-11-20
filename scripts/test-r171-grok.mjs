@@ -9,8 +9,8 @@ const guiaSrc = readFileSync(new URL("../GUIA-UNIFICADO.md", import.meta.url), "
 const javaSrc = readFileSync(new URL("../android/app/src/main/java/br/com/jornadadocacador/app/MainActivity.java", import.meta.url), "utf8");
 
 // 1. Validar versão r182 no service worker e guia
-assert(swSrc.includes("r183"), "sw.js deve estar na versao r183");
-assert(guiaSrc.includes("r183"), "GUIA-UNIFICADO.md deve estar na versao r183");
+assert(swSrc.includes("r184"), "sw.js deve estar na versao r184");
+assert(guiaSrc.includes("r184"), "GUIA-UNIFICADO.md deve estar na versao r184");
 
 // 2. Executar e testar as funções do r182 no VM
 const ctx = {
