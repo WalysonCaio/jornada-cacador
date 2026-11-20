@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+const html=readFileSync(new URL('../dist/index.html',import.meta.url),'utf8');
+const a=html.indexOf('function fcKey('),b=html.indexOf('function belongsToActiveCampaign(',a);
+assert(a>=0&&b>a);
+const nodes={'#flashcard':{dataset:{},classList:{remove(){}}},'#cardQuestion':{},'#cardAnswer':{},'#cardCounter':{},'#cardFilter':{value:'all'}};
+let saves=0;
+const ctx={state:{_ownerUserId:'a',activeCampaignId:'p',campaigns:[{id:'p'},{id:'other'}],flashProgress:{}},cloudSession:{user:{id:'a'}},ALL_FLASHCARDS:[['Português','Qual é a regra?','A resposta do cartão.']],currentCard:0,
+ $:id=>nodes[id],document:{getElementById:()=>null,dispatchEvent(){}},Event:class {},save(){saves++;},renderStreak(){},console};
+vm.createContext(ctx);vm.runInContext(html.slice(a,b),ctx);
+ctx.renderCard();assert.match(nodes['#cardQuestion'].textContent,/regra/);
+ctx.gradeCard('easy');assert.equal(saves,1);
+const record=ctx.state.flashProgress[ctx.fcKey(ctx.ALL_FLASHCARDS[0])];
+assert.equal(record.userId,'a');assert.equal(record.campaignId,'p');assert(record.answered_at&&record.date);
+ctx.renderCard();ctx.cloudSession={user:{id:'b'}};
+assert.equal(ctx.filteredCards().length,0,'não mostra cartões da conta anterior enquanto novo login carrega');
+ctx.gradeCard('easy');assert.equal(saves,1,'callback antigo não grava nota em outra conta');
+ctx.renderCard();assert.equal(nodes['#cardCounter'].textContent,'0/0');
+ctx.cloudSession={user:{id:'a'}};ctx.state.activeCampaignId='other';
+assert.equal(ctx.fcProgress({key:ctx.fcKey(ctx.ALL_FLASHCARDS[0]),i:0}),null,'nota de outro portal não é reaproveitada');
+ctx.state.activeCampaignId='p';ctx.renderCard();ctx.state._resetEpoch=1;ctx.gradeCard('easy');assert.equal(saves,1,'reset invalida o cartão anterior');
+ctx.cloudSession=null;assert.equal(ctx.filteredCards().length,0,'logout não expõe os cartões remanescentes');
+console.log('OK r182: avaliação de flashcards com conta/portal/reset, metadados reais e bloqueio de callback tardio.');

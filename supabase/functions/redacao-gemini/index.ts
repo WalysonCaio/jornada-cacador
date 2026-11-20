@@ -1,8 +1,5 @@
-// ARQUIVO AUTOCONTIDO PARA COLAR NO EDITOR DO SUPABASE: redacao-gemini
-// Gerado por: node scripts/build-supabase-dashboard.mjs
-// Fonte: supabase/functions/redacao-gemini/index.ts
-// SHA-256 da fonte: 58ba5f55341b7b0abcbb543dbc6d06b77346fadf5a8d9c059f10ace2b8705930
-// Atualize a fonte e regenere; não exclua os validadores incorporados.
+// Jornada do Caçador — função autocontida para CLI e editor do painel.
+// Cópias para publicação: node scripts/build-supabase-dashboard.mjs
 
 // Dependência incorporada: ../_shared/essay-result.mjs (SHA-256 793eb97f5934b8bb766b53a7dbd602412b2899801d338c0c758f562847469d29)
 const { validateEssayResult } = (() => {

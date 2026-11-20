@@ -99,6 +99,11 @@ console.log("OK: contratos v100 (autor da biblioteca sem nome real) validados.")
 
   // (a) toda função public.xxx(...) chamada precisa existir em alguma migração (pegou assert_rate_limit/grant_server_xp inexistentes)
   const defined = new Set([...allSql.matchAll(/create (?:or replace )?function public\.(\w+)/gi)].map((m) => m[1]));
+  // ALTER FUNCTION ... RENAME preserves a real function definition (v108 wraps the v97 calculation).
+  for (const m of allSql.matchAll(/alter function\s+public\.(\w+)\([^;]*?\)\s+rename to\s+(\w+)/gi)) {
+    assert(defined.has(m[1]), `função renomeada sem definição: ${m[1]}`);
+    defined.add(m[2]);
+  }
   const tables = new Set([...allSql.matchAll(/create table (?:if not exists )?public\.(\w+)/gi)].map((m) => m[1]));
   const stripped = allSql
     .replace(/(?:create (?:or replace )?function|drop function if exists|alter function|comment on function)\s+public\.\w+/gi, "")
@@ -125,7 +130,10 @@ console.log("OK: contratos v100 (autor da biblioteca sem nome real) validados.")
   assert(/create or replace function public\.submit_hunter_duel_round\(\s*p_duel_id uuid,\s*p_score integer/i.test(t), "v101 deve redefinir a função de duelo ativa (4 parâmetros)");
   // (c) o servidor marca o que processou e a v100 não carrega mais o complemento quebrado
   const mat = read("supabase/functions/material-gemini/index.ts");
-  assert((mat.match(/server_verified: true/g) || []).length >= 3, "material-gemini deve gravar server_verified: true (status ready, conteúdo e cópia em cache)");
+  assert(mat.includes("rpc/create_generated_document_content"), "materiais devem ser gravados pela transação de primeira análise");
+  assert(mat.includes("DOCUMENT_REVIEW_REQUIRED") && mat.includes("EXAM_DETERMINISTIC_REVIEW_REQUIRED"), "reanálises e provas não podem passar pela substituição automática do gerador");
+  assert(!mat.includes("id=not.in.") && !mat.includes("CONTENT_REPLACE_FAILED"), "a substituição REST em duas etapas não pode permanecer");
+  assert(mat.includes('key_source: "ia_sugerido"') && mat.includes('answer_key_validation: "pendente"') && mat.includes('answer_unknown: true'), "chave gerada deve permanecer pendente, sem selo factual");
   const v100 = sqlOf(files.find((f) => f.includes("v100_community_author_privacy")));
   assert(!/questions_json|content_json|assert_rate_limit|grant_server_xp|challenger_finished_at/.test(v100), "a v100 não pode referenciar colunas/funções inexistentes");
 }

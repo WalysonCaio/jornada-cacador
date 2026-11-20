@@ -8,10 +8,10 @@ const archCode = fs.readFileSync(path.join(root, 'dist', 'jc-architecture-module
 const htmlCode = fs.readFileSync(path.join(root, 'dist', 'index.html'), 'utf8');
 const swCode = fs.readFileSync(path.join(root, 'dist', 'sw.js'), 'utf8');
 
-console.log('=== Teste r178/r181: Redesign Clean UI, Sidebar Retrátil & Cronômetro Tela Cheia ===');
+console.log('=== Teste r178/r182: Redesign Clean UI, Sidebar Retrátil & Cronômetro Tela Cheia ===');
 
-assert.ok(swCode.includes('r181'), 'sw.js deve usar cache r181');
-console.log('✓ 1. Service Worker atualizado para r181');
+assert.ok(swCode.includes('r184'), 'sw.js deve usar cache r184');
+console.log('✓ 1. Service Worker atualizado para r182');
 
 const navMatch = htmlCode.match(/<nav class="tabs"[\s\S]*?<\/nav>/);
 assert.ok(navMatch, 'nav.tabs deve continuar presente no HTML para mobile');

@@ -62,7 +62,9 @@ async function visible(page, selector) {
 }
 
 async function openQuestions(page) {
-  await page.locator('button[data-view="report"]').click();
+  const sidebar = page.locator('[data-jc-side-view="report"]');
+  if (await sidebar.isVisible()) await sidebar.click();
+  else await page.locator('button[data-view="report"]').click();
   await visible(page, '#report.active #questionSubject');
   await visible(page, '#report.active #questionTopic');
 }

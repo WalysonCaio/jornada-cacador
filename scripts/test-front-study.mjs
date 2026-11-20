@@ -18,7 +18,7 @@ const code = [
 function makeEnv() {
   const els = { "#flashcard": { dataset: {}, classList: { remove() {} } }, "#cardQuestion": {}, "#cardAnswer": {}, "#cardCounter": {}, "#cardFilter": { value: "all" }, "#flashDueOnlyToggle": { checked: false }, "#toast": { classList: { add() {}, remove() {} } } };
   const toasts = [];
-  const ctx = { ALL_FLASHCARDS: [], currentCard: 0, KEY: "k", state: { flashProgress: {}, answeredQuestionFingerprints: {} }, $: (s) => els[s], document: { dispatchEvent() {}, getElementById: (id) => els["#" + id] }, Event: class {}, localStorage: { setItem() {} }, window: {}, setTimeout, clearTimeout, console };
+  const ctx = { cloudSession: null, ALL_FLASHCARDS: [], currentCard: 0, KEY: "k", state: { flashProgress: {}, answeredQuestionFingerprints: {} }, $: (s) => els[s], document: { dispatchEvent() {}, getElementById: (id) => els["#" + id] }, Event: class {}, localStorage: { setItem() {} }, window: {}, setTimeout, clearTimeout, console };
   vm.createContext(ctx); vm.runInContext(code, ctx);
   ctx.toast = (m) => toasts.push(m);
   return { ctx, els, toasts, run: (e) => vm.runInContext(e, ctx) };
@@ -306,7 +306,7 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
   const pdfClientCode = readFileSync(new URL("../dist/pdf-text-client.js", import.meta.url), "utf8");
   assert(pdfClientCode.includes("Promise.withResolvers"), "pdf-text-client.js deve incluir polyfill para Promise.withResolvers");
   assert(pdfClientCode.includes("extractStructuredEditalTopics"), "pdf-text-client.js deve expor extractStructuredEditalTopics");
-  assert(pdfClientCode.includes("campaign_topics?on_conflict=campaign_id,subject,topic"), "pdf-text-client.js deve salvar campaign_topics com on_conflict para evitar erro 409");
+  assert(pdfClientCode.includes("rpc/replace_campaign_topics_atomic"), "pdf-text-client.js deve salvar o mapa por RPC transacional com upsert e propriedade verificada");
 
   const uc = [
     slice("function normalizeText(", "function missionForQuestion("),
@@ -706,6 +706,7 @@ console.log("OK: desdobramento automático de disciplinas do edital validado.");
     "function normalizedDifficulty(q){return q?.difficulty||'medio'}",
     "const shortLabel=(t,m=52)=>String(t||'').slice(0,m);",
     v77Src.slice(v77Src.indexOf("function buildLocalCognitiveTwinQuestion("), v77Src.indexOf("async function spawnTwinQuestionForCurrent(")),
+    v77Src.slice(v77Src.indexOf("function answerOptionText("), v77Src.indexOf("function answerOptionsSignature(")),
     v77Src.slice(v77Src.indexOf("function parseExamAnswerKeyTable("), v77Src.indexOf("async function handleImportQuestionJsonFile(")),
   ].join("\n");
 
@@ -770,8 +771,10 @@ GABARITO DEFINITIVO
       correctText: extracted[0].options[1],
     },
   };
+  const originalMold = JSON.stringify(moldWithError);
   const twin = ctx.window.buildLocalCognitiveTwinQuestion(moldWithError);
-  assert.ok(twin.statement.includes("Questão Gêmea de Fixação") && twin.explanation.includes("Análise do distrator que confundiu antes"), "Questão gêmea deve trabalhar o distrator que o aluno marcou por engano");
+  assert.equal(twin, null, "Modo local não fabrica uma questão nova ou sua fundamentação");
+  assert.equal(JSON.stringify(moldWithError), originalMold, "Molde original permanece intacto");
   console.log("OK: Extrator Determinístico de Provas (A–D, A–E com gabarito E, Certo/Errado, Anuladas) e Motor Cognitivo de Questões Gêmeas (v117) validados.");
 }
 
@@ -1084,7 +1087,7 @@ GABARITO DEFINITIVO
 
   // 2) Verifica que uploadStudyDocument mantém o edital no perfil ativo do usuário (PM PE, BCM PE, CBM PE, etc.) sem trocar de portal nem compartilhar com a comunidade
   assert.ok(!htmlSrc.includes('toast(`Novo portal "${detectedPortal.name}" criado automaticamente para este edital!`)'), "uploadStudyDocument não deve criar outro portal forçado ao enviar um edital no perfil escolhido pelo usuário");
-  assert.ok(htmlSrc.includes("const isEditalFile=type==='edital'||isEditalDocumentOrTitle(") && htmlSrc.includes("const shareOptIn=!isEditalFile"), "Editais devem ter share_with_community = false obrigatoriamente");
+  assert.ok(/const\s+isEditalFile\s*=/.test(htmlSrc) && /shareOptIn\s*=\s*!isEditalFile/.test(htmlSrc), "Editais devem ter share_with_community = false obrigatoriamente");
 
   // 3) Verifica suporte a BCM PE e CBM PE e bloqueio de missões comunitárias ('edital-comm-')
   const fnSlice = [
@@ -1148,7 +1151,7 @@ GABARITO DEFINITIVO
   assert(v77Src.includes("togglePaperReadingMode"), "Modo Papel / Leitura Clara presente");
   assert(htmlSrc.includes("Placar Caveira:") && htmlSrc.includes("Líquido Cebraspe:"), "Cálculo de Placar Líquido Caveira presente");
   assert(pdfSrc.includes("isTwoColumnPage"), "Detector de PDF em duas colunas presente");
-  assert(pdfSrc.includes("preferredCaderno"), "Seleção de caderno pelo usuário presente");
+  assert(v77Src.includes("preferredCaderno") && readFileSync(new URL("../dist/question-review.js", import.meta.url), "utf8").includes("preferredCaderno"), "Seleção explícita de caderno no extrator e na revisão, sem escolher o primeiro automaticamente");
   assert(v77Src.includes("splitQuestionAssociatedText"), "Parser de Texto Associado (estilo Gran Questões) presente");
   assert(v77Src.includes("Ler texto de apoio da questão") && v77Src.includes("Ocultar texto de apoio da questão"), "Botão '📖 Ler texto de apoio da questão' presente");
   assert(v77Src.includes("toggleGranAssociatedText"), "Função de abrir/fechar texto associado presente");
@@ -1162,7 +1165,7 @@ GABARITO DEFINITIVO
   assert(htmlSrc.includes("streakDaysByHalfMission") && v77Src.includes("streakDaysByHalfMission"), "Ofensiva diária é confirmada automaticamente ao atingir 50% das etapas da missão");
   assert(pdfSrc.includes("askUserScannedPdfPermission") && pdfSrc.includes("convertScannedPdfViaBrowserCanvasOcr"), "Detector de PDF escaneado vs. texto digital + conversor OCR com confirmação prévia de tokens presentes");
   assert(htmlSrc.includes("pdfPreScanBox") && pdfSrc.includes("pdfPreScanBox"), "Raio-X Pré-Análise Instantâneo presente");
-  assert(htmlSrc.includes("documentAnswerKeyFile") && pdfSrc.includes("documentAnswerKeyFile"), "Importador de Gabarito Separado em PDF presente");
+  assert(htmlSrc.includes("documentAnswerKeyFile") && v77Src.includes("attachAnswerKeyToExistingDoc"), "Entrada de gabarito separado e fluxo tardio de adição de chave presentes");
   assert(htmlSrc.includes("textStudyModalDialog") && pdfSrc.includes("openTextStudyModalBtn"), "Criação de estudo direto por Texto/Assunto/Lei Seca (sem PDF) presente");
   assert(pdfSrc.includes("askUserExamAnswerKeyOptions"), "Modal interativo de gabarito para provas (Anexar Gabarito / Colar Gabarito / Resolver com IA) presente");
   assert(v77Src.includes("btn.textContent='⏳ Extraindo questões...'"), "Feedback visual de extração imediato e bloqueio de cliques concorrentes no catálogo de provas presente");
@@ -1186,9 +1189,9 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   assert.ok(htmlSrc.includes('id="globalThemeToggleBtn"') && v77Src.includes("applyGlobalAppTheme") && v77Src.includes("body.lightAppTheme"), "O botão #globalThemeToggleBtn deve estar no menu e aplicar o tema claro completo (body.lightAppTheme)");
 
   // 2) Verifica os 6 aprimoramentos estratégicos (TEC, Caveira, Gran, Estudei)
-  assert.ok(v77Src.includes("computeQuestionOptionChoiceStats") && v77Src.includes("Pegadinha mais marcada!"), "Deve conter estatística por alternativa e identificação da pegadinha principal");
+  assert.ok(v77Src.includes("computeQuestionOptionChoiceStats") && v77Src.includes("Seu erro mais frequente"), "Deve conter estatística por alternativa e identificação da pegadinha principal");
   assert.ok(v77Src.includes("computeTopicBankIncidencePct") && v77Src.includes("formatTopicIncidenceBadgeHtml"), "Deve conter cálculo real de incidência por assunto na banca");
-  assert.ok(pdfSrc.includes("pageSnapCache") && v77Src.includes("questionFigureBox"), "Deve suportar recorte/anexo de figuras e tabelas nas questões");
+  assert.ok(pdfSrc.includes("JCQuestionReview.reviewDocument") && readFileSync(new URL("../dist/question-review.js", import.meta.url), "utf8").includes("source_visual_review_required") && v77Src.includes("questionFigureBox"), "Deve preservar figuras existentes e marcar dependência visual para conferência na fonte; não fabrica recorte de página sem vínculo confirmado");
   assert.ok(v77Src.includes("renderGuildOfficialSimuladoBanner") && v77Src.includes("startGuildOfficialSimuladoBtn"), "Deve conter o Simulado Oficial da Guilda com Ranking e Nota de Corte por Cargo");
   assert.ok(v77Src.includes("balanceEstudeiCycleByWeightBtn") && v77Src.includes("getSubjectAccuracyAndWeight"), "Deve conter o balanceamento automático do Ciclo Tático por peso e desempenho (2x)");
   assert.ok(v77Src.includes("scheduleLazyTabHydration"), "Deve conter hidratação sob demanda para performance mobile");
@@ -1215,7 +1218,7 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
 
   assert.ok(htmlSrc.includes("function inferStrictQuestionSubject(") && htmlSrc.includes("window.inferStrictQuestionSubject=inferStrictQuestionSubject"), "Deve conter o classificador estrito por enunciado/tópico inferStrictQuestionSubject");
   assert.ok(v77Src.includes("function sanitizeAllQuestionsAndErrorsSubjects(") && v77Src.includes("function buildSubjectAppropriateDistractors("), "Deve conter higienização automática de disciplinas em ALL_QUESTIONS/state.errors e distratores específicos por disciplina");
-  assert.ok(v77Src.includes("chosenPool=chosenPool.filter(item=>topicKey(resolveStrictQuestionDiscipline(item))===subjKey);"), "startSubjectTargetedFix (Correção de Gargalo) deve garantir que 100% das questões pertencem exclusivamente à disciplina selecionada");
+  assert.ok(v77Src.includes("const eligible=item=>isQuestionDisciplineEligible(item,cleanSubj)") && v77Src.includes("chosenPool=chosenPool.filter(eligible);"), "Correção de Gargalo deve aplicar disciplina estrita e gabarito válido; comportamento exercitado em test-r174-error-retry");
   assert.ok(!v77Src.includes("Alternativa incorreta conforme a literalidade da norma e jurisprudência aplicável."), "Não deve injetar distratores jurídicos genéricos em questões de Raciocínio Lógico, Português ou Informática");
 
   console.log("OK: Isolamento estrito de disciplina na Correção de Gargalos e Caderno de Erros (r152) validado.");
@@ -1420,7 +1423,7 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   // Verifica trava contra inflação artificial de learning.xp no console
   vmCtx.state.learning.xp = 999999;
   assert.ok(vmCtx.xp() < 2000, "capHonestLearningXp deve impedir que edição manual de learning.xp infle o XP total");
-  assert.ok(v77Src.includes("function computeAuditedHunterXpCeiling(") && v77Src.includes("const safeXp=serverXp>0?Math.min(Math.max(serverXp,meLocal.xp),ceilingXp)"), "Ranking deve limitar o XP do próprio aparelho pelo teto auditável");
+  assert.ok(v77Src.includes("function computeAuditedHunterXpCeiling(") && v77Src.includes("xp:Math.min(rankMetric(hs.xp)??0,auditedXpCeiling)"), "Ranking deve limitar XP próprio pelo teto auditável de registros reais (comportamento testado em test-r178-profile.mjs)");
 
   console.log("OK: IA Honesta (r157), Separação Estudado vs. Dominado (40 XP vs 100 XP) e Proteção Anti-Inflação de Ranking (r158) validados.");
 }
@@ -1490,7 +1493,7 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   assert.ok(htmlSrc.includes("Adiar revisão (7 dias)") && !htmlSrc.includes(">Marcar como dominado<"), "Caderno de erros deve apenas adiar revisão por 7 dias em vez de apagar o erro manualmente");
   assert.ok(v77Src.includes("Meta interna atingida (≥70% · não é aprovação oficial)") && !v77Src.includes("Caveira Aprovado (≥70%)"), "Selo do simulado deve indicar meta interna e não aprovação oficial");
   assert.ok(assistFnSrc.includes("hasExplicitGabaritoInRawText") && assistFnSrc.includes("CONTRATO ESTRITO DO MODO SOLICITADO") && assistFnSrc.includes("conhecimento_geral_conferir"), "assistente-pmpe deve validar gabarito explícito, contratos por modo e campo confidence");
-  assert.ok(redacaoFnSrc.includes("const sumScore = result.criteria.reduce"), "redacao-gemini deve reconciliar a nota total com a soma dos critérios");
+  assert.ok(redacaoFnSrc.includes("validateEssayResult(parseGeminiJsonText(aiData))"), "redacao-gemini deve validar o espelho antes de aceitar a nota");
   assert.ok(hyperFnSrc.includes("status: 410") && hyperFnSrc.includes("DEPRECATED_ENDPOINT"), "hyper-endpoint deve responder 410 Gone");
   assert.ok(sqlV104.includes("bonus_70_paid") && sqlV104.includes("bonus_85_paid"), "Migração v104 deve criar colunas de controle de bônus único");
 
@@ -1508,7 +1511,7 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   // 1) Verifica que openTheoryForSubjectAndTopic e NATIVE_CORE_THEORY_SUMMARIES estão presentes e cobrem os tópicos reportados
   assert.ok(
     v77Src.includes("function openTheoryForSubjectAndTopic(") &&
-    v77Src.includes("window.BASIC_SUMMARIES = NATIVE_CORE_THEORY_SUMMARIES") &&
+    v77Src.includes("window.BASIC_SUMMARIES = NATIVE_CORE_THEORY_SUMMARIES.filter(") &&
     v77Src.includes("Revolução Pernambucana de 1817") &&
     v77Src.includes("Capitanias Hereditárias") &&
     v77Src.includes("Negação de Condicional (MANÉ)"),
@@ -1590,8 +1593,8 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   );
   assert.equal(
     preparedFlawed.options[preparedFlawed.correct_index],
-    "Que horas começa o plantão policial?",
-    "A questão defeituosa sobre NÃO proposição deve apontar para a frase interrogativa corrigida"
+    "2 + 2 = 5.",
+    "Não inventa uma nova alternativa para corrigir conteúdo defeituoso"
   );
 
   // 2b) Verifica sincronização do gabarito com a explicação após embaralhamento e quebra de linha entre alternativas
@@ -1663,8 +1666,8 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
     origin: "oficial"
   };
   const healedEscolar = vmCtx.window.prepareQuestionConsistent(escolarCorrupted);
-  assert.deepEqual(Array.from(healedEscolar.options), ["A.", "E.", "R.", "S."], "As alternativas A. e E. da questão ESCOLAR devem ser restauradas integralmente");
-  assert.equal(healedEscolar.options[healedEscolar.correct_index], "A.", "A 2.022ª letra de ESCOLAR (2022 = 7*288 + 6 -> 6ª letra) deve ser A.");
+  assert.deepEqual(Array.from(healedEscolar.options), ["", "", "R.", "S."], "Preserva alternativas ausentes para revisão explícita, sem inventar texto");
+  assert.equal(healedEscolar.correct_index, -1, "Alternativas incompletas não devem receber gabarito utilizável");
 
   // 4) Verifica que "quadro negro" e "tabela-verdade" são ignorados pelo detector de figuras (needsVisualCue)
   assert.ok(

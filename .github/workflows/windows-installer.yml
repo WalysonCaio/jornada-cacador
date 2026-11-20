@@ -8,8 +8,14 @@ on:
       - "desktop/**"
       - ".github/workflows/windows-installer.yml"
 
+permissions:
+  contents: read
+
 jobs:
+  checks:
+    uses: ./.github/workflows/quality-checks.yml
   build-windows:
+    needs: checks
     runs-on: windows-latest
     defaults:
       run:

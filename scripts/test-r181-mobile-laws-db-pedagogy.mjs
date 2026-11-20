@@ -13,7 +13,7 @@ const sqlV106 = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20261
 console.log('=== Teste r181: Responsividade Mobile, Banco Interno de Leis (Supabase + JSON), Preservação das 2.554 Questões e Auditoria Pedagógica ===');
 
 // 1. Service Worker r181
-assert.ok(swCode.includes('r181'), 'sw.js deve estar na versão r181');
+assert.ok(swCode.includes('r184'), 'sw.js deve estar na versão r184');
 console.log('✓ 1. Service Worker atualizado para r181');
 
 // 2. Preservação de todas as questões em loadGeneratedContent (evita queda de 2554 -> 781)
@@ -21,7 +21,7 @@ assert.ok(htmlCode.includes('_prevPreservedQs') && htmlCode.includes('_customCam
 console.log('✓ 2. Preservação de 100% das questões (sem perda ao sincronizar) validada');
 
 // 3. Base Interna de Leis no Banco de Dados (JSON + Migração SQL v106 + syncAllLawsToUserDatabase sem links externos)
-assert.ok(Array.isArray(lawsDbJson) && lawsDbJson.length >= 10, 'dist/native-laws-database.json deve conter os diplomas legais completos');
+assert.ok(Array.isArray(lawsDbJson) && lawsDbJson.length >= 10, 'dist/native-laws-database.json deve conter os seleções de dispositivos legais');
 assert.ok(sqlV106.includes('CREATE TABLE IF NOT EXISTS public.study_laws_bank'), 'Migração v106 deve criar a tabela public.study_laws_bank');
 assert.ok(archCode.includes('syncAllLawsToUserDatabase') && !archCode.includes('🌐 Fonte Oficial ↗'), 'Leis devem ser salvas no banco interno sem redirecionar o aluno para fora do site');
 console.log('✓ 3. Base Interna de Leis (dist/native-laws-database.json + study_laws_bank + leitura 100% interna) validada');
@@ -48,8 +48,9 @@ const sampleExtracted = [
 ];
 const report = sb.auditAndEnrichAllQuestionsPedagogy(sampleExtracted);
 assert.equal(report.validCount, 1);
-assert.equal(report.enrichedCount, 1);
-assert.ok(sampleExtracted[0].explanation.length > 50, 'Questão extraída sem comentário deve receber fundamentação pedagógica completa automaticamente');
+assert.equal(report.enrichedCount, 0, 'Auditoria não fabrica conteúdo');
+assert.equal(sampleExtracted[0].explanation, '', 'Ausência de comentário continua explícita');
+assert.equal(report.missingExplanationCount, 1, 'Auditoria informa a pendência');
 console.log('✓ 5. Motor de auditoria e enriquecimento pedagógico das questões extraídas validado');
 
 console.log('=== Todos os testes da r181 passaram com 100% de sucesso! ===');

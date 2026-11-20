@@ -6,8 +6,10 @@ import assert from "node:assert/strict";
 const src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
 const a = src.indexOf("function parseExamAnswerKeyTable("), b = src.indexOf("window.extractStructuredExamQuestions=");
 assert(a >= 0 && b > a, "extrator não encontrado");
+const optionStart = src.indexOf("function answerOptionText("), optionEnd = src.indexOf("function answerOptionsSignature(", optionStart);
+assert(optionStart >= 0 && optionEnd > optionStart, "normalizador de alternativas não encontrado");
 const ctx = { canonicalSubjectName: (s, d) => d || "Conteúdo Geral", window: {} };
-vm.createContext(ctx); vm.runInContext(src.slice(a, b), ctx);
+vm.createContext(ctx); vm.runInContext(src.slice(optionStart, optionEnd) + "\n" + src.slice(a, b), ctx);
 const extract = (t, o = {}) => ctx.extractStructuredExamQuestions(t, { defaultSubject: "Direito", defaultBoard: "AOCP", ...o });
 const L = "ABCDE";
 const mkQ = (n, correct, opts = 5, extra = "") => ({ n, correct, body: `QUESTÃO ${String(n).padStart(2, "0")}\nAssinale a alternativa correta sobre o tema número ${n} do edital de concurso.${extra}\n` + Array.from({ length: opts }, (_, i) => `(${L[i]}) Alternativa ${L[i]} da questão ${n} com texto suficiente.`).join("\n") });
@@ -221,7 +223,7 @@ console.log("OK: extrator de provas (19 cenários: Texto I pré-Q01 de Portuguê
 {
   const pdfSrc = readFileSync(new URL("../dist/pdf-text-client.js", import.meta.url), "utf8");
   assert(/resolveAiBtn\.hidden = true/.test(pdfSrc), "o botão 'Resolver com IA' não pode aparecer enquanto não existir");
-  assert(/examReport\.answerUnknown/.test(pdfSrc), "a cobertura deve avisar sobre questões sem gabarito");
+  assert(pdfSrc.includes("JCQuestionReview.reviewDocument") && readFileSync(new URL("../dist/question-review.js", import.meta.url), "utf8").includes("key_conflicts"), "a extração deve entrar na comparação de gabaritos, sem substituir conteúdo automaticamente");
   assert(/Date\.now\(\) - since > 150000/.test(pdfSrc), "a auto-recuperação só pode resetar documentos parados há mais de 150 s");
 }
 console.log("OK: extrator sem gabarito (nunca assume A/CERTO, fora de simulados).");

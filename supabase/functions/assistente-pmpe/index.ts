@@ -1,8 +1,5 @@
-// ARQUIVO AUTOCONTIDO PARA COLAR NO EDITOR DO SUPABASE: assistente-pmpe
-// Gerado por: node scripts/build-supabase-dashboard.mjs
-// Fonte: supabase/functions/assistente-pmpe/index.ts
-// SHA-256 da fonte: ec2580cf1a4b9ac231c36058526ee3a4f17ee1bba8396b69431008d04333c66e
-// Atualize a fonte e regenere; não exclua os validadores incorporados.
+// Jornada do Caçador — função autocontida para CLI e editor do painel.
+// Cópias para publicação: node scripts/build-supabase-dashboard.mjs
 
 // Dependência incorporada: ../_shared/solved-keys.mjs (SHA-256 9648f444db9058b826236cfb6c82d6313565ab28e8ca97c32d195bc3567b2cbd)
 const { validatedSuggestedKeys } = (() => {
