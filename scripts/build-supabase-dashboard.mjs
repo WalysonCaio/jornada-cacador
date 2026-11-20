@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {resolve, dirname} from 'node:path';
 import {createHash} from 'node:crypto';
 
-export const names = ['assistente-pmpe','redacao-gemini','material-gemini','edital-gemini','account-security','system-diagnostics'];
+export const names = ['assistente-pmpe','redacao-gemini','material-gemini','edital-gemini','account-security','system-diagnostics','leis-oficiais'];
 const root=fileURLToPath(new URL('../',import.meta.url));
 const sharedExports = new Map([
   ['../_shared/solved-keys.mjs',['validatedSuggestedKeys']],

@@ -37,6 +37,12 @@
       "path": "supabase/dashboard/system-diagnostics/index.ts",
       "bytes": 7597,
       "sha256": "15695e7181b80581aaa846e657d132344484ebcf9bf7d2f099f669a57f6bc196"
+    },
+    {
+      "function": "leis-oficiais",
+      "path": "supabase/dashboard/leis-oficiais/index.ts",
+      "bytes": 16116,
+      "sha256": "1803d272db5449ddf4bd2a354b4bb856e8fd848bbfe2c916a24d498835c8b730"
     }
   ]
 }

@@ -1,118 +1,52 @@
-# Jornada do Caçador — Guia Unificado (r182)
+# Jornada do Caçador — Guia Unificado (r183)
 
-Revisão concluída em 19/11/2026. Versão do código: **r182**.
+Revisão de 20/11/2026. [Aplicação da versão, GitHub e Supabase](docs/revisao-r183/LEIA-ME.md) · [Conferência do texto do Gemini](docs/revisao-r183/CONFERENCIA-GEMINI.md) · [Validação](docs/revisao-r183/VALIDACAO.txt).
 
-Para aplicar esta entrega, siga [o passo a passo da revisão r182](docs/revisao-r182/LEIA-ME.md). A nova migração v109 corrige a biblioteca de leis; v107 e v108 continuam pré-requisitos para edital e privacidade. O guia histórico abaixo não substitui os resultados e limites da revisão atual.
+Este guia substitui as instruções históricas que citavam cache r148, contagens fixas de questões e garantias sem evidência. Publicar código no GitHub e atualizar Supabase/Cloudflare são etapas distintas.
 
-Os Manuais do Caçador são ajuda da plataforma e ficam fora das disciplinas. Gabaritos sem fonte/revisão permanecem pendentes. A base nativa de leis reúne seleções de dispositivos, sem promessa de texto integral ou vigência automaticamente conferida.
+## Rotina de estudo
 
-Este documento reúne o **Manual Passo a Passo de Uso Pedagógico** (seções 1 a 6) e o **Guia Técnico de Manutenção, Banco de Dados e Publicação** (seções 7 a 21).
+1. Escolha o portal do concurso e o edital correspondente. Um portal que já possui edital é preservado: para outro edital, crie outro portal ou use a exclusão explícita existente.
+2. Em Hoje, escolha a missão, a modalidade e o bloco de foco. O cronômetro no topo abre o modo de tela cheia; regressivo e tempo acumulado de hoje são modos diferentes. Wake Lock e fullscreen dependem do navegador.
+3. Em Questões, filtre disciplina e assunto antes de iniciar. A seleção é mantida nos modos de treino. Sem questões compatíveis, o aplicativo informa a ausência.
+4. Confira origem, fonte e situação do gabarito. Sem chave válida, anulação ou sugestão de IA não se tornam acerto/erro confirmado. Comentário gerado não equivale a revisão factual.
+5. Use Continuar depois para preservar a sessão. O salvamento é conferido antes de atalhos que saem do treino.
+6. Em Estudar, alterne Resumos, Flashcards, Anotações, Caderno IA e Leis & Textos. Os Manuais do Caçador ficam em Menu → ajuda e não são material de disciplina, revisão ou fonte de XP.
 
-## 1. Primeiros Passos: Conta, Tema Claro/Escuro, Chave IA e Portais
+## Biblioteca e IA
 
-1. **Crie sua conta e sincronize entre dispositivos:** na tela de abertura, clique em **Criar conta** e informe seu nome, e-mail e senha. Ao usar a mesma conta no computador e no celular, todo o seu progresso é sincronizado automaticamente ao abrir/retornar ao aplicativo e a cada alteração salva.
-2. **Alternância entre Tema Claro e Tema Escuro:** no topo da tela, clique em **☀️ Claro / 🌙 Escuro** para alternar entre o visual escuro (Solo Leveling) e o Modo Papel de alto contraste para leitura prolongada de leis e PDFs.
-3. **Chave Gemini Pessoal (BYOK — Recomendado):** em **Minha Conta → Configurar minha IA**, cole sua chave gratuita do Google AI Studio. Ela fica criptografada no cofre do servidor (Supabase Vault) e libera cota ampliada para analisar editais extensos, apostilas e redações.
-4. **Portais Individuais e Conciliação de 2 Concursos (`🔗 Unificar editais`):** use o seletor de portal no topo da tela (ex.: `PMPE — Soldado ▾`) para criar portais por concurso (`PMPE`, `CBMPE`, `PPPE`, `PCPE`, `PRF`). Para estudar para até 2 provas ao mesmo tempo, clique em **🔗 Unificar editais** na aba **Portais** — os tópicos comuns avançam simultaneamente nos dois editais.
+A política existente de compartilhamento da biblioteca foi preservada. Confira os controles de visibilidade disponíveis no projeto. Enviar um PDF não garante que todo o conteúdo foi extraído; acompanhe os avisos de cobertura e processamento.
 
-## 2. Como Enviar o Edital (Verticalizado ou Oficial) e Usar o Mapa
+O Invocador exige conta e conexão. Contexto e respostas permanecem vinculados ao portal e à conta. Seu histórico distingue apoio no material de conhecimento geral; essa indicação não certifica a resposta. Revise referências e gabaritos sugeridos antes de adotá-los.
 
-1. Abra **Menu → Biblioteca**, escolha o arquivo PDF, selecione a categoria **Edital do concurso** e clique no botão **Enviar para esta campanha** (o edital é 100% individual e privado do seu perfil).
-2. O extrator processa tanto **Editais Verticalizados** (em tabela, com checkboxes ou numeração contínua) quanto **Editais Oficiais completos** (até 600 páginas em trechos), separando todas as disciplinas reais em ordem pedagógica (`1 → 2 → 3`).
-3. Na aba **Portais**, acompanhe o **Termômetro Duplo do Edital** (**Cobertura Teórica %** vs. **Cobertura Prática em Questões %**), o **Cronograma Reverso** até a data da prova e o **Chefe da Disciplina**.
+Para provas sem gabarito, é possível estudar o enunciado e guardar pendências. Adicione a chave posteriormente quando houver fonte conferível; a IA permanece uma sugestão, com a origem identificada.
 
-## 3. Rotina Diária Sincronizada na Aba "Hoje": Missão, Ciclo Tático e Planejamento
+## Leis & Textos
 
-A aba **Hoje** mantém em sincronia total a **Missão Atual**, o **Ciclo Tático do seu Edital**, o **Cronômetro de Foco por Modalidade**, o **Plano Diário** e a **Missão Semanal**:
+A base nativa contém 12 seleções curtas identificadas como seleções. A r183 acrescenta uma importação de documentos oficiais por catálogo fixo, sem usar geração por IA para preencher leis.
 
-| Etapa da Missão Diária | O que fazer no passo a passo | Como o sistema marca e sincroniza |
-|---|---|---|
-| **1. Estudar a teoria do tópico** | Selecione **📖 Teoria** no Cronômetro de Foco, dê o play e leia o resumo do tópico na Central de Estudo (ou clique em *1. Abrir Resumo* no Ciclo Tático). | Marca automaticamente ao estudar o resumo da disciplina ou concluir um bloco de foco. |
-| **2. Criar resumo ou revisar Flashcards** | Selecione **📜 Lei** no Cronômetro, leia os artigos vinculados e salve sua nota ou revise os cartões em *Estudar → Flashcards*. | Marca ao criar um resumo/nota ou revisar os flashcards. Ao completar **2 etapas (50%)**, sua **Ofensiva Diária** já é confirmada automaticamente! |
-| **3. Resolver questões da disciplina** | Clique no botão fixo **◎ Questões de [Disciplina da Missão]** ou em **⚡ Sprint Rápido (5 min)** abaixo da Missão Atual (ou em *Iniciar batalha de 5 questões* na aba Questões). | Acompanha a meta configurada no seu Planejamento (5, 10, 15 ou 20 questões/dia) e marca ao atingir o volume do dia. |
-| **4. Corrigir erros e revisão final** | Confira o diagnóstico passo a passo das questões erradas e revise as pendências de 24h, 7d e 30d na Central de Revisão. | Marca ao concluir a bateria comentada ou revisar erros. Clique em **Concluir missão e receber XP**. |
+Ao importar, o serviço consulta a fonte oficial, extrai o documento recebido e registra fonte, horário e hash. O leitor pagina a apresentação para manter a tela leve, preservando o texto salvo. Bloqueio, truncamento detectado, erro de rede ou falha de persistência devem aparecer como falha ou pendência, sem sucesso fabricado. A extração não certifica vigência, consolidação jurídica ou aplicabilidade ao edital; consulte a referência oficial. Cada conta mantém sua cópia pessoal de leis.
 
-- **Bônus de Maestria Pedagógica no XP:** cada missão concluída concede **+100 XP base** mais um **Bônus de Maestria (+15 XP para acerto $\ge$ 50%, +30 XP para $\ge$ 70% e +50 XP para $\ge$ 85%)** calculado sobre o seu desempenho real nas questões daquela matéria.
-- **Ciclo Tático do Edital e Planejamento:** ao clicar em **⏭️ Girar para Próxima Matéria** ou em qualquer disciplina numerada do Ciclo Tático, a Missão Atual, o Cronômetro e o Histórico Diário giram juntos (sem repetir missões concluídas em dias anteriores). No botão **Planejamento**, o resumo ao vivo mostra a soma exata do Plano Diário (ex.: `77m + 58m + 65m + 40m = 240m`) e da Meta Semanal (`20 questões/dia × 6 dias = 120 questões/semana`).
+## Indicadores
 
-## 4. Biblioteca Inteligente: Raio-X, Caderno de Prova, Gabarito Tardio e Estudo sem PDF
+Taxas e médias usam os registros válidos disponíveis da conta, do portal e do período. Ausência de dados permanece explícita. Avaliar um flashcard como fácil não comprova memória de longo prazo; completar uma missão não demonstra domínio de todo o edital. O histórico de alternativas da questão representa as respostas registradas do próprio usuário.
 
-1. **Raio-X Pré-Análise Instantâneo:** ao escolher qualquer PDF na Biblioteca, o sistema mostra na hora o número de páginas, se há texto digital (ou se precisa de OCR) e quantas questões foram detectadas antes do envio.
-2. **Provas com Escolha de Caderno e Gabarito Separado:** ao enviar uma *Prova anterior* ou *Simulado*, você pode anexar o **PDF do Gabarito Separado**, colar o gabarito em texto e indicar o **Caderno** (*Tipo 1, Tipo 2, Azul, Amarelo, Branco*).
-3. **Botão "🔑 Adicionar gabarito depois" (Blindado):** para provas importadas sem gabarito, clique em **🔑 Adicionar gabarito** quando tiver o gabarito em mãos. O sistema aplica estritamente pelo número da questão, recusa gabaritos ambíguos (dois cadernos colados juntos), nunca sobrescreve respostas já válidas e marca como `ANULADA` as questões anuladas pela banca.
-4. **Botão "📝 Criar Estudo por Texto ou Assunto" (Sem PDF):** cole artigos de Lei Seca ou anotações diretamente em texto para gerar resumos, flashcards e questões sem precisar de PDF.
-5. **Compartilhamento Comunitário Opt-In (LGPD):** a caixa de compartilhamento comunitário inicia **desmarcada por padrão**; ao marcá-la, apenas resumos e questões higienizados (sem CPF, e-mail ou nome real) são compartilhados, podendo alternar entre **🤝 Público** e **🔒 Privado** a qualquer momento.
+## Manutenção e publicação
 
-## 5. Central de Estudo em Ordem Cronológica, Banco de Questões e Bancas
+Requer Node.js 24 ou superior:
 
-- **Ordem Didática e Cronológica Estrita (`Art. 1º → Art. 2º → Art. 5º`):** na aba **Estudar**, todos os resumos e artigos seguem ordem numérica e pedagógica, trazendo Explicação, Lei Seca em Destaque, Bizu de Prova, Mnemônico, Pegadinha da Banca e **Mapa Mental Tático**.
-- **Banco de Questões Balanceado e Bases Gratuitas:** na aba **Questões**, as 117 questões nativas são marcadas com honestidade como `autoral` (mantendo o filtro por estilo da banca: *Instituto AOCP, Cebraspe, FGV Conhecimento, UPENET/IAUPE, IBFC, IDECAN*), com alternativas embaralhadas de forma determinística (distribuição equilibrada A/B/C/D = 21%/32%/26%/20%), indicação de **Norma-Base e Data de Conferência (11/2026)** e botão **⚠️ Reportar erro ou lei atualizada**.
-- **Importação de Bases Gratuitas e Remoção de Duplicatas:** use o botão **📦 Importar JSON** para carregar `banco-questoes/lote-bases-gratuitas.json` (com deduplicação automática por *fingerprint*) ou execute `banco-questoes/limpar-questoes-repetidas-supabase.sql` no SQL Editor do Supabase.
-- **Simulador de Aprovação (Meta de Corte & Correção de Gargalos):** compara sua nota líquida com a meta de corte do concurso e aponta as disciplinas prioritárias para correção.
-
-## 6. Arena Duelo X1 (60s), Redação IA, TAF, Story 9:16 e Privacidade LGPD
-
-- **Arena Duelo X1 (60s por questão + Bots Examinadores):** desafie colegas online ou treine contra os Bots das Bancas (AOCP, Cebraspe, FGV, UPENET e Sombra Rank S) com 60 segundos por questão, suporte a 2–5 alternativas e placar validado no servidor.
-- **Card Story 9:16:** baixe ou compartilhe seu card vertical (1080×1920) ao final de cada bateria de questões.
-- **Redação IA, TAF e Ranking:** pratique redações com Textos Motivadores I e II, registre seus treinos no Painel TAF Policial e acompanhe o Ranking Geral (com opção de ocultar seu perfil).
-- **Canal Público do Encarregado (DPO — Art. 41, § 1º da LGPD):** `privacidade@jornadadocacador.com.br` (além de exportação JSON e exclusão definitiva de conta em *Minha Conta*).
-
-## 7. Estrutura Técnica de Pastas do Projeto
-
-```text
-dist/                  site e PWA publicados (inclui native-question-bank.json)
-supabase/functions/    7 Edge Functions executadas no servidor
-supabase/migrations/   31 migrações SQL do banco de dados (até v102)
-scripts/               11 suítes de validação e testes automatizados
-banco-questoes/        lotes JSON de questões abertas e scripts SQL de limpeza/seed
-desktop/               instalador Windows (Electron)
-android/               projeto Android (WebView)
+```bash
+npm ci --ignore-scripts
+npm test
+npm run test:sql
 ```
 
-## 8. Validação Obrigatória Antes de Publicar
+Os testes SQL são locais. Não executam migrações no seu Supabase. O resultado estrutural do banco nativo não representa aprovação pedagógica de todas as respostas.
 
-Na raiz do projeto (`C:\Users\Walyson Caio\Documents\jornada-cacador`), execute:
+A r183 inclui as correções r182. Confira o histórico do banco antes de aplicar v109, que exige a v106 de `internal_laws_bank`; v107 e v108 seguem os pré-requisitos existentes. Há mais de uma migração histórica com o número v106: use os nomes completos informados no passo a passo.
 
-```cmd
-node scripts\validate-project.mjs
-node scripts\test-question-bank.mjs
-node scripts\test-attach-answer-key.mjs
-node scripts\test-crud-contracts.mjs
-node scripts\test-security-contracts.mjs
-node scripts\test-front-study.mjs
-```
+Para o editor Supabase, use os arquivos autocontidos de `supabase/dashboard/`. Não remova imports isoladamente para esconder erros de publicação. Fontes e cópias são conferidas por teste; regenere com `node scripts/build-supabase-dashboard.mjs` após alterar o servidor. A função nova desta revisão é `leis-oficiais`; confira as instruções de publicação antes de disponibilizar o frontend.
 
-Todos os scripts devem exibir `OK:`.
+Publique `dist` completa pelo fluxo Cloudflare existente (`wrangler.jsonc` aponta para essa pasta). Não é necessário migrar para Hostinger. O cache da aplicação é r183; fechar e reabrir os clientes permite receber a nova versão. Alterações de fonte preservam as chaves de dados pessoais de r182.
 
-## 9. Publicação no GitHub e Cloudflare Pages
-
-```cmd
-cd "C:\Users\Walyson Caio\Documents\jornada-cacador"
-git add .
-git commit -m "feat(r148): manual oficial e video tutorial atualizados + sincronia completa"
-git push origin main
-npx wrangler pages deploy dist --project-name jornada-cacador --commit-dirty=true
-```
-
-Após o deploy concluir, abra o site e pressione `Ctrl + Shift + R` para ativar o Service Worker `r148`.
-
-## 10. Migração SQL v102 no Supabase (5 Alternativas no Banco Compartilhado)
-
-Caso ainda não tenha executado a migração `v102`, abra o **SQL Editor** no Supabase e execute `supabase/migrations/20261106120000_v102_shared_bank_five_options.sql`:
-
-```sql
-do $$
-begin
-  if to_regclass('public.shared_question_bank') is not null then
-    alter table public.shared_question_bank drop constraint if exists shared_question_bank_correct_index_check;
-    alter table public.shared_question_bank
-      add constraint shared_question_bank_correct_index_check
-      check (correct_index >= 0 and correct_index <= 4);
-  end if;
-end
-$$;
-```
-
-## 11. Autoria e Aviso Legal
-
-Projeto idealizado por **Walyson Caio**. Plataforma independente, sem vínculo oficial com órgãos públicos, bancas examinadoras ou cursos preparatórios. Leis, editais e gabaritos devem ser conferidos nas publicações oficiais.
+A integração contínua executa testes Node e SQL e condiciona os builds Android/Windows a eles. Para impedir integração sem aprovação, configure a regra de proteção do branch no GitHub. Testes de navegador e homologação no dispositivo real continuam separados da verificação de código; detalhes e limites estão no relatório da versão.

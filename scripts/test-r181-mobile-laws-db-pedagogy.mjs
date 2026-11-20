@@ -13,7 +13,7 @@ const sqlV106 = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20261
 console.log('=== Teste r181: Responsividade Mobile, Banco Interno de Leis (Supabase + JSON), Preservação das 2.554 Questões e Auditoria Pedagógica ===');
 
 // 1. Service Worker r181
-assert.ok(swCode.includes('r182'), 'sw.js deve estar na versão r182');
+assert.ok(swCode.includes('r183'), 'sw.js deve estar na versão r183');
 console.log('✓ 1. Service Worker atualizado para r181');
 
 // 2. Preservação de todas as questões em loadGeneratedContent (evita queda de 2554 -> 781)

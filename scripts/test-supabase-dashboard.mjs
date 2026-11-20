@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import vm from 'node:vm';
 import {buildFunction, names} from './build-supabase-dashboard.mjs';
 
-const expected = ['account-security', 'assistente-pmpe', 'edital-gemini', 'material-gemini', 'redacao-gemini', 'system-diagnostics'];
+const expected = ['account-security', 'assistente-pmpe', 'edital-gemini', 'leis-oficiais', 'material-gemini', 'redacao-gemini', 'system-diagnostics'];
 assert.deepEqual([...names].sort(), expected);
 for (const name of names) {
   const file = new URL(`../supabase/dashboard/${name}/index.ts`, import.meta.url);
@@ -36,7 +36,7 @@ for (const name of names) {
   assert.equal(preflight.status, 200);
   assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://jornada.wcaio.workers.dev');
   const get = await handler(new Request('https://function.test', {method:'GET'}));
-  assert.equal(get.status, 405);
+  assert.equal(get.status, name === 'leis-oficiais' ? 401 : 405);
   assert.equal(networkCalls, 0, `${name}: inicialização, preflight e método inválido não acessam serviços`);
 }
 

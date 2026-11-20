@@ -2748,51 +2748,102 @@ function learningUnits(subject){
 }
 function shuffle(a){const out=[...a];for(let i=out.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[out[i],out[j]]=[out[j],out[i]]}return out}
 const TRAIL_HEART_REGEN_MS = 20 * 60 * 1000;
+function trailAccountScopeReady(){
+  if(typeof cloudSession==='undefined')return true;
+  const userId=cloudSession?.user?.id;
+  return userId?state._ownerUserId===userId:!state._ownerUserId;
+}
+function trailScopeIdentity(){
+  if(!trailAccountScopeReady())return null;
+  const userId=typeof cloudSession!=='undefined'&&cloudSession?.user?.id||state._ownerUserId||'guest';
+  return JSON.stringify([userId,state.activeCampaignId||'',Number(state._resetEpoch||0)]);
+}
+function trailLessonScopeReady(lesson){return Boolean(lesson&&(!lesson.scope||lesson.scope===trailScopeIdentity())&&trailAccountScopeReady())}
+function clearStaleTrailLesson(){
+  if(typeof activeLesson==='undefined'||!activeLesson?.scope||activeLesson.scope===trailScopeIdentity())return;
+  activeLesson=null;const dialog=$('#lessonDialog');if(dialog?.open)dialog.close();
+  if(typeof restoreLessonStage==='function')restoreLessonStage();
+}
 function availableTrailHearts(){
-  state.learning.hearts = Number.isInteger(state.learning.hearts) ? Math.max(0, Math.min(3, state.learning.hearts)) : 3;
-  const now = Date.now();
+  clearStaleTrailLesson();
+  if(!trailAccountScopeReady())return 0;
+  state.learning=state.learning||{hearts:3,xp:0,completed:{}};
+  const learning=state.learning,previous=learning.hearts,previousDeadline=learning.heartCooldownUntil;
+  learning.hearts=Number.isInteger(learning.hearts)?Math.max(0,Math.min(3,learning.hearts)):3;
+  const now=Date.now();
   if (state.learning.hearts < 3) {
-    if (!state.learning.heartCooldownUntil || !Number.isFinite(Number(state.learning.heartCooldownUntil))) {
-      state.learning.heartCooldownUntil = now + TRAIL_HEART_REGEN_MS;
-      save();
-    } else if (now >= Number(state.learning.heartCooldownUntil)) {
-      const elapsed = now - Number(state.learning.heartCooldownUntil);
-      const gained = 1 + Math.floor(Math.max(0, elapsed) / TRAIL_HEART_REGEN_MS);
-      const prev = state.learning.hearts;
-      state.learning.hearts = Math.min(3, state.learning.hearts + gained);
-      if (state.learning.hearts >= 3) {
-        state.learning.heartCooldownUntil = null;
-      } else {
-        state.learning.heartCooldownUntil = Number(state.learning.heartCooldownUntil) + gained * TRAIL_HEART_REGEN_MS;
-      }
-      save();
-      if (state.learning.hearts > prev) {
-        toast(`❤️ +${state.learning.hearts - prev} vida(s) regenerada(s) na Trilha Tática! (${state.learning.hearts}/3)`);
-      }
+    let until=Number(learning.heartCooldownUntil);
+    if(!Number.isFinite(until)||until<=0)until=now+TRAIL_HEART_REGEN_MS;
+    if(now>=until){
+      const gained=1+Math.floor((now-until)/TRAIL_HEART_REGEN_MS);
+      learning.hearts=Math.min(3,learning.hearts+gained);
+      until=learning.hearts===3?null:until+gained*TRAIL_HEART_REGEN_MS;
     }
-  } else if (state.learning.heartCooldownUntil) {
-    state.learning.heartCooldownUntil = null;
-  }
-  return state.learning.hearts;
+    learning.heartCooldownUntil=until;
+  }else learning.heartCooldownUntil=null;
+  if(previous!==learning.hearts||previousDeadline!==learning.heartCooldownUntil)save();
+  if(typeof activeLesson!=='undefined'&&trailLessonScopeReady(activeLesson))activeLesson.hearts=learning.hearts;
+  return learning.hearts;
 }
 function trailCooldownMessage(){
-  availableTrailHearts();
-  if ((state.learning.hearts || 0) >= 3 || !state.learning.heartCooldownUntil) return 'Suas 3 vidas estão completas!';
-  const seconds = Math.max(0, Math.ceil((Number(state.learning.heartCooldownUntil) - Date.now()) / 1000));
-  const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
-  const ss = String(seconds % 60).padStart(2, '0');
-  return `Próxima vida (+1 ❤️) em ${mm}:${ss} (renovação a cada 20 min).`;
+  const hearts=availableTrailHearts();
+  if(!trailAccountScopeReady())return 'Aguarde o carregamento do perfil atual.';
+  if(hearts>=3)return 'Suas 3 vidas estão completas!';
+  const seconds=Math.max(0,Math.ceil((Number(state.learning.heartCooldownUntil)-Date.now())/1000));
+  const mm=String(Math.floor(seconds/60)).padStart(2,'0'),ss=String(seconds%60).padStart(2,'0');
+  return `Próxima vida (+1 ❤️) em ${mm}:${ss} (renovação a cada 20 min). Você pode continuar lendo teoria e revisando seus materiais.`;
 }
-window.availableTrailHearts = availableTrailHearts;
-window.trailCooldownMessage = trailCooldownMessage;
-function restoreTrailHeartsNow(){state.learning.hearts=3;state.learning.heartCooldownUntil=null;if(activeLesson){activeLesson.hearts=3;if($('#lessonHearts'))$('#lessonHearts').textContent='♥♥♥';if($('#lessonNext'))$('#lessonNext').textContent=activeLesson.current>=activeLesson.questions.length-1?'Ver resultado':'Continuar'}save();if(typeof renderLearning==='function')renderLearning();toast('❤️ Suas 3 vidas foram restauradas! Continue avançando na Trilha!')}
+window.availableTrailHearts=availableTrailHearts;
+window.trailCooldownMessage=trailCooldownMessage;
+window.trailAccountScopeReady=trailAccountScopeReady;
+// Mantém o atalho legado para consultar a renovação, sem conceder vidas fora do prazo.
+function restoreTrailHeartsNow(){const hearts=availableTrailHearts();toast(trailCooldownMessage());return hearts}
 window.restoreTrailHeartsNow=restoreTrailHeartsNow;
-
-function startLesson(index){const unit=learningUnits(selectedLearningSubject)[index];if(!unit)return;let hearts=availableTrailHearts();if(hearts<=0){restoreTrailHeartsNow();hearts=3}const questions=balancedQuestions(unit.cards,Math.min(5,unit.cards.length)).map(prepareQuestion);if(!questions.length)return toast('Ainda não há exercícios disponíveis nesta fase.');activeLesson={unit,index,questions,current:0,correct:0,hearts,answered:false};$('#lessonDialog').showModal();showLessonQuestion()}
-function showLessonQuestion(){const l=activeLesson;if(!l)return;const q=l.questions[l.current],options=q.options||[],boardLabel=q.board||(q.origin==='adaptada_do_pdf'?'ADAPTADA DO PDF':'ESTILO BANCA');$('#lessonFill').style.width=(l.current/l.questions.length*100)+'%';$('#lessonCounter').textContent=`${l.current+1}/${l.questions.length}`;$('#lessonHearts').textContent='♥'.repeat(l.hearts)+'♡'.repeat(3-l.hearts);$('#lessonSubject').textContent=`${selectedLearningSubject} · ${(q.difficulty||'médio').toUpperCase()} · ${boardLabel}`;$('#lessonQuestion').innerHTML=typeof window.formatStatementWithHighlights==='function'?window.formatStatementWithHighlights(q.statement,q):esc(q.statement);$('#lessonOptions').innerHTML=options.map((o,i)=>`<button class="lessonOption modernOptCard" data-option-index="${i}"><span class="optLetterBadge">${String.fromCharCode(65+i)}</span><span class="optBodyText">${esc(o)}</span></button>`).join('');$('#lessonFeedback').className='lessonFeedback';$('#lessonFeedback').textContent='';$('#lessonNext').hidden=true;$('#lessonNext').textContent='Continuar';l.answered=false;$$('[data-option-index]').forEach(b=>b.onclick=()=>answerLesson(b,q))}
-function answerLesson(button,q){const l=activeLesson;if(!l||l.answered)return;const chosen=Number(button.dataset.optionIndex),grading=typeof window.gradeAnswer==='function'?window.gradeAnswer(q,chosen):null;if(grading&&!grading.scored){toast('Esta questão aguarda gabarito válido ou revisão.');return}l.answered=true;const correct=Number(q.correct_index),ok=grading?grading.ok:chosen===correct;recordQuestionResult(q,ok,chosen);if(ok){l.correct++;button.classList.add('correct');state.learning.xp+=20}else{l.hearts=Math.max(0,l.hearts-1);state.learning.hearts=l.hearts;if(l.hearts<3 && !state.learning.heartCooldownUntil)state.learning.heartCooldownUntil=Date.now()+20*60*1000;button.classList.add('wrong');$$('[data-option-index]').find(b=>Number(b.dataset.optionIndex)===correct)?.classList.add('correct')}const stepHtml=typeof window.formatStepByStepResolution==='function'?window.formatStepByStepResolution(q,chosen,ok,false):`<b>${esc(ok?'Correto! +20 XP':`Resposta correta: ${String.fromCharCode(65+correct)}`)}</b><p>${esc(q.explanation||q.options?.[correct]||'Revise este ponto no material.')}</p>`;const recoverBtnHtml=(!ok&&l.hearts===0)?`<div style="margin-top:10px;padding:10px;border-radius:10px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35)"><p class="small" style="margin:0 0 8px">${esc(trailCooldownMessage())} Ou recupere suas vidas agora mesmo para não interromper o ritmo:</p><button type="button" class="action small" id="restoreLessonHeartsInlineBtn">❤️ Restaurar 3 Vidas Agora (Sem Espera)</button></div>`:'';$('#lessonFeedback').innerHTML=stepHtml+recoverBtnHtml;$('#lessonFeedback').className=`lessonFeedback show ${ok?'good':'bad'}`;const recBtn=$('#restoreLessonHeartsInlineBtn');if(recBtn)recBtn.onclick=()=>{restoreTrailHeartsNow();recBtn.closest('div')?.remove()};$$('[data-option-index]').forEach(b=>b.disabled=true);$('#lessonHearts').textContent='♥'.repeat(l.hearts)+'♡'.repeat(3-l.hearts);$('#lessonNext').hidden=false;if(l.hearts===0||l.current===l.questions.length-1)$('#lessonNext').textContent='Ver resultado';$('#lessonNext').scrollIntoView({block:'nearest'});save();renderHero()}
-function nextLesson(){const l=activeLesson;if(!l)return;if(l.hearts===0||l.current>=l.questions.length-1)return finishLesson();l.current++;showLessonQuestion()}
-function finishLesson(){const l=activeLesson,total=l.questions.length,score=Math.round(l.correct/total*100),passed=score>=70,missions=missionPool(),id=missions.find(m=>normalizeText(m.subject).includes(normalizeText(selectedLearningSubject)))?.id||missions[0]?.id||null;state.scores.push({id,total,correct:l.correct,date:new Date().toISOString(),campaignId:state.activeCampaignId,subject:selectedLearningSubject,source:'trail'});if(passed){const previous=state.learning.completed[l.unit.key];state.learning.completed[l.unit.key]={score:Math.max(score,previous?.score||0),date:new Date().toISOString()};if(!previous)state.learning.xp+=100}save();$('#lessonFill').style.width='100%';$('#lessonStage').innerHTML=`<div class="lessonFinish"><div class="medal">${passed?'★':'↻'}</div><h2>${passed?'Fase concluída!':'Vamos tentar novamente'}</h2><p>Você acertou <b>${l.correct} de ${total}</b> questões (${score}%).</p><p class="muted">${passed?'Próxima fase liberada · bônus de conclusão recebido.':'Revise os resumos e alcance pelo menos 70%.'}</p><button class="action" id="finishLessonButton">${passed?'Continuar trilha':'Tentar novamente'}</button></div>`;$('#finishLessonButton').onclick=()=>{const retry=!passed,index=l.index;$('#lessonDialog').close();activeLesson=null;restoreLessonStage();renderLearning();renderHero();renderReport();renderErrorNotebook();if(retry)startLesson(index)}}
+function startLesson(index){
+  const scope=trailScopeIdentity();
+  if(!scope)return toast('Aguarde o carregamento do perfil atual.');
+  const hearts=availableTrailHearts();
+  if(hearts<=0)return toast(trailCooldownMessage());
+  const unit=learningUnits(selectedLearningSubject)[index];if(!unit)return false;
+  const questions=balancedQuestions(unit.cards,Math.min(5,unit.cards.length)).map(prepareQuestion);
+  if(!questions.length)return toast('Ainda não há exercícios disponíveis nesta fase.');
+  activeLesson={unit,index,scope,questions,current:0,correct:0,hearts,answered:false,answeredCount:0,finalized:false};
+  $('#lessonDialog').showModal();showLessonQuestion();return true;
+}
+function showLessonQuestion(){const l=activeLesson;if(!trailLessonScopeReady(l))return;const q=l.questions[l.current],options=q.options||[],boardLabel=q.board||(q.origin==='adaptada_do_pdf'?'ADAPTADA DO PDF':'ESTILO BANCA');$('#lessonFill').style.width=(l.current/l.questions.length*100)+'%';$('#lessonCounter').textContent=`${l.current+1}/${l.questions.length}`;$('#lessonHearts').textContent='♥'.repeat(l.hearts)+'♡'.repeat(3-l.hearts);$('#lessonSubject').textContent=`${selectedLearningSubject} · ${(q.difficulty||'médio').toUpperCase()} · ${boardLabel}`;$('#lessonQuestion').innerHTML=typeof window.formatStatementWithHighlights==='function'?window.formatStatementWithHighlights(q.statement,q):esc(q.statement);$('#lessonOptions').innerHTML=options.map((o,i)=>`<button class="lessonOption modernOptCard" data-option-index="${i}"><span class="optLetterBadge">${String.fromCharCode(65+i)}</span><span class="optBodyText">${esc(o)}</span></button>`).join('');$('#lessonFeedback').className='lessonFeedback';$('#lessonFeedback').textContent='';$('#lessonNext').hidden=true;$('#lessonNext').textContent='Continuar';l.answered=false;$$('[data-option-index]').forEach(b=>b.onclick=()=>answerLesson(b,q))}
+function answerLesson(button,q){
+  const l=activeLesson;if(!trailLessonScopeReady(l)||l.questions[l.current]!==q||l.answered||l.finalized)return;
+  const chosen=Number(button.dataset.optionIndex),grading=typeof window.gradeAnswer==='function'?window.gradeAnswer(q,chosen):null;
+  if(!Number.isInteger(chosen)||chosen<0||chosen>=q.options.length||!grading||!grading.scored){toast('Esta questão aguarda gabarito válido ou revisão.');return}
+  l.hearts=availableTrailHearts();if(l.hearts<=0)return toast(trailCooldownMessage());
+  l.answered=true;l.answeredCount=Number(l.answeredCount||0)+1;
+  const correct=Number(q.correct_index),ok=grading?grading.ok:chosen===correct;
+  recordQuestionResult(q,ok,chosen);
+  if(ok){l.correct++;button.classList.add('correct');state.learning.xp=Number(state.learning.xp||0)+20}
+  else{
+    l.hearts=Math.max(0,l.hearts-1);state.learning.hearts=l.hearts;
+    if(!Number.isFinite(Number(state.learning.heartCooldownUntil))||Number(state.learning.heartCooldownUntil)<=0)state.learning.heartCooldownUntil=Date.now()+TRAIL_HEART_REGEN_MS;
+    button.classList.add('wrong');$$('[data-option-index]').find(b=>Number(b.dataset.optionIndex)===correct)?.classList.add('correct');
+  }
+  const stepHtml=typeof window.formatStepByStepResolution==='function'?window.formatStepByStepResolution(q,chosen,ok,false):`<b>${esc(ok?'Correto! +20 XP':`Gabarito informado: ${String.fromCharCode(65+correct)}`)}</b><p>${esc(q.explanation||'Confira a fonte desta questão.')}</p>`;
+  const cooldownHtml=l.hearts===0?`<div class="lessonCooldownNotice"><p class="small">${esc(trailCooldownMessage())}</p></div>`:'';
+  $('#lessonFeedback').innerHTML=stepHtml+cooldownHtml;$('#lessonFeedback').className=`lessonFeedback show ${ok?'good':'bad'}`;
+  $$('[data-option-index]').forEach(b=>b.disabled=true);$('#lessonHearts').textContent='♥'.repeat(l.hearts)+'♡'.repeat(3-l.hearts);
+  $('#lessonNext').hidden=false;$('#lessonNext').textContent=l.hearts===0||l.current===l.questions.length-1?'Ver resultado':'Continuar';
+  $('#lessonNext').scrollIntoView({block:'nearest'});save();renderHero();
+}
+function nextLesson(){const l=activeLesson;if(!trailLessonScopeReady(l)||l.finalized||!l.answered)return;l.hearts=availableTrailHearts();if(l.hearts===0||l.current>=l.questions.length-1)return finishLesson();l.current++;showLessonQuestion()}
+function finishLesson(){
+  const l=activeLesson;if(!trailLessonScopeReady(l)||l.finalized)return false;
+  const total=Number(l.answeredCount||0);if(!total)return toast('Responda uma questão antes de registrar o resultado.');
+  l.finalized=true;
+  const score=Math.round(l.correct/total*100),passed=total===l.questions.length&&score>=70,missions=missionPool(),id=missions.find(m=>normalizeText(m.subject)===normalizeText(selectedLearningSubject))?.id||null;
+  state.scores=state.scores||[];state.scores.push({id,total,correct:l.correct,date:new Date().toISOString(),campaignId:state.activeCampaignId,userId:typeof cloudSession!=='undefined'&&cloudSession?.user?.id||state._ownerUserId||'guest',subject:selectedLearningSubject,source:'trail'});
+  if(passed){state.learning.completed=state.learning.completed||{};const previous=state.learning.completed[l.unit.key];state.learning.completed[l.unit.key]={score:Math.max(score,previous?.score||0),date:new Date().toISOString()};if(!previous)state.learning.xp=Number(state.learning.xp||0)+100}
+  save();$('#lessonFill').style.width='100%';
+  $('#lessonStage').innerHTML=`<div class="lessonFinish"><div class="medal">${passed?'★':'↻'}</div><h2>${passed?'Fase concluída!':'Revisão da fase'}</h2><p>Você acertou <b>${l.correct} de ${total}</b> questões respondidas (${score}%).</p><p class="muted">${passed?'Próxima fase liberada · bônus de conclusão recebido.':l.hearts===0?esc(trailCooldownMessage()):'Revise os resumos e conclua a fase com pelo menos 70%.'}</p><button class="action" id="finishLessonButton">${passed?'Continuar trilha':'Voltar à trilha'}</button></div>`;
+  $('#finishLessonButton').onclick=()=>{if(!trailLessonScopeReady(l)||activeLesson!==l)return;$('#lessonDialog').close();activeLesson=null;restoreLessonStage();renderLearning();renderHero();renderReport();renderErrorNotebook()};return true;
+}
 function restoreLessonStage(){$('#lessonStage').innerHTML='<div class="eyebrow" id="lessonSubject">DISCIPLINA</div><h2 class="lessonQuestion" id="lessonQuestion"></h2><div class="lessonOptions" id="lessonOptions"></div><div class="lessonFeedback" id="lessonFeedback"></div><button class="action" id="lessonNext" hidden>Continuar</button>';$('#lessonNext').onclick=nextLesson}
 function renderCampaigns(){const current=activeCampaign();$('#campaignBtn').textContent=`${current?.name||'Meus portais'} ▾`;$('#campaignList').innerHTML=state.campaigns.map(c=>`<div class="campaignChoice ${c.id===state.activeCampaignId?'active':''}"><div><b>${esc(c.name)}</b><span class="small muted">${esc(c.organization||'Concurso personalizado')} · prioridade ${c.priority}</span></div><div class="campaignButtons"><button class="ghost" data-switch-campaign="${c.id}">${c.id===state.activeCampaignId?'Ativa':'Entrar'}</button><button class="ghost" data-edit-campaign="${c.id}">Editar</button><button class="ghost danger" data-delete-campaign="${c.id}">Excluir</button></div></div>`).join('');$$('[data-switch-campaign]').forEach(b=>b.onclick=()=>switchCampaign(b.dataset.switchCampaign));$$('[data-edit-campaign]').forEach(b=>b.onclick=()=>openCampaignEdit(b.dataset.editCampaign));$$('[data-delete-campaign]').forEach(b=>b.onclick=()=>deleteCampaign(b.dataset.deleteCampaign))}
 function switchCampaign(id){const current=activeCampaign();if(current)current.customCampaign=state.customCampaign;const next=state.campaigns.find(c=>c.id===id);if(!next)return;state.activeCampaignId=id;state.customCampaign=next.customCampaign||{name:next.name,missions:[]};selectedCustomSubject=localStorage.getItem(portalSelectionKey())||'';state.daily=null;state.dailySteps={};cloudDocuments=[];cloudEssays=[];ALL_SUMMARIES=[];ALL_FLASHCARDS=[];ALL_QUESTIONS=[];LEARNING_SUBJECTS=[];save();$('#campaignDialog').close();hydrateFromLocalDatabase(id).then(()=>{render();if(cloudSession)Promise.all([loadCloudDocuments(),loadGeneratedContent(),loadCampaignTopics(),loadEssays()]).then(()=>{persistToLocalDatabase(id);const act=document.querySelector('.view.active')?.id||'today';renderViewById(act,true)})});toast(`Portal ${next.name} ativado`)}
@@ -2895,7 +2946,7 @@ function classifyAssistantErrorMessage(error,status=0,data={}){
     return "Sem internet ou falha de conexão com o servidor. Verifique sua rede e tente novamente.";
   }
   if(status===401||status===403||/sess[aã]o expirou|jwt|unauthorized|not_authenticated/i.test(rawMsg)){
-    return "Sua sessão expirou. Entre novamente na sua conta para usar o Instrutor IA.";
+    return "Sua sessão expirou. Entre novamente na sua conta para usar o Invocador.";
   }
   if(data?.code==="DAILY_LIMIT"||/limite di[aá]rio/i.test(rawMsg)){
     return data?.error||"Cota diária atingida hoje. Configure sua chave Gemini pessoal ou aguarde a renovação à meia-noite.";
@@ -2910,8 +2961,54 @@ function classifyAssistantErrorMessage(error,status=0,data={}){
 }
 window.classifyAssistantErrorMessage=classifyAssistantErrorMessage;
 
-function renderAssistant(){const history=(state.aiHistory||[]).filter(belongsToActiveCampaign),materialCount=cloudDocuments.filter(doc=>doc.document_type!=="edital"&&doc.processing_status==="ready").length,summaryCount=ALL_SUMMARIES.length;$("#aiStatus").textContent=cloudSession?"IA conectada":"Entre para usar";$("#aiLibraryStatus").textContent=summaryCount?`${materialCount} PDF${materialCount===1?"":"s"} · ${summaryCount} assunto${summaryCount===1?"":"s"} sincronizado${summaryCount===1?"":"s"}`:"Nenhum material processado";$("#aiHistory").innerHTML=history.length?[...history].reverse().map(turn=>`<article class="aiTurn"><div class="aiQuestion">${esc(turn.question)}</div><div class="aiAnswer">${formatAIAnswer(typeof sanitizeAiPedagogicalText==="function"?sanitizeAiPedagogicalText(turn.answer,turn.question,""):turn.answer)}</div><div class="aiVerifyNotice small muted" style="margin-top:8px;padding-top:6px;border-top:1px dashed rgba(148,163,184,0.25)">⚖️ Apoio pedagógico por IA — confira sempre na fonte oficial, legislação vigente e edital atualizado.</div><div class="aiMeta"><span>${esc(turn.mode)}${turn.provider?` · IA ${esc(turn.provider)}`:""}</span><span>${turn.confidence==="apoiada_no_material"||turn.grounded?"✓ apoiada_no_material (Biblioteca da campanha)":"⚠ conhecimento_geral_conferir (Conferir na fonte oficial)"} · ${new Date(turn.date).toLocaleString("pt-BR")}</span></div></article>`).join(""):"<div class=\"empty\">Faça a primeira pergunta ao Instrutor IA neste portal.</div>"}
-async function sendAssistant(){const question=$("#aiQuestion").value.trim(),manualContext=$("#aiContext").value.trim(),automaticContext=assistantLibraryContext(question),context=[automaticContext,manualContext].filter(Boolean).join("\n\nCOMPLEMENTO DO USUÁRIO:\n").slice(0,18000),mode=$("#aiMode").value,button=$("#sendAI");if(!cloudSession)return toast("Entre na sua conta para usar o Instrutor IA");if(question.length<3)return toast("Escreva o que deseja estudar");if(typeof navigator!=="undefined"&&navigator.onLine===false)return toast("Sem internet no momento. Verifique sua conexão e tente novamente.");button.disabled=true;$("#aiLoading").classList.add("show");const controller=typeof AbortController!=="undefined"?new AbortController():null;const timeoutId=controller?setTimeout(()=>controller.abort(),90000):null;let resStatus=0,resData={};try{const session=await validSession();if(!session)throw new Error("Sua sessão expirou. Entre novamente.");const response=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{method:"POST",headers:{...authHeaders(session.access_token)},body:JSON.stringify({question,context,mode,campaign_id:activeCampaign()?.dbId,campaign:activeCampaign()?.name,document_titles:cloudDocuments.filter(doc=>doc.processing_status==="ready").map(doc=>doc.title)}),signal:controller?.signal});resStatus=response.status;resData=await response.json().catch(()=>({}));if(!response.ok)throw new Error(classifyAssistantErrorMessage(null,resStatus,resData));const cleanAnswer=typeof sanitizeAiPedagogicalText==="function"?sanitizeAiPedagogicalText(String(resData.answer||"").trim(),question,""):String(resData.answer||"").trim();if(!cleanAnswer)throw new Error(classifyAssistantErrorMessage({message:"resposta vazia"},502,{code:"EMPTY_RESPONSE"}));state.aiHistory.push({question,answer:cleanAnswer,mode,provider:resData.provider,grounded:!!context,confidence:resData.confidence||(context?"apoiada_no_material":"conhecimento_geral_conferir"),campaignId:state.activeCampaignId,date:new Date().toISOString()});if(state.aiHistory.length>30)state.aiHistory=state.aiHistory.slice(-30);$("#aiQuestion").value="";save();renderAssistant();const providerName={gemini:resData.key_source==="personal"?"Gemini (chave pessoal)":"Gemini",deepseek:"DeepSeek",groq:"Groq"}[resData.provider]||resData.provider||"IA";toast(`Resposta concluída com ${providerName}`)}catch(error){toast(classifyAssistantErrorMessage(error,resStatus,resData))}finally{if(timeoutId)clearTimeout(timeoutId);button.disabled=false;$("#aiLoading").classList.remove("show")}}
+function renderAssistant(){cancelAssistantOperationForScope();const history=(state.aiHistory||[]).filter(belongsToActiveCampaign),materialCount=cloudDocuments.filter(doc=>doc.document_type!=="edital"&&doc.processing_status==="ready").length,summaryCount=ALL_SUMMARIES.length;$("#aiStatus").textContent=cloudSession?"IA conectada":"Entre para usar";$("#aiLibraryStatus").textContent=summaryCount?`${materialCount} PDF${materialCount===1?"":"s"} · ${summaryCount} assunto${summaryCount===1?"":"s"} sincronizado${summaryCount===1?"":"s"}`:"Nenhum material processado";$("#aiHistory").innerHTML=history.length?[...history].reverse().map(turn=>`<article class="aiTurn"><div class="aiQuestion">${esc(turn.question)}</div><div class="aiAnswer">${formatAIAnswer(typeof sanitizeAiPedagogicalText==="function"?sanitizeAiPedagogicalText(turn.answer,turn.question,""):turn.answer)}</div><div class="aiVerifyNotice small muted" style="margin-top:8px;padding-top:6px;border-top:1px dashed rgba(148,163,184,0.25)">⚖️ Apoio pedagógico por IA — confira sempre na fonte oficial, legislação vigente e edital atualizado.</div><div class="aiMeta"><span>${esc(turn.mode)}${turn.provider?` · IA ${esc(turn.provider)}`:""}</span><span>${turn.confidence==="apoiada_no_material"||turn.grounded?"✓ apoiada_no_material (Biblioteca da campanha)":"⚠ conhecimento_geral_conferir (Conferir na fonte oficial)"} · ${new Date(turn.date).toLocaleString("pt-BR")}</span></div></article>`).join(""):"<div class=\"empty\">Faça a primeira pergunta ao Invocador neste portal.</div>"}
+function cancelAssistantOperationForScope(){
+  const operation=sendAssistant._operation;
+  if(!operation)return;
+  const same=cloudSession?.user?.id===operation.userId&&state._ownerUserId===operation.userId&&state.activeCampaignId===operation.portalId&&activeCampaign()?.dbId===operation.dbId&&Number(state._resetEpoch||0)===operation.resetEpoch;
+  if(same)return;
+  sendAssistant._operation=null;operation.controller?.abort();
+  const button=$('#sendAI'),loading=$('#aiLoading');if(button)button.disabled=false;loading?.classList.remove('show');
+}
+async function sendAssistant(){
+  cancelAssistantOperationForScope();
+  const userId=cloudSession?.user?.id;
+  if(!userId)return toast('Entre na sua conta para usar o Invocador IA.');
+  if(state._ownerUserId!==userId)return toast('Aguarde o carregamento da sua conta antes de usar o Invocador IA.');
+  const question=$('#aiQuestion').value.trim(),manualContext=$('#aiContext').value.trim(),mode=$('#aiMode').value;
+  if(question.length<3)return toast('Escreva o que deseja estudar');
+  if(typeof navigator!=='undefined'&&navigator.onLine===false)return toast('Sem internet no momento. Verifique sua conexão e tente novamente.');
+  const campaign=activeCampaign(),portalId=state.activeCampaignId,dbId=campaign?.dbId,resetEpoch=Number(state._resetEpoch||0),button=$('#sendAI'),loading=$('#aiLoading');
+  if(sendAssistant._operation){const previous=sendAssistant._operation;if(previous.userId===userId&&previous.portalId===portalId&&previous.resetEpoch===resetEpoch)return;previous.controller?.abort()}
+  const controller=typeof AbortController!=='undefined'?new AbortController():null;
+  const operation={userId,portalId,dbId,resetEpoch,controller};sendAssistant._operation=operation;
+  const currentScope=()=>sendAssistant._operation===operation&&cloudSession?.user?.id===userId&&state._ownerUserId===userId&&state.activeCampaignId===portalId&&activeCampaign()?.dbId===dbId&&Number(state._resetEpoch||0)===resetEpoch;
+  let timeoutId,resStatus=0,resData={};
+  try{
+    const automaticContext=assistantLibraryContext(question),context=[automaticContext,manualContext].filter(Boolean).join('\n\nCOMPLEMENTO DO USUÁRIO:\n').slice(0,18000);
+    const documentTitles=cloudDocuments.filter(doc=>doc.processing_status==='ready'&&(!doc.user_id||doc.user_id===userId||doc.is_community===true)).map(doc=>doc.title);
+    if(!currentScope())return false;
+    button.disabled=true;loading.classList.add('show');
+    timeoutId=controller?setTimeout(()=>controller.abort(),90000):null;
+    const session=await validSession();
+    if(!session||session.user?.id!==userId||!currentScope())return false;
+    const response=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{method:'POST',headers:{...authHeaders(session.access_token)},body:JSON.stringify({question,context,mode,campaign_id:dbId,campaign:campaign?.name,document_titles:documentTitles}),signal:controller?.signal});
+    if(!currentScope())return false;
+    resStatus=response.status;resData=await response.json().catch(()=>({}));
+    if(!currentScope())return false;
+    if(!response.ok)throw new Error(classifyAssistantErrorMessage(null,resStatus,resData));
+    const cleanAnswer=typeof sanitizeAiPedagogicalText==='function'?sanitizeAiPedagogicalText(String(resData.answer||'').trim(),question,''):String(resData.answer||'').trim();
+    if(!cleanAnswer)throw new Error(classifyAssistantErrorMessage({message:'resposta vazia'},502,{code:'EMPTY_RESPONSE'}));
+    state.aiHistory=state.aiHistory||[];state.aiHistory.push({question,answer:cleanAnswer,mode,provider:resData.provider,grounded:!!context,confidence:resData.confidence||(context?'apoiada_no_material':'conhecimento_geral_conferir'),campaignId:portalId,userId,date:new Date().toISOString()});
+    if(state.aiHistory.length>30)state.aiHistory=state.aiHistory.slice(-30);
+    // Uma pergunta nova digitada durante o envio não deve ser apagada pela resposta anterior.
+    if($('#aiQuestion').value.trim()===question)$('#aiQuestion').value='';
+    save();renderAssistant();
+    const providerName={gemini:resData.key_source==='personal'?'Gemini (chave pessoal)':'Gemini',deepseek:'DeepSeek',groq:'Groq'}[resData.provider]||'IA';
+    toast(`Resposta concluída com ${providerName}`);return true;
+  }catch(error){if(!currentScope())return false;toast(classifyAssistantErrorMessage(error,resStatus,resData));return false}
+  finally{if(timeoutId)clearTimeout(timeoutId);if(sendAssistant._operation===operation){button.disabled=false;loading.classList.remove('show');sendAssistant._operation=null}}
+}
 function render(){
   normalizeCampaigns();
   dedupeDailyHistory();
@@ -2936,7 +3033,7 @@ async function runSystemDiagnostics(){
   let localReadable=false;
   try{localStorage.getItem(KEY);localReadable=true}catch{}
   const rows=[
-    diagnosticRow('Aplicativo',true,`Revisão r174 · ${navigator.onLine?'conexão de rede detectada':'modo offline'}`),
+    diagnosticRow('Aplicativo',true,`Revisão r183 · ${navigator.onLine?'conexão de rede detectada':'modo offline'}`),
     diagnosticRow('Sincronização deste aparelho',!state._dirty&&Number(state._serverRevision)>0,`Revisão ${state._serverRevision||0} · ${state._dirty?'alterações pendentes':Number(state._serverRevision)>0?'último estado confirmado':'sem confirmação do servidor'}`),
     diagnosticRow('Leitura do armazenamento local',localReadable,localReadable?'Armazenamento acessível; não é teste de capacidade livre':'Armazenamento indisponível')
   ];

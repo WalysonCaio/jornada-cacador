@@ -4029,7 +4029,7 @@
       q('#questionBattleMode')?.addEventListener('change',updateQuestionPool);
     }
     if(!q('#questionHistoryFilter')){
-      filters.insertAdjacentHTML('beforeend',`<label class="field">Filtro TEC / Caderno<select id="questionHistoryFilter"><option value="all">Todas do banco</option><option value="unanswered">✨ Apenas inéditas (não resolvidas)</option><option value="wrong">❌ Questões que errei</option><option value="correct">✅ Questões que acertei</option><option value="favorites">⭐ Minhas favoritas</option></select></label>`);
+      filters.insertAdjacentHTML('beforeend',`<label class="field">Filtro TEC / Caderno<select id="questionHistoryFilter"><option value="all">Todas do banco</option><option value="answered">✓ Resolvidas</option><option value="unanswered">✨ Apenas inéditas (não resolvidas)</option><option value="wrong">❌ Questões que errei</option><option value="correct">✅ Questões que acertei</option><option value="favorites">⭐ Minhas favoritas</option></select></label>`);
       q('#questionHistoryFilter')?.addEventListener('change',updateQuestionPool);
     }
     const trainer=q('.questionTrainer');
@@ -4143,7 +4143,9 @@
     const selectedTopicLabel=topicSel&&topicSel.selectedIndex>=0?topicSel.options[topicSel.selectedIndex]?.text||'':'';
     let byTopic=source.filter(item=>questionMatchesBoardFilter(item,board)&&(topic==='all'||questionMatchesTopicFilter(item,topic,subject,selectedTopicLabel))&&(difficulty==='all'||normalizedDifficulty(item)===difficulty)&&(origin==='all'||normalizedOrigin(item)===origin));
     let filtered=byTopic.filter(item => !["sem_gabarito", "anulada"].includes(answerKeyStatus(item)));
-    if(historyFilter==='unanswered'){
+    if(historyFilter==='answered'){
+      filtered=filtered.filter(item=>isQuestionAnsweredBefore(item));
+    }else if(historyFilter==='unanswered'){
       const unanswered=filtered.filter(item=>!isQuestionAnsweredBefore(item));
       filtered=unanswered;
     }else if(historyFilter==='wrong'){
@@ -4758,6 +4760,8 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     toast('Questão e resolução passo a passo salvas nas suas Anotações!');
   }
 
+  window.saveCurrentQuestionToNotes=saveCurrentQuestionToNotes;
+
   // Sobrescreve showQuestion e answerQuestion com Caixa de Pergunta Moderna (Estilo Qconcursos / TEC / boaResposta + Solo Leveling)
   window.showQuestion=function(){
     const battle=activeQuestions;
@@ -4956,7 +4960,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         aiInput.value=`[Modo QAP Policial] Explique detalhadamente os fundamentos, artigos de lei e pegadinhas de banca sobre esta questão de ${item.subject} (${item.topic}): "${item.statement}"`;
         aiInput.focus();
       }
-      toast('🦅 Questão enviada para o Instrutor Tático em QAP!');
+      toast('🦅 Questão enviada para o Invocador em QAP!');
     };
     if(q('#skipQuestionBlankBtn'))q('#skipQuestionBlankBtn').disabled=true;
     q('#nextQuestion').hidden=false;
@@ -11744,7 +11748,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
             </label>
             <div class="trailHeartsBox">
               <span id="trailHeartsStatusBadge">♥♥♥ 3/3 vidas</span>
-              <button type="button" class="ghost small" id="restoreTrailHeartsToolbarBtn">❤️ Restaurar 3 Vidas</button>
+              <button type="button" class="ghost small" id="restoreTrailHeartsToolbarBtn">⏱ Ver renovação</button>
             </div>
           </div>
         `);
@@ -14122,23 +14126,20 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
 
       /* 10. Modo Visual Limpo / Direto (body.compactCleanUx — elimina poluição visual e excesso de textos explicativos longos) */
       body.compactCleanUx #docTitleHintBox,
-      body.compactCleanUx .appLegalFooter .small.muted,
       body.compactCleanUx #guildOfficialSimuladoCard .sectionHead .small.muted,
-      body.compactCleanUx #estudeiEditalThermometer > .small.muted,
       body.compactCleanUx #communityCoopBanner .small.muted,
       body.compactCleanUx .reverseScheduleCard > p.small.muted,
       body.compactCleanUx .studyCycleCard .sectionHead p.small.muted,
       body.compactCleanUx .tacticalDiagnosisCard > p.small.muted,
       body.compactCleanUx .examBankHubCard .sectionHead p.small.muted,
       body.compactCleanUx .simuladoLauncher .sectionHead p.small.muted,
-      body.compactCleanUx #topicMasteryRadarCard > p.small.muted,
-      body.compactCleanUx #cutoffAdviceText {
+      body.compactCleanUx #topicMasteryRadarCard > p.small.muted {
         display: none !important;
       }
       body.compactCleanUx .sectionHead p.small.muted,
       body.compactCleanUx .card > p.small.muted {
-        font-size: 11.5px !important;
-        line-height: 1.35 !important;
+        font-size: 12px !important;
+        line-height: 1.45 !important;
         margin-top: 2px !important;
         margin-bottom: 6px !important;
         opacity: 0.9;
@@ -14174,17 +14175,25 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     if (typeof document === "undefined") return;
     injectFullLightAppThemeStyles();
     const isClean = mode !== "detailed";
+    if (typeof window.applyCaveiraCleanDashboardMode === 'function') return window.applyCaveiraCleanDashboardMode(isClean, false);
     document.body.classList.toggle("compactCleanUx", isClean);
-    try { localStorage.setItem("jc_clean_ux_v1", isClean ? "clean" : "detailed"); } catch (_e) {}
+    document.body.classList.toggle("jcCleanDashboard", isClean);
+    try {
+      localStorage.setItem("jc_clean_ux_v1", isClean ? "clean" : "detailed");
+      localStorage.setItem("jc_caveira_clean_mode_v1", isClean ? "1" : "0");
+    } catch (_e) {}
     const btn = document.querySelector("#cleanUxToggleBtn");
     if (btn) {
       btn.innerHTML = isClean ? "📖<span>Textos Detalhados</span>" : "✨<span>Visual Enxuto</span>";
       btn.title = isClean ? "Mostrar todas as descrições e textos explicativos" : "Ativar Modo Visual Enxuto (sem excesso de textos)";
+      btn.setAttribute?.('aria-pressed', String(isClean));
     }
     const sBtn = document.querySelector("#settingsCleanUxToggleBtn");
     if (sBtn) {
       sBtn.textContent = isClean ? "📖 Alternar para Modo Detalhado (Mostrar textos explicativos)" : "✨ Alternar para Visual Enxuto (Sem poluição visual)";
+      sBtn.setAttribute?.('aria-pressed', String(isClean));
     }
+    return isClean;
   }
   window.applyCleanUxMode = applyCleanUxMode;
 
@@ -15680,7 +15689,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         askInput.value = `Explique detalhadamente a teoria, os artigos/regras, exemplos de prova e pegadinhas de banca sobre "${tp}" na disciplina de ${sb}.`;
         askInput.focus();
       }
-      toast(`🤖 Instrutor IA pronto para aprofundar "${shortLabel(tp, 36)}"!`);
+      toast(`🤖 Invocador pronto para aprofundar "${shortLabel(tp, 36)}"!`);
     }
   });
 

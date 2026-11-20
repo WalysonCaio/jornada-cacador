@@ -12,6 +12,10 @@ O projeto transforma o edital enviado pelo usuário em um plano de aprendizagem:
 
 [Correções e aplicação](docs/revisao-r182/LEIA-ME.md) · [Alterações](docs/revisao-r182/ALTERACOES.md) · [Verificações](docs/revisao-r182/VALIDACAO.txt). Preserva a biblioteca compartilhada e mantém os Manuais do Caçador na ajuda.
 
+## Revisão r183 — conferência do Gemini
+
+[Aplicação e GitHub](docs/revisao-r183/LEIA-ME.md) · [Conferência das promessas e avaliação](docs/revisao-r183/CONFERENCIA-GEMINI.md) · [Verificações](docs/revisao-r183/VALIDACAO.txt). Inclui a revisão r182, corrige fluxos incompletos e acrescenta importação autenticada de documentos legais oficiais. A biblioteca compartilhada foi preservada; os Manuais continuam na ajuda.
+
 ## Principais recursos
 
 - edital convertido em mapa de disciplinas e tópicos;
