@@ -1,8 +1,5 @@
-// ARQUIVO AUTOCONTIDO PARA COLAR NO EDITOR DO SUPABASE: account-security
-// Gerado por: node scripts/build-supabase-dashboard.mjs
-// Fonte: supabase/functions/account-security/index.ts
-// SHA-256 da fonte: 5f3ba7d89210713e71e1b246bb7cbcece07526ac614f371ccf1b64df4b0ae14f
-// Atualize a fonte e regenere; não exclua os validadores incorporados.
+// Jornada do Caçador — função autocontida para CLI e editor do painel.
+// Cópias para publicação: node scripts/build-supabase-dashboard.mjs
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

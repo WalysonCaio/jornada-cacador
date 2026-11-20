@@ -1,8 +1,5 @@
-// ARQUIVO AUTOCONTIDO PARA COLAR NO EDITOR DO SUPABASE: material-gemini
-// Gerado por: node scripts/build-supabase-dashboard.mjs
-// Fonte: supabase/functions/material-gemini/index.ts
-// SHA-256 da fonte: 8bffccda4daecc2291059d1f463c2f378832d754a582c10ed7f73cc0f4b57f93
-// Atualize a fonte e regenere; não exclua os validadores incorporados.
+// Jornada do Caçador — função autocontida para CLI e editor do painel.
+// Cópias para publicação: node scripts/build-supabase-dashboard.mjs
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

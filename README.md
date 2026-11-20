@@ -8,6 +8,10 @@ O projeto transforma o edital enviado pelo usuário em um plano de aprendizagem:
 
 [Alterações, avaliação e aplicação](docs/revisao-r178/LEIA-ME.md). Inclui correções de disciplinas/gabaritos, retomada, desempenho local e privacidade. Os Manuais do Caçador ficam na ajuda da plataforma; o compartilhamento da biblioteca foi preservado.
 
+## Revisão r182
+
+[Correções e aplicação](docs/revisao-r182/LEIA-ME.md) · [Alterações](docs/revisao-r182/ALTERACOES.md) · [Verificações](docs/revisao-r182/VALIDACAO.txt). Preserva a biblioteca compartilhada e mantém os Manuais do Caçador na ajuda.
+
 ## Principais recursos
 
 - edital convertido em mapa de disciplinas e tópicos;

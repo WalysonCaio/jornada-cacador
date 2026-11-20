@@ -1,7 +1,10 @@
-# Jornada do Caçador — Guia Unificado e Manual Passo a Passo (r181 — v105)
+# Jornada do Caçador — Guia Unificado (r182)
 
-Última atualização documental: 06 de novembro de 2026  
-Versão da aplicação: **r181** (Banco até a migração v105, Chefe com Maestria e Amostra Mínima ≥70%, Selo de Origem em Toda Questão, Recibo Honesto da Missão, Extrator Contínuo em Lote e WebView Seguro) (Ciclo Tático Sincronizado, Lei Seca Cronológica, Provas com Raio-X, Banco de Questões sem Viés, Duelo X1 60s e Conformidade LGPD/DPO)
+Revisão concluída em 19/11/2026. Versão do código: **r182**.
+
+Para aplicar esta entrega, siga [o passo a passo da revisão r182](docs/revisao-r182/LEIA-ME.md). A nova migração v109 corrige a biblioteca de leis; v107 e v108 continuam pré-requisitos para edital e privacidade. O guia histórico abaixo não substitui os resultados e limites da revisão atual.
+
+Os Manuais do Caçador são ajuda da plataforma e ficam fora das disciplinas. Gabaritos sem fonte/revisão permanecem pendentes. A base nativa de leis reúne seleções de dispositivos, sem promessa de texto integral ou vigência automaticamente conferida.
 
 Este documento reúne o **Manual Passo a Passo de Uso Pedagógico** (seções 1 a 6) e o **Guia Técnico de Manutenção, Banco de Dados e Publicação** (seções 7 a 21).
 

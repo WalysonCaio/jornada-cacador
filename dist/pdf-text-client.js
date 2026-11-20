@@ -961,19 +961,26 @@
       if (lastEnd > openB) {
         try {
           const arr = JSON.parse(`[${cleaned.slice(openB + 1, lastEnd + 1)}]`);
-          return { [key]: arr };
+          return { [key]: arr, _partial: true };
         } catch {}
       }
     }
     throw new Error("INVALID_RECOVERY_JSON");
   }
 
-  async function saveTopicsToCampaignAndSync(doc, rawTopics, session, pagesCount = 1) {
+  async function saveTopicsToCampaignAndSync(doc, rawTopics, session, pagesCount = 1, recoveryInfo = {}) {
     if (!isEditalType(doc)) {
       console.warn("Bloqueado: documento não é edital, não pode criar missões.", doc?.title, doc?.document_type);
       return false;
     }
-    const campaignName = typeof activeCampaign === "function" ? activeCampaign()?.name || "" : "";
+    const targetCampaign = (state.campaigns || []).find((campaign) => campaign.dbId === doc.campaign_id);
+    if (!targetCampaign || !session?.user?.id || (doc.user_id && doc.user_id !== session.user.id)) return false;
+    const targetCampaignId = targetCampaign.id;
+    const ownerId=session.user.id, resetEpoch=Number(state._resetEpoch||0);
+    const currentScope=()=>cloudSession?.user?.id===ownerId&&(!state._ownerUserId||state._ownerUserId===ownerId)&&state.activeCampaignId===targetCampaign.id&&Number(state._resetEpoch||0)===resetEpoch&&(state.campaigns||[]).some(c=>c.id===targetCampaign.id&&c.dbId===doc.campaign_id);
+    if(!currentScope())return false;
+    const ownerHeaders={...(typeof authHeaders==='function'?authHeaders(session.access_token):{})};
+    const campaignName = targetCampaign.name || "";
     const topics = typeof window.unpackEditalTopicsList === "function"
       ? window.unpackEditalTopicsList(rawTopics, campaignName, doc.title)
       : rawTopics.filter((t) => t?.subject && t?.topic).slice(0, 1800);
@@ -982,9 +989,17 @@
     const topicsFilter = `campaign_id=eq.${doc.campaign_id}&user_id=eq.${session.user.id}`;
     let backupTopics = [];
     try {
-      const backupRes = await cloudFetch(`campaign_topics?${topicsFilter}&select=campaign_id,user_id,subject,unit_name,topic,edital_order,subject_order,learning_order,difficulty,prerequisite_topic,pedagogical_reason`);
-      if (backupRes.ok) backupTopics = await backupRes.json().catch(() => []);
-    } catch {}
+      const backupRes = await cloudFetch(`campaign_topics?${topicsFilter}&select=campaign_id,user_id,subject,unit_name,topic,edital_order,subject_order,learning_order,difficulty,prerequisite_topic,pedagogical_reason`,{headers:ownerHeaders});
+      if(!currentScope())return false;
+      if (!backupRes.ok) throw new Error("MAP_READ_FAILED");
+      backupTopics = await backupRes.json();
+      if(!currentScope())return false;
+      if (!Array.isArray(backupTopics)) throw new Error("MAP_READ_FAILED");
+    } catch {
+      if(!currentScope())return false;
+      toast("Não foi possível conferir o mapa atual. Ele foi preservado; tente novamente quando a conexão voltar.");
+      return false;
+    }
 
     const newSubjects = new Set(topics.map((t) => normalizeSearch(t.subject)).filter(Boolean));
     const oldSubjects = new Set((backupTopics || []).map((t) => normalizeSearch(t.subject)).filter(Boolean));
@@ -1030,102 +1045,84 @@
 
     if (!rows.length) return false;
 
-    // Atualiza o estado local imediatamente para que os portais e disciplinas nunca fiquem vazios
+    const pdfMeta = window._extractedPdfMetaByDocId.get(doc.id) || {};
+    const totalPages = Math.max(Number(pdfMeta.pdfTotalPages) || 0, Number(pagesCount) || 1);
+    const processedPages = Math.min(Number(recoveryInfo.pagesProcessed) || Number(pagesCount) || 1, totalPages);
+    const coverage = {
+      percent: Math.min(100, Math.round(processedPages / totalPages * 100)),
+      summary_count: rows.length,
+      estimated_pages: totalPages,
+      incomplete: Boolean(pdfMeta.truncatedPages) || processedPages < totalPages || Boolean(recoveryInfo.incomplete),
+      needs_review: true,
+      warnings: ["Mapa extraído pelo modo de recuperação. A porcentagem refere-se às páginas processadas neste modo; confira disciplinas e tópicos com o edital original."],
+    };
+    // Sem migração v107 não existe fallback destrutivo: só atualiza o estado local
+    // depois de confirmar a transação de tópicos + status no servidor.
+    if(!currentScope())return false;
+    const persisted = await cloudFetch("rpc/replace_campaign_topics_atomic", {
+      method: "POST",
+      headers: { "Content-Type": "application/json",...ownerHeaders },
+      body: JSON.stringify({
+        p_user_id: session.user.id,
+        p_campaign_id: doc.campaign_id,
+        p_document_id: doc.id,
+        p_topics: rows,
+        p_coverage: coverage,
+      }),
+    }).catch(() => null);
+    const persistedData = persisted ? await persisted.json().catch(() => null) : null;
+    const confirmedRows = persistedData?.topics;
+    if (!persisted?.ok || !Array.isArray(confirmedRows) || persistedData?.saved !== rows.length || confirmedRows.length !== rows.length || !confirmedRows.every((item) => item && typeof item.id === "string" && item.subject && item.topic)) {
+      const missingMigration = persisted?.status === 404 || persistedData?.code === "PGRST202";
+      const partial = String(persistedData?.message || "").includes("PARTIAL_RESULT");
+      if(!currentScope())return false;
+      toast(missingMigration
+        ? "Aplique a migração v107 no Supabase para salvar o edital com segurança. O mapa atual foi preservado."
+        : partial
+          ? "A análise parcial não substituiu o mapa anterior. Tente reprocessar o edital completo."
+          : "Não foi possível confirmar a gravação do mapa. Recarregue o portal antes de tentar novamente.");
+      return false;
+    }
+
+    // A transação do portal de origem pode ter concluído; nenhuma resposta antiga altera a tela atual.
+    if(!currentScope())return true;
+    doc.processing_status = "ready";
+    doc.metadata = { ...(doc.metadata || {}), coverage };
     const previous = [...(state.customCampaign?.missions || [])];
-    const prefix = state.activeCampaignId.replace(/[^a-z0-9]/gi, "").slice(-10);
-    const missions = rows.map((item, i) => ({
-      id: `${prefix}-ai-${i}`,
+    const missions = confirmedRows.map((item, i) => ({
+      id: `edital-${item.id}`,
+      dbId: item.id,
       si: null,
       ti: i,
       name: item.topic,
-      subject: item.subject || "Edital",
+      subject: item.subject,
       editalOrder: item.edital_order,
       subjectOrder: item.subject_order,
       learningOrder: item.learning_order,
       difficulty: item.difficulty,
+      prerequisite: item.prerequisite_topic || "",
+      pedagogicalReason: item.pedagogical_reason || "",
     }));
     if (typeof reconcileMissionProgress === "function") reconcileMissionProgress(previous, missions);
-    state.customCampaign = { name: activeCampaign()?.name || "Campanha", missions };
-    if (activeCampaign()) activeCampaign().customCampaign = state.customCampaign;
+    state.customCampaign = { name: campaignName, missions };
+    state.campaigns.find((campaign) => campaign.id === targetCampaignId).customCampaign = state.customCampaign;
     save();
-
-    const delRes = await cloudFetch(`campaign_topics?${topicsFilter}`, { method: "DELETE" }).catch(() => null);
-    if (delRes && delRes.ok) {
-      let insRes = await cloudFetch("campaign_topics?on_conflict=campaign_id,subject,topic", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Prefer: "return=representation,resolution=ignore-duplicates",
-        },
-        body: JSON.stringify(rows),
-      }).catch(() => null);
-
-      // Fallback caso alguma coluna estendida (v48) ainda não exista no banco do usuário
-      if (!insRes || !insRes.ok) {
-        const minimalRows = rows.map((r) => ({
-          campaign_id: r.campaign_id,
-          user_id: r.user_id,
-          subject: r.subject,
-          unit_name: r.unit_name,
-          topic: r.topic,
-          edital_order: r.edital_order,
-        }));
-        insRes = await cloudFetch("campaign_topics?on_conflict=campaign_id,subject,topic", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Prefer: "return=representation,resolution=ignore-duplicates",
-          },
-          body: JSON.stringify(minimalRows),
-        }).catch(() => null);
-      }
-
-      if (!insRes || !insRes.ok) {
-        if (Array.isArray(backupTopics) && backupTopics.length) {
-          await cloudFetch("campaign_topics?on_conflict=campaign_id,subject,topic", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Prefer: "resolution=ignore-duplicates",
-            },
-            body: JSON.stringify(backupTopics),
-          }).catch(() => undefined);
-        }
-      }
-    }
-
-    await cloudFetch(`study_documents?id=eq.${doc.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        document_type: "edital",
-        processing_status: "ready",
-        metadata: {
-          ...(doc.metadata || {}),
-          coverage: {
-            percent: 100,
-            summary_count: rows.length,
-            estimated_pages: pagesCount,
-            needs_review: false,
-            warnings: [],
-          },
-        },
-      }),
-    }).catch(() => undefined);
-
-    doc.document_type = "edital";
-    doc.processing_status = "ready";
-    await loadCampaignTopics().catch(() => undefined);
     await loadCloudDocuments().catch(() => undefined);
+    if(!currentScope())return true;
     if (cloudSession && navigator.onLine && typeof pushCloudState === "function") {
       pushCloudState().catch(() => undefined);
     }
     render();
-    toast(`Edital analisado: ${subjOrderMap.size} disciplina(s) e ${rows.length} missões criadas no portal!`);
+    toast(`Edital salvo: ${subjOrderMap.size} disciplina(s) e ${confirmedRows.length} missões. Confira o mapa com o PDF original.`);
     return true;
   }
 
   async function recoverPdfViaAssistant(doc, pages, session) {
     if (!Array.isArray(pages) || !pages.length) return false;
+    const ownerId=session?.user?.id,portalId=state.activeCampaignId,resetEpoch=Number(state._resetEpoch||0);
+    const currentScope=()=>!!ownerId&&cloudSession?.user?.id===ownerId&&(!state._ownerUserId||state._ownerUserId===ownerId)&&state.activeCampaignId===portalId&&Number(state._resetEpoch||0)===resetEpoch&&(!doc.user_id||doc.user_id===ownerId)&&(state.campaigns||[]).some(c=>c.id===portalId&&c.dbId===doc.campaign_id);
+    if(!currentScope())return false;
+    const scopedCloudFetch=(path,options={})=>{if(!currentScope())return Promise.reject(new Error('DOCUMENT_SCOPE_CANCELLED'));return cloudFetch(path,{...options,headers:{...(options.headers||{}),...authHeaders(session.access_token)}})};
     const pdfMeta = window._extractedPdfMetaByDocId.get(doc.id) || {};
     const compactPages = compactPagesForInlinePayload(pages, 45000);
     const fullText = compactPages.map((p) => `[PÁGINA ${p.page}]\n${p.text}`).join("\n\n").slice(0, 45000);
@@ -1160,6 +1157,8 @@
         return false;
       }
       const rawTopics = [];
+      let completedChunks = 0;
+      let partialResponse = false;
       for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
         const prompt = `Extraia TODAS as disciplinas e tópicos do conteúdo programático presentes neste trecho (${cIdx + 1}/${chunks.length}) do edital "${doc.title}". IMPORTANTE: o campo "subject" DEVE ser o nome individual de cada disciplina (ex.: "Língua Portuguesa", "Raciocínio Lógico", "Informática", "Direito Constitucional", "Direito Administrativo", "Direito Penal", "Direito Processual Penal", "Legislação Especial", "Direitos Humanos", etc.) — NUNCA use "Conhecimentos Gerais", "Conteúdo Programático", "Edital Verticalizado", o nome do cargo ou do concurso como subject. Ignore regras administrativas. Responda EXCLUSIVAMENTE um JSON válido no formato {"topics":[{"subject":"Nome da Disciplina","unit":"","topic":"Tópico de estudo"}]}.`;
         const res = await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`, {
@@ -1172,17 +1171,31 @@
             campaign_id: doc.campaign_id,
           }),
         }).catch(() => null);
+      if(!currentScope())return false;
         const data = res ? await res.json().catch(() => ({})) : {};
+      if(!currentScope())return false;
         if (res?.ok && data?.answer) {
           try {
             const parsed = parseJsonBlock(data.answer);
-            if (Array.isArray(parsed?.topics)) rawTopics.push(...parsed.topics);
-          } catch {}
+            if (Array.isArray(parsed?.topics) && parsed.topics.length) {
+              rawTopics.push(...parsed.topics);
+              completedChunks++;
+              partialResponse ||= Boolean(parsed._partial);
+            }
+          } catch {
+      if(!currentScope())return false;}
         }
+      }
+      if (completedChunks !== chunks.length) {
+        toast("Um ou mais trechos do edital não puderam ser analisados. O mapa anterior foi preservado; tente novamente.");
+        return false;
       }
       const mergedTopics = rawTopics.length >= structured.topics.length ? rawTopics : structured.topics;
       if (!mergedTopics.length) return false;
-      return await saveTopicsToCampaignAndSync(doc, mergedTopics, session, pages.length);
+      return await saveTopicsToCampaignAndSync(doc, mergedTopics, session, pages.length, {
+        pagesProcessed: targetPages.length,
+        incomplete: partialResponse || targetPages.some((page) => String(page.text || "").length > 9000),
+      });
     }
 
     toast(`Concluindo análise de “${doc.title}” pelo modo de recuperação inteligente...`);
@@ -1201,7 +1214,9 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
         campaign_id: doc.campaign_id,
       }),
     });
+      if(!currentScope())return false;
     const data = await res.json().catch(() => ({}));
+      if(!currentScope())return false;
     if (!res.ok || !data?.answer) return false;
     const parsed = parseJsonBlock(data.answer);
     const summaries = Array.isArray(parsed?.summaries) ? parsed.summaries.filter((s) => s?.title && s?.explanation) : [];
@@ -1226,11 +1241,12 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
       source_refs: [{ document_id: doc.id, title: doc.title }],
     }));
 
-    const saveRes = await cloudFetch("generated_study_content", {
+    const saveRes = await scopedCloudFetch("generated_study_content", {
       method: "POST",
       headers: { "Content-Type": "application/json", Prefer: "return=representation" },
       body: JSON.stringify(dbRows),
     });
+      if(!currentScope())return false;
     if (!saveRes.ok) return false;
 
     const primarySubject = dbRows[0]?.content?.subject || "Conteúdo Geral";
@@ -1255,7 +1271,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
       needs_review: wasSampled,
     };
 
-    await cloudFetch(`study_documents?id=eq.${doc.id}`, {
+    await scopedCloudFetch(`study_documents?id=eq.${doc.id}`, {
       method: "PATCH",
       body: JSON.stringify({
         processing_status: "ready",
@@ -1269,9 +1285,11 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
         },
       }),
     });
+      if(!currentScope())return false;
 
     doc.processing_status = "ready";
     await Promise.all([loadGeneratedContent(), loadCloudDocuments()]);
+      if(!currentScope())return false;
     render();
     toast("Conteúdo, resumos, flashcards e questões gerados com sucesso!");
     return true;
@@ -1321,17 +1339,36 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
   processEditalDocument = async function (id) {
     const doc = cloudDocuments.find((item) => item.id === id);
     if (!doc) return;
+    const ownerId=cloudSession?.user?.id,portalId=state.activeCampaignId,resetEpoch=Number(state._resetEpoch||0);
+    const dbId=typeof activeCampaign==='function'?activeCampaign()?.dbId:(state.campaigns||[]).find(c=>c.id===portalId)?.dbId;
+    if(!ownerId||(state._ownerUserId&&state._ownerUserId!==ownerId)||(doc.user_id&&doc.user_id!==ownerId)||(dbId&&doc.campaign_id!==dbId))return false;
+    const operations=window._pdfDocumentProcessingOperations||(window._pdfDocumentProcessingOperations=new Map()),operation={};
+    operations.set(id,operation);
+    const currentScope=()=>operations.get(id)===operation&&cloudSession?.user?.id===ownerId&&(!state._ownerUserId||state._ownerUserId===ownerId)&&state.activeCampaignId===portalId&&Number(state._resetEpoch||0)===resetEpoch&&(!dbId||(typeof activeCampaign==='function'?activeCampaign()?.dbId:(state.campaigns||[]).find(c=>c.id===portalId)?.dbId)===dbId);
+    let session;
+    const scopedCloudFetch=(path,options={})=>{if(!currentScope())return Promise.reject(new Error('DOCUMENT_SCOPE_CANCELLED'));return cloudFetch(path,{...options,headers:{...(options.headers||{}),...authHeaders(session?.access_token)}})};
     window._activeProcessingDocs.add(id);
-    const session = await validSession();
+    try {
+    session = await validSession();
+      if(!currentScope())return false;
+    if(!session||session.user?.id!==ownerId){
+      if(currentScope()){
+        doc.processing_status='pending';renderUserDocuments();
+        const gate=document.getElementById?.('loginGate');if(gate)gate.hidden=false;
+        toast('Sua sessão expirou. Entre novamente para analisar o PDF.');
+      }
+      return false;
+    }
     if (session) {
       try {
         await prepareDocumentText(doc, session);
+      if(!currentScope())return false;
       } catch (error) {
+      if(!currentScope())return false;
         console.warn("Preparação de texto no navegador falhou", error);
         toast("Não foi possível extrair o texto no navegador. Tentaremos a leitura visual do PDF.");
       }
     }
-    try {
       const pages = window._extractedPagesByDocId.get(id);
       if (Array.isArray(pages) && pages.length && session) {
         const campaignName = typeof activeCampaign === "function" ? activeCampaign()?.name || "" : "";
@@ -1342,6 +1379,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
         // Provas, simulados, materiais, leis e anotações NUNCA viram edital nem geram missões.
         if (isEditalType(doc) && structured.subjectCount >= 2 && structured.topics.length >= 6) {
           const savedOk = await saveTopicsToCampaignAndSync(doc, structured.topics, session, pages.length);
+      if(!currentScope())return false;
           if (savedOk) return;
         }
 
@@ -1353,27 +1391,35 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
           const ansKeyFile = document.querySelector("#documentAnswerKeyFile")?.files?.[0];
           if (ansKeyFile) {
             try {
-              toast(`Extraindo gabarito oficial de “${ansKeyFile.name}” no navegador...`);
+              toast(`Extraindo arquivo de gabarito de “${ansKeyFile.name}” no navegador...`);
               const akBytes = new Uint8Array(await ansKeyFile.arrayBuffer());
+      if(!currentScope())return false;
               const pdfjs = await import("./pdf.mjs");
+      if(!currentScope())return false;
               const akPdf = await openPdfDocumentWithFallback(pdfjs, akBytes);
+      if(!currentScope())return false;
               let akText = "";
               for (let akP = 1; akP <= akPdf.numPages; akP++) {
                 const akPage = await akPdf.getPage(akP);
+      if(!currentScope())return false;
                 const akContent = await akPage.getTextContent();
+      if(!currentScope())return false;
                 akText += "\n" + (akContent.items || []).map((it) => it.str || "").join(" ");
                 akPage.cleanup();
               }
-              try { await akPdf.destroy(); } catch {}
+              try { await akPdf.destroy();
+      if(!currentScope())return false; } catch {
+      if(!currentScope())return false;}
               if (akText.trim()) {
-                pages.push({ page: pages.length + 1, text: `\nGABARITO OFICIAL DEFINITIVO\n${akText}` });
-                toast("✓ Gabarito oficial anexado e cruzado com sucesso com as questões da prova!");
+                pages.push({ page: pages.length + 1, text: `\nGABARITO INFORMADO NO ARQUIVO\n${akText}` });
+                toast("✓ Texto do gabarito anexado. A correspondência com as questões será conferida na extração.");
               }
             } catch (akErr) {
+      if(!currentScope())return false;
               console.warn("Falha ao ler PDF de gabarito anexado", akErr);
             }
           }
-          const activeCampBoard = (typeof activeCampaign === "function" ? activeCampaign()?.board : "") || "Instituto AOCP";
+          const activeCampBoard = "Banca não informada";
           const detectedBoard = /\b(?:cebraspe|cespe)\b/i.test(`${doc.title} ${doc.source_name}`) ? "Cebraspe"
             : /\b(?:fgv)\b/i.test(`${doc.title} ${doc.source_name}`) ? "FGV Conhecimento"
             : /\b(?:upenet|iaupe)\b/i.test(`${doc.title} ${doc.source_name}`) ? "UPENET/IAUPE"
@@ -1386,7 +1432,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
             : "";
           const fallbackSubj = (inferredFromTitle && inferredFromTitle !== "Conteúdo Geral")
             ? inferredFromTitle
-            : (doc.detected_subject || doc.metadata?.primary_subject || "Direito Constitucional");
+            : (doc.detected_subject || doc.metadata?.primary_subject || "Conteúdo Geral");
           let extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard });
           let examReport = extractedQs?.report || {};
           if (examReport.ambiguous && Array.isArray(examReport.cadernos) && examReport.cadernos.length >= 2) {
@@ -1395,6 +1441,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
               : typeof window.askUserExamCadernoChoice === "function"
               ? await window.askUserExamCadernoChoice(doc, examReport.cadernos)
               : (typeof prompt === "function" ? prompt(`Foram identificados múltiplos gabaritos/cadernos neste PDF (${examReport.cadernos.join(", ")}). Digite qual caderno deseja importar:`, examReport.cadernos[0]) : examReport.cadernos[0]);
+      if(!currentScope())return false;
             if (pickedCad && pickedCad.trim()) {
               extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard, preferredCaderno: pickedCad.trim() });
               examReport = extractedQs?.report || {};
@@ -1410,6 +1457,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
             userChoice = window._isBatchExamImportActive
               ? { allowWithoutKey: true, resolveWithAi: Boolean(window._batchResolveMissingKeyWithAi) }
               : await window.askUserExamAnswerKeyOptions(doc, pages, examReport);
+      if(!currentScope())return false;
             if (userChoice?.cancelled) {
               doc.processing_status = "pending";
               renderUserDocuments();
@@ -1417,7 +1465,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
               return;
             }
             if (userChoice?.appendedText) {
-              pages.push({ page: pages.length + 1, text: `\nGABARITO OFICIAL DEFINITIVO\n${userChoice.appendedText}` });
+              pages.push({ page: pages.length + 1, text: `\nGABARITO INFORMADO PELO USUÁRIO\n${userChoice.appendedText}` });
               extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard, preferredCaderno: userChoice.preferredCaderno || "" });
               examReport = extractedQs?.report || {};
             } else if (userChoice?.allowWithoutKey) {
@@ -1426,6 +1474,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
               if (userChoice?.resolveWithAi && Array.isArray(extractedQs) && extractedQs.length > 0 && typeof window.solveQuestionsArrayWithAi === "function") {
                 toast("🤖 Resolvendo gabarito e comentários das questões com a IA...");
                 await window.solveQuestionsArrayWithAi(extractedQs, doc);
+      if(!currentScope())return false;
                 examReport.answerUnknown = extractedQs.filter(q => q.answer_unknown || !Number.isInteger(Number(q.correct_index)) || Number(q.correct_index) < 0).length;
                 examReport.aiKeyed = extractedQs.filter(q => q.key_source === "ia_sugerido").length;
               }
@@ -1439,7 +1488,9 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
               const visualQs = extractedQs.filter(q => visualRe.test(String(q.statement || "")) && !q.figure_data_url);
               if (visualQs.length > 0 && pdfBytes && typeof document !== "undefined") {
                 const pdfjs = await import("./pdf.mjs");
+      if(!currentScope())return false;
                 const figPdf = await openPdfDocumentWithFallback(pdfjs, pdfBytes);
+      if(!currentScope())return false;
                 const pageSnapCache = new Map();
                 for (const vq of visualQs.slice(0, 12)) {
                   const snippet = String(vq.statement || "").replace(/\s+/g, " ").trim().slice(0, 45).toLowerCase();
@@ -1448,12 +1499,14 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
                   if (pageNum >= 1 && pageNum <= figPdf.numPages) {
                     if (!pageSnapCache.has(pageNum)) {
                       const pg = await figPdf.getPage(pageNum);
+      if(!currentScope())return false;
                       const vp = pg.getViewport({ scale: 1.15 });
                       const cnv = document.createElement("canvas");
                       cnv.width = Math.floor(vp.width);
                       cnv.height = Math.floor(vp.height);
                       const ctx2d = cnv.getContext("2d");
                       await pg.render({ canvasContext: ctx2d, viewport: vp }).promise;
+      if(!currentScope())return false;
                       pg.cleanup();
                       pageSnapCache.set(pageNum, cnv.toDataURL("image/jpeg", 0.68));
                     }
@@ -1461,9 +1514,12 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
                     vq.figure_page = pageNum;
                   }
                 }
-                try { await figPdf.destroy(); } catch {}
+                try { await figPdf.destroy();
+      if(!currentScope())return false; } catch {
+      if(!currentScope())return false;}
               }
             } catch (figErr) {
+      if(!currentScope())return false;
               console.warn("Aviso ao recortar figura de questão do PDF:", figErr);
             }
             const bySubj = {};
@@ -1483,7 +1539,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
                 source: doc.title,
                 page_start: 1,
                 page_end: pages.length,
-                explanation: `Pacote de ${qs.length} questão(ões) extraída(s) de ${doc.title} com o gabarito do próprio documento.`,
+                explanation: `Pacote de ${qs.length} questão(ões) extraída(s) de ${doc.title}. A situação do gabarito deve ser conferida em cada questão.`,
                 points: [],
                 flashcards: [],
                 questions: qs
@@ -1493,16 +1549,21 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
             // Grava primeiro e só apaga o conteúdo antigo depois (evita ficar sem nada se a gravação falhar).
             let oldIds = [];
             try {
-              const oldRes = await cloudFetch(`generated_study_content?source_document_id=eq.${encodeURIComponent(doc.id)}&select=id`);
+              const oldRes = await scopedCloudFetch(`generated_study_content?source_document_id=eq.${encodeURIComponent(doc.id)}&select=id`);
+      if(!currentScope())return false;
               if (oldRes.ok) oldIds = (await oldRes.json().catch(() => [])).map((row) => row.id).filter(Boolean);
-            } catch { /* sem backup de ids */ }
-            const saveRes = await cloudFetch("generated_study_content", {
+      if(!currentScope())return false;
+            } catch {
+      if(!currentScope())return false; /* sem backup de ids */ }
+            const saveRes = await scopedCloudFetch("generated_study_content", {
               method: "POST",
               headers: { "Content-Type": "application/json", Prefer: "return=representation" },
               body: JSON.stringify(dbRows)
             });
+      if(!currentScope())return false;
             if (saveRes.ok && oldIds.length) {
-              await cloudFetch(`generated_study_content?id=in.(${oldIds.map(encodeURIComponent).join(",")})`, { method: "DELETE" }).catch(() => undefined);
+              await scopedCloudFetch(`generated_study_content?id=in.(${oldIds.map(encodeURIComponent).join(",")})`, { method: "DELETE" }).catch(() => undefined);
+      if(!currentScope())return false;
             }
             if (saveRes.ok) {
               const primarySubject = Object.keys(bySubj)[0] || fallbackSubj;
@@ -1524,12 +1585,13 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
                 shallow_summaries: 0,
                 warnings: [
                   ...(examReport.pickedCaderno ? [`Gabarito importado do caderno "${examReport.pickedCaderno}". Confira se é o seu.`] : []),
-                  ...(examReport.answerUnknown ? [`${examReport.answerUnknown} questão(ões) foram importadas SEM gabarito e ficam fora de simulados e do desempenho até você adicionar o gabarito oficial.`] : []),
+                  ...(examReport.answerUnknown ? [`${examReport.answerUnknown} questão(ões) foram importadas SEM gabarito e ficam fora de simulados e do desempenho até validação.`] : []),
+                  ...(examReport.aiKeyed ? [`${examReport.aiKeyed} sugestão(ões) da IA aguardam validação humana e ficam fora do treino pontuado.`] : []),
                   ...(examPercent < 100 ? [`Foram importadas ${extractedQs.length} de ${validTotal} questões válidas da prova.`] : []),
                 ],
-                needs_review: examPercent < 95 || Boolean(examReport.answerUnknown)
+                needs_review: examPercent < 95 || Boolean(examReport.answerUnknown) || Boolean(examReport.aiKeyed)
               };
-              await cloudFetch(`study_documents?id=eq.${doc.id}`, {
+              await scopedCloudFetch(`study_documents?id=eq.${doc.id}`, {
                 method: "PATCH",
                 body: JSON.stringify({
                   processing_status: "ready",
@@ -1543,26 +1605,30 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
                   }
                 })
               });
+      if(!currentScope())return false;
               doc.processing_status = "ready";
               doc.metadata = { ...(doc.metadata || {}), coverage };
               await Promise.all([loadGeneratedContent(), loadCloudDocuments()]);
+      if(!currentScope())return false;
               render();
-              toast(`🎯 ${extractedQs.length} questões oficiais extraídas com gabarito de “${doc.title}” (${subjectsList.length} disciplina(s))!`);
+              toast(`🎯 ${extractedQs.length} questões extraídas de “${doc.title}” (${subjectsList.length} disciplina(s)). ${examReport.answerUnknown || 0} sem gabarito; ${examReport.aiKeyed || 0} sugestão(ões) da IA para validar.`);
               return;
             }
           }
           if (window._isBatchExamImportActive && (!Array.isArray(extractedQs) || extractedQs.length === 0)) {
             try {
-              await cloudFetch(`study_documents?id=eq.${doc.id}`, {
+              await scopedCloudFetch(`study_documents?id=eq.${doc.id}`, {
                 method: "PATCH",
                 body: JSON.stringify({
                   processing_status: "ready",
                   metadata: { ...(doc.metadata || {}), note: "Material verificado no lote" }
                 })
               });
+      if(!currentScope())return false;
               doc.processing_status = "ready";
               return;
-            } catch (_err) {}
+            } catch (_err) {
+      if(!currentScope())return false;}
           }
         }
       }
@@ -1572,24 +1638,28 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
         const userChoice = window._isBatchExamImportActive
           ? "compact_ocr"
           : await window.askUserScannedPdfPermission(doc, pdfMetaCheck);
+      if(!currentScope())return false;
         if (userChoice === "cancel") {
           doc.processing_status = "pending";
-          await cloudFetch(`study_documents?id=eq.${id}`, {
+          await scopedCloudFetch(`study_documents?id=eq.${id}`, {
             method: "PATCH",
             body: JSON.stringify({
               processing_status: "pending",
               metadata: { ...(doc.metadata || {}), pdf_kind: "scanned_image", selectable_chars: pdfMetaCheck.meaningfulCharacters || 0 },
             }),
           }).catch(() => undefined);
+      if(!currentScope())return false;
           renderUserDocuments();
           toast("Análise do PDF escaneado cancelada. Nenhum token da IA foi consumido.");
           return;
         }
         if (userChoice === "compact_ocr") {
           await convertScannedPdfViaBrowserCanvasOcr(doc, pdfMetaCheck, session);
+      if(!currentScope())return false;
         }
       }
       await originalProcessDocument(id);
+      if(!currentScope())return false;
       const updatedDoc = cloudDocuments.find((item) => item.id === id);
       const afterPages = window._extractedPagesByDocId.get(id);
       if (updatedDoc && Array.isArray(afterPages) && afterPages.length && session) {
@@ -1609,23 +1679,30 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
             try {
               if (structured.subjectCount >= 2 && structured.topics.length >= 5) {
                 await saveTopicsToCampaignAndSync(updatedDoc, structured.topics, session, afterPages.length);
+      if(!currentScope())return false;
               } else if (updatedDoc.processing_status !== "ready" || currentSubjCount <= 1) {
                 await recoverPdfViaAssistant(updatedDoc, afterPages, session);
+      if(!currentScope())return false;
               }
             } catch (recErr) {
+      if(!currentScope())return false;
               console.warn("Reparo estruturado/complementar do edital falhou", recErr);
             }
           }
         } else if (updatedDoc.processing_status !== "ready") {
           try {
             await recoverPdfViaAssistant(updatedDoc, afterPages, session);
+      if(!currentScope())return false;
           } catch (recErr) {
+      if(!currentScope())return false;
             console.warn("Modo de recuperação complementar falhou", recErr);
           }
         }
       }
     } finally {
-      window._activeProcessingDocs.delete(id);
+      if(currentScope()) {
+
+
       const btn = document.querySelector(`[data-process-doc="${id}"]`);
       if (btn) btn.disabled = false;
       const btnExam = document.querySelector(`[data-exam-doc-process="${id}"]`);
@@ -1636,14 +1713,18 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
       const finalDoc = cloudDocuments.find((item) => item.id === id);
       if (finalDoc && finalDoc.processing_status === "processing") {
         finalDoc.processing_status = "pending";
-        cloudFetch(`study_documents?id=eq.${id}`, {
+        scopedCloudFetch(`study_documents?id=eq.${id}`, {
           method: "PATCH",
           body: JSON.stringify({ processing_status: "pending" }),
         }).catch(() => undefined);
         renderUserDocuments();
         if (typeof renderExamBankHub === "function") renderExamBankHub();
       }
+
+      }
+      if(operations.get(id)===operation){window._activeProcessingDocs.delete(id);operations.delete(id)}
     }
+
   };
 
   const originalDeleteDocument = deleteCloudDocument;

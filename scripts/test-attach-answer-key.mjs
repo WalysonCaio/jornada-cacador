@@ -4,7 +4,7 @@ import vm from "node:vm";
 import assert from "node:assert/strict";
 const src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
 const grab = (from, to) => { const a = src.indexOf(from), b = src.indexOf(to, a + 1); assert(a >= 0 && b > a, `trecho não encontrado: ${from}`); return src.slice(a, b); };
-const code = [grab("function parseExamAnswerKeyTable(", "window.extractStructuredExamQuestions="), grab("async function attachAnswerKeyToExistingDoc", "window.attachAnswerKeyToExistingDoc=")].join("\n");
+const code = [grab("function answerKeyStatus(", "function classifyQuestion("),grab("function parseExamAnswerKeyTable(", "window.extractStructuredExamQuestions="), grab("async function attachAnswerKeyToExistingDoc", "window.attachAnswerKeyToExistingDoc=")].join("\n");
 
 async function run({ questions, pasted, preferredCaderno = "" }) {
   const toasts = [], patches = [];

@@ -1,0 +1,42 @@
+{
+  "format": 1,
+  "generator": "scripts/build-supabase-dashboard.mjs",
+  "files": [
+    {
+      "function": "assistente-pmpe",
+      "path": "supabase/dashboard/assistente-pmpe/index.ts",
+      "bytes": 55481,
+      "sha256": "2f454e199fec352ea8ba2e6f9ea882a24fed058f91f22d2dfdceeb5faf1e2c12"
+    },
+    {
+      "function": "redacao-gemini",
+      "path": "supabase/dashboard/redacao-gemini/index.ts",
+      "bytes": 24754,
+      "sha256": "b4d64ae8caa8818617d9a1ed09157c4a84f889cea565c75fa7f1008cb7bc0e07"
+    },
+    {
+      "function": "material-gemini",
+      "path": "supabase/dashboard/material-gemini/index.ts",
+      "bytes": 104901,
+      "sha256": "d1cc4aae888b7f47f5b6344b90154f0d7eaaeded882d54e54a7b2755e27cd6fd"
+    },
+    {
+      "function": "edital-gemini",
+      "path": "supabase/dashboard/edital-gemini/index.ts",
+      "bytes": 89140,
+      "sha256": "bd22ccdb68ac8f6cee4f50832f8c53f2d926ff71ad0425b0a42e578cc0732a2a"
+    },
+    {
+      "function": "account-security",
+      "path": "supabase/dashboard/account-security/index.ts",
+      "bytes": 13437,
+      "sha256": "964ea64cdd2570ac527fc56b436354f072ad9310d8942d41fbb99e5aa9b1d030"
+    },
+    {
+      "function": "system-diagnostics",
+      "path": "supabase/dashboard/system-diagnostics/index.ts",
+      "bytes": 7597,
+      "sha256": "15695e7181b80581aaa846e657d132344484ebcf9bf7d2f099f669a57f6bc196"
+    }
+  ]
+}
