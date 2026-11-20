@@ -8,7 +8,7 @@ const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url
 const swSrc = readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
 
 // 1. Verificar vinculação do módulo e Service Worker r182
-assert(swSrc.includes("r182"), "sw.js deve estar na versao r182");
+assert(swSrc.includes("r183"), "sw.js deve estar na versao r183");
 assert(swSrc.includes("./jc-architecture-modules.js"), "sw.js deve fazer cache offline do módulo jc-architecture-modules.js");
 assert(htmlSrc.includes('src="jc-architecture-modules.js"'), "index.html deve carregar jc-architecture-modules.js");
 assert(htmlSrc.includes('id="profile"'), "index.html deve possuir a view #profile (Meu Perfil)");

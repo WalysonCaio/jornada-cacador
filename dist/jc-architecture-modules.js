@@ -1027,6 +1027,18 @@
     };
   }
 
+  // Retira apenas pares de aspas externos; preserva as citações dentro da bio.
+  function normalizeHunterBio(value) {
+    let text=String(value??'').trim();
+    const pairs=[['“','”'],['"','"'],['‘','’'],["'","'"]];
+    for(let n=0;n<8;n++) {
+      const pair=pairs.find(([left,right])=>text.length>=2&&text.startsWith(left)&&text.endsWith(right));
+      if(!pair)break;
+      text=text.slice(pair[0].length,-pair[1].length).trim();
+    }
+    return text.slice(0,140);
+  }
+
   const profileSaveScopes=new Set();
   async function saveHunterProfileChanges(changes={}) {
     const scope=profileScope(),st=ownProfileState();
@@ -1035,7 +1047,7 @@
     if(profileSaveScopes.has(saveKey))return {status:'busy'};
     const clean=(value,max)=>String(value??'').trim().slice(0,max);
     const privacy=Object.fromEntries(['showAvatar','showStreak','showAccuracy','showHours','showTargetRole','showBadges','showBio'].map(key=>[key,changes.privacy?.[key]!==false]));
-    const snapshot={name:clean(changes.name,50)||'Caçador',role:clean(changes.role,80),secondaryRole:clean(changes.secondaryRole,80),bio:clean(changes.bio,140),privacy,hidden:!!changes.hidden};
+    const snapshot={name:clean(changes.name,50)||'Caçador',role:clean(changes.role,80),secondaryRole:clean(changes.secondaryRole,80),bio:normalizeHunterBio(changes.bio),privacy,hidden:!!changes.hidden};
     st.profileDisplayName=snapshot.name;st.profileTargetRole=snapshot.role;
     st.profileCity=clean(changes.city,50);st.profileBioMotto=snapshot.bio;
     st.publicProfile={...(st.publicProfile||{}),...snapshot,avatar:getHunterAvatarDataUrl()};
@@ -1255,7 +1267,7 @@
     const camp = typeof activeCampaign === 'function' ? activeCampaign() : null;
     const targetRole = st.profileTargetRole || st.publicProfile?.role || camp?.name || '';
     const secRole = st.publicProfile?.secondaryRole || '';
-    const bioMotto = st.profileBioMotto || st.publicProfile?.bio || '“Disciplina diária, constância no ciclo e foco cirúrgico até a posse.”';
+    const bioMotto = normalizeHunterBio(st.profileBioMotto || st.publicProfile?.bio || 'Disciplina diária, constância no ciclo e foco cirúrgico até a posse.');
     const cityState = st.profileCity || '';
 
     const totalXp = profileMetric(typeof xp === 'function' ? xp() : st.hunterStats?.xp)??0;
@@ -1331,7 +1343,7 @@
               <label class="field" style="margin:0">2º Concurso (Opcional)<input type="text" id="jcEditSecRoleInput" value="${profileHtml(secRole)}" maxlength="80" placeholder="Ex.: CBMPE / PPPE"></label>
               <label class="field" style="margin:0">Cidade / Estado<input type="text" id="jcEditCityInput" value="${profileHtml(cityState)}" maxlength="50"></label>
             </div>
-            <label class="field" style="margin:0">Lema de Estudos / Bio do Perfil<input type="text" id="jcEditBioInput" value="${profileHtml(bioMotto.replace(/^“|”$/g, ''))}" maxlength="140"></label>
+            <label class="field" style="margin:0">Lema de Estudos / Bio do Perfil<input type="text" id="jcEditBioInput" value="${profileHtml(bioMotto)}" maxlength="140"></label>
 
             <div class="eyebrow" style="color:#34d399;margin-top:4px">2. PRIVACIDADE DO SEU PERFIL PÚBLICO (O QUE OUTROS USUÁRIOS PODEM VER AO CLICAR EM VOCÊ)</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px">
@@ -1608,9 +1620,29 @@
 
   const JC_MODULES = (window.JC_MODULES = window.JC_MODULES || {});
   let wakeLockSentinel = null;
+  let wakeLockDesired = false;
+  let wakeLockGeneration = 0;
+  let wakeLockRequest = null;
+  let focusReturnElement = null;
+  let focusBackground = [];
+  let focusPreviousOverflow = '';
+  let focusFullscreenOwned = false;
+  let focusNativeActive = false;
+  let focusFullscreenRequest = null;
+  let focusControlPending = false;
+
+  function focusPreference(key) {
+    try { return localStorage.getItem(key); } catch (_e) { return null; }
+  }
+  function preferredCleanMode() {
+    const current = focusPreference('jc_caveira_clean_mode_v1');
+    if (current === '0' || current === '1') return current === '1';
+    return focusPreference('jc_clean_ux_v1') !== 'detailed';
+  }
 
   function formatHHMMSS(totalSeconds) {
-    const sec = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+    const number = Number(totalSeconds);
+    const sec = Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 0;
     const h = Math.floor(sec / 3600);
     const m = Math.floor((sec % 3600) / 60);
     const s = sec % 60;
@@ -1618,15 +1650,41 @@
   }
 
   async function requestScreenWakeLock(enable) {
+    const desired = Boolean(enable);
+    if (wakeLockDesired !== desired) wakeLockGeneration++;
+    wakeLockDesired = desired;
+    if (!desired) {
+      const previous = wakeLockSentinel;
+      wakeLockSentinel = null;
+      try { await previous?.release(); } catch (_e) {}
+      return;
+    }
+    if (typeof navigator === 'undefined' || !navigator.wakeLock || document.visibilityState === 'hidden') return;
+    if (wakeLockSentinel) return;
+    if (wakeLockRequest) {
+      try { await wakeLockRequest; } catch (_e) {}
+      if (wakeLockDesired && !wakeLockSentinel && !wakeLockRequest) return requestScreenWakeLock(true);
+      return;
+    }
+    const generation = wakeLockGeneration;
+    let request;
     try {
-      if (enable && 'wakeLock' in navigator && !wakeLockSentinel) {
-        wakeLockSentinel = await navigator.wakeLock.request('screen');
-        wakeLockSentinel.addEventListener('release', () => { wakeLockSentinel = null; });
-      } else if (!enable && wakeLockSentinel) {
-        await wakeLockSentinel.release();
-        wakeLockSentinel = null;
+      request = navigator.wakeLock.request('screen');
+      wakeLockRequest = request;
+      const sentinel = await request;
+      if (wakeLockRequest === request) wakeLockRequest = null;
+      const overlay = document.getElementById('jcFullscreenFocusOverlay');
+      if (!wakeLockDesired || generation !== wakeLockGeneration || !overlay || overlay.hidden || document.visibilityState === 'hidden') {
+        try { await sentinel.release(); } catch (_e) {}
+        return;
       }
-    } catch (_e) {}
+      wakeLockSentinel = sentinel;
+      sentinel.addEventListener?.('release', () => { if (wakeLockSentinel === sentinel) wakeLockSentinel = null; });
+    } catch (_e) {
+      // A recusa da API não impede a leitura ou o funcionamento do cronômetro.
+    } finally {
+      if (wakeLockRequest === request) wakeLockRequest = null;
+    }
   }
 
   function injectCaveiraCleanUiStyles() {
@@ -2156,11 +2214,47 @@
         .jcFocusModeSwitchRow { margin-top: 10px; }
       }
 
+      .jcFullscreenFocusModal { box-sizing:border-box; max-height:100dvh; overflow-y:auto; overscroll-behavior:contain; padding:max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+      .jcFocusGiantDigits { font-size:clamp(2rem, 11vw, 7.6rem); max-width:100%; white-space:nowrap; letter-spacing:.01em; }
+      .jcFocusControlsBar { box-sizing:border-box; max-width:100%; flex-wrap:wrap; justify-content:center; gap:10px; padding:10px 12px; }
+      .jcFocusBottomMeta { color:#cbd5e1; max-width:100%; line-height:1.5; }
+      .jcTopTimerDigits { width:auto; min-width:0; border:0; background:transparent; }
+      .jcTopUtilityRow { min-width:0; max-width:100%; flex-wrap:wrap; }
+      .jcTopTimerPill { min-width:0; max-width:100%; }
+      .jcTopXpPill { max-width:100%; min-width:0; overflow:hidden; }
+      #jcTopXpValue { overflow:hidden; text-overflow:ellipsis; }
+      .jcFocusCtrlBtn:focus-visible, .jcFocusModeChip:focus-visible, .jcTopTimerDigits:focus-visible, .jcSideNavBtn:focus-visible { outline:3px solid #65e7ff; outline-offset:3px; }
+      body.lightAppTheme .jcFullscreenFocusModal { background:radial-gradient(circle at 50% 35%,#ffffff 0%,#f1f5f9 100%); color:#0f172a; }
+      body.lightAppTheme .jcFocusGiantDigits, body.lightAppTheme .jcFullscreenFocusModal.isRunning .jcFocusGiantDigits { color:#0f172a; text-shadow:none; }
+      body.lightAppTheme .jcFocusMissionPill, body.lightAppTheme .jcFocusControlsBar, body.lightAppTheme .jcFocusCtrlBtn, body.lightAppTheme .jcFocusModeChip { background:#fff; color:#0f172a; border-color:#64748b; box-shadow:none; }
+      body.lightAppTheme .jcFocusModeChip.active { background:#e0f2fe; color:#075985; border-color:#0369a1; }
+      body.lightAppTheme .jcFocusCtrlBtn.primaryPlay { background:#0369a1; color:#fff; border-color:#0369a1; }
+      body.lightAppTheme .jcFocusBottomMeta, body.lightAppTheme .jcTopTimerBtn { color:#334155; }
+      body.lightAppTheme .jcTopTimerBtn:hover { background:#e0f2fe; color:#0f172a; }
+      body.lightAppTheme .jcTopTimerBtn.playBtn.active { background:#cffafe; color:#075985; }
+      body.lightAppTheme .jcFocusCtrlBtn:focus-visible, body.lightAppTheme .jcFocusModeChip:focus-visible, body.lightAppTheme .jcTopTimerDigits:focus-visible { outline-color:#075985; }
+      @media (max-width:760px) {
+        .jcTopTimerPill { flex:1 1 240px !important; }
+        .jcTopXpPill { flex:0 1 auto !important; }
+        .top > .accountArea { max-width:118px; min-width:0; flex-wrap:wrap; justify-content:flex-end; }
+        .top > .accountArea #accountBtn { max-width:76px; overflow:hidden; text-overflow:ellipsis; }
+      }
+      @media (max-width:360px) {
+        .jcFocusControlsBar { gap:8px; padding:8px; }
+        .jcFocusCtrlBtn { width:42px; height:42px; }
+        .jcFocusCtrlBtn.primaryPlay { width:48px; height:48px; }
+      }
+      @media (max-height:350px) {
+        .jcFullscreenFocusModal { justify-content:flex-start; }
+        .jcFocusCenterEmblem { display:none; }
+        .jcFocusModeSwitchRow { margin-top:8px; }
+      }
+      @media (prefers-reduced-motion:reduce) {
+        .jcFullscreenFocusModal, .jcFocusCenterEmblem, .jcSideRail, body.jcHasSidebar { animation:none !important; transition:none !important; }
+      }
+
       /* ── 4. DESPOLUIÇÃO VISUAL PROFUNDA ("CLEAN DASHBOARD MODE" PADRÃO) ── */
-      body.jcCleanDashboard .sectionHead p.small.muted,
-      body.jcCleanDashboard .questionTrust,
-      body.jcCleanDashboard #streakRequirement,
-      body.jcCleanDashboard .localDbBar {
+      body.jcCleanDashboard .jcDecorativeDescription {
         display: none !important;
       }
       body.jcCleanDashboard .card {
@@ -2225,7 +2319,7 @@
   }
 
   // Estado do modo de exibição do cronômetro ('countdown' = regressivo do bloco | 'elapsed' = progressivo do dia)
-  let focusDisplayMode = localStorage.getItem('jc_focus_display_mode_v1') || 'countdown';
+  let focusDisplayMode = focusPreference('jc_focus_display_mode_v1') === 'elapsed' ? 'elapsed' : 'countdown';
 
   function getFocusSecondsToDisplay() {
     const st = typeof state === 'object' && state ? state : (window.state || {});
@@ -2292,11 +2386,42 @@
     }
   }
 
+  function runFocusTimerControl(action) {
+    if (focusControlPending) return;
+    focusControlPending = true;
+    let result;
+    try {
+      if (action === 'reset') result = document.getElementById('timerReset')?.click();
+      else if (action === 'toggle' || (typeof timerRun !== 'undefined' && timerRun)) {
+        if (typeof toggleTimer === 'function') result = toggleTimer();
+        else result = document.getElementById('timerToggle')?.click();
+      }
+    } catch (error) {
+      if (typeof window.toast === 'function') window.toast(error?.message || 'Não foi possível atualizar o cronômetro.');
+    }
+    updateAllFocusTimerDisplays();
+    Promise.resolve(result).catch(error => {
+      if (typeof window.toast === 'function') window.toast(error?.message || 'Não foi possível atualizar o cronômetro.');
+    }).finally(() => { focusControlPending = false; updateAllFocusTimerDisplays(); });
+  }
+
+  function focusOverlayControls(modal) {
+    return [...modal.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')].filter(element => !element.hidden && !element.disabled && (typeof element.getClientRects !== 'function' || element.getClientRects().length > 0));
+  }
+
   function openFullscreenFocusTimer() {
     ensureFullscreenFocusModalExists();
     const modal = document.getElementById('jcFullscreenFocusOverlay');
     if (!modal) return;
-    // Atualiza nome da missão atual no topo do modal
+    const firstOpening = modal.hidden;
+    if (firstOpening) {
+      focusReturnElement = document.activeElement;
+      focusPreviousOverflow = document.body.style.overflow || '';
+      focusBackground = [...(document.body.children || [])].filter(element => element !== modal && !['SCRIPT','STYLE'].includes(element.tagName)).map(element => ({ element, inert: Boolean(element.inert), hidden: element.getAttribute?.('aria-hidden') }));
+      focusBackground.forEach(({ element }) => { element.inert = true; element.setAttribute?.('aria-hidden', 'true'); });
+      document.body.style.overflow = 'hidden';
+      document.body.classList.add('jcFocusOverlayOpen');
+    }
     const missionEl = document.getElementById('jcFocusMissionLabel');
     if (missionEl) {
       try {
@@ -2306,25 +2431,50 @@
         missionEl.textContent = curM ? `🎯 ${curM.subject} — ${curM.name}` : '⚔️ Modo Foco Imersivo · Jornada do Caçador';
       } catch (_e) {}
     }
-    modal.hidden = false; if (modal.classList) modal.classList.add('open');
+    modal.hidden = false;
+    modal.classList.add('open');
     updateAllFocusTimerDisplays();
+    document.getElementById('jcFsPlayPauseBtn')?.focus?.();
     requestScreenWakeLock(true);
-    try {
-      if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      }
-    } catch (_e) {}
+    focusNativeActive = Boolean(document.fullscreenElement);
+    if (document.documentElement.requestFullscreen && !document.fullscreenElement && !focusFullscreenRequest) {
+      try {
+        const request = Promise.resolve(document.documentElement.requestFullscreen());
+        focusFullscreenRequest = request;
+        request.then(() => {
+          if (modal.hidden) {
+            if (document.fullscreenElement === document.documentElement) document.exitFullscreen?.().catch?.(() => {});
+          } else {
+            focusFullscreenOwned = document.fullscreenElement === document.documentElement;
+            focusNativeActive = Boolean(document.fullscreenElement);
+          }
+        }).catch(() => {}).finally(() => { if (focusFullscreenRequest === request) focusFullscreenRequest = null; });
+      } catch (_e) {}
+    }
   }
 
   function closeFullscreenFocusTimer() {
     const modal = document.getElementById('jcFullscreenFocusOverlay');
-    if (modal) { modal.hidden = true; if (modal.classList) modal.classList.remove('open'); }
+    const wasOpen = modal && !modal.hidden;
+    if (modal) { modal.hidden = true; modal.classList.remove('open'); }
     requestScreenWakeLock(false);
+    if (wasOpen) {
+      focusBackground.forEach(({ element, inert, hidden }) => {
+        element.inert = inert;
+        if (hidden === null || hidden === undefined) element.removeAttribute?.('aria-hidden');
+        else element.setAttribute?.('aria-hidden', hidden);
+      });
+      focusBackground = [];
+      document.body.style.overflow = focusPreviousOverflow;
+      document.body.classList.remove('jcFocusOverlayOpen');
+      if (focusReturnElement?.isConnected !== false) focusReturnElement?.focus?.();
+      focusReturnElement = null;
+    }
     try {
-      if (document.fullscreenElement && document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
-      }
+      if (focusFullscreenOwned && document.fullscreenElement && document.exitFullscreen) Promise.resolve(document.exitFullscreen()).catch(() => {});
     } catch (_e) {}
+    focusFullscreenOwned = false;
+    focusNativeActive = false;
   }
 
   window.openFullscreenFocusTimer = openFullscreenFocusTimer;
@@ -2336,6 +2486,7 @@
     modal.id = 'jcFullscreenFocusOverlay';
     modal.className = 'jcFullscreenFocusModal';
     modal.hidden = true;
+    modal.tabIndex = -1;
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
     modal.setAttribute('aria-label', 'Cronômetro de foco em tela cheia');
@@ -2358,21 +2509,9 @@
     `;
     document.body.appendChild(modal);
 
-    document.getElementById('jcFsPlayPauseBtn').onclick = () => {
-      if (typeof toggleTimer === 'function') toggleTimer().then(updateAllFocusTimerDisplays);
-      else document.getElementById('timerToggle')?.click();
-      setTimeout(updateAllFocusTimerDisplays, 50);
-    };
-    document.getElementById('jcFsStopBtn').onclick = () => {
-      if (typeof timerRun !== 'undefined' && timerRun && typeof toggleTimer === 'function') {
-        toggleTimer().then(updateAllFocusTimerDisplays);
-      }
-      setTimeout(updateAllFocusTimerDisplays, 50);
-    };
-    document.getElementById('jcFsResetBtn').onclick = () => {
-      document.getElementById('timerReset')?.click();
-      setTimeout(updateAllFocusTimerDisplays, 50);
-    };
+    document.getElementById('jcFsPlayPauseBtn').onclick = () => runFocusTimerControl('toggle');
+    document.getElementById('jcFsStopBtn').onclick = () => runFocusTimerControl('stop');
+    document.getElementById('jcFsResetBtn').onclick = () => runFocusTimerControl('reset');
     document.getElementById('jcFsExitFullscreenBtn').onclick = () => closeFullscreenFocusTimer();
 
     modal.querySelectorAll('[data-jc-focus-mode]').forEach(chip => {
@@ -2385,14 +2524,35 @@
     });
 
     document.addEventListener('keydown', (e) => {
-      if (modal.hidden) return;
+      if (modal.hidden || e.isComposing) return;
       if (e.key === 'Escape') {
-        e.preventDefault();
-        closeFullscreenFocusTimer();
-      } else if (e.key === ' ' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '')) {
-        e.preventDefault();
-        document.getElementById('jcFsPlayPauseBtn')?.click();
+        e.preventDefault(); closeFullscreenFocusTimer(); return;
       }
+      const active = document.activeElement;
+      if (e.key === 'Tab') {
+        const controls = focusOverlayControls(modal), first = controls[0], last = controls[controls.length - 1];
+        if (!first) { e.preventDefault(); modal.focus?.(); }
+        else if (e.shiftKey && (active === first || !modal.contains?.(active))) { e.preventDefault(); last.focus?.(); }
+        else if (!e.shiftKey && (active === last || !modal.contains?.(active))) { e.preventDefault(); first.focus?.(); }
+        return;
+      }
+      const interactive = ['INPUT','TEXTAREA','SELECT','BUTTON','A','SUMMARY'].includes(active?.tagName || '') || active?.isContentEditable || active?.closest?.('[contenteditable="true"],[contenteditable=""]');
+      if (e.key === ' ' && !e.repeat && !e.altKey && !e.ctrlKey && !e.metaKey && !interactive && !e.defaultPrevented) {
+        e.preventDefault(); runFocusTimerControl('toggle');
+      }
+    });
+    document.addEventListener('focusin', event => {
+      if (!modal.hidden && !modal.contains?.(event.target)) (focusOverlayControls(modal)[0] || modal).focus?.();
+    });
+    document.addEventListener('fullscreenchange', () => {
+      if (modal.hidden) return;
+      if (document.fullscreenElement) {
+        focusNativeActive = true;
+        if (focusFullscreenRequest && document.fullscreenElement === document.documentElement) focusFullscreenOwned = true;
+      } else if (focusNativeActive) closeFullscreenFocusTimer();
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (!modal.hidden) requestScreenWakeLock(document.visibilityState !== 'hidden');
     });
   }
 
@@ -2406,7 +2566,7 @@
         <button type="button" class="jcTopTimerBtn stopBtn" id="jcTopTimerStopBtn" aria-label="Pausar foco" title="Pausar Foco">⏹</button>
         <button type="button" class="jcTopTimerBtn resetBtn" id="jcTopTimerResetBtn" aria-label="Reiniciar bloco" title="Reiniciar Bloco">↻</button>
         <span class="jcTopTimerDivider"></span>
-        <span class="jcTopTimerDigits" id="jcTopTimerDigits">00:50:00</span>
+        <button type="button" class="jcTopTimerDigits" id="jcTopTimerDigits" aria-label="Abrir cronômetro em tela cheia">00:50:00</button>
         <button type="button" class="jcTopTimerExpandBtn" id="jcTopTimerExpandBtn" aria-label="Expandir cronômetro em tela cheia" title="Modo Foco em Tela Cheia (Estilo Caveira)">⛶</button>
       </div>
       <div class="jcTopXpPill" id="jcTopXpPill" title="Sua Experiência Acumulada">
@@ -2424,21 +2584,9 @@
       accountArea.insertAdjacentHTML('afterbegin', timerPillHtml);
     }
 
-    document.getElementById('jcTopTimerPlayBtn').onclick = () => {
-      if (typeof toggleTimer === 'function') toggleTimer().then(updateAllFocusTimerDisplays);
-      else document.getElementById('timerToggle')?.click();
-      setTimeout(updateAllFocusTimerDisplays, 50);
-    };
-    document.getElementById('jcTopTimerStopBtn').onclick = () => {
-      if (typeof timerRun !== 'undefined' && timerRun && typeof toggleTimer === 'function') {
-        toggleTimer().then(updateAllFocusTimerDisplays);
-      }
-      setTimeout(updateAllFocusTimerDisplays, 50);
-    };
-    document.getElementById('jcTopTimerResetBtn').onclick = () => {
-      document.getElementById('timerReset')?.click();
-      setTimeout(updateAllFocusTimerDisplays, 50);
-    };
+    document.getElementById('jcTopTimerPlayBtn').onclick = () => runFocusTimerControl('toggle');
+    document.getElementById('jcTopTimerStopBtn').onclick = () => runFocusTimerControl('stop');
+    document.getElementById('jcTopTimerResetBtn').onclick = () => runFocusTimerControl('reset');
     document.getElementById('jcTopTimerDigits').onclick = () => openFullscreenFocusTimer();
     document.getElementById('jcTopTimerExpandBtn').onclick = () => openFullscreenFocusTimer();
 
@@ -2452,7 +2600,7 @@
 
   function ensureCollapsibleDesktopSidebar() {
     if (document.getElementById('jcCollapsibleSidebar')) return;
-    const isCollapsed = localStorage.getItem('jc_sidebar_collapsed_v1') === '1';
+    const isCollapsed = focusPreference('jc_sidebar_collapsed_v1') === '1';
     document.body.classList.add('jcHasSidebar');
     document.body.classList.toggle('jcSidebarCollapsed', isCollapsed);
 
@@ -2612,27 +2760,36 @@
     const isClean = Boolean(enable);
     document.body.classList.toggle('jcCleanDashboard', isClean);
     document.body.classList.toggle('compactCleanUx', isClean);
-    try { localStorage.setItem('jc_caveira_clean_mode_v1', isClean ? '1' : '0'); } catch (_e) {}
+    try {
+      localStorage.setItem('jc_caveira_clean_mode_v1', isClean ? '1' : '0');
+      localStorage.setItem('jc_clean_ux_v1', isClean ? 'clean' : 'detailed');
+    } catch (_e) {}
     const lbl = document.querySelector('#jcSideCleanModeToggleBtn .jcSideNavLabel');
     if (lbl) lbl.textContent = isClean ? 'Visual Limpo: ON' : 'Visual Limpo: OFF';
-    const todayAcc = document.getElementById('jcTodaySecondaryAccordion');
-    const repAcc = document.getElementById('jcReportSecondaryAccordion');
-    if (isClean) {
-      organizeTodaySecondaryCardsIntoDrawer();
-      if (todayAcc) todayAcc.open = false;
-      if (repAcc) repAcc.open = false;
-    } else {
-      if (todayAcc) todayAcc.open = true;
-      if (repAcc) repAcc.open = true;
+    const side = document.getElementById('jcSideCleanModeToggleBtn');
+    side?.setAttribute?.('aria-pressed', String(isClean));
+    const btn = document.getElementById('cleanUxToggleBtn');
+    if (btn) {
+      btn.innerHTML = isClean ? '📖<span>Textos Detalhados</span>' : '✨<span>Visual Enxuto</span>';
+      btn.title = isClean ? 'Visual limpo ativado. Mostrar detalhes.' : 'Modo detalhado ativado. Recolher elementos decorativos.';
+      btn.setAttribute?.('aria-pressed', String(isClean));
     }
-    if (showNotice && typeof window.toast === 'function') {
-      window.toast(
-        isClean
-          ? '✨ Visual Limpo ON: Banners decorativos, textos longos e blocos secundários recolhidos para foco máximo!'
-          : '📖 Visual Limpo OFF (Modo Detalhado): Todos os banners ilustrativos, dicas e cartões foram expandidos!'
-      );
+    const settings = document.getElementById('settingsCleanUxToggleBtn');
+    if (settings) {
+      settings.textContent = isClean ? '📖 Alternar para Modo Detalhado (Mostrar textos explicativos)' : '✨ Alternar para Visual Enxuto (Sem poluição visual)';
+      settings.setAttribute?.('aria-pressed', String(isClean));
     }
+    if (isClean) organizeTodaySecondaryCardsIntoDrawer();
+    for (const id of ['jcTodaySecondaryAccordion','jcReportSecondaryAccordion']) {
+      const drawer = document.getElementById(id);
+      if (drawer) drawer.open = !isClean;
+    }
+    if (showNotice && typeof window.toast === 'function') window.toast(isClean
+      ? '✨ Visual Limpo ativado: banners decorativos e detalhes secundários recolhidos. Avisos e fontes continuam visíveis.'
+      : '📖 Modo detalhado ativado: banners e seções secundárias expandidos.');
+    return isClean;
   }
+
   window.applyCaveiraCleanDashboardMode = applyCaveiraCleanDashboardMode;
 
   function bootCaveiraUiAndFullscreenTimer() {
@@ -2641,7 +2798,7 @@
     ensureTopHeaderFocusTimerBar();
     ensureCollapsibleDesktopSidebar();
 
-    const preferClean = localStorage.getItem('jc_caveira_clean_mode_v1') !== '0';
+    const preferClean = preferredCleanMode();
     applyCaveiraCleanDashboardMode(preferClean);
     updateAllFocusTimerDisplays();
 
@@ -2929,220 +3086,249 @@
   // O acervo de leis é pessoal por conta/reset e pode ser reutilizado nos seus portais.
   // Chaves antigas sem proprietário permanecem intactas, mas não são atribuídas a outra conta.
   const LAWS_INTERNAL_KEY = 'jc_internal_laws_db_r182';
+  const OFFICIAL_LAW_IMPORTS = [
+    {id:'cf88',title:'Constituição Federal de 1988',discipline:'Direito Constitucional'},
+    {id:'cp',title:'Código Penal',discipline:'Direito Penal'},
+    {id:'cpp',title:'Código de Processo Penal',discipline:'Direito Processual Penal'},
+    {id:'cpm',title:'Código Penal Militar',discipline:'Direito Penal Militar'},
+    {id:'cppm',title:'Código de Processo Penal Militar',discipline:'Direito Processual Penal Militar'},
+    {id:'improbidade',title:'Lei de Improbidade Administrativa',discipline:'Direito Administrativo'},
+    {id:'licitacoes',title:'Lei de Licitações e Contratos',discipline:'Direito Administrativo'},
+    {id:'abuso',title:'Lei de Abuso de Autoridade',discipline:'Legislação Extravagante'},
+    {id:'tortura',title:'Lei dos Crimes de Tortura',discipline:'Legislação Extravagante'},
+    {id:'maria-da-penha',title:'Lei Maria da Penha',discipline:'Legislação Extravagante'},
+    {id:'desarmamento',title:'Estatuto do Desarmamento',discipline:'Legislação Extravagante'},
+    {id:'drogas',title:'Lei de Drogas',discipline:'Legislação Extravagante'},
+    {id:'estatuto-pmpe',title:'Estatuto dos Policiais Militares de Pernambuco',discipline:'Direito Militar'}
+  ];
+  const OFFICIAL_LAW_SEEDS = {
+    'law-cf88-art1-5':['cf88'],'law-cf88-art37-144':['cf88'],
+    'law-adm-improbidade-8429':['improbidade'],'law-adm-licitacoes-14133':['licitacoes'],
+    'law-penal-parte-geral-e-adm':['cp'],'law-cpp-inquerito-prisao':['cpp'],
+    'law-penal-militar-cpm-cppm':['cpm','cppm','estatuto-pmpe'],
+    'law-extrav-pacote-policial':['abuso','tortura','maria-da-penha','desarmamento','drogas']
+  };
+  const LAW_READER_PAGE_SIZE = 60;
   let lawsMemory = null;
   let lawsUiScope = '';
   let lawsSyncMessage = '';
+  let lawReaderPage = 0;
   function lawSession() {
     try { if (typeof cloudSession !== 'undefined') return cloudSession; } catch (_e) {}
     return typeof window !== 'undefined' ? window.cloudSession || null : null;
   }
   function lawScope() {
     const st = getAppStateSafe(), session = lawSession();
-    const userId = String(session?.user?.id || 'guest');
-    const owner = String(st._ownerUserId || '');
-    return {userId, resetEpoch: Number(st._resetEpoch || 0), campaignId: String(st.activeCampaignId || ''), ready: !owner || owner === userId};
+    const userId = String(session?.user?.id || 'guest'), owner = String(st._ownerUserId || '');
+    return {userId, resetEpoch:Number(st._resetEpoch || 0), campaignId:String(st.activeCampaignId || ''), ready:!owner || owner===userId};
   }
-  function lawScopeKey(scope = lawScope()) { return JSON.stringify([scope.userId, scope.resetEpoch]); }
+  function lawScopeKey(scope = lawScope()) { return JSON.stringify([scope.userId,scope.resetEpoch]); }
   function lawScopeCurrent(scope) {
-    const now = lawScope();
-    return scope.ready && now.ready && now.userId === scope.userId && now.resetEpoch === scope.resetEpoch && now.campaignId === scope.campaignId;
+    const now=lawScope();
+    return scope.ready&&now.ready&&now.userId===scope.userId&&now.resetEpoch===scope.resetEpoch&&now.campaignId===scope.campaignId;
   }
-  function lawStorageKey(base, scope = lawScope()) { return `${base}:r182:${encodeURIComponent(scope.userId)}:${scope.resetEpoch}`; }
-  function readLawStore(base, fallback, scope = lawScope()) {
-    if (!scope.ready) return fallback;
-    try { const value = JSON.parse(localStorage.getItem(lawStorageKey(base, scope)) || 'null'); return value === null ? fallback : value; } catch (_e) { return fallback; }
+  function lawStorageKey(base,scope=lawScope()) { return `${base}:r182:${encodeURIComponent(scope.userId)}:${scope.resetEpoch}`; }
+  function readLawStore(base,fallback,scope=lawScope()) {
+    if(!scope.ready)return fallback;
+    try{const value=JSON.parse(localStorage.getItem(lawStorageKey(base,scope))||'null');return value===null?fallback:value;}catch(_e){return fallback;}
   }
-  function writeLawStore(base, value, scope = lawScope()) {
-    if (!lawScopeCurrent(scope)) return false;
-    try { localStorage.setItem(lawStorageKey(base, scope), JSON.stringify(value)); return true; } catch (_e) { return false; }
+  function writeLawStore(base,value,scope=lawScope()) {
+    if(!lawScopeCurrent(scope))return false;
+    try{localStorage.setItem(lawStorageKey(base,scope),JSON.stringify(value));return true;}catch(_e){return false;}
   }
-  function lawEscape(value) { return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+  function lawEscape(value) { return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
   function safeLawUrl(value) {
-    try {
-      const url = new URL(String(value || ''));
-      const host = url.hostname.toLowerCase();
-      if (url.protocol !== 'https:' || url.username || url.password || !(host.endsWith('.gov.br') || host.endsWith('.leg.br') || ['pt.wikipedia.org','pt.wikisource.org','cartilha.cert.br'].includes(host))) return '';
-      return url.href;
-    } catch (_e) { return ''; }
+    try{const url=new URL(String(value||'')),host=url.hostname.toLowerCase();if(url.protocol!=='https:'||url.username||url.password||!(host.endsWith('.gov.br')||host.endsWith('.leg.br')||['pt.wikipedia.org','pt.wikisource.org','cartilha.cert.br'].includes(host)))return '';return url.href;}catch(_e){return '';}
   }
-  function normalizeLawRecord(value, isNative = false) {
-    if (!value || typeof value !== 'object' || !/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,179}$/.test(String(value.id || ''))) return null;
-    if (!Array.isArray(value.articles)) return null;
-    const articles = value.articles.filter(text => typeof text === 'string' && text.trim()).slice(0, 1000).map(text => text.slice(0, 20000));
-    if (!articles.length) return null;
-    const external = !isNative && (value.content_kind === 'external_excerpt' || String(value.id).startsWith('ext-law-'));
-    const kind = external ? 'external_excerpt' : 'selection';
-    let title = String(value.title || 'Seleção para estudo').replace(/Textos-Base Completos:/gi, 'Seleção de textos:').replace(/Pacote Policial Completo:/gi, 'Seleção de legislação policial:').replace(/\s*\(Importado da Base Externa Completa\)/gi, '').slice(0, 500);
-    if (String(value.id) === 'law-cf88-art1-5') title = 'Constituição Federal de 1988 — seleção dos arts. 1º a 5º';
+  function officialLawSource(value) {
+    try{const url=new URL(safeLawUrl(value));return ['www.planalto.gov.br','planalto.gov.br','www2.camara.leg.br','www.camara.leg.br','legis.alepe.pe.gov.br'].includes(url.hostname.toLowerCase())?url.href:'';}catch(_e){return '';}
+  }
+  function normalizeLawRecord(value,isNative=false) {
+    if(!value||typeof value!=='object'||!/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,179}$/.test(String(value.id||''))||!Array.isArray(value.articles))return null;
+    const rawArticles=value.articles.filter(text=>typeof text==='string'&&text.trim());
+    const official=!isNative&&value.content_kind==='official_document_extraction'&&value.full_document===true&&OFFICIAL_LAW_IMPORTS.some(item=>item.id===value.law_id)&&officialLawSource(value.sourceUrl||value.source_url)&&/^[a-f0-9]{64}$/i.test(String(value.content_hash||''));
+    if(official&&(rawArticles.length>30000||rawArticles.reduce((n,text)=>n+text.length,0)>6*1024*1024))return null;
+    const articles=official?rawArticles.slice():rawArticles.slice(0,1000).map(text=>text.slice(0,20000));
+    if(!articles.length)return null;
+    const external=!official&&!isNative&&(value.content_kind==='external_excerpt'||String(value.id).startsWith('ext-law-'));
+    const kind=official?'official_document_extraction':external?'external_excerpt':'selection';
+    let title=String(value.title||'Seleção para estudo').replace(/Textos-Base Completos:/gi,'Seleção de textos:').replace(/Pacote Policial Completo:/gi,'Seleção de legislação policial:').replace(/\s*\(Importado da Base Externa Completa\)/gi,'').slice(0,500);
+    if(String(value.id)==='law-cf88-art1-5')title='Constituição Federal de 1988 — seleção dos arts. 1º a 5º';
     return {
-      id: String(value.id), discipline: String(value.discipline || 'Legislação Extravagante').slice(0, 150), title,
-      articles, content_kind: kind,
-      badge: external ? 'Trecho externo · conferir fonte' : 'Seleção de dispositivos e notas',
-      coverage: external ? 'Trecho de fonte externa; não é conferência oficial nem garantia de integralidade.' : 'Seleção local de dispositivos e notas; não é texto integral. Confira a vigência e a redação na referência.',
-      sourceName: external ? String(value.sourceName || value.source_name || 'Fonte externa não revisada').slice(0, 200) : 'Seleção local · referência informada',
-      sourceUrl: safeLawUrl(value.sourceUrl || value.source_url || value.officialUrl),
-      sourceVersion: String(value.sourceVersion || value.source_version || 'r182-selection-1').slice(0, 100),
-      fetchedAt: typeof value.fetchedAt === 'string' ? value.fetchedAt.slice(0, 50) : '',
-      wikisourceTitle: String(value.wikisourceTitle || '').slice(0, 250), wikipediaTitle: String(value.wikipediaTitle || '').slice(0, 250),
-      contentTruncated: !!value.contentTruncated || value.articles.length > 1000,
-      updatedAt: String(value.updatedAt || value.updated_at || ''),
-      is_public: typeof value.is_public === 'boolean' ? value.is_public : true,
-      external: value.external && typeof value.external === 'object' ? {source: String(value.external.source || '').slice(0, 200), sourceUrl: safeLawUrl(value.external.sourceUrl), fetchedAt: String(value.external.fetchedAt || '').slice(0, 50), truncated: !!value.external.truncated} : null,
+      id:String(value.id),discipline:String(value.discipline||'Legislação Extravagante').slice(0,150),title,articles,content_kind:kind,
+      badge:official?'Texto extraído da fonte oficial':external?'Trecho externo · conferir fonte':'Seleção de dispositivos e notas',
+      coverage:official?'Os parágrafos textuais extraídos da resposta HTML da fonte oficial foram preservados. Imagens, OCR e anexos externos não são incluídos. Isso não certifica vigência, consolidação ou revisão editorial.':external?'Trecho de fonte externa; não é conferência oficial nem garantia de integralidade.':'Seleção local de dispositivos e notas; não é texto integral. Confira a vigência e a redação na referência.',
+      sourceName:official?String(value.sourceName||value.source_name||'Fonte oficial').slice(0,200):external?String(value.sourceName||value.source_name||'Fonte externa não revisada').slice(0,200):'Seleção local · referência informada',
+      sourceUrl:safeLawUrl(value.sourceUrl||value.source_url||value.officialUrl),
+      sourceVersion:String(value.sourceVersion||value.source_version||'r182-selection-1').slice(0,160),
+      fetchedAt:String(value.fetchedAt||value.retrieved_at||'').slice(0,50),
+      law_id:official?String(value.law_id):'',full_document:official,content_hash:official?String(value.content_hash).toLowerCase():'',
+      sourceWarnings:official&&Array.isArray(value.sourceWarnings)?value.sourceWarnings.filter(text=>typeof text==='string').slice(0,8).map(text=>text.slice(0,2000)):[],
+      wikisourceTitle:String(value.wikisourceTitle||'').slice(0,250),wikipediaTitle:String(value.wikipediaTitle||'').slice(0,250),
+      contentTruncated:official?false:!!value.contentTruncated||rawArticles.length>1000||rawArticles.some(text=>text.length>20000),
+      updatedAt:String(value.updatedAt||value.updated_at||''),is_public:typeof value.is_public==='boolean'?value.is_public:true,
+      external:!official&&value.external&&typeof value.external==='object'?{source:String(value.external.source||'').slice(0,200),sourceUrl:safeLawUrl(value.external.sourceUrl),fetchedAt:String(value.external.fetchedAt||'').slice(0,50),truncated:!!value.external.truncated}:null
     };
   }
-  function getLawMemory(scope = lawScope()) {
-    const key = lawScopeKey(scope);
-    if (!lawsMemory || lawsMemory.key !== key) {
-      const stored = readLawStore(LAWS_INTERNAL_KEY, {}, scope);
-      const custom = readLawStore(LAWS_CUSTOM_IMPORTED_KEY, [], scope);
-      const external = readLawStore(LAWS_EXTERNAL_CACHE_KEY, {}, scope);
-      lawsMemory = {key, laws: Array.isArray(stored?.laws) ? stored.laws.map(law => normalizeLawRecord(law)).filter(Boolean) : [], custom: Array.isArray(custom) ? custom.map(law => normalizeLawRecord(law)).filter(Boolean) : [], external: external && typeof external === 'object' && !Array.isArray(external) ? external : {}, pending: !!stored?.pending, revision: 0, loadPromise: null, loaded: false, lastAttempt: 0, syncing: false};
+  function getLawMemory(scope=lawScope()) {
+    const key=lawScopeKey(scope);
+    if(!lawsMemory||lawsMemory.key!==key){
+      const stored=readLawStore(LAWS_INTERNAL_KEY,{},scope),custom=readLawStore(LAWS_CUSTOM_IMPORTED_KEY,[],scope),external=readLawStore(LAWS_EXTERNAL_CACHE_KEY,{},scope);
+      lawsMemory={key,laws:Array.isArray(stored?.laws)?stored.laws.map(law=>normalizeLawRecord(law)).filter(Boolean):[],custom:Array.isArray(custom)?custom.map(law=>normalizeLawRecord(law)).filter(Boolean):[],external:external&&typeof external==='object'&&!Array.isArray(external)?external:{},pending:!!stored?.pending,revision:0,loadPromise:null,loaded:false,lastAttempt:0,syncing:false,localLoaded:false,localPromise:null,officialImports:new Map()};
     }
     return lawsMemory;
   }
-  function getFavLaws() { const v = readLawStore(LAWS_FAV_KEY, []); return Array.isArray(v) ? v.filter(id => typeof id === 'string') : []; }
-  function setFavLaws(arr) { return writeLawStore(LAWS_FAV_KEY, Array.isArray(arr) ? arr.filter(id => typeof id === 'string') : []); }
-  function getHighlightedArticles() { const v = readLawStore(LAWS_HIGHLIGHT_KEY, {}); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
-  function toggleHighlightArticle(key) {
-    const map = getHighlightedArticles();
-    if (Object.hasOwn(map, key)) delete map[key]; else Object.defineProperty(map, key, {value: true, configurable: true, enumerable: true, writable: true});
-    if (!writeLawStore(LAWS_HIGHLIGHT_KEY, map) && typeof window.toast === 'function') window.toast('O grifo não pôde ser salvo neste aparelho.');
-    return Boolean(map[key]);
+  function getFavLaws(){const value=readLawStore(LAWS_FAV_KEY,[]);return Array.isArray(value)?value.filter(id=>typeof id==='string'):[];}
+  function setFavLaws(arr){return writeLawStore(LAWS_FAV_KEY,Array.isArray(arr)?arr.filter(id=>typeof id==='string'):[]);}
+  function getHighlightedArticles(){const value=readLawStore(LAWS_HIGHLIGHT_KEY,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}
+  function toggleHighlightArticle(key){const map=getHighlightedArticles();if(Object.hasOwn(map,key))delete map[key];else Object.defineProperty(map,key,{value:true,configurable:true,enumerable:true,writable:true});if(!writeLawStore(LAWS_HIGHLIGHT_KEY,map)&&typeof window.toast==='function')window.toast('O grifo não pôde ser salvo neste aparelho.');return Boolean(map[key]);}
+  function getLawsFoldersOpenState(){const value=readLawStore(LAWS_FOLDERS_OPEN_KEY,{});return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}
+  function setLawsFolderOpenState(key,open){const map=getLawsFoldersOpenState();Object.defineProperty(map,key,{value:!!open,configurable:true,enumerable:true,writable:true});return writeLawStore(LAWS_FOLDERS_OPEN_KEY,map);}
+  function getExternalFullTextCache(){return lawScope().ready?getLawMemory().external:{};}
+  function saveExternalFullTextCache(id,text,scope=lawScope()){if(!lawScopeCurrent(scope))return false;const mem=getLawMemory(scope);Object.defineProperty(mem.external,id,{value:text,configurable:true,enumerable:true,writable:true});mem.pending=true;mem.revision++;return writeLawStore(LAWS_EXTERNAL_CACHE_KEY,mem.external,scope);}
+  function getCustomImportedLaws(){return lawScope().ready?getLawMemory().custom.slice():[];}
+  function saveCustomImportedLaw(value,scope=lawScope()){const law=normalizeLawRecord(value);if(!law||!lawScopeCurrent(scope))return false;const mem=getLawMemory(scope);mem.custom=[law,...mem.custom.filter(item=>item.id!==law.id)].slice(0,80);mem.pending=true;mem.revision++;return writeLawStore(LAWS_CUSTOM_IMPORTED_KEY,mem.custom,scope);}
+  function getAllLawsCombined(){const scope=lawScope(),byId=new Map(NATIVE_SMART_LAWS.map(law=>normalizeLawRecord(law,true)).filter(Boolean).map(law=>[law.id,law]));if(scope.ready)for(const law of [...getLawMemory(scope).laws,...getCustomImportedLaws()])byId.set(law.id,law);return [...byId.values()];}
+  function materializeLaw(value){const law=normalizeLawRecord(value);if(!law)return null;if(law.full_document)return law;const ext=getExternalFullTextCache()[law.id];if(ext&&Array.isArray(ext.paragraphs)){law.articles=[...new Set([...law.articles,...ext.paragraphs.filter(text=>typeof text==='string')])].slice(0,1000);law.external={source:String(ext.source||''),sourceUrl:safeLawUrl(ext.sourceUrl),fetchedAt:String(ext.fetchedAt||''),truncated:!!ext.truncated};}return law;}
+  function applyLawUiScope(){const scope=lawScope(),key=`${lawScopeKey(scope)}|${scope.campaignId}|${scope.ready}`;if(lawsUiScope!==key){lawsUiScope=key;activeLawModalItem=null;activeLawExternalLoading=false;lawsSearchQuery='';lawsFilterFavOnly=false;lawsSyncMessage='';lawReaderPage=0;}return scope;}
+  function lawLocalPayload(mem){return {laws:mem.laws,custom:mem.custom,external:mem.external,pending:mem.pending};}
+  function lawIndexedDb(mode,scope,payload){
+    if(typeof indexedDB==='undefined'||!scope.ready)return Promise.resolve(mode==='read'?null:false);
+    return new Promise(resolve=>{
+      let db,done=false;
+      const finish=value=>{if(done)return;done=true;try{db?.close();}catch(_e){}resolve(value);};
+      try{
+        const request=indexedDB.open('jc-laws-library-v1',1);
+        request.onupgradeneeded=()=>{const opened=request.result;if(!opened.objectStoreNames.contains('libraries'))opened.createObjectStore('libraries',{keyPath:'key'});};
+        request.onerror=()=>finish(mode==='read'?null:false);
+        request.onblocked=()=>finish(mode==='read'?null:false);
+        request.onsuccess=()=>{
+          db=request.result;if(!lawScopeCurrent(scope))return finish(mode==='read'?null:false);
+          const tx=db.transaction('libraries',mode==='read'?'readonly':'readwrite'),store=tx.objectStore('libraries');
+          tx.onabort=tx.onerror=()=>finish(mode==='read'?null:false);
+          if(mode==='read'){const get=store.get(lawScopeKey(scope));let result=null;get.onsuccess=()=>{result=get.result?.payload||null;};tx.oncomplete=()=>finish(result);}
+          else{store.put({key:lawScopeKey(scope),userId:scope.userId,resetEpoch:scope.resetEpoch,payload});tx.oncomplete=()=>finish(true);}
+        };
+      }catch(_e){finish(mode==='read'?null:false);}
+    });
   }
-  function getLawsFoldersOpenState() { const v = readLawStore(LAWS_FOLDERS_OPEN_KEY, {}); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
-  function setLawsFolderOpenState(discKey, isOpen) { const map = getLawsFoldersOpenState(); Object.defineProperty(map, discKey, {value: !!isOpen, configurable: true, enumerable: true, writable: true}); return writeLawStore(LAWS_FOLDERS_OPEN_KEY, map); }
-  function getExternalFullTextCache() { return lawScope().ready ? getLawMemory().external : {}; }
-  function saveExternalFullTextCache(lawId, textData, scope = lawScope()) {
-    if (!lawScopeCurrent(scope)) return false;
-    const mem = getLawMemory(scope);
-    Object.defineProperty(mem.external, lawId, {value: textData, configurable: true, enumerable: true, writable: true});
-    mem.pending = true; mem.revision++;
-    return writeLawStore(LAWS_EXTERNAL_CACHE_KEY, mem.external, scope);
-  }
-  function getCustomImportedLaws() { return lawScope().ready ? getLawMemory().custom.slice() : []; }
-  function saveCustomImportedLaw(lawObj, scope = lawScope()) {
-    const law = normalizeLawRecord(lawObj);
-    if (!law || !lawScopeCurrent(scope)) return false;
-    const mem = getLawMemory(scope);
-    mem.custom = [law, ...mem.custom.filter(item => item.id !== law.id)].slice(0, 80);
-    mem.pending = true; mem.revision++;
-    return writeLawStore(LAWS_CUSTOM_IMPORTED_KEY, mem.custom, scope);
-  }
-  function getAllLawsCombined() {
-    const scope = lawScope(), byId = new Map(NATIVE_SMART_LAWS.map(law => normalizeLawRecord(law, true)).filter(Boolean).map(law => [law.id, law]));
-    if (scope.ready) for (const law of [...getLawMemory(scope).laws, ...getCustomImportedLaws()]) byId.set(law.id, law);
-    return [...byId.values()];
-  }
-  function materializeLaw(law) {
-    const normalized = normalizeLawRecord(law);
-    if (!normalized) return null;
-    const ext = getExternalFullTextCache()[normalized.id];
-    if (ext && Array.isArray(ext.paragraphs)) {
-      normalized.articles = [...new Set([...normalized.articles, ...ext.paragraphs.filter(text => typeof text === 'string')])].slice(0, 1000);
-      normalized.external = {source: String(ext.source || ''), sourceUrl: safeLawUrl(ext.sourceUrl), fetchedAt: String(ext.fetchedAt || ''), truncated: !!ext.truncated};
-    }
-    return normalized;
-  }
-  function applyLawUiScope() {
-    const scope = lawScope(), key = `${lawScopeKey(scope)}|${scope.campaignId}|${scope.ready}`;
-    if (lawsUiScope !== key) { lawsUiScope = key; activeLawModalItem = null; activeLawExternalLoading = false; lawsSearchQuery = ''; lawsFilterFavOnly = false; lawsSyncMessage = ''; }
-    return scope;
-  }
-  async function loadLawsFromUserDatabase(force = false) {
-    const scope = lawScope(), session = lawSession();
-    if (!scope.ready || scope.userId === 'guest' || !session?.access_token || typeof cloudFetch !== 'function' || (typeof navigator !== 'undefined' && !navigator.onLine)) return false;
-    const mem = getLawMemory(scope);
-    if (mem.loadPromise) return mem.loadPromise;
-    if (!force && (mem.loaded || Date.now() - mem.lastAttempt < 30000)) return false;
-    mem.lastAttempt = Date.now();
-    const revision = mem.revision;
-    const job = (async () => {
-      try {
-        const res = await cloudFetch(`study_laws_bank?user_id=eq.${encodeURIComponent(scope.userId)}&select=id,user_id,discipline,title,badge,source_name,source_url,source_version,content_kind,metadata,articles,is_public,updated_at&order=id&limit=500`, {headers: typeof authHeaders === 'function' ? authHeaders(session.access_token) : {Authorization: `Bearer ${session.access_token}`}});
-        if (!lawScopeCurrent(scope)) return false;
-        if (!res?.ok) throw new Error('Não foi possível recuperar suas leis.');
-        const rows = await res.json();
-        if (!lawScopeCurrent(scope)) return false;
-        if (!Array.isArray(rows)) throw new Error('Resposta inválida ao carregar leis.');
-        const incoming = rows.filter(row => row.user_id === scope.userId).map(row => normalizeLawRecord({...row, ...(row.metadata || {}), sourceUrl: row.source_url, sourceVersion: row.source_version, sourceName: row.source_name, content_kind: row.content_kind, updatedAt: row.updated_at})).filter(Boolean);
-        const byId = new Map((mem.pending || mem.revision !== revision ? [...incoming, ...mem.laws, ...mem.custom] : [...mem.laws, ...incoming]).map(law => [law.id, law]));
-        mem.laws = [...byId.values()]; mem.loaded = true;
-        const localSaved = writeLawStore(LAWS_INTERNAL_KEY, {laws: mem.laws, pending: mem.pending}, scope);
-        lawsSyncMessage = localSaved ? 'Leis da sua conta carregadas; cópia local disponível.' : 'Leis da sua conta carregadas; não foi possível gravar a cópia local.';
-        if (typeof document !== 'undefined') { const panel = document.getElementById('laws'); if (panel) renderSmartLawsPanelContent(panel); }
-        return true;
-      } catch (_e) {
-        if (lawScopeCurrent(scope)) lawsSyncMessage = 'Não foi possível recuperar as leis da conta; a seleção local continua disponível. Confira a conexão e a migração v109.';
-        return false;
-      }
+  async function loadLawLocalLibrary(scope=lawScope()){
+    if(!lawScopeCurrent(scope)||typeof indexedDB==='undefined')return false;
+    const mem=getLawMemory(scope);if(mem.localLoaded)return false;if(mem.localPromise)return mem.localPromise;
+    const revision=mem.revision;
+    const job=(async()=>{
+      const stored=await lawIndexedDb('read',scope);
+      if(!lawScopeCurrent(scope))return false;
+      mem.localLoaded=true;if(!stored||typeof stored!=='object')return false;
+      const incoming=Array.isArray(stored.laws)?stored.laws.map(law=>normalizeLawRecord(law)).filter(Boolean):[];
+      const custom=Array.isArray(stored.custom)?stored.custom.map(law=>normalizeLawRecord(law)).filter(Boolean):[];
+      const newer=mem.revision!==revision;
+      mem.laws=[...new Map((newer?[...incoming,...mem.laws]:[...mem.laws,...incoming]).map(law=>[law.id,law])).values()];
+      mem.custom=[...new Map((newer?[...custom,...mem.custom]:[...mem.custom,...custom]).map(law=>[law.id,law])).values()];
+      mem.external={...(stored.external&&typeof stored.external==='object'?stored.external:{}),...mem.external};mem.pending=mem.pending||!!stored.pending;
+      return true;
     })();
-    mem.loadPromise = job;
-    try { return await job; } finally { if (mem.loadPromise === job) mem.loadPromise = null; }
+    mem.localPromise=job;try{return await job;}finally{if(mem.localPromise===job)mem.localPromise=null;}
   }
-  // Busca complementar: fonte e limite de cobertura explícitos; nenhuma resposta é chamada de integral.
-  async function withLawFetchDeadline(run) {
-    const controller = typeof AbortController === 'function' ? new AbortController() : null;
-    const deadline = Date.now() + 8000;
-    const timer = typeof setTimeout === 'function' ? setTimeout(() => controller?.abort(), 8000) : null;
-    const request = async url => {
-      if (Date.now() >= deadline) throw new Error('Tempo de consulta excedido.');
-      const response = await fetch(url, {signal: controller?.signal});
-      if (!response.ok) throw new Error('Fonte externa indisponível.');
-      const data = await response.json();
-      if (Date.now() >= deadline) throw new Error('Tempo de consulta excedido.');
-      return data;
-    };
-    try { return await run(request); } finally { if (timer !== null && typeof clearTimeout === 'function') clearTimeout(timer); }
+  async function persistLawLibrary(scope=lawScope()){
+    if(!lawScopeCurrent(scope))return false;
+    const mem=getLawMemory(scope),payload=lawLocalPayload(mem);
+    let fastSaved=false;const serialized=JSON.stringify(payload);
+    // Livros grandes usam IndexedDB; não estouram a cota síncrona de localStorage.
+    if(serialized.length<=512*1024)fastSaved=writeLawStore(LAWS_INTERNAL_KEY,payload,scope);
+    const indexedSaved=typeof indexedDB!=='undefined'?await lawIndexedDb('write',scope,payload):false;
+    return lawScopeCurrent(scope)&&Boolean(fastSaved||indexedSaved);
   }
-  function lawParagraphs(extract, max = 180) {
-    const all = String(extract || '').split(/\n+/).map(line => line.trim()).filter(line => line.length >= 35 && !/^=+.*=+$/.test(line));
-    return {paragraphs: all.slice(0, max).map(line => line.slice(0, 20000)), truncated: all.length > max || all.some(line => line.length > 20000)};
+  async function loadLawsFromUserDatabase(force=false){
+    const scope=lawScope(),session=lawSession();if(!scope.ready)return false;
+    const mem=getLawMemory(scope);
+    const cloudAvailable=scope.userId!=='guest'&&session?.access_token&&typeof cloudFetch==='function'&&(typeof navigator==='undefined'||navigator.onLine);
+    if(!cloudAvailable){const local=typeof indexedDB!=='undefined'?await loadLawLocalLibrary(scope):false;if(local&&typeof document!=='undefined'){const panel=document.getElementById('laws');if(panel)renderSmartLawsPanelContent(panel);}return local;}
+    if(mem.loadPromise)return mem.loadPromise;
+    if(!force&&(mem.loaded||Date.now()-mem.lastAttempt<30000))return false;
+    mem.lastAttempt=Date.now();
+    const job=(async()=>{
+      try{
+        if(typeof indexedDB!=='undefined')await loadLawLocalLibrary(scope);
+        if(!lawScopeCurrent(scope))return false;const revision=mem.revision;
+        const res=await cloudFetch(`study_laws_bank?user_id=eq.${encodeURIComponent(scope.userId)}&select=id,user_id,discipline,title,badge,source_name,source_url,source_version,content_kind,metadata,articles,is_public,updated_at&order=id&limit=500`,{headers:typeof authHeaders==='function'?authHeaders(session.access_token):{Authorization:`Bearer ${session.access_token}`}});
+        if(!lawScopeCurrent(scope))return false;if(!res?.ok)throw new Error('Não foi possível recuperar suas leis.');
+        const rows=await res.json();if(!lawScopeCurrent(scope))return false;if(!Array.isArray(rows))throw new Error('Resposta inválida ao carregar leis.');
+        const incoming=rows.filter(row=>row.user_id===scope.userId).map(row=>normalizeLawRecord({...row,...(row.metadata||{}),sourceUrl:row.source_url,sourceVersion:row.source_version,sourceName:row.source_name,content_kind:row.content_kind,updatedAt:row.updated_at})).filter(Boolean);
+        mem.laws=[...new Map((mem.pending||mem.revision!==revision?[...incoming,...mem.laws,...mem.custom]:[...mem.laws,...incoming]).map(law=>[law.id,law])).values()];mem.loaded=true;
+        const localSaved=typeof indexedDB!=='undefined'?await persistLawLibrary(scope):writeLawStore(LAWS_INTERNAL_KEY,{laws:mem.laws,pending:mem.pending},scope);
+        if(!lawScopeCurrent(scope))return false;
+        lawsSyncMessage=localSaved?'Leis da sua conta carregadas; cópia local disponível.':'Leis da sua conta carregadas; não foi possível gravar a cópia local.';
+        if(typeof document!=='undefined'){const panel=document.getElementById('laws');if(panel)renderSmartLawsPanelContent(panel);}return true;
+      }catch(_e){if(lawScopeCurrent(scope))lawsSyncMessage='Não foi possível recuperar as leis da conta; a seleção local continua disponível. Confira a conexão e a migração v109.';return false;}
+    })();
+    mem.loadPromise=job;try{return await job;}finally{if(mem.loadPromise===job)mem.loadPromise=null;}
   }
-  async function fetchExternalCompleteLawText(lawItem) {
-    const scope = lawScope();
-    if (!scope.ready || !lawItem || typeof fetch !== 'function') return null;
-    const cached = getExternalFullTextCache()[lawItem.id];
-    if (cached && Array.isArray(cached.paragraphs) && cached.paragraphs.length) return cached;
-    const sources = [];
-    if (lawItem.wikisourceTitle) sources.push({host: 'pt.wikisource.org', title: lawItem.wikisourceTitle, source: 'Wikisource · texto complementar não revisado'});
-    if (lawItem.wikipediaTitle) sources.push({host: 'pt.wikipedia.org', title: lawItem.wikipediaTitle, source: 'Wikipédia · texto enciclopédico não revisado'});
-    return withLawFetchDeadline(async request => {
-      for (const item of sources) {
-        try {
-          const data = await request(`https://${item.host}/w/api.php?action=query&prop=extracts&explaintext=1&titles=${encodeURIComponent(item.title)}&format=json&origin=*`);
-          if (!lawScopeCurrent(scope)) return null;
-          const first = Object.values(data?.query?.pages || {})[0], parsed = lawParagraphs(first?.extract);
-          if (!parsed.paragraphs.length) continue;
-          const payload = {...parsed, source: item.source, sourceUrl: `https://${item.host}/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}`, fetchedAt: new Date().toISOString()};
-          payload.localSaved = saveExternalFullTextCache(lawItem.id, payload, scope);
-          return payload;
-        } catch (_e) { if (!lawScopeCurrent(scope)) return null; }
-      }
-      return null;
-    });
+  function officialLawIdsFor(value){if(value?.full_document&&value.law_id)return[value.law_id];return OFFICIAL_LAW_SEEDS[value?.id]||[];}
+  async function verifyOfficialLawHash(articles,expected){
+    if(!Array.isArray(articles)||!articles.length||articles.some(text=>typeof text!=='string'||!text.trim())||!globalThis.crypto?.subtle||typeof TextEncoder==='undefined')return false;
+    const digest=await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(articles)));
+    return Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('')===String(expected||'').toLowerCase();
   }
-  async function searchAndImportExternalLawOrText(queryStr, targetDiscipline = 'Legislação Extravagante') {
-    const query = String(queryStr || '').trim(), scope = lawScope();
-    if (!query || !scope.ready || typeof fetch !== 'function') return null;
-    return withLawFetchDeadline(async request => {
-      for (const target of [{host: 'pt.wikisource.org', label: 'Wikisource · fonte externa não revisada'}, {host: 'pt.wikipedia.org', label: 'Wikipédia · fonte enciclopédica não revisada'}]) {
-        try {
-          const search = await request(`https://${target.host}/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&utf8=1&format=json&origin=*`);
-          if (!lawScopeCurrent(scope)) return null;
-          const hit = search?.query?.search?.[0];
-          if (!hit?.title) continue;
-          const data = await request(`https://${target.host}/w/api.php?action=query&prop=extracts&explaintext=1&titles=${encodeURIComponent(hit.title)}&format=json&origin=*`);
-          if (!lawScopeCurrent(scope)) return null;
-          const parsed = lawParagraphs(Object.values(data?.query?.pages || {})[0]?.extract, 150);
-          if (!parsed.paragraphs.length) continue;
-          const law = normalizeLawRecord({id: `ext-law-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, discipline: targetDiscipline, title: String(hit.title), content_kind: 'external_excerpt', sourceName: target.label, sourceUrl: `https://${target.host}/wiki/${encodeURIComponent(String(hit.title).replace(/ /g, '_'))}`, fetchedAt: new Date().toISOString(), articles: parsed.paragraphs, contentTruncated: parsed.truncated, wikisourceTitle: target.host.includes('wikisource') ? hit.title : '', wikipediaTitle: target.host.includes('wikipedia') ? hit.title : ''});
-          const localSaved = saveCustomImportedLaw(law, scope);
-          return {...law, localSaved};
-        } catch (_e) { if (!lawScopeCurrent(scope)) return null; }
-      }
-      return null;
-    });
+  async function importOfficialLawToLibrary(lawId,showToast=true){
+    const id=String(lawId||''),scope=lawScope(),initialSession=lawSession();
+    if(!OFFICIAL_LAW_IMPORTS.some(item=>item.id===id))return {status:'failed',error:'Escolha um diploma do catálogo oficial.'};
+    if(!scope.ready)return{status:'cancelled'};
+    if(scope.userId==='guest'||!initialSession?.access_token)return{status:'failed',error:'Entre na sua conta para importar o documento da fonte oficial.'};
+    if(typeof navigator!=='undefined'&&!navigator.onLine)return{status:'failed',error:'Conecte-se para consultar a fonte oficial. Os textos já salvos continuam disponíveis.'};
+    const mem=getLawMemory(scope);if(mem.officialImports.has(id))return mem.officialImports.get(id);
+    const previous=mem.officialImportTail;
+    const job=(async()=>{
+      let timer;
+      try{
+        // Mantém as importações/gravações de diplomas distintos na ordem dos cliques.
+        if(previous)await previous;
+        if(!lawScopeCurrent(scope))return{status:'cancelled'};
+        const session=typeof validSession==='function'?await validSession():initialSession;
+        if(!lawScopeCurrent(scope)||session?.user?.id!==scope.userId||!session?.access_token)return{status:'cancelled'};
+        const base=typeof SUPABASE_URL==='string'?SUPABASE_URL:window.SUPABASE_URL;
+        if(!base)throw new Error('Endereço do serviço de leis não configurado.');
+        const controller=typeof AbortController==='function'?new AbortController():null;
+        timer=setTimeout(()=>controller?.abort(),30000);
+        const response=await fetch(`${base}/functions/v1/leis-oficiais`,{method:'POST',signal:controller?.signal,headers:{...(typeof authHeaders==='function'?authHeaders(session.access_token):{Authorization:`Bearer ${session.access_token}`}),'Content-Type':'application/json'},body:JSON.stringify({law_id:id})});
+        if(!lawScopeCurrent(scope))return{status:'cancelled'};
+        const data=await response.json();if(!lawScopeCurrent(scope))return{status:'cancelled'};
+        if(!response.ok)throw new Error(response.status===404?'Publique a função leis-oficiais para usar esta importação.':String(data?.error||'A fonte oficial não confirmou o documento.'));
+        const raw=data?.law;
+        if(!raw||raw.law_id!==id||raw.id!==`official-${id}`||raw.full_document!==true||raw.content_kind!=='official_document_extraction'||!Array.isArray(raw.articles||raw.paragraphs)||!officialLawSource(raw.source_url)||!/^[a-f0-9]{64}$/i.test(String(raw.content_hash||''))||!String(raw.source_version||'').trim())throw new Error('A resposta da fonte oficial está incompleta; nenhum texto foi marcado como integral.');
+        if(!await verifyOfficialLawHash(raw.articles||raw.paragraphs,raw.content_hash))throw new Error('O conteúdo recebido não corresponde ao resumo SHA-256 informado. Nenhum documento foi importado.');
+        if(!lawScopeCurrent(scope))return{status:'cancelled'};
+        const law=normalizeLawRecord({...raw,articles:raw.articles||raw.paragraphs,sourceUrl:raw.source_url,sourceVersion:raw.source_version,fetchedAt:raw.retrieved_at,sourceWarnings:data.warnings});
+        if(!law||!law.full_document)throw new Error('O documento ultrapassou o limite suportado ou veio inválido. Nenhum trecho foi salvo como se fosse o documento completo.');
+        mem.laws=[law,...mem.laws.filter(item=>item.id!==law.id)];mem.pending=true;mem.revision++;
+        const result=await syncAllLawsToUserDatabase(false,law.id);
+        if(!lawScopeCurrent(scope))return{status:'cancelled'};
+        const warnings=Array.isArray(data.warnings)?data.warnings.filter(text=>typeof text==='string').slice(0,8):[];
+        lawsSyncMessage=result.cloudSaved?`${law.title}: documento da fonte oficial salvo na conta${result.localSaved?' e neste aparelho':''}. Confira a versão e a vigência na referência.`:result.localSaved?`${law.title}: documento salvo neste aparelho; envio à conta pendente.`:`${law.title}: disponível somente nesta sessão; não foi possível confirmar o salvamento.`;
+        if(warnings.length)lawsSyncMessage+=' '+warnings.join(' ');
+        if(showToast&&typeof window.toast==='function')window.toast(lawsSyncMessage);
+        return{...result,law,warnings};
+      }catch(error){
+        if(!lawScopeCurrent(scope))return{status:'cancelled'};
+        const message=error?.name==='AbortError'?'A consulta à fonte oficial excedeu o prazo; tente novamente.':String(error?.message||'Não foi possível importar o documento oficial.');
+        lawsSyncMessage=message;if(showToast&&typeof window.toast==='function')window.toast(message);return{status:'failed',error:message};
+      }finally{if(timer)clearTimeout(timer);}
+    })();
+    mem.officialImports.set(id,job);mem.officialImportTail=job;
+    try{return await job;}finally{if(mem.officialImports.get(id)===job)mem.officialImports.delete(id);if(mem.officialImportTail===job)mem.officialImportTail=null;}
   }
+  async function importAllOfficialLaws(){
+    const scope=lawScope(),mem=getLawMemory(scope);if(!scope.ready||mem.importingAll)return{status:'busy',imported:0};
+    mem.importingAll=true;let imported=0,failed=0;
+    try{for(const item of OFFICIAL_LAW_IMPORTS){if(!lawScopeCurrent(scope))return{status:'cancelled',imported,failed};lawsSyncMessage=`Importando ${imported+failed+1}/${OFFICIAL_LAW_IMPORTS.length}: ${item.title}...`;if(typeof document!=='undefined'){const panel=document.getElementById('laws');if(panel)renderSmartLawsPanelContent(panel);}const result=await importOfficialLawToLibrary(item.id,false);if(result.status==='cancelled')return{status:'cancelled',imported,failed};if(result.cloudSaved||result.localSaved)imported++;else failed++;}
+      lawsSyncMessage=`Importação concluída: ${imported} documentos com salvamento confirmado; ${failed} não confirmados. As seleções anteriores foram preservadas.`;if(typeof window.toast==='function')window.toast(lawsSyncMessage);return{status:failed?'partial':'synced',imported,failed};
+    }finally{mem.importingAll=false;}
+  }
+  // Consulta enciclopédica complementar: não é substituta do diploma oficial.
+  async function withLawFetchDeadline(run){const controller=typeof AbortController==='function'?new AbortController():null,deadline=Date.now()+8000,timer=typeof setTimeout==='function'?setTimeout(()=>controller?.abort(),8000):null;const request=async url=>{if(Date.now()>=deadline)throw new Error('Tempo de consulta excedido.');const response=await fetch(url,{signal:controller?.signal});if(!response.ok)throw new Error('Fonte externa indisponível.');const data=await response.json();if(Date.now()>=deadline)throw new Error('Tempo de consulta excedido.');return data;};try{return await run(request);}finally{if(timer!==null&&typeof clearTimeout==='function')clearTimeout(timer);}}
+  function lawParagraphs(extract,max=180){const all=String(extract||'').split(/\n+/).map(line=>line.trim()).filter(line=>line.length>=35&&!/^=+.*=+$/.test(line));return{paragraphs:all.slice(0,max).map(line=>line.slice(0,20000)),truncated:all.length>max||all.some(line=>line.length>20000)};}
+  async function fetchExternalCompleteLawText(lawItem){const scope=lawScope();if(!scope.ready||!lawItem||typeof fetch!=='function')return null;const cached=getExternalFullTextCache()[lawItem.id];if(cached&&Array.isArray(cached.paragraphs)&&cached.paragraphs.length)return cached;const sources=[];if(lawItem.wikisourceTitle)sources.push({host:'pt.wikisource.org',title:lawItem.wikisourceTitle,source:'Wikisource · texto complementar não revisado'});if(lawItem.wikipediaTitle)sources.push({host:'pt.wikipedia.org',title:lawItem.wikipediaTitle,source:'Wikipédia · texto enciclopédico não revisado'});return withLawFetchDeadline(async request=>{for(const item of sources){try{const data=await request(`https://${item.host}/w/api.php?action=query&prop=extracts&explaintext=1&titles=${encodeURIComponent(item.title)}&format=json&origin=*`);if(!lawScopeCurrent(scope))return null;const first=Object.values(data?.query?.pages||{})[0],parsed=lawParagraphs(first?.extract);if(!parsed.paragraphs.length)continue;const payload={...parsed,source:item.source,sourceUrl:`https://${item.host}/wiki/${encodeURIComponent(item.title.replace(/ /g,'_'))}`,fetchedAt:new Date().toISOString()};payload.localSaved=saveExternalFullTextCache(lawItem.id,payload,scope);return payload;}catch(_e){if(!lawScopeCurrent(scope))return null;}}return null;});}
+  async function searchAndImportExternalLawOrText(queryStr,targetDiscipline='Legislação Extravagante'){const query=String(queryStr||'').trim(),scope=lawScope();if(!query||!scope.ready||typeof fetch!=='function')return null;return withLawFetchDeadline(async request=>{for(const target of [{host:'pt.wikisource.org',label:'Wikisource · fonte externa não revisada'},{host:'pt.wikipedia.org',label:'Wikipédia · fonte enciclopédica não revisada'}]){try{const search=await request(`https://${target.host}/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&utf8=1&format=json&origin=*`);if(!lawScopeCurrent(scope))return null;const hit=search?.query?.search?.[0];if(!hit?.title)continue;const data=await request(`https://${target.host}/w/api.php?action=query&prop=extracts&explaintext=1&titles=${encodeURIComponent(hit.title)}&format=json&origin=*`);if(!lawScopeCurrent(scope))return null;const parsed=lawParagraphs(Object.values(data?.query?.pages||{})[0]?.extract,150);if(!parsed.paragraphs.length)continue;const law=normalizeLawRecord({id:`ext-law-${Date.now()}-${Math.random().toString(36).slice(2,9)}`,discipline:targetDiscipline,title:String(hit.title),content_kind:'external_excerpt',sourceName:target.label,sourceUrl:`https://${target.host}/wiki/${encodeURIComponent(String(hit.title).replace(/ /g,'_'))}`,fetchedAt:new Date().toISOString(),articles:parsed.paragraphs,contentTruncated:parsed.truncated,wikisourceTitle:target.host.includes('wikisource')?hit.title:'',wikipediaTitle:target.host.includes('wikipedia')?hit.title:''});const localSaved=saveCustomImportedLaw(law,scope);return{...law,localSaved};}catch(_e){if(!lawScopeCurrent(scope))return null;}}return null;});}
 
   function getAppStateSafe() {
     try { if (typeof state === 'object' && state) return state; } catch (_e) {}
@@ -3193,8 +3379,7 @@
       body.jcCleanDashboard .caveiraSprintBanner {
         display: none !important;
       }
-      body.jcCleanDashboard .sectionHead p.small.muted,
-      body.jcCleanDashboard .card > p.small.muted {
+      body.jcCleanDashboard .jcDecorativeDescription {
         display: none !important;
       }
       body.jcCleanDashboard .card:not(.hero) {
@@ -3965,9 +4150,11 @@
 
     const triggerThemeBtn = document.getElementById('jcEssayTriggerThemeBtn');
     if (triggerThemeBtn) {
+      triggerThemeBtn.textContent = document.getElementById('generateAiEssayThemeBtn') ? 'GERAR TEMA COM IA' : 'SORTEAR TEMA';
       triggerThemeBtn.onclick = () => {
-        const aiBtn = document.getElementById('generateAiEssayThemeBtn') || document.getElementById('drawEssayThemeBtn');
-        if (aiBtn) aiBtn.click();
+        const aiBtn = document.getElementById('generateAiEssayThemeBtn') || document.getElementById('suggestEssayThemeBtn');
+        if (!aiBtn) { if (typeof window.toast === 'function') window.toast('A geração de temas ainda está carregando. Tente novamente.'); return; }
+        aiBtn.click();
         const box = document.getElementById('essayMotivatingBox') || document.getElementById('essayTheme');
         if (box && box.scrollIntoView) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
       };
@@ -4135,6 +4322,7 @@
       else inReview++;
     });
     const totalSolved = inReview + shortMem + longMem;
+    const dueCount = deck.filter(({rating}) => !rating || rating.level === 'hard' || !Number.isFinite(Date.parse(rating.nextDue || '')) || Date.parse(rating.nextDue) <= Date.now()).length;
 
     let hub = document.getElementById('jcFlashcardsDashboardHub');
     if (!hub) {
@@ -4147,14 +4335,14 @@
       <div class="jcCaveiraTopCards">
         <div class="jcCaveiraActionCard">
           <div>
-            <div class="jcCaveiraActionTitle">📖 MEUS FLASHCARDS</div>
-            <div class="jcCaveiraActionSub">CARDS CRIADOS POR VOCÊ E EXTRAÍDOS DOS SEUS PDFS</div>
+            <div class="jcCaveiraActionTitle">📖 CONTINUAR MEUS FLASHCARDS</div>
+            <div class="jcCaveiraActionSub">RETOME OS CARTÕES DO FILTRO ATUAL</div>
           </div>
           <button type="button" class="jcCaveiraActionBtn" id="jcFlashFocusDeckBtn">ACESSAR</button>
         </div>
         <div class="jcCaveiraActionCard">
           <div>
-            <div class="jcCaveiraActionTitle">⚔️ CARDS DO CAÇADOR</div>
+            <div class="jcCaveiraActionTitle">⚔️ TODOS OS FLASHCARDS</div>
             <div class="jcCaveiraActionSub">CARDS TÁTICOS DAS DISCIPLINAS DO EDITAL (${deck.length})</div>
           </div>
           <button type="button" class="jcCaveiraActionBtn" id="jcFlashFilterAllBtn">ACESSAR</button>
@@ -4162,7 +4350,7 @@
         <div class="jcCaveiraActionCard">
           <div>
             <div class="jcCaveiraActionTitle">🔄 REVISÃO 1·7·30</div>
-            <div class="jcCaveiraActionSub">REVISAR CARDS RESOLVIDOS ANTERIORMENTE (${inReview} PENDENTES)</div>
+            <div class="jcCaveiraActionSub">CARTÕES NOVOS, VENCIDOS OU DIFÍCEIS (${dueCount} PARA REVISAR)</div>
           </div>
           <button type="button" class="jcCaveiraActionBtn" id="jcFlashOpenReviewBtn">ACESSAR</button>
         </div>
@@ -4211,13 +4399,19 @@
     if (allBtn) {
       allBtn.onclick = () => {
         const cf = document.getElementById('cardFilter');
+        const due = document.getElementById('flashDueOnlyToggle');
+        if (due) { due.checked = false; due.dispatchEvent(new Event('change')); }
         if (cf) { cf.value = 'all'; cf.dispatchEvent(new Event('change')); }
         scrollCard();
       };
     }
     if (revBtn) {
       revBtn.onclick = () => {
-        if (typeof window.openView === 'function') window.openView('review');
+        const due = document.getElementById('flashDueOnlyToggle');
+        if (!due) { if (typeof window.toast === 'function') window.toast('O filtro de revisão ainda está carregando. Tente novamente.'); return; }
+        due.checked = true;
+        due.dispatchEvent(new Event('change'));
+        scrollCard();
       };
     }
   }
@@ -4240,6 +4434,9 @@
     });
     if (targetSubtab === 'notebook' && typeof window.setupCanvasNotebook === 'function') {
       try { window.setupCanvasNotebook(); } catch (_e) {}
+    }
+    if (targetSubtab === 'smart' && typeof window.renderSmartNotebookPanel === 'function') {
+      window.renderSmartNotebookPanel();
     }
     if (targetSubtab === 'laws') {
       renderSmartLawsPanelContent(document.getElementById('laws'));
@@ -4300,14 +4497,28 @@
       const rows = isOpen ? items.map(law => `<div class="jcLawRowItem"><div style="display:flex;gap:10px;align-items:center"><button type="button" class="ghost small" data-law-fav="${lawEscape(law.id)}" title="Favoritar seleção">${favs.has(law.id) ? '⭐' : '☆'}</button><div><strong>${lawEscape(law.title)}</strong><div class="small muted">${lawEscape(law.sourceName)} · ${lawEscape(law.badge)}</div></div></div><button type="button" class="jcLawStartBtn" data-law-open="${lawEscape(law.id)}">📖 Ler seleção</button></div>`).join('') : '';
       return `<section class="libraryFolder ${isOpen ? 'open' : ''}" data-law-folder="${lawEscape(discKey)}"><button type="button" class="folderHead" data-law-folder-toggle="${lawEscape(discKey)}" aria-expanded="${isOpen}"><span>▤ ${lawEscape(disc)}</span><span class="tag">${items.length} seleções</span></button><div class="folderBody" style="display:${isOpen ? 'block' : 'none'}">${rows}</div></section>`;
     }).join('') || '<div class="empty">Nenhuma seleção encontrada neste filtro.</div>';
-    lawsPanel.innerHTML = `<div class="jcCaveiraOverviewBox" style="padding:14px 16px;margin-bottom:14px"><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between"><div><button type="button" class="ghost small ${!lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabAllBtn">📋 Todas (${allLaws.length})</button><button type="button" class="ghost small ${lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabFavBtn">⭐ Favoritos (${favs.size})</button></div><button type="button" class="ghost small" id="jcSyncAllLawsToDbBtn">💾 Salvar seleções</button></div><p class="small muted">Seleções de dispositivos e notas. Confira a redação e a vigência nas referências; o acervo não é uma edição integral revisada.</p><p class="small" role="status">${lawEscape(lawsSyncMessage)}</p><div style="display:flex;gap:8px;flex-wrap:wrap"><input type="search" id="jcLawsSearchInput" value="${lawEscape(lawsSearchQuery)}" placeholder="Buscar lei ou dispositivo..." style="min-width:160px;flex:1"><button type="button" class="jcCaveiraActionBtn" id="jcImportExternalLawBtn">🌐 Buscar trecho externo</button></div></div>${activeLawModalItem ? renderActiveLawReaderHtml(activeLawModalItem) : ''}<div class="libraryFolders" id="jcLawsAccordionContainer">${groupsHtml}</div>`;
+    lawsPanel.innerHTML = `<div class="jcCaveiraOverviewBox" style="padding:14px 16px;margin-bottom:14px"><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between"><div><button type="button" class="ghost small ${!lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabAllBtn">📋 Todas (${allLaws.length})</button><button type="button" class="ghost small ${lawsFilterFavOnly ? 'active' : ''}" id="jcLawsTabFavBtn">⭐ Favoritos (${favs.size})</button></div><button type="button" class="ghost small" id="jcSyncAllLawsToDbBtn">💾 Salvar acervo</button></div><p class="small muted">As seleções locais não são edições integrais revisadas. Você pode importar documentos de fontes oficiais; confira a versão e a vigência na referência.</p><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><label for="jcOfficialLawSelect">Documento oficial</label><select id="jcOfficialLawSelect" style="min-width:160px;flex:1">${OFFICIAL_LAW_IMPORTS.map(item=>`<option value="${lawEscape(item.id)}">${lawEscape(item.title)}</option>`).join('')}</select><button type="button" class="ghost small" id="jcImportOfficialLawBtn">Importar documento</button><button type="button" class="ghost small" id="jcImportAllOfficialLawsBtn">Importar catálogo (13)</button></div><p class="small" role="status">${lawEscape(lawsSyncMessage)}</p><div style="display:flex;gap:8px;flex-wrap:wrap"><input type="search" id="jcLawsSearchInput" value="${lawEscape(lawsSearchQuery)}" placeholder="Buscar lei ou dispositivo..." style="min-width:160px;flex:1"><button type="button" class="jcCaveiraActionBtn" id="jcImportExternalLawBtn">🌐 Buscar trecho externo</button></div></div>${activeLawModalItem ? renderActiveLawReaderHtml(activeLawModalItem) : ''}<div class="libraryFolders" id="jcLawsAccordionContainer">${groupsHtml}</div>`;
     const find = id => lawsPanel.querySelector?.(`#${id}`) || document.getElementById(id);
     const redraw = () => { if (lawScopeCurrent(scope)) renderSmartLawsPanelContent(lawsPanel); };
     const bind = (id, fn) => { const el = find(id); if (el) el.onclick = fn; };
     bind('jcLawsTabAllBtn', () => { lawsFilterFavOnly = false; redraw(); });
     bind('jcLawsTabFavBtn', () => { lawsFilterFavOnly = true; redraw(); });
-    bind('jcSyncAllLawsToDbBtn', async () => { await syncAllLawsToUserDatabase(true); redraw(); });
-    bind('jcSaveSingleLawToDbBtn', async () => { await syncAllLawsToUserDatabase(true, activeLawModalItem?.id); redraw(); });
+    bind('jcSyncAllLawsToDbBtn', async () => { if(!lawScopeCurrent(scope))return;await syncAllLawsToUserDatabase(true); redraw(); });
+    bind('jcSaveSingleLawToDbBtn', async () => { if(!lawScopeCurrent(scope))return;await syncAllLawsToUserDatabase(true, activeLawModalItem?.id); redraw(); });
+    const importAndShow=async id=>{
+      if(!lawScopeCurrent(scope))return;
+      lawsSyncMessage='Consultando o documento na fonte oficial...';redraw();
+      const result=await importOfficialLawToLibrary(id);
+      if(!lawScopeCurrent(scope))return;
+      if(result.law){activeLawModalItem=result.law;lawReaderPage=0;}
+      else if(result.error)lawsSyncMessage=result.error;
+      redraw();
+    };
+    bind('jcImportOfficialLawBtn',()=>importAndShow(find('jcOfficialLawSelect')?.value||'cf88'));
+    bind('jcImportAllOfficialLawsBtn',async()=>{if(!lawScopeCurrent(scope))return;await importAllOfficialLaws();redraw();});
+    lawsPanel.querySelectorAll('[data-law-import-official]').forEach(btn=>{btn.onclick=()=>importAndShow(btn.getAttribute('data-law-import-official'));});
+    bind('jcLawReaderPrevBtn',()=>{if(!lawScopeCurrent(scope))return;lawReaderPage=Math.max(0,lawReaderPage-1);redraw();});
+    bind('jcLawReaderNextBtn',()=>{if(!lawScopeCurrent(scope))return;lawReaderPage++;redraw();});
     const search = find('jcLawsSearchInput');
     if (search) search.oninput = () => {
       const pos = search.selectionStart; lawsSearchQuery = search.value; redraw();
@@ -4341,9 +4552,9 @@
     lawsPanel.querySelectorAll('[data-law-open]').forEach(btn => { btn.onclick = () => {
       if (!lawScopeCurrent(scope)) return;
       activeLawModalItem = getAllLawsCombined().find(law => law.id === btn.getAttribute('data-law-open')) || null;
-      activeLawExternalLoading = false; redraw();
+      activeLawExternalLoading = false; lawReaderPage=0; redraw();
     }; });
-    bind('jcCloseLawReaderBtn', () => { activeLawModalItem = null; activeLawExternalLoading = false; redraw(); });
+    bind('jcCloseLawReaderBtn', () => { if(!lawScopeCurrent(scope))return;activeLawModalItem = null; activeLawExternalLoading = false; redraw(); });
     bind('jcFetchLawComplementBtn', async () => {
       const item = activeLawModalItem;
       if (!item || !lawScopeCurrent(scope) || activeLawExternalLoading) return;
@@ -4369,13 +4580,75 @@
   function renderActiveLawReaderHtml(value) {
     const law = materializeLaw(value);
     if (!law) return '<div class="empty">Seleção indisponível.</div>';
-    const highlights = getHighlightedArticles(), url = safeLawUrl(law.sourceUrl), extUrl = safeLawUrl(law.external?.sourceUrl);
-    return `<div class="jcCaveiraOverviewBox" id="jcActiveLawReaderBox" style="border:1.5px solid #65e7ff;margin-bottom:18px"><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between"><div><span class="tag">${lawEscape(law.discipline)} · ${lawEscape(law.badge)}</span><h3>${lawEscape(law.title)}</h3></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="ghost small" id="jcSaveSingleLawToDbBtn">💾 Salvar seleção</button><button type="button" class="action small" id="jcInvokeLawAiBtn">🧙‍♂️ Invocar questões</button><button type="button" class="ghost small" id="jcCloseLawReaderBtn">✕ Fechar leitura</button></div></div><p class="small muted">${lawEscape(law.coverage)} Versão da seleção: ${lawEscape(law.sourceVersion)}.</p><p class="small">${lawEscape(law.sourceName)} ${url ? `<a href="${lawEscape(url)}" target="_blank" rel="noopener noreferrer">Consultar referência</a>` : '· referência documental não informada'}${law.external ? `<br>${lawEscape(law.external.source)} · ${lawEscape(law.external.fetchedAt)}${law.external.truncated ? ' · trecho limitado' : ''}${extUrl ? ` · <a href="${lawEscape(extUrl)}" target="_blank" rel="noopener noreferrer">Consultar fonte complementar</a>` : ''}` : ''}</p>${law.contentTruncated ? '<p class="small">Conteúdo limitado ao trecho importado.</p>' : ''}<button type="button" class="ghost small" id="jcFetchLawComplementBtn" ${activeLawExternalLoading ? 'disabled' : ''}>${activeLawExternalLoading ? 'Consultando fonte...' : 'Consultar complemento externo'}</button><div style="display:grid;gap:10px;max-height:540px;overflow-y:auto;margin-top:12px">${law.articles.map((article, idx) => { const key = `${law.id}:${idx}`, highlighted = !!highlights[key]; return `<div style="padding:12px;border-radius:10px;border:1px solid ${highlighted ? '#eab308' : 'rgba(56,189,248,.2)'};background:${highlighted ? 'rgba(234,179,8,.16)' : 'rgba(8,19,34,.75)'};display:flex;gap:12px"><p style="margin:0;line-height:1.58;flex:1;white-space:pre-wrap">${lawEscape(article)}</p><button type="button" class="ghost small" data-law-highlight="${lawEscape(key)}">${highlighted ? '🖍️ Grifado' : '🖍️ Grifar'}</button></div>`; }).join('')}</div></div>`;
+    const highlights=getHighlightedArticles(), url=safeLawUrl(law.sourceUrl), extUrl=safeLawUrl(law.external?.sourceUrl);
+    const totalPages=Math.max(1,Math.ceil(law.articles.length/LAW_READER_PAGE_SIZE));
+    lawReaderPage=Math.min(totalPages-1,Math.max(0,Math.floor(Number(lawReaderPage)||0)));
+    const first=lawReaderPage*LAW_READER_PAGE_SIZE, visible=law.articles.slice(first,first+LAW_READER_PAGE_SIZE);
+    const officialActions=officialLawIdsFor(law).map(id=>`<button type="button" class="ghost small" data-law-import-official="${lawEscape(id)}">${law.full_document?'Atualizar':'Importar'} ${lawEscape(OFFICIAL_LAW_IMPORTS.find(item=>item.id===id)?.title||id)} da fonte oficial</button>`).join('');
+    const paragraphs=visible.map((article,offset)=>{
+      const key=`${law.id}:${first+offset}`, highlighted=!!highlights[key];
+      return `<div style="padding:12px;border-radius:10px;border:1px solid ${highlighted?'#eab308':'rgba(56,189,248,.2)'};background:${highlighted?'rgba(234,179,8,.16)':'rgba(8,19,34,.75)'};display:flex;gap:12px"><p style="margin:0;line-height:1.58;flex:1;white-space:pre-wrap">${lawEscape(article)}</p><button type="button" class="ghost small" data-law-highlight="${lawEscape(key)}">${highlighted?'🖍️ Grifado':'🖍️ Grifar'}</button></div>`;
+    }).join('');
+    return `<div class="jcCaveiraOverviewBox" id="jcActiveLawReaderBox" style="border:1.5px solid #65e7ff;margin-bottom:18px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between"><div><span class="tag">${lawEscape(law.discipline)} · ${lawEscape(law.badge)}</span><h3>${lawEscape(law.title)}</h3></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="ghost small" id="jcSaveSingleLawToDbBtn">💾 Salvar texto</button><button type="button" class="action small" id="jcInvokeLawAiBtn">🧙‍♂️ Invocar questões</button><button type="button" class="ghost small" id="jcCloseLawReaderBtn">✕ Fechar leitura</button></div></div>
+      <p class="small muted">${lawEscape(law.coverage)} Versão: ${lawEscape(law.sourceVersion)}.</p>
+      ${law.sourceWarnings?.length?`<p class="small">${law.sourceWarnings.map(lawEscape).join(' ')}</p>`:''}
+      <p class="small">${lawEscape(law.sourceName)} ${url?`<a href="${lawEscape(url)}" target="_blank" rel="noopener noreferrer">Consultar referência</a>`:'· referência documental não informada'}${law.external?`<br>${lawEscape(law.external.source)} · ${lawEscape(law.external.fetchedAt)}${law.external.truncated?' · trecho limitado':''}${extUrl?` · <a href="${lawEscape(extUrl)}" target="_blank" rel="noopener noreferrer">Consultar fonte complementar</a>`:''}`:''}</p>
+      ${law.full_document?`<p class="small" style="overflow-wrap:anywhere">Recuperado em: ${lawEscape(law.fetchedAt)} · SHA-256: ${lawEscape(law.content_hash)}</p>`:''}
+      ${law.contentTruncated?'<p class="small">Conteúdo limitado ao trecho importado.</p>':''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${officialActions}${!law.full_document?`<button type="button" class="ghost small" id="jcFetchLawComplementBtn" ${activeLawExternalLoading?'disabled':''}>${activeLawExternalLoading?'Consultando fonte...':'Consultar complemento externo'}</button>`:''}</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px"><button type="button" class="ghost small" id="jcLawReaderPrevBtn" ${lawReaderPage===0?'disabled':''}>Anterior</button><span role="status">Página ${lawReaderPage+1}/${totalPages} · blocos ${first+1}–${Math.min(first+LAW_READER_PAGE_SIZE,law.articles.length)} de ${law.articles.length}</span><button type="button" class="ghost small" id="jcLawReaderNextBtn" ${lawReaderPage===totalPages-1?'disabled':''}>Próxima</button></div>
+      <div style="display:grid;gap:10px;max-height:540px;overflow-y:auto;margin-top:12px">${paragraphs}</div></div>`;
   }
 
   // 6) Pílulas Rápidas de Status na Aba Questões + Barra Inferior da Questão com Invocador
   function mountCaveiraQuestionBankEnhancements() {
     if (typeof document === 'undefined') return;
+    const notify = message => { if (typeof window.toast === 'function') window.toast(message); };
+    const getBattle = () => {
+      try { if (typeof activeQuestions === 'object' && activeQuestions) return activeQuestions; } catch (_e) {}
+      return window.activeQuestions || null;
+    };
+    const scopeKey = () => {
+      const st = getAppStateSafe();
+      let session;
+      try { if (typeof cloudSession !== 'undefined') session = cloudSession; } catch (_e) {}
+      const userId = session?.user?.id || st._ownerUserId || 'guest';
+      if ((session?.user?.id && st._ownerUserId !== userId) || (!session?.user?.id && st._ownerUserId)) return null;
+      return JSON.stringify([userId, st.activeCampaignId || '', Number(st._resetEpoch || 0)]);
+    };
+    const captureContext = () => {
+      const battle = getBattle(), item = battle?.questions?.[battle.current], scope = scopeKey();
+      return battle && item && scope ? { battle, item, scope, index: battle.current } : null;
+    };
+    const shown = window.showQuestion;
+    if (typeof shown === 'function' && !shown._jcQuestionActionsHooked) {
+      const wrapped = function(...args) {
+        const result = shown.apply(this, args);
+        window._jcQuestionActionContext = captureContext();
+        mountCaveiraQuestionBankEnhancements();
+        return result;
+      };
+      wrapped._jcQuestionActionsHooked = true;
+      window.showQuestion = wrapped;
+    }
+    const currentQuestion = () => {
+      const captured = window._jcQuestionActionContext, current = captureContext();
+      const dialog = document.getElementById('questionDialog');
+      return captured && current && dialog?.open && captured.scope === current.scope && captured.battle === current.battle && captured.item === current.item && captured.index === current.index ? current : null;
+    };
+    const pauseForNavigation = () => {
+      if (typeof window.saveActiveQuestionSession !== 'function' || !window.saveActiveQuestionSession()) {
+        notify('Não foi possível salvar o treino. Libere espaço antes de sair para outro conteúdo.');
+        return false;
+      }
+      document.getElementById('questionDialog')?.close();
+      try { if (typeof activeQuestions !== 'undefined') activeQuestions = null; } catch (_e) {}
+      window.activeQuestions = null;
+      window._jcQuestionActionContext = null;
+      window.checkAndOfferSavedQuestionSessionResume?.();
+      return true;
+    };
     const reportSec = document.getElementById('report');
     if (reportSec && !document.getElementById('jcCaveiraQuestionStatusPills')) {
       const trainer = reportSec.querySelector('.questionTrainer') || reportSec.querySelector('.card');
@@ -4392,93 +4665,83 @@
           <button type="button" class="jcQStatusPill" data-q-status-pill="wrong">Errei</button>
         `;
         filtersWrap.parentElement.insertBefore(pillsBar, filtersWrap);
-
-        pillsBar.querySelectorAll('[data-q-status-pill]').forEach((btn) => {
+        pillsBar.querySelectorAll('[data-q-status-pill]').forEach(btn => {
           btn.onclick = () => {
-            pillsBar.querySelectorAll('[data-q-status-pill]').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
             const status = btn.getAttribute('data-q-status-pill');
             const histSel = document.getElementById('questionHistoryFilter');
-            if (histSel) {
-              const mapVal = { all: 'all', solved: 'answered', unsolved: 'unanswered', right: 'correct', wrong: 'wrong' };
-              if (mapVal[status] && [...histSel.options].some(o => o.value === mapVal[status])) {
-                histSel.value = mapVal[status];
-                histSel.dispatchEvent(new Event('change'));
-                return;
-              }
-            }
-            if (status === 'wrong') {
-              const errBtn = document.getElementById('openErrorNotebookBtn') || document.getElementById('startErrorReinforcementBtn');
-              if (errBtn) errBtn.click();
-            } else if (typeof window.updateQuestionPool === 'function') {
-              window._jcQuestionStatusFilter = status;
-              try { window.updateQuestionPool(); } catch (_e) {}
-            }
+            const mapVal = { all: 'all', solved: 'answered', unsolved: 'unanswered', right: 'correct', wrong: 'wrong' };
+            if (!histSel || !mapVal[status] || ![...histSel.options].some(option => option.value === mapVal[status])) { notify('O filtro de questões ainda está carregando. Tente novamente.'); return; }
+            histSel.value = mapVal[status];
+            histSel.dispatchEvent(new Event('change'));
+            pillsBar.querySelectorAll('[data-q-status-pill]').forEach(button => button.classList.toggle('active', button === btn));
           };
         });
       }
     }
-
+    const statusBar = document.getElementById('jcCaveiraQuestionStatusPills'), history = document.getElementById('questionHistoryFilter');
+    if (statusBar && history) {
+      const syncPills = () => {
+        const selected = { all:'all', answered:'solved', unanswered:'unsolved', correct:'right', wrong:'wrong' }[history.value];
+        statusBar.querySelectorAll('[data-q-status-pill]').forEach(button => button.classList.toggle('active', button.getAttribute('data-q-status-pill') === selected));
+      };
+      if (!history._jcPillsBound) { history._jcPillsBound = true; history.addEventListener('change', syncPills); }
+      syncPills();
+    }
     const qDialog = document.getElementById('questionDialog');
-    const qBox = qDialog ? qDialog.querySelector('.questionBox') : null;
+    const qBox = qDialog ? qDialog.querySelector('.questionBox') || qDialog.querySelector('.modernQuestionBox') : null;
     const qFeedback = document.getElementById('questionFeedback');
     if (qBox && qFeedback && !document.getElementById('jcCaveiraQuestionToolbar')) {
       const bar = document.createElement('div');
       bar.id = 'jcCaveiraQuestionToolbar';
       bar.className = 'jcQuestionCaveiraFooter';
       bar.innerHTML = `
-        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarInvocadorBtn" title="Invocar explicação tática da IA">🧙‍♂️ INVOCADOR</button>
-        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarProfCommentBtn" title="Ver Comentário do Professor e Gabarito">🎓 COMENTÁRIO DO PROFESSOR</button>
-        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarTheoryBtn" title="Ler Resumo ou Lei Seca deste Assunto">📖 TEORIA &amp; LEI</button>
-        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarNotebookBtn" title="Salvar questão no seu Caderno">📓 CADERNOS</button>
-        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarNotesBtn" title="Adicionar anotação ou bizu pessoal">✏️ ANOTAÇÕES</button>
-        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarStatsBtn" title="Ver estatísticas de acerto da questão">📈 ESTATÍSTICAS</button>
+        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarInvocadorBtn" title="Abrir o Invocador com a questão atual">🧙‍♂️ INVOCADOR</button>
+        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarProfCommentBtn" title="Ver o comentário e a origem informada da questão">💬 COMENTÁRIO DA QUESTÃO</button>
+        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarTheoryBtn" title="Ler a teoria da disciplina e do assunto desta questão">📖 TEORIA &amp; LEI</button>
+        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarNotebookBtn" title="Abrir suas anotações e questões salvas">📓 CADERNOS</button>
+        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarNotesBtn" title="Salvar a questão atual nas suas anotações">✏️ ANOTAÇÕES</button>
+        <button type="button" class="jcQCaveiraToolBtn" id="jcQBarStatsBtn" title="Ver seu histórico registrado nesta questão">📈 MEU HISTÓRICO</button>
       `;
       qBox.insertBefore(bar, qFeedback);
-
       document.getElementById('jcQBarInvocadorBtn').onclick = () => {
-        const qap = document.getElementById('askQapInstructorBtn') || document.getElementById('explainEasyAnalogyBtn');
-        if (qap) { qap.click(); return; }
-        if (typeof window.toast === 'function') window.toast('🧙‍♂️ Responda a questão para destravar a análise passo a passo do Invocador!');
+        if (!currentQuestion()) return notify('Abra uma questão da conta e do portal atuais.');
+        const qap = document.getElementById('askQapInstructorBtn');
+        if (!qap) return notify('Responda a questão para abrir o Invocador com a análise do gabarito.');
+        if (pauseForNavigation()) qap.click();
       };
       document.getElementById('jcQBarProfCommentBtn').onclick = () => {
-        if (qFeedback && qFeedback.textContent.trim()) {
-          qFeedback.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        } else if (typeof window.toast === 'function') {
-          window.toast('🎓 Marque uma alternativa primeiro para revelar o Comentário do Professor!');
-        }
+        if (!currentQuestion()) return notify('Abra uma questão da conta e do portal atuais.');
+        const feedback = document.getElementById('questionFeedback');
+        if (feedback?.textContent?.trim()) feedback.scrollIntoView({ behavior:'smooth', block:'nearest' });
+        else notify('Responda a questão para revelar o comentário do material e a situação do gabarito.');
       };
       document.getElementById('jcQBarTheoryBtn').onclick = () => {
-        const pills = document.getElementById('questionMetaPills');
-        const subj = pills ? pills.textContent : '';
-        if (qDialog && typeof qDialog.close === 'function') qDialog.close();
-        if (typeof window.openTheorySummaryForTopic === 'function') {
-          window.openTheorySummaryForTopic(subj, subj);
-        } else if (typeof window.openView === 'function') {
-          window.openView('study');
-        }
+        const context = currentQuestion();
+        if (!context) return notify('Abra uma questão da conta e do portal atuais.');
+        if (typeof window.openTheoryForSubjectAndTopic !== 'function') return notify('A teoria ainda está carregando. Tente novamente.');
+        const {subject,topic} = context.item;
+        if (pauseForNavigation()) window.openTheoryForSubjectAndTopic(subject,topic || '');
       };
       document.getElementById('jcQBarNotebookBtn').onclick = () => {
-        const fav = document.getElementById('toggleFavoriteQuestionBtn') || document.getElementById('saveQuestionNoteBtn');
-        if (fav) { fav.click(); return; }
-        if (typeof window.toast === 'function') window.toast('📓 Questão marcada no seu Caderno Tático!');
+        if (!currentQuestion()) return notify('Abra uma questão da conta e do portal atuais.');
+        if (typeof window.switchStudySubtab !== 'function' || typeof window.openView !== 'function') return notify('O caderno ainda está carregando. Tente novamente.');
+        if (pauseForNavigation()) { window.openView('study'); window.switchStudySubtab('notes'); }
       };
       document.getElementById('jcQBarNotesBtn').onclick = () => {
-        const inp = document.getElementById('personalQuestionCommentInput');
-        if (inp) { inp.scrollIntoView({ behavior: 'smooth', block: 'center' }); inp.focus(); return; }
-        if (typeof window.toast === 'function') window.toast('✏️ Responda a questão para abrir o campo de Bizu Pessoal abaixo do gabarito!');
+        const context = currentQuestion();
+        if (!context) return notify('Abra uma questão da conta e do portal atuais.');
+        if (typeof window.saveCurrentQuestionToNotes !== 'function') return notify('As anotações ainda estão carregando. Tente novamente.');
+        window.saveCurrentQuestionToNotes(context.item);
       };
       document.getElementById('jcQBarStatsBtn').onclick = () => {
-        if (typeof window.toast === 'function') {
-          window.toast('📈 Estatísticas por alternativa (A–E) exibidas junto às opções após a resposta!');
-        }
+        if (!currentQuestion()) return notify('Abra uma questão da conta e do portal atuais.');
+        const stats = document.getElementById('questionFeedback')?.querySelector('.communityOptionStatsBar');
+        if (stats) stats.scrollIntoView({ behavior:'smooth',block:'center' });
+        else notify('Responda a questão para consultar seu histórico local de alternativas. Ausência de registros não é uma estatística da comunidade.');
       };
     }
-
     const qapBtn = document.getElementById('askQapInstructorBtn');
-    if (qapBtn && !qapBtn.textContent.includes('Invocador')) {
-      qapBtn.innerHTML = '🧙‍♂️ Invocador';
-    }
+    if (qapBtn && !qapBtn.textContent.includes('Invocador')) qapBtn.textContent = '🧙‍♂️ Invocador';
   }
 
 
@@ -4489,6 +4752,8 @@
   async function syncAllLawsToUserDatabase(showToast = true, lawId = null) {
     const scope = lawScope(), session = lawSession();
     if (!scope.ready) return {status: 'cancelled', total: 0, localSaved: false, cloudSaved: 0};
+    if (typeof indexedDB !== 'undefined') await loadLawLocalLibrary(scope);
+    if (!lawScopeCurrent(scope)) return {status: 'cancelled', total: 0, localSaved: false, cloudSaved: 0};
     const mem = getLawMemory(scope);
     if (mem.syncing) return {status: 'busy', total: 0, localSaved: false, cloudSaved: 0};
     const selected = getAllLawsCombined().filter(law => !lawId || law.id === lawId).map(materializeLaw).filter(Boolean);
@@ -4498,14 +4763,15 @@
     const merged = new Map([...mem.laws, ...selected].map(law => [law.id, law]));
     mem.laws = [...merged.values()]; mem.pending = true; mem.revision++;
     const revision = mem.revision;
-    localSaved = writeLawStore(LAWS_INTERNAL_KEY, {laws: mem.laws, pending: true}, scope);
+    localSaved = await persistLawLibrary(scope);
+    if (!lawScopeCurrent(scope)) { mem.syncing=false; return {status:'cancelled',total:selected.length,localSaved:false,cloudSaved:0}; }
     try {
       if (scope.userId !== 'guest' && session?.access_token && typeof cloudFetch === 'function' && (typeof navigator === 'undefined' || navigator.onLine)) {
         const rows = selected.map(law => ({
           id: law.id, user_id: scope.userId, discipline: law.discipline, title: law.title,
           badge: law.badge, source_name: law.sourceName, source_url: law.sourceUrl,
           source_version: law.sourceVersion, content_kind: law.content_kind,
-          metadata: {coverage: law.coverage, fetchedAt: law.fetchedAt, external: law.external, contentTruncated: law.contentTruncated, wikisourceTitle: law.wikisourceTitle, wikipediaTitle: law.wikipediaTitle},
+          metadata: {coverage: law.coverage, fetchedAt: law.fetchedAt, external: law.external, contentTruncated: law.contentTruncated, wikisourceTitle: law.wikisourceTitle, wikipediaTitle: law.wikipediaTitle, law_id:law.law_id, full_document:law.full_document, content_hash:law.content_hash, sourceWarnings:law.sourceWarnings},
           articles: law.articles, is_public: law.is_public, updated_at: new Date().toISOString()
         }));
         const response = await cloudFetch('study_laws_bank?on_conflict=user_id,id', {
@@ -4519,7 +4785,7 @@
           const confirmedIds = new Set(rows.map(row => row.id));
           mem.custom = mem.custom.filter(law => !confirmedIds.has(law.id));
           writeLawStore(LAWS_CUSTOM_IMPORTED_KEY, mem.custom, scope);
-          localSaved = writeLawStore(LAWS_INTERNAL_KEY, {laws: mem.laws, pending: false}, scope) || localSaved;
+          localSaved = await persistLawLibrary(scope) || localSaved;
         }
       }
     } catch (_e) {
@@ -4647,6 +4913,9 @@
       mountCaveiraSmartLawsHub,
       openSmartLawsSubtab,
       switchStudySubtab,
+      importOfficialLawToLibrary,
+      importAllOfficialLaws,
+      OFFICIAL_LAW_IMPORTS,
       fetchExternalCompleteLawText,
       searchAndImportExternalLawOrText,
       syncAllLawsToUserDatabase,
