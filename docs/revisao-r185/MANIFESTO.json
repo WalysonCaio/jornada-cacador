@@ -186,8 +186,8 @@
     },
     {
       "path": "docs/revisao-r185/VALIDACAO.txt",
-      "bytes": 4773,
-      "sha256": "994b4d5c23a66fdc2af38f1923621949a5ae1d43e6168c73a7b6ec553dcd2336"
+      "bytes": 4940,
+      "sha256": "6bf5c14bd7f244e684acca29af8b0c6423f924eb15d2cb6275f5bbfcb461ca73"
     },
     {
       "path": "package-lock.json",
@@ -411,8 +411,8 @@
     },
     {
       "path": "scripts/test-r185-cleanup.mjs",
-      "bytes": 2713,
-      "sha256": "6c21e9222ecf62def0edf4893718ad9106f33aa5931f0991612ac4f166dc9564"
+      "bytes": 2958,
+      "sha256": "55833a3c6d330540c43f6349a268bb10f0640d8e573683491832934e1a8e67d7"
     },
     {
       "path": "scripts/test-r185-service-worker.mjs",

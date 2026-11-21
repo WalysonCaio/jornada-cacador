@@ -48,6 +48,8 @@ O helper de ZIP verifica SHA256 normalizando somente CRLF e preserva arquivo com
 conteúdo diferente, symlink e outros caminhos. O modo --stage confere também a
 versão do índice e seleciona somente exclusões reconhecidas; não seleciona outras
 edições locais. Testes usam repositório temporário, sem limpar o checkout do usuário.
+No Windows sem permissão para symlink, o teste usa um diretório para conferir a
+preservação de caminhos que não são arquivos; a execução Linux cobre symlinks.
 *.swp, *.swo e /-r182 adicionados ao .gitignore; *.rar já existia.
 O ZIP não apaga arquivos sozinho: use o helper ou integre o PR com as exclusões.
 
