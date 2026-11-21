@@ -1,0 +1,76 @@
+JORNADA DO CAÇADOR — r185
+21/11/2026 (America/Sao_Paulo)
+Base: 0d32dea6af5612a3ffb4b524c710820a3d0e1193 (r184).
+Node v24.22.1; testes JS com DOM/HTTP/armazenamento simulados.
+
+RESULTADOS LOCAIS
+- npm ci --ignore-scripts: aprovado.
+- npm test: 65/65 scripts aprovados.
+- npm run test:sql: quatro integrações PostgreSQL/PGlite aprovadas.
+- node --check scripts/browser-smoke.mjs: aprovado (sintaxe, não execução).
+- git diff --check: aprovado.
+
+CADERNO IA — 18 GRUPOS DE REGRESSÃO (IIFE REAL)
+- Cache legado sem dono não é atribuído a uma conta.
+- Conta/portal local/dbId/reset compõem o escopo; reload preserva apenas seu cache.
+- Conta em carregamento, convidado e logout não leem nem geram resultado privado.
+- Respostas antigas descartadas antes/depois de sessão, HTTP e JSON.
+- Request antigo não trava contexto novo nem libera pedido mais recente.
+- Um clique repetido usa a mesma operação; pergunta nova digitada é preservada.
+- Token renovado é aceito para a conta original; sessão de outra conta recusada.
+- Snapshot de fontes/contexto permanece da requisição original.
+- Mudança de conteúdo, mesmo sem updated_at mudar, invalida o cache.
+- Resultado obsoleto não reaparece após troca de fonte/texto.
+- Cobertura e nomes privados não aparecem enquanto outra conta carrega.
+- Pergunta anterior limpa ao trocar contexto; quiz só usa fontes atuais.
+- Fontes privadas de outra conta/portal excluídas; compartilhadas explícitas mantidas.
+- Seleção de até cinco fontes; limpar seleção não escolhe outra automaticamente.
+- Falha de quota não anuncia persistência inexistente; resposta em sessão permanece.
+- Cache corrompido/excessivo não impede abrir o painel; entradas limitadas.
+- Falha de rede/resposta vazia permite tentar novamente.
+- Execução independente confirmou os dois vazamentos anteriores ausentes.
+
+SERVICE WORKER
+Handlers reais executados em VM: precache sem PDF/worker; primeira abertura online
+cacheia respostas básicas válidas; uso/reabertura offline usa a cópia; primeiro uso
+sem rede retorna503 em vez de HTML. Requisições com autenticação, query, método
+nãoGET, origem externa e caminho fora da lista não entram no cache. Falha de
+quota não impede a resposta online. Ativação preserva caches de outras aplicações.
+JPGs e shell continuam no precache.
+
+PDF+worker retirados do precache: 2.868.101 bytes de arquivos SEM COMPRESSÃO.
+Não é medição de tráfego comprimido, tempo de abertura ou economia real em celular.
+O primeiro uso do leitor após atualizar precisa de internet para baixar esta versão.
+
+LIMPEZA
+Removidos somente três arquivos rastreados comprovadamente acidentais na raiz.
+O helper de ZIP verifica SHA256 normalizando somente CRLF e preserva arquivo com
+conteúdo diferente, symlink e outros caminhos. O modo --stage confere também a
+versão do índice e seleciona somente exclusões reconhecidas; não seleciona outras
+edições locais. Testes usam repositório temporário, sem limpar o checkout do usuário.
+*.swp, *.swo e /-r182 adicionados ao .gitignore; *.rar já existia.
+O ZIP não apaga arquivos sozinho: use o helper ou integre o PR com as exclusões.
+
+REGRESSÕES MANTIDAS
+Gabaritos e sugestões pendentes, disciplina/assunto e numeração, PDFs originais,
+reanálise com propostas/snapshots/aplicação atômica, sincronização, retomada,
+leis por conta, privacidade e indicadores reais, manuais como ajuda. Banco nativo
+continua125itens estruturalmente válidos; não houve nova certificação factual.
+
+LIMITES E APLICAÇÃO
+- Sem acesso às contas ou PDFs privados do usuário, deploy remoto ou migrações SQL.
+- Nenhuma migração/EdgeFunction nova na r185. Pré-requisitos r184 continuam exigidos.
+- Sem homologação no navegador/celular real nesta sessão. A suíte existente foi
+  ampliada para desktop e360/390/412px e teve sintaxe verificada; ela cobre os fluxos
+  descritos em browser-smoke.mjs, não todas as telas nem contas reais.
+- A ferramenta cua_repl.js não estava disponível. A habilidade Sites determina:
+  "If cua_repl.js is unavailable, skip browser QA: do not start a preview server,
+  install a browser, or improvise another browser-control path."
+  Fonte: skill://plugin_connector_1p_689987207de08191979cf68eca2941c6/sites/SKILL.md
+  Essa regra impediu executar QA visual neste ambiente. Comandos de homologação no
+  computador/CI e cenários de celular estão no LEIA-ME.md; não se anunciou aprovação.
+- Atualizar o SW não troca o JS de abas já abertas: fechar/reabrir os clientes.
+- O PR#4 continua em rascunho; integrar e publicar são ações separadas da entrega.
+- Biblioteca compartilhada e Manuais como ajuda preservados.
+
+Integridade: MANIFESTO.json (inclui lista de remoções) e entregas/r185/SHA256SUMS.txt.

@@ -1,10 +1,13 @@
-const CACHE='jornada-cacador-v78-smart-notebook-r184';
-const ASSETS=['./','./index.html','./ui-v75.css','./ui-v77.css','./ui-v78.css','./ui-r184.css','./question-review.js','./v59-enhancements.js','./question-session-store.js','./v77-experience.js','./v78-smart-notebook.js','./jc-architecture-modules.js','./pdf-text-client.js','./pdf.mjs','./pdf.worker.mjs','./hunter-manuals.js','./hunter-manuals.css','./content-summaries.js','./native-question-bank.json','./native-laws-database.json','./material-deep-dives.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./login-banner.jpg',
+const CACHE='jornada-cacador-v78-smart-notebook-r185';
+const ASSETS=['./','./index.html','./ui-v75.css','./ui-v77.css','./ui-v78.css','./ui-r184.css','./question-review.js','./v59-enhancements.js','./question-session-store.js','./v77-experience.js','./v78-smart-notebook.js','./jc-architecture-modules.js','./pdf-text-client.js','./hunter-manuals.js','./hunter-manuals.css','./content-summaries.js','./native-question-bank.json','./native-laws-database.json','./material-deep-dives.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./login-banner.jpg',
   './login-banner.webp',
   './bancas-boss-banner.webp','./bancas-boss-banner.jpg','./og-banner-1200x630.jpg','./privacidade.html','./termos.html','./cookies.html','./404.html'];
 
+// O leitor e o worker entram no cache após o primeiro uso bem-sucedido.
+// A instalação do aplicativo não precisa baixar o motor de PDF antecipadamente.
+const LAZY_ASSETS = ['./pdf.mjs', './pdf.worker.mjs'];
 const CACHE_PREFIX = 'jornada-cacador-';
-const STATIC_PATHS = new Set(ASSETS.map(path => new URL(path, self.registration.scope).pathname));
+const STATIC_PATHS = new Set([...ASSETS, ...LAZY_ASSETS].map(path => new URL(path, self.registration.scope).pathname));
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
 });

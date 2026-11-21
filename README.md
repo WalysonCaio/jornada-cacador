@@ -20,6 +20,10 @@ O projeto transforma o edital enviado pelo usuário em um plano de aprendizagem:
 
 [Aplicação e GitHub](docs/revisao-r184/LEIA-ME.md) · [Correções e limites](docs/revisao-r184/REVISAO.md) · [Validação](docs/revisao-r184/VALIDACAO.txt). Releitura dos PDFs originais em lote, propostas de revisão e aplicação atômica, classificação conservadora e ajustes responsivos. Inclui r182/r183.
 
+## Revisão r185 — Caderno IA
+
+[Aplicação e GitHub](docs/revisao-r185/LEIA-ME.md) · [Correções e validação](docs/revisao-r185/VALIDACAO.txt). Isola cache e operações do Caderno IA por conta, portal e reset; preserva fontes, reduz o precache do PDF e remove saídas acidentais do Git. Inclui r182/r183/r184.
+
 ## Principais recursos
 
 - edital convertido em mapa de disciplinas e tópicos;

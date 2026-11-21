@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
+const expectedRelease='r'+JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8')).version.split('.').at(-1);
 const root = process.cwd();
 const htmlCode = fs.readFileSync(path.join(root, 'dist', 'index.html'), 'utf8');
 const v77Code = fs.readFileSync(path.join(root, 'dist', 'v77-experience.js'), 'utf8');
@@ -11,7 +12,7 @@ const swCode = fs.readFileSync(path.join(root, 'dist', 'sw.js'), 'utf8');
 console.log('=== Teste r182: Índices de Questões/Trilha, Pastas Retráteis, Sem Manuais nas Disciplinas, Base Externa de Leis e Paleta Oficial ===');
 
 // 1. Service Worker na versão r182
-assert.ok(swCode.includes('r184'), 'sw.js deve estar na versão r184');
+assert.ok(swCode.includes(expectedRelease), 'sw.js deve estar na versão do pacote');
 console.log('✓ 1. Service Worker atualizado para r182');
 
 // 2. Indexação de consultas de questionPool, questionsForMode e learningUnits
