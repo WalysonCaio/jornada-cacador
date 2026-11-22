@@ -2,13 +2,14 @@ import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import assert from "node:assert/strict";
 
+const expectedRelease='r'+JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).version.split('.').at(-1);
 const modSrc = readFileSync(new URL("../dist/jc-architecture-modules.js", import.meta.url), "utf8");
 const htmlSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
 const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
 const swSrc = readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
 
 // 1. Verificar vinculação do módulo e Service Worker r182
-assert(swSrc.includes("r184"), "sw.js deve estar na versao r184");
+assert(swSrc.includes(expectedRelease), "sw.js deve estar na versao do pacote");
 assert(swSrc.includes("./jc-architecture-modules.js"), "sw.js deve fazer cache offline do módulo jc-architecture-modules.js");
 assert(htmlSrc.includes('src="jc-architecture-modules.js"'), "index.html deve carregar jc-architecture-modules.js");
 assert(htmlSrc.includes('id="profile"'), "index.html deve possuir a view #profile (Meu Perfil)");

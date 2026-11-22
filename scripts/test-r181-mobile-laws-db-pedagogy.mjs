@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 
+const expectedRelease='r'+JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8')).version.split('.').at(-1);
 const root = process.cwd();
 const htmlCode = fs.readFileSync(path.join(root, 'dist', 'index.html'), 'utf8');
 const archCode = fs.readFileSync(path.join(root, 'dist', 'jc-architecture-modules.js'), 'utf8');
@@ -13,7 +14,7 @@ const sqlV106 = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20261
 console.log('=== Teste r181: Responsividade Mobile, Banco Interno de Leis (Supabase + JSON), Preservação das 2.554 Questões e Auditoria Pedagógica ===');
 
 // 1. Service Worker r181
-assert.ok(swCode.includes('r184'), 'sw.js deve estar na versão r184');
+assert.ok(swCode.includes(expectedRelease), 'sw.js deve estar na versão do pacote');
 console.log('✓ 1. Service Worker atualizado para r181');
 
 // 2. Preservação de todas as questões em loadGeneratedContent (evita queda de 2554 -> 781)

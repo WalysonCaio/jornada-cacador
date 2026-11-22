@@ -316,7 +316,9 @@ try {
   origin = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({ headless: true });
   await runScenario(browser, 'desktop', { width: 1440, height: 1000 });
-  await runScenario(browser, 'mobile', { width: 390, height: 844 });
+  for(const viewport of [{width:360,height:800},{width:390,height:844},{width:412,height:915}]){
+    await runScenario(browser, `mobile-${viewport.width}`, viewport);
+  }
 } finally {
   await browser?.close();
   server.closeAllConnections();

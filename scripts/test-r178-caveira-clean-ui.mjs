@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 
+const expectedRelease='r'+JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8')).version.split('.').at(-1);
 const root = process.cwd();
 const archCode = fs.readFileSync(path.join(root, 'dist', 'jc-architecture-modules.js'), 'utf8');
 const htmlCode = fs.readFileSync(path.join(root, 'dist', 'index.html'), 'utf8');
@@ -10,7 +11,7 @@ const swCode = fs.readFileSync(path.join(root, 'dist', 'sw.js'), 'utf8');
 
 console.log('=== Teste r178/r182: Redesign Clean UI, Sidebar Retrátil & Cronômetro Tela Cheia ===');
 
-assert.ok(swCode.includes('r184'), 'sw.js deve usar cache r184');
+assert.ok(swCode.includes(expectedRelease), 'sw.js deve usar cache da versão do pacote');
 console.log('✓ 1. Service Worker atualizado para r182');
 
 const navMatch = htmlCode.match(/<nav class="tabs"[\s\S]*?<\/nav>/);

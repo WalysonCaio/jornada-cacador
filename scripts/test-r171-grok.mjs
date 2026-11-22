@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import assert from "node:assert/strict";
 
+const expectedRelease='r'+JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).version.split('.').at(-1);
 const v77Src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
 const idxSrc = readFileSync(new URL("../dist/index.html", import.meta.url), "utf8");
 const swSrc = readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
@@ -9,8 +10,8 @@ const guiaSrc = readFileSync(new URL("../GUIA-UNIFICADO.md", import.meta.url), "
 const javaSrc = readFileSync(new URL("../android/app/src/main/java/br/com/jornadadocacador/app/MainActivity.java", import.meta.url), "utf8");
 
 // 1. Validar versão r182 no service worker e guia
-assert(swSrc.includes("r184"), "sw.js deve estar na versao r184");
-assert(guiaSrc.includes("r184"), "GUIA-UNIFICADO.md deve estar na versao r184");
+assert(swSrc.includes(expectedRelease), "sw.js deve estar na versao do pacote");
+assert(guiaSrc.includes(expectedRelease), "GUIA-UNIFICADO.md deve estar na versao do pacote");
 
 // 2. Executar e testar as funções do r182 no VM
 const ctx = {

@@ -44,7 +44,8 @@ assert.deepEqual(Array.from(listContext.itemsForTest,item=>item.id),[material.id
 // Fontes do Caderno IA: documento de guia legado não é fonte de estudo.
 const smart=fs.readFileSync(new URL('../dist/v78-smart-notebook.js',import.meta.url),'utf8');
 const start=smart.indexOf('  function readySources(){'),end=smart.indexOf('  function contextBlock(){',start);
-Object.assign(context,{ALL_SUMMARIES:[{...guide,documentId:'manual-doc'},{...material,documentId:'material-doc'}],current:()=>({subject:'all',sources:['manual-doc','material-doc']}),MAX_SOURCES:5});
+context.cloudDocuments.forEach(doc=>{doc.user_id='user-a';doc.campaign_id='db-portal-a';});
+Object.assign(context,{syncNotebookScope:()=>({ready:true,ownerId:'user-a',campaignDbId:'db-portal-a'}),ALL_SUMMARIES:[{...guide,documentId:'manual-doc'},{...material,documentId:'material-doc'}],current:()=>({subject:'all',sources:['manual-doc','material-doc']}),MAX_SOURCES:5});
 vm.runInContext(smart.slice(start,end),context);
 assert.deepEqual(Array.from(context.readySources(),item=>item.id),['material-doc']);
 assert.deepEqual(Array.from(context.selectedSummaries(),item=>item.id),[material.id]);
