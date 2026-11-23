@@ -28,7 +28,7 @@ function fixture({count=2,fail=[],empty=[],sidecar=null}={}){
   ]}),getViewport:()=>({width:595,height:842}),cleanup(){}};
  }};
  ctx.openPdfDocumentWithFallback=async()=>pdf;ctx.fixturePdfjs={};
- vm.createContext(ctx);vm.runInContext('const extractionJobs=new Map(),extractionGenerations=new Map(),MAX_EXTRACT_PAGES=600;'+part('  function pdfExtractionScope(', '  function compactPagesForInlinePayload(').replace('await import("./pdf.mjs")','await Promise.resolve(fixturePdfjs)'),ctx);
+ vm.createContext(ctx);vm.runInContext(part('  function pdfTextItemGeometry(', '  function withTimeout(')+'const extractionJobs=new Map(),extractionGenerations=new Map(),MAX_EXTRACT_PAGES=600;'+part('  function pdfExtractionScope(', '  function compactPagesForInlinePayload(').replace('await import("./pdf.mjs")','await Promise.resolve(fixturePdfjs)'),ctx);
  return{ctx,doc,calls,pdf,pagesLoaded,notices,session:ctx.cloudSession};
 }
 {

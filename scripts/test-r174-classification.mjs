@@ -24,7 +24,7 @@ vm.runInContext([
   section(source,'  function strictSubjectMatch(','  function computeQuestionEditalLearningOrder('),
   section(source,'  function answerKeyStatus(','  function classifyQuestion('),
   section(source,'  function classifyQuestion(','  async function completeMissionHonestServer('),
-  section(source,'  const _TOPIC_STOP_WORDS=','  function activeCampaignErrors('),
+  section(source,'  const _TOPIC_REF_CACHE=','  function activeCampaignErrors('),
   section(source,'  function filteredQuestionPool(){','  function updateQuestionPool(){'),
   section(html,'function questionPool(){','function stripLeadingOptionPrefix('),
   section(html,'function learningQuestions(','function questionPriority('),
@@ -32,6 +32,7 @@ vm.runInContext([
   section(source,'  function buildDuelQuestionPack(','  function computeArenaStatsAndRivalries('),
   section(source,'  function findRelatedSummary(','  function buildSpecificErrorDiagnosis('),
   section(source,'  function simuladoCandidatePool(){','  function updateSimuladoAvailability(){'),
+  section(source,'  function questionSessionFilterContext(','  function startFilteredBattle('),
   section(source,'  function startQuickSprintBattle(){','  function ensureTopicPanelSearch(){')
 ].join('\n'),ctx);
 ctx.learningCategory=ctx.canonicalSubjectName;
@@ -78,7 +79,8 @@ editedOptions.options.splice(0,2,'habeas corpus','mandado de segurança');
 assert.equal(ctx.resolveStrictQuestionDiscipline(editedOptions),'Direito Constitucional');
 
 // Subject aliases match; generic subject labels and numeric substrings are not subtopics.
-const language={subject:'Língua Portuguesa',subject_source:'manual',topic:'Língua Portuguesa',statement:'Analise a pontuação da frase.',options:['Opção correta','Opção incorreta'],correct_index:0};
+const language={subject:'Língua Portuguesa',subject_source:'manual',topic:'Pontuação',statement:'Analise a pontuação da frase.',options:['Opção correta','Opção incorreta'],correct_index:0};
+assert.equal(ctx.questionMatchesTopicFilter({...language,topic:'Língua Portuguesa'},'pontuacao','Português'),false);
 assert.equal(ctx.questionMatchesTopicFilter(language,'pontuacao','Português'),true);
 assert.equal(ctx.questionMatchesTopicFilter(language,'crase','Português'),false);
 const constitutional={subject:'Direito Constitucional',subject_source:'manual',topic:'Art. 144',statement:'Organização da polícia civil.',options:['Opção correta','Opção incorreta']};

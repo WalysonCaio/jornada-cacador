@@ -101,6 +101,7 @@
               mode:'battle',
               subject:curMission.subject||'Missão Diária',
               missionId:curMission.id,
+              filterContext:questionSessionFilterContext({subject:curMission.subject||'all',topic:curMission.name||'all'}),
               questions:chosen.map(prepareQuestion),
               current:0,
               correct:0,
@@ -132,7 +133,7 @@
 
   function startQuickSprintBattle(){
     const mission=(typeof missionPool==='function'?missionPool():[]).find(item=>item.id===state?.daily)||null;
-    const source=(ALL_QUESTIONS||[]).filter(item=>isQuestionDisciplineEligible(item,mission?.subject||'all')&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item)));
+    const source=(ALL_QUESTIONS||[]).filter(item=>isQuestionDisciplineEligible(item,mission?.subject||'all')&&(!mission?.name||questionMatchesTopicFilter(item,topicKey(mission.name),mission.subject,mission.name))&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item)));
     if(!source.length){
       openView('report');
       return toast(mission?.subject?`Não há questões validadas de ${mission.subject} para este sprint. Revise as classificações ou adicione questões dessa disciplina.`:'Envie um PDF ou gere um caderno na Central de Provas para iniciar o Sprint de 5 minutos.');
@@ -140,6 +141,7 @@
     activeQuestions={
       mode:'progressive',
       subject:mission?.subject?`Sprint 5 min · ${mission.subject}`:'Sprint Rápido 5 min',
+      filterContext:questionSessionFilterContext({subject:mission?.subject||'all',topic:mission?.name||'all'}),
       questions:progressiveQuestions(source,Math.min(4,source.length)).map(prepareQuestion),
       current:0,
       correct:0,
@@ -2452,19 +2454,54 @@
   if (typeof window !== 'undefined') setTimeout(syncExternalNativeQuestionBank, 1200);
 
   function questionMatchesBoardFilter(item, boardFilter) {
+    const decision=questionBoardDecision(item);
+    if(decision.needs_review)return false;
     if (!boardFilter || boardFilter === 'all') return true;
-    const target = String(boardFilter).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR').trim();
-    // Explanations often compare boards; that does not make the question belong to each one.
-    const declaredBoard=String(item?.board||'').trim();
-    const hay = (declaredBoard&&!/^(?:prova oficial|banca n[aã]o informada|desconhecida)$/i.test(declaredBoard)?declaredBoard:String(item?.statement||'').slice(0,180)).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
-    if (target.includes('aocp')) return /aocp/.test(hay);
-    if (target.includes('cebraspe') || target.includes('cespe')) return /cebraspe|cespe/.test(hay);
-    if (target.includes('fgv')) return /\bfgv\b|fundacao getulio vargas/.test(hay);
-    if (target.includes('upenet') || target.includes('iaupe')) return /upenet|iaupe/.test(hay);
-    if (target.includes('ibfc')) return /\bibfc\b/.test(hay);
-    if (target.includes('idecan')) return /idecan/.test(hay);
-    return hay.includes(target);
+    const normalize=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+    return normalize(canonicalQuestionBoard(boardFilter))===normalize(decision.board);
   }
+  function canonicalQuestionBoard(value){
+    const raw=String(value||'').trim(),key=raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const aliases=[['Instituto AOCP',/\baocp\b/],['Cebraspe',/\b(?:cebraspe|cespe)\b/],['FGV',/\bfgv\b|fundacao getulio vargas/],['UPENET/IAUPE',/\b(?:upenet|iaupe)\b/],['FUNCAB',/\bfuncab\b/],['IBFC',/\bibfc\b/],['IDECAN',/\bidecan\b/],['FCC',/\bfcc\b|fundacao carlos chagas/],...['VUNESP','CESGRANRIO','IADES','IBADE','CONSULPLAN','FUNDATEC'].map(name=>[name,new RegExp(`\\b${name.toLowerCase()}\\b`)])];
+    const matches=aliases.filter(([,pattern])=>pattern.test(key));
+    return matches.length===1?matches[0][0]:raw;
+  }
+  function declaredQuestionBoard(statement){
+    // The leading exam attribution is evidence; incidental references in the
+    // support passage, explanation or options are not a second exam board.
+    const text=String(statement||'').trim().replace(/^(?:quest[aã]o\s*)?\d{1,4}\s*[.)\-–:]\s*/i,'');
+    const match=text.match(/^(?:\(([^)\n]{2,110})\)|\[([^\]\n]{2,110})\]|((?:Instituto\s+)?AOCP|FUNCAB|CEBRASPE|CESPE|FGV|UPENET(?:\s*\/\s*IAUPE)?|IAUPE|IBFC|IDECAN|FCC|VUNESP|CESGRANRIO|IADES|IBADE|CONSULPLAN|FUNDATEC)\s*[-–—:])\s*/i);
+    if(!match)return '';
+    const attribution=String(match[1]||match[2]||match[3]||'').trim();
+    if(!/^(?:(?:instituto\s+)?AOCP|FUNCAB|CEBRASPE|CESPE|FGV(?:\s+Conhecimento)?|UPENET(?:\s*\/\s*IAUPE)?|IAUPE|IBFC|IDECAN|FCC|VUNESP|CESGRANRIO|IADES|IBADE|CONSULPLAN|FUNDATEC)(?:$|\s*(?:\/|[-–—]))/i.test(attribution))return '';
+    const canonical=canonicalQuestionBoard(attribution);
+    // An attribution naming two different boards is not an unambiguous prefix.
+    return canonical===attribution&&/[\/–—-]/.test(attribution)&&!/^UPENET\s*\/\s*IAUPE$/i.test(attribution)?'':canonical;
+  }
+  function questionBoardDecision(item){
+    const declared=canonicalQuestionBoard(item?.board||''),explicit=declaredQuestionBoard(item?.statement||item?.question||'');
+    const human=['manual','manual_revisado','humano','humana','revisado','oficial_verificado'].includes(String(item?.board_source||'').toLowerCase());
+    const comparable=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const conflict=Boolean(explicit&&declared&&comparable(explicit)!==comparable(declared)&&human);
+    return {board:explicit||declared,declared_board:declared,explicit_board:explicit,source:explicit?'statement':human?'manual':'metadata',human,needs_review:conflict||item?.board_needs_review===true};
+  }
+  function resolvedQuestionBoard(item){return questionBoardDecision(item).board}
+  function questionBoardLabel(item,fallback='Banca não informada'){const decision=questionBoardDecision(item);return `${decision.board||fallback}${decision.needs_review?' · banca em revisão':''}`}
+  function applyQuestionBoardEvidence(item){
+    if(!item||typeof item!=='object')return item;
+    const decision=questionBoardDecision(item);
+    if(!decision.explicit_board)return item;
+    if(decision.needs_review){item.board_needs_review=true;item.board_statement=decision.explicit_board;return item}
+    if(decision.human)return item;
+    if(item.board!==decision.explicit_board){if(item.board&&!item.board_declared)item.board_declared=item.board;item.board=decision.explicit_board;item.board_source='statement'}
+    return item;
+  }
+  window.canonicalQuestionBoard=canonicalQuestionBoard;
+  window.declaredQuestionBoard=declaredQuestionBoard;
+  window.questionBoardDecision=questionBoardDecision;
+  window.resolvedQuestionBoard=resolvedQuestionBoard;
+  window.questionBoardLabel=questionBoardLabel;
+  window.applyQuestionBoardEvidence=applyQuestionBoardEvidence;
 
   function subjectIconForName(subj) {
     const k = String(subj || '').toLocaleLowerCase('pt-BR');
@@ -2604,7 +2641,10 @@
   };
 
   function formatStatementWithHighlights(rawText, itemObj) {
-    const parsed = splitQuestionAssociatedText(rawText, itemObj);
+    const textTools=window.JCQuestionText;
+    const displayText=textTools?textTools.normalizeTypography(rawText):rawText;
+    const displayItem=textTools&&itemObj?{...itemObj,associated_text:textTools.normalizeTypography(itemObj.associated_text||'')}:itemObj;
+    const parsed = splitQuestionAssociatedText(displayText, displayItem);
     const hasMissingFigureRef = !parsed.associatedText && /\b(observe a tirinha|analise a charge|observe a charge|na tirinha a seguir|no quadrinho acima|observe a figura abaixo|de acordo com o gr[áa]fico a seguir)\b/i.test(parsed.questionStem);
     const figureWarningHtml = hasMissingFigureRef
       ? `<div class="visualFigureAlert"><span>🖼️ <b>Atenção:</b> Esta questão faz referência a uma imagem/tirinha/gráfico do PDF original.</span><button type="button" class="ghost small" onclick="if(typeof window.skipQuestionBlank==='function')window.skipQuestionBlank()" style="width:auto;padding:4px 10px;font-size:.74rem">⚪ Deixar em Branco (0 pt)</button></div>`
@@ -3180,10 +3220,13 @@
 
   function repairKnownExamTextArtifacts(value){
     // Known extraction splits only; joining arbitrary words can change a key.
+    if(window.JCQuestionText)return window.JCQuestionText.normalizeTypography(value);
     return String(value??'').replace(/\breportag\s+em\b/gi,match=>/^R/.test(match)?'Reportagem':'reportagem').replace(/\b([Ll])e\s+i\b/g,'$1ei');
   }
   window.repairKnownExamTextArtifacts=repairKnownExamTextArtifacts;
   function getQuestionQualityDecision(item){
+    const integrity=window.JCQuestionText?.analyzeQuestion(item);
+    if(integrity?.needs_review)return{needs_source:true,needs_review:true,quality_status:'alternative_leak',reason:integrity.reason,missing_assertions:[],alternative_leaks:integrity.leaks};
     const statement=String(item?.statement||item?.question||''),associated=String(item?.associated_text||'').trim(),options=Array.isArray(item?.options)?item.options:[];
     const roman=['I','II','III','IV','V','VI','VII','VIII','IX','X'],required=new Set(),declared=new Set();
     for(const option of options){
@@ -3215,7 +3258,7 @@
     const declaredRaw=String(['manual','manual_revisado','humano','humana','revisado'].includes(source)?item?.subject||item?.classification_declared_subject||'':item?.classification_declared_subject||item?.subject||'');
     const options=Array.isArray(item?.options)?item.options:[];
     const cached=item&&typeof item==='object'?questionDisciplineCache.get(item):null;
-    const qualitySignature=JSON.stringify([item?.needs_source,item?.structure_needs_review,item?.quality_status,item?.quality_reason]);
+    const qualitySignature=JSON.stringify([item?.needs_source,item?.structure_needs_review,item?.quality_status,item?.quality_reason,item?.text_integrity_review?.pending]);
     if(cached&&cached.st===st&&cached.tp===tp&&cached.associated===associated&&cached.command===command&&cached.qualitySignature===qualitySignature&&cached.declaredRaw===declaredRaw&&cached.source===source&&cached.review===Boolean(item?.classification_needs_review)&&cached.topicReview===Boolean(item?.topic_classification_needs_review)&&cached.reason===item?.classification_reason&&cached.reviewStatus===item?.review_status&&cached.category===item?.category&&cached.id===item?.id&&cached.options.length===options.length&&options.every((o,i)=>cached.options[i]===o))return cached.result;
     const valid=s=>Boolean(s&&s!=='Conteúdo Geral'&&!isInvalidTrailSubject(s));
     const declared=canonicalSubjectName(declaredRaw);
@@ -3245,7 +3288,8 @@
   }
 
   function isQuestionDisciplineEligible(item,subject='all'){
-    if(!item||item.needs_review||item.review_status==='source_not_matched')return false;
+    if(!item||item.needs_review||item.board_needs_review||item.review_status==='source_not_matched')return false;
+    if(typeof questionBoardDecision==='function'&&questionBoardDecision(item).needs_review)return false;
     const decision=questionDisciplineDecision(item);
     return !decision.needs_review&&strictSubjectMatch(decision.subject,subject);
   }
@@ -3330,6 +3374,8 @@
           ALL_QUESTIONS.splice(i,1);
           continue;
         }
+        if(typeof window.applyQuestionTopicEvidence==='function')window.applyQuestionTopicEvidence(qItem);
+        if(typeof window.applyQuestionBoardEvidence==='function')window.applyQuestionBoardEvidence(qItem);
         const decision=questionDisciplineDecision(qItem);
         const quality=getQuestionQualityDecision(qItem);
         if(quality.needs_review){qItem.needs_source=true;qItem.structure_needs_review=true;qItem.quality_status=quality.quality_status;qItem.quality_reason=quality.reason;}
@@ -3340,7 +3386,8 @@
         if(realSubj&&!isInvalidTrailSubject(realSubj)&&realSubj!==qItem.subject){
           qItem.subject=realSubj;
         }
-        if(!['manual','manual_revisado','humano','humana','revisado'].includes(String(qItem.subject_source||qItem.classification_source||'').toLowerCase())&&isTopicContaminatedByWrongSubject(qItem.topic,qItem.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
+        if(typeof window.applyQuestionTopicEvidence==='function')window.applyQuestionTopicEvidence(qItem);
+        if(!window.questionTopicDecision?.(qItem)?.human&&!['manual','manual_revisado','humano','humana','revisado'].includes(String(qItem.subject_source||qItem.classification_source||'').toLowerCase())&&isTopicContaminatedByWrongSubject(qItem.topic,qItem.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
           qItem.topic=inferQuestionPedagogicalTopic(qItem.statement,qItem.subject);
         }
         qItem.subject_canonical=subjectKey(qItem.subject||'');
@@ -3362,6 +3409,8 @@
       for(const [cId,list] of Object.entries(state.customQuestionsByCampaign)){
         if(!Array.isArray(list))continue;
         state.customQuestionsByCampaign[cId]=list.filter(qItem=>qItem&&typeof qItem==='object'&&isValidFn(qItem,{allowSourceReview:true})).map(qItem=>{
+          if(typeof window.applyQuestionTopicEvidence==='function')window.applyQuestionTopicEvidence(qItem);
+          if(typeof window.applyQuestionBoardEvidence==='function')window.applyQuestionBoardEvidence(qItem);
           const decision=questionDisciplineDecision(qItem);
           const quality=getQuestionQualityDecision(qItem);
           if(quality.needs_review){qItem.needs_source=true;qItem.structure_needs_review=true;qItem.quality_status=quality.quality_status;qItem.quality_reason=quality.reason;}
@@ -3370,7 +3419,8 @@
           qItem.classification_needs_review=decision.needs_review;
           qItem.classification_reason=decision.reason;
           if(realSubj&&!isInvalidTrailSubject(realSubj))qItem.subject=realSubj;
-          if(!['manual','manual_revisado','humano','humana','revisado'].includes(String(qItem.subject_source||qItem.classification_source||'').toLowerCase())&&isTopicContaminatedByWrongSubject(qItem.topic,qItem.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
+          if(typeof window.applyQuestionTopicEvidence==='function')window.applyQuestionTopicEvidence(qItem);
+          if(!window.questionTopicDecision?.(qItem)?.human&&!['manual','manual_revisado','humano','humana','revisado'].includes(String(qItem.subject_source||qItem.classification_source||'').toLowerCase())&&isTopicContaminatedByWrongSubject(qItem.topic,qItem.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
             qItem.topic=inferQuestionPedagogicalTopic(qItem.statement,qItem.subject);
           }
           return qItem;
@@ -3386,6 +3436,9 @@
           errChanged=true;
           continue;
         }
+        const evidenceBefore=JSON.stringify([err.topic,err.topic_source,err.topic_classification_source,err.topic_classification_needs_review,err.topic_statement,err.topic_declared,err.board,err.board_source,err.board_needs_review,err.board_statement,err.board_declared]);
+        const humanTopic=window.questionTopicDecision?.(err)?.human===true;
+        const humanBoard=['manual','manual_revisado','humano','humana','revisado','oficial_verificado'].includes(String(err.board_source||'').toLowerCase());
         if(err.question){
           const testObj={statement:err.question,options:Array.isArray(err.options)&&err.options.length>=2?err.options:['Opção A','Opção B'],topic:err.topic||'',associated_text:err.associated_text||''};
           if(!isValidFn(testObj,{allowSourceReview:true})){
@@ -3402,7 +3455,9 @@
         const matchedQ=stKey?byStmt.get(stKey):null;
         if(matchedQ){
           if(err.subject!==matchedQ.subject){err.subject=matchedQ.subject;errChanged=true;}
-          if(matchedQ.topic&&(isTopicContaminatedByWrongSubject(err.topic,matchedQ.subject)||err.topic!==matchedQ.topic)){err.topic=matchedQ.topic;errChanged=true;}
+          if(!humanTopic&&matchedQ.topic&&(isTopicContaminatedByWrongSubject(err.topic,matchedQ.subject)||err.topic!==matchedQ.topic)){err.topic=matchedQ.topic;errChanged=true;}
+          if(!humanTopic)for(const field of ['topic_source','topic_classification_source','topic_declared','topic_statement','topic_classification_needs_review'])if(matchedQ[field]!==undefined)err[field]=matchedQ[field];
+          if(!humanBoard)for(const field of ['board','board_source','board_declared','board_statement','board_needs_review'])if(matchedQ[field]!==undefined)err[field]=matchedQ[field];
           if(Array.isArray(matchedQ.options)&&matchedQ.options.length>=2){
             err.options=[...matchedQ.options];
             err.correct_index=matchedQ.correct_index;
@@ -3415,11 +3470,14 @@
             err.subject=realErrSubj;
             errChanged=true;
           }
-          if(!['manual','manual_revisado','humano','humana','revisado'].includes(String(err.subject_source||err.classification_source||'').toLowerCase())&&isTopicContaminatedByWrongSubject(err.topic,err.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
+          if(!humanTopic&&!['manual','manual_revisado','humano','humana','revisado'].includes(String(err.subject_source||err.classification_source||'').toLowerCase())&&isTopicContaminatedByWrongSubject(err.topic,err.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
             err.topic=inferQuestionPedagogicalTopic(err.question||'',err.subject);
             errChanged=true;
           }
         }
+        if(typeof window.applyQuestionTopicEvidence==='function')window.applyQuestionTopicEvidence(err);
+        if(typeof window.applyQuestionBoardEvidence==='function')window.applyQuestionBoardEvidence(err);
+        if(evidenceBefore!==JSON.stringify([err.topic,err.topic_source,err.topic_classification_source,err.topic_classification_needs_review,err.topic_statement,err.topic_declared,err.board,err.board_source,err.board_needs_review,err.board_statement,err.board_declared]))errChanged=true;
         const errorQuality=getQuestionQualityDecision(err);
         if(errorQuality.needs_review){err.needs_source=true;err.structure_needs_review=true;err.quality_status=errorQuality.quality_status;err.quality_reason=errorQuality.reason;}
       }
@@ -3605,6 +3663,7 @@
 
   function answerKeyStatus(q) {
     if (q?.annulled || q?.anulada) return "anulada";
+    if(window.JCQuestionText?.analyzeQuestion(q).needs_review)return 'sem_gabarito';
     const raw = q?.correct_index;
     if (isUnreviewedAiAnswer(q) || q?.answer_unknown || typeof raw === 'boolean' || typeof raw === 'object' || raw === null || raw === undefined || String(raw).trim() === '' ||
         !Number.isInteger(Number(raw)) || Number(raw) < 0 ||
@@ -3649,10 +3708,18 @@
   window.gradeAnswer = gradeAnswer;
 
   function answerOptionText(value) {
-    const text=String(value??'').normalize('NFC').replace(/\s+/g,' ').trim();
+    const text=(window.JCQuestionText?window.JCQuestionText.normalizeTypography(value):String(value??'')).normalize('NFC').replace(/\s+/g,' ').trim();
     return text.length<=3?text:text.replace(/^(?:alternativa\s+|letra\s+|item\s+)?(?:\([A-Ea-e]\)|\[[A-Ea-e]\]|[A-Ea-e]\s*[\)\-–—:]|[A-Ea-e]\.\s+)\s*(?=\S)/i,'');
   }
   function answerOptionsSignature(item) { return JSON.stringify((item?.options||[]).map(answerOptionText).sort()); }
+  function answerOverrideMatchesOptions(override,item){
+    if(!override||typeof override.options_signature!=='string')return false;
+    const current=answerOptionsSignature(item);
+    if(override.options_signature===current)return true;
+    // Older personal reviews stored PDF spacing literally. Accept only the
+    // same complete alternatives after deterministic typography normalization.
+    try{const previous=JSON.parse(override.options_signature);return Array.isArray(previous)&&previous.every(value=>typeof value==='string')&&answerOptionsSignature({options:previous})===current;}catch{return false;}
+  }
   window.answerOptionText=answerOptionText;
   window.answerOptionsSignature=answerOptionsSignature;
 
@@ -3682,8 +3749,11 @@
   function recordBoardQuestionAttempt(item,chosen) {
     const grading=gradeAnswer(item,chosen);
     if(!grading.scored)return false;
-    const raw=String(item.board||'Banca não informada').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-    const board=/aocp/.test(raw)?'Instituto AOCP':/cebraspe|cespe/.test(raw)?'Cebraspe':/\bfgv\b/.test(raw)?'FGV':/upenet|iaupe/.test(raw)?'UPENET/IAUPE':String(item.board||'Banca não informada');
+    const boardDecision=typeof questionBoardDecision==='function'?questionBoardDecision(item):null;
+    if(boardDecision?.needs_review)return false;
+    const boardValue=boardDecision?.board||item.board||'Banca não informada';
+    const raw=String(boardValue).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const board=/aocp/.test(raw)?'Instituto AOCP':/cebraspe|cespe/.test(raw)?'Cebraspe':/\bfgv\b/.test(raw)?'FGV':/upenet|iaupe/.test(raw)?'UPENET/IAUPE':String(boardValue);
     const subject=String(item.subject||'Disciplina não informada');
     const origin=item.origin==='oficial'?'documento':'autoral';
     const campaign=String(state?.activeCampaignId||'default');
@@ -3857,57 +3927,129 @@
     return String(text||'').trim();
   };
 
-  const _TOPIC_STOP_WORDS=new Set(['para','como','sobre','entre','pelo','pela','seus','suas','nocoes','conceitos','estudo','aspectos','compreensao','estruturas','disposicoes','gerais','preliminares','capitulo','titulo','secao','artigo','artigos','republica','federativa','brasil']);
   const _TOPIC_REF_CACHE=new Map();
-  function _getParsedTopicRef(topicVal,rawTopicLabel){
-    const ck=`${topicVal}|${rawTopicLabel}`;
-    let cached=_TOPIC_REF_CACHE.get(ck);
+  function normalizedQuestionTopic(value){
+    return topicKey(value).replace(/^\d+(?:\s+\d+)*\s+(?=[a-z])/,'').replace(/\bart(?:igos?)?s?\b/g,'art').replace(/\s+/g,' ').trim();
+  }
+  function topicArticleReferences(value){
+    const text=normalizedQuestionTopic(value),articles=new Set();
+    for(const match of text.matchAll(/\bart\s+(\d{1,3})(?:\s+(?:a|ao|ate|e)\s+(\d{1,3}))?/g)){
+      const first=Number(match[1]),last=Number(match[2]||match[1]);
+      if(last>=first&&last-first<=150)for(let n=first;n<=last;n++)articles.add(n);
+    }
+    return articles;
+  }
+  function constitutionalTopicFamilies(value){
+    const text=normalizedQuestionTopic(value),articles=topicArticleReferences(text),families=new Set();
+    if(/\b(?:reparticao de competencias|organizacao do estado|organizacao politico administrativa|competencias? (?:constitucionais?|legislativas?|comuns?|concorrentes?|privativas?|exclusivas?))\b/.test(text)||[21,22,23,24].some(n=>articles.has(n)))families.add('competencias');
+    if(/\b(?:direitos e deveres individuais|direitos e garantias individuais|direitos individuais|remedios constitucionais|habeas corpus|habeas data|mandado de seguranca|mandado de injuncao|acao popular)\b/.test(text)||articles.has(5))families.add('direitos');
+    if(/\b(?:principios fundamentais|fundamentos da republica|objetivos fundamentais)\b/.test(text)||[1,2,3,4].some(n=>articles.has(n)))families.add('principios');
+    if(/\b(?:seguranca publica|forcas armadas)\b/.test(text)||articles.has(144))families.add('seguranca');
+    if(/\b(?:direitos sociais|direitos dos trabalhadores)\b/.test(text)||[6,7,8,9,10,11].some(n=>articles.has(n)))families.add('sociais');
+    return families;
+  }
+  function _getParsedTopicRef(topicVal,rawTopicLabel=''){
+    // The option value is complete; its rendered label can be truncated or carry a count.
+    const refText=normalizedQuestionTopic(topicVal||rawTopicLabel);
+    let cached=_TOPIC_REF_CACHE.get(refText);
     if(cached)return cached;
-    const refText=topicKey(`${rawTopicLabel||''} ${topicVal}`).replace(/^\d+\s*/,'').trim();
-    const isArt1=/\bart\s*1\b.*\b4\b|\bprincipios fundamentais\b/.test(refText);
-    const isArt5=/\bart\s*5\b|\bdireitos e deveres individuais\b|\bdireitos e garantias\b/.test(refText);
-    const isArt144=/\bart\s*144\b|\bseguranca publica\b/.test(refText);
-    const isRlm=/\bproposic|\bconectiv|\bestruturas logicas/.test(refText);
-    const keywords=[...new Set(refText.split(/\s+/).filter(w=>w.length>=4&&!_TOPIC_STOP_WORDS.has(w)))];
-    cached={refText,isArt1,isArt5,isArt144,isRlm,keywords};
+    const articles=topicArticleReferences(refText),families=constitutionalTopicFamilies(refText);
+    if(!articles.size&&families.has('competencias')){
+      if(/\bconcorrentes?\b/.test(refText))articles.add(24);
+      else if(/\bprivativas?\b/.test(refText))articles.add(22);
+      else if(/\bcomuns?\b/.test(refText))articles.add(23);
+      else if(/\bexclusivas?\b/.test(refText))articles.add(21);
+    }
+    const remedy=/\b(?:remedios constitucionais|habeas corpus|habeas data|mandado de seguranca|mandado de injuncao|acao popular)\b/.test(refText);
+    const remedyKinds=['habeas corpus','habeas data','mandado de seguranca','mandado de injuncao','acao popular'].filter(kind=>` ${refText} `.includes(` ${kind} `));
+    const scopeWords={competencias:'organizacao estado politico administrativa municipios reparticao competencias competencia constitucionais constitucional legislativas legislativa comuns comum concorrentes concorrente privativas privativa exclusivas exclusiva uniao estados distrito federal',direitos:'direitos direito deveres individuais individual coletivos coletivo garantias fundamentais remedios constitucionais habeas corpus data mandado seguranca injuncao acao popular',sociais:'direitos direito sociais social trabalhadores trabalhador',principios:'principios fundamentais fundamentos republica objetivos',seguranca:'seguranca publica forcas armadas'};
+    const allowed=new Set(`art a ao ate e da do das dos de o os as ${scopeWords[[...families][0]]||''}`.split(' '));
+    const semanticScope=families.size===1&&refText.split(' ').every(word=>/^\d+$/.test(word)||allowed.has(word))&&!(remedyKinds.length&&/\b(?:coletivos?|individuais|individual|preventivos?|repressivos?)\b/.test(refText));
+    cached={refText,articles,families,remedy,remedyKinds,semanticScope};
     if(_TOPIC_REF_CACHE.size>2000)_TOPIC_REF_CACHE.clear();
-    _TOPIC_REF_CACHE.set(ck,cached);
+    _TOPIC_REF_CACHE.set(refText,cached);
     return cached;
   }
+  function topicTargetAcceptsEvidence(target,evidence,strictScope=true){
+    if(!evidence?.family||!target.families.has(evidence.family))return false;
+    if(strictScope&&!target.semanticScope)return false;
+    if(target.remedy&&!evidence.remedy&&strictScope)return false;
+    if(target.remedyKinds.length){
+      if(!evidence.remedyKinds?.length){if(strictScope)return false}
+      else if(!evidence.remedyKinds.every(kind=>target.remedyKinds.includes(kind)))return false;
+    }
+    if(target.articles.size){
+      if(!evidence.articles?.length)return !strictScope;
+      if(!evidence.articles.every(n=>target.articles.has(n)))return false;
+    }
+    return true;
+  }
+  function constitutionalQuestionTopicEvidence(item){
+    const statement=String(item?.statement||item?.question||''),associated=String(item?.associated_text||'');
+    const parts=typeof window.questionCommandParts==='function'?window.questionCommandParts(statement,associated,item?.command||''):null;
+    const rawCommand=item?.command||(associated||/^Texto[- ]base\s*:/i.test(statement)?parts?.command:statement)||statement;
+    const command=normalizedQuestionTopic(rawCommand),constitutional=/\b(?:constituicao|constitucional|cf(?: 88| 1988)?|carta magna)\b/.test(command);
+    const articles=constitutional?[...topicArticleReferences(command)].filter(n=>!new RegExp(`\\bart ${n}\\s+(?:d[ao]s? (?:lei|codigo)|(?:cp|cpp)\\b)`).test(command)):[];
+    const candidates=[];
+    const add=(family,topic,refs,remedy=false)=>{const found=candidates.find(e=>e.family===family);if(found){found.articles=[...new Set([...found.articles,...refs])];found.remedy=found.remedy||remedy;return}candidates.push({family,topic,articles:refs,remedy,remedyKinds:remedy?['habeas corpus','habeas data','mandado de seguranca','mandado de injuncao','acao popular'].filter(kind=>` ${command} `.includes(` ${kind} `)):[],source:'command'})};
+    const concurrent=/\blegislar concorrentemente\b|\bcompetencias? concorrentes?\b/.test(command);
+    const privateLaw=/\blegislar privativamente\b|\bcompetencias? privativas?\b[\s\S]{0,90}\b(?:uniao|estados|distrito federal|municipios)\b|\b(?:uniao|estados|distrito federal|municipios)\b[\s\S]{0,90}\bcompetencias? privativas?\b/.test(command);
+    const common=/\bcompetencias? comuns?\b[\s\S]{0,90}\b(?:uniao|estados|distrito federal|municipios)\b|\b(?:uniao|estados|distrito federal|municipios)\b[\s\S]{0,90}\bcompetencias? comuns?\b/.test(command);
+    const exclusive=/\bcompetencias? exclusivas?\b[\s\S]{0,90}\buniao\b|\buniao\b[\s\S]{0,90}\bcompetencias? exclusivas?\b/.test(command);
+    const competenceArticles=articles.filter(n=>n>=21&&n<=24);
+    if(concurrent||privateLaw||common||exclusive||competenceArticles.length)add('competencias','Organização do Estado e Repartição de Competências (Arts. 21 a 24)',[...new Set([...competenceArticles,...(concurrent?[24]:[]),...(privateLaw?[22]:[]),...(common?[23]:[]),...(exclusive?[21]:[])])]);
+    const remedy=/\b(?:remedios constitucionais|habeas corpus|habeas data|mandado de seguranca|mandado de injuncao|acao popular)\b/.test(command);
+    if(remedy||articles.includes(5)||/\bdireitos (?:e deveres )?individuais\b/.test(command))add('direitos',remedy?'Remédios Constitucionais':'Direitos e Deveres Individuais e Coletivos (Art. 5º)',[5],remedy);
+    if(articles.some(n=>n>=6&&n<=11)||/\bdireitos sociais\b|\bdireitos dos trabalhadores\b/.test(command))add('sociais','Dos Direitos Sociais (Art. 6º ao 11)',articles.filter(n=>n>=6&&n<=11));
+    if(articles.some(n=>n>=1&&n<=4)||/\b(?:principios fundamentais|fundamentos da republica|objetivos fundamentais)\b/.test(command))add('principios','Princípios Fundamentais (Art. 1º ao 4º)',articles.filter(n=>n>=1&&n<=4));
+    if(articles.includes(144)||/\bseguranca publica\b/.test(command))add('seguranca','Da Segurança Pública (Art. 144) e Forças Armadas',[144]);
+    return candidates.length===1?candidates[0]:candidates.length?{ambiguous:true,family:'',topic:'',articles:[],candidates}:null;
+  }
+  function questionTopicDecision(item,subject=item?.subject||''){
+    const declared=String(item?.topic||''),constitutional=/constitucional/.test(topicKey(subject));
+    const evidence=constitutional?constitutionalQuestionTopicEvidence(item):null;
+    const human=[item?.topic_source,item?.topic_classification_source].some(value=>['manual','manual_revisado','humano','humana','revisado','oficial_verificado'].includes(String(value||'').toLowerCase()));
+    const target=_getParsedTopicRef(declared);
+    const generic=!target.refText||target.refText===normalizedQuestionTopic(subject)||/^(?:geral|conteudo geral|questao \d+|item \d+)$/.test(target.refText);
+    const conflict=Boolean(evidence?.family&&!generic&&!topicTargetAcceptsEvidence(target,evidence,false));
+    return {topic:evidence?.topic||declared,declared_topic:declared,family:evidence?.family||'',evidence,ambiguous:evidence?.ambiguous===true,source:evidence?.family?'command':'metadata',conflict,needs_review:Boolean(human&&conflict)||item?.topic_classification_needs_review===true,human};
+  }
+  function applyQuestionTopicEvidence(item){
+    if(!item||typeof item!=='object')return item;
+    const decision=questionTopicDecision(item);
+    if(decision.source!=='command')return item;
+    if(decision.needs_review){item.topic_classification_needs_review=true;item.topic_statement=decision.topic;return item}
+    if(decision.human)return item;
+    // Compatible metadata can carry a narrower topic than the detected family.
+    if(!decision.conflict&&decision.declared_topic&&!_getParsedTopicRef(decision.declared_topic).semanticScope)return item;
+    if(item.topic!==decision.topic){if(item.topic&&!item.topic_declared)item.topic_declared=item.topic;item.topic=decision.topic;item.topic_source='command';delete item.learning_order;delete item._loCampId}
+    return item;
+  }
+  window.constitutionalTopicFamilies=constitutionalTopicFamilies;
+  window.constitutionalQuestionTopicEvidence=constitutionalQuestionTopicEvidence;
+  window.questionTopicDecision=questionTopicDecision;
+  window.applyQuestionTopicEvidence=applyQuestionTopicEvidence;
 
   function questionMatchesTopicFilter(item,topicVal,subject='all',rawTopicLabel=''){
     if(!topicVal||topicVal==='all')return true;
     if(subject&&subject!=='all'){
       if(!strictSubjectMatch(resolveStrictQuestionDiscipline(item),subject))return false;
     }
-    topicVal=topicKey(topicVal);
-    const qTopicKey=topicKey(item?.topic||'');
     const itemSubject=resolveStrictQuestionDiscipline(item);
-    const genericTopic=!qTopicKey||qTopicKey===topicKey(itemSubject)||/^(?:geral|conteudo geral|questao \d+|item \d+)$/.test(qTopicKey);
-    const containsPhrase=(text,phrase)=>Boolean(phrase&&` ${text} `.includes(` ${phrase} `));
-    if(qTopicKey&&(qTopicKey===topicVal||(!genericTopic&&(containsPhrase(qTopicKey,topicVal)||containsPhrase(topicVal,qTopicKey)))))return true;
-    // Reuse a normalized search only while both inputs still match after an edit.
-    if(item&&typeof item==='object'&&(item._hayTopicSrc!==item.topic||item._hayStatementSrc!==item.statement)){
-      item._hayKey=topicKey(`${item.topic||''} ${item.statement||''}`);
-      item._hayTopicSrc=item.topic;item._hayStatementSrc=item.statement;
-    }
-    const hay=item?._hayKey||topicKey(`${item?.topic||''} ${item?.statement||''}`);
-    const parsed=_getParsedTopicRef(topicVal,rawTopicLabel);
+    const topicDecision=questionTopicDecision(item,itemSubject);
+    if(topicDecision.needs_review||topicDecision.ambiguous)return false;
     const constitutional=topicKey(itemSubject)==='direito constitucional';
-    if(constitutional&&parsed.isArt1&&/\b(principios fundamentais|fundamentos da republica|soberania|dignidade da pessoa|pluralismo politico|autodeterminacao|art 1|art 2|art 3|art 4)\b/.test(hay))return true;
-    if(constitutional&&parsed.isArt5&&/\b(art 5|direitos individuais|inviolabilidade|habeas|mandado de seguranca|liberdade|propriedade)\b/.test(hay))return true;
-    if(constitutional&&parsed.isArt144&&/\b(art 144|seguranca publica|policia militar|policia civil|policia federal|policia penal|bombeiro)\b/.test(hay))return true;
-    if(topicKey(itemSubject)==='raciocinio logico matematico'&&parsed.isRlm&&/\b(proposic|conectiv|bicondicional|condicional|disjuncao|conjuncao|tabela verdade|tautologia|negacao|equivalencia|logicamente)\b/.test(hay))return true;
-    const disciplineWords=new Set(topicKey(itemSubject).split(' '));
-    const keywords=parsed.keywords.filter(word=>!disciplineWords.has(word));
-    if(!keywords.length)return false;
-    const minHits=Math.min(2,keywords.length);
-    let hits=0;
-    for(let i=0;i<keywords.length;i++){
-      if(containsPhrase(hay,keywords[i])){
-        hits++;
-        if(hits>=minHits)return true;
-      }
+    const parsed=_getParsedTopicRef(topicVal,rawTopicLabel);
+    // An article-specific selection must be justified by that article. A shared
+    // family or a word in the support passage cannot admit another topic.
+    if(constitutional&&topicDecision.family){
+      if(topicTargetAcceptsEvidence(parsed,topicDecision.evidence))return true;
+      return !topicDecision.conflict&&normalizedQuestionTopic(topicDecision.declared_topic)===parsed.refText;
+    }
+    const declared=_getParsedTopicRef(topicDecision.topic);
+    if(declared.refText&&declared.refText===parsed.refText)return true;
+    if(constitutional&&declared.families.size===1){
+      return topicTargetAcceptsEvidence(parsed,{family:[...declared.families][0],articles:[...declared.articles],remedy:declared.remedy,remedyKinds:declared.remedyKinds});
     }
     return false;
   }
@@ -3921,17 +4063,16 @@
   function questionMatchesErrorPool(question,errorEntries){
     if(!errorEntries.length)return false;
     const qSubj=topicKey(resolveStrictQuestionDiscipline(question));
-    const qTopic=topicKey(question?.topic);
     const qStmt=topicKey(question?.statement);
-    const isGenericTopic=t=>!t||t.length<5||/^(geral|questao \d*|item \d*|simulado.*|correcao de erro|ponto de atencao|revisao.*|conteudo.*)$/.test(t);
     return errorEntries.some(([,err])=>{
-      const eSubj=topicKey(resolveStrictQuestionDiscipline(err?.question||'',err?.topic||'',err?.subject||'',err?.options||[]));
+      if(!err||questionTopicDecision(err).needs_review)return false;
+      const eSubj=topicKey(resolveStrictQuestionDiscipline(err));
       if(qSubj&&eSubj&&qSubj!==eSubj)return false;
       const eStmt=topicKey(err?.question);
       if(eStmt&&qStmt&&eStmt===qStmt)return true;
-      const eTopic=topicKey(err?.topic);
-      if(!isGenericTopic(eTopic)&&!isGenericTopic(qTopic)&&(qTopic.includes(eTopic)||eTopic.includes(qTopic)))return true;
-      return Boolean(eSubj&&qSubj===eSubj&&!eStmt);
+      const eTopic=questionTopicDecision(err).topic;
+      if(!eTopic||/^(?:geral|questao \d*|item \d*|simulado.*|correcao de erro|ponto de atencao|revisao.*|conteudo.*)$/.test(topicKey(eTopic)))return false;
+      return questionMatchesTopicFilter(question,topicKey(eTopic),err.subject||'all',eTopic);
     });
   }
 
@@ -4073,6 +4214,7 @@
     activeQuestions={
       mode:'caveira_sprint',
       subject:'Sprint Reta Final Caveira',
+      filterContext:questionSessionFilterContext(),
       questions:unique.map(prepareQuestion),
       current:0,
       correct:0,
@@ -4284,9 +4426,21 @@
     return filtered;
   }
 
+  function questionAvailabilityBreakdown(pool){
+    if(!window.JCQuestionAvailability)return null;
+    return window.JCQuestionAvailability.partition(ALL_QUESTIONS,pool,item=>{
+      const classification=typeof questionDisciplineDecision==='function'?questionDisciplineDecision(item):null;
+      if(!item||classification?.needs_source||classification?.needs_review||item.needs_review||item.classification_needs_review||item.board_needs_review||(!classification&&!isQuestionDisciplineEligible(item,'all')))return 'review';
+      const status=answerKeyStatus(item);
+      return status==='anulada'?'annulled':status==='sem_gabarito'?'pendingKey':'otherFilters';
+    });
+  }
+  window.questionAvailabilityBreakdown=questionAvailabilityBreakdown;
   function updateQuestionPool(){
     const pool=filteredQuestionPool(),badge=q('#questionPoolCount'),battleMode=q('#questionBattleMode')?.value||'progressive';
     if(badge)badge.textContent=`${pool.length} disponíve${pool.length===1?'l':'is'}`;
+    const summary=q('#questionAvailabilitySummary'),counts=summary?questionAvailabilityBreakdown(pool):null;
+    if(summary&&counts){const label=window.JCQuestionAvailability.describe(counts);if(summary.textContent!==label)summary.textContent=label;summary.hidden=false;}
     const button=q('#startQuestions');
     if(button){
       button.disabled=!pool.length;
@@ -4322,6 +4476,20 @@
     return ordered.slice(0,count).sort((a,b)=>difficultyWeight(normalizedDifficulty(a))-difficultyWeight(normalizedDifficulty(b)));
   }
 
+  function questionSessionFilterContext(context=null){
+    if(context)return {subject:'all',board:'all',topic:'all',difficulty:'all',origin:'all',...context};
+    return {subject:q('#questionSubject')?.value||'all',board:q('#questionBoardFilter')?.value||'all',topic:q('#questionTopic')?.value||'all',difficulty:q('#questionDifficulty')?.value||'all',origin:q('#questionOrigin')?.value||'all'};
+  }
+  function questionMatchesSessionFilterContext(item,context={}){
+    return isQuestionDisciplineEligible(item,context.subject||'all')&&questionMatchesBoardFilter(item,context.board||'all')&&questionMatchesTopicFilter(item,context.topic||'all',context.subject||'all')&&( !context.difficulty||context.difficulty==='all'||normalizedDifficulty(item)===context.difficulty)&&(!context.origin||context.origin==='all'||normalizedOrigin(item)===context.origin);
+  }
+  function savedQuestionSessionCanResume(battle){
+    return Boolean(battle&&Array.isArray(battle.questions)&&battle.questions.length&&battle.questions.every(item=>questionMatchesSessionFilterContext(item,battle.filterContext||{})));
+  }
+  window.questionSessionFilterContext=questionSessionFilterContext;
+  window.questionMatchesSessionFilterContext=questionMatchesSessionFilterContext;
+  window.savedQuestionSessionCanResume=savedQuestionSessionCanResume;
+
   function startFilteredBattle(){
     const pool=filteredQuestionPool(),subject=q('#questionSubject')?.value||'all',topicSel=q('#questionTopic'),battleMode=q('#questionBattleMode')?.value||'progressive';
     if(!pool.length)return toast('Não há questões que correspondam aos filtros selecionados.');
@@ -4331,6 +4499,7 @@
     activeQuestions={
       mode:battleMode==='progressive'?'progressive':battleMode==='errors'?'errors':'battle',
       subject:topicLabel?`${subject==='all'?'Treino':subject} · ${topicLabel}`:subject,
+      filterContext:questionSessionFilterContext(),
       questions:chosenQuestions,
       current:0,
       correct:0,
@@ -4351,9 +4520,10 @@
     const errEntries=activeCampaignErrors();
     if(!errEntries.length)return toast('Parabéns! Seu Caderno de Erros está zerado neste portal.');
     const canRetry=item=>Boolean(item&&String(item.statement||'').trim()&&isQuestionDisciplineEligible(item)&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item)));
-    const allPool=Array.isArray(ALL_QUESTIONS)?ALL_QUESTIONS:[];
+    const allPool=filteredQuestionPool();
     let errQuestions=allPool.filter(item=>canRetry(item)&&questionMatchesErrorPool(item,errEntries));
     if(!errQuestions.length){
+      const subject=q('#questionSubject')?.value||'all',board=q('#questionBoardFilter')?.value||'all',topic=q('#questionTopic')?.value||'all',difficulty=q('#questionDifficulty')?.value||'all',origin=q('#questionOrigin')?.value||'all';
       errQuestions=errEntries.filter(([,e])=>e?.question&&Array.isArray(e.options)).map(([key,e])=>{
         const realSubj=resolveStrictQuestionDiscipline(e.question,e.topic,e.subject,e.options);
         return {
@@ -4369,7 +4539,7 @@
           _alreadyPreparedConsistent:true,
           _errorNotebookKey:key
         };
-      }).filter(canRetry);
+      }).filter(item=>canRetry(item)&&isQuestionDisciplineEligible(item,subject)&&questionMatchesBoardFilter(item,board)&&questionMatchesTopicFilter(item,topic,subject)&&(difficulty==='all'||normalizedDifficulty(item)===difficulty)&&(origin==='all'||normalizedOrigin(item)===origin));
     }
     if(!errQuestions.length)return toast('Estes erros não têm questões completas com gabarito válido. Use “Ler Teoria” ou importe a questão completa para refazer.');
     const count=Math.min(6,errQuestions.length);
@@ -4378,6 +4548,7 @@
     activeQuestions={
       mode:'errors',
       subject:'Reforço de Erros',
+      filterContext:questionSessionFilterContext(),
       questions,
       current:0,
       correct:0,
@@ -4485,7 +4656,7 @@
       const isRight=idx===correctIndex;
       const isUserPick=idx===chosenIndex;
       const statusTag=isRight?'<span class="stepOptBadge good">✓ Correta</span>':isUserPick?'<span class="stepOptBadge bad">✗ Sua escolha</span>':'<span class="stepOptBadge neutral">Distrator</span>';
-      return `<div class="stepOptionItem ${isRight?'isRight':isUserPick?'isWrong':''}"><div><b>${letter})</b> ${escText(opt)}</div>${statusTag}</div>`;
+      return `<div class="stepOptionItem ${isRight?'isRight':isUserPick?'isWrong':''}"><div><b>${letter})</b> ${escText(window.JCQuestionText?window.JCQuestionText.analyzeOption(opt).text:opt)}</div>${statusTag}</div>`;
     }).join('');
 
     const interactiveControls=interactive?`
@@ -4540,7 +4711,7 @@
           <span class="eyebrow">${ok?'✓ RESPOSTA CORRETA · +25 XP':chosenIndex===-2?'⚪ QUESTÃO EM BRANCO · CONFIRA A RESOLUÇÃO':'✗ RESPOSTA INCORRETA · APRENDA COM O PASSO A PASSO'}</span>
           <h4>Gabarito: ${isCE?correctLetter:`Alternativa ${correctLetter}`}${!ok?` (${chosenIndex===-2?'deixada em branco':chosenIndex===-1?'tempo esgotado':`você marcou ${chosenLetter}`})`:''}</h4>
         </div>
-        <span class="tag">${escText(item.board||(normalizedOrigin(item)==='oficial'?'Prova Oficial':'Estilo Banca'))}</span>
+        <span class="tag">${escText(questionBoardLabel(item,normalizedOrigin(item)==='oficial'?'Prova Oficial':'Estilo Banca'))}</span>
       </div>
       <p class="small muted">${escText(keyDetails.label)}${keyDetails.source?` · Fonte informada: ${escText(keyDetails.source)}`:''}. Explicações de IA são apoio ao estudo e devem ser conferidas.</p>
       ${directComparisonHtml}
@@ -4919,7 +5090,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     item._answerStartedAt=Date.now();
     const diff=normalizedDifficulty(item);
     const diffLabel={facil:'🟢 Fácil',medio:'🟡 Média',dificil:'🔴 Difícil'}[diff]||'🟡 Média'; const sealOrigin = typeof window.questionOriginSeal === 'function' ? window.questionOriginSeal(item) : 'OFICIAL';
-    const boardLabel=item.board||(normalizedOrigin(item)==='oficial'?'Prova Oficial':'Autoral IA');
+    const boardLabel=questionBoardLabel(item,normalizedOrigin(item)==='oficial'?'Prova Oficial':'Autoral IA');
     const subjName=learningCategory(item.subject)||'Disciplina';
     const topicName=shortLabel(item.topic||'Geral',42);
     const pct=Math.round(((battle.current+1)/Math.max(1,battle.questions.length))*100);
@@ -4964,7 +5135,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         reader.readAsDataURL(f);
       };
     }
-    q('#questionOptions').innerHTML=(item.options||[]).map((o,i)=>`<div class="optionWithScissors"><button type="button" class="optionMainBtn" data-question-index="${i}"><span class="optLetterBadge">${String.fromCharCode(65+i)}</span><span class="optBodyText">${escText(o)}</span></button><button type="button" class="scissorBtn" data-scissor-index="${i}" title="Riscar/eliminar alternativa (estilo TEC/Qconcursos)" aria-label="Riscar alternativa ${String.fromCharCode(65+i)}">✂</button></div>`).join('')+`<div class="questionAnswerControls"><span id="questionSelectionStatus" class="small muted" role="status" aria-live="polite">Selecione uma alternativa e confirme abaixo.</span><button type="button" class="action" id="confirmQuestionAnswerBtn" disabled>${answerKeyDetails(item).scored?'Responder':'Ver explicação (sem pontuar)'}</button></div><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px"><button type="button" class="ghost small" id="skipQuestionBlankBtn" style="width:auto;padding:6px 12px;font-size:.77rem" title="Pular sem marcar alternativa (Estratégia Líquida Cebraspe/Caveira: não perde ponto líquido)">⚪ Deixar em Branco (Modo Líquido Caveira)</button><button type="button" class="ghost small" id="toggleModalPaperModeBtn" style="width:auto;padding:6px 10px;font-size:.75rem">☀️ Modo Papel</button></div>`;
+    q('#questionOptions').innerHTML=(item.options||[]).map((o,i)=>`<div class="optionWithScissors"><button type="button" class="optionMainBtn" data-question-index="${i}"><span class="optLetterBadge">${String.fromCharCode(65+i)}</span><span class="optBodyText">${escText(window.JCQuestionText?window.JCQuestionText.analyzeOption(o).text:o)}</span></button><button type="button" class="scissorBtn" data-scissor-index="${i}" title="Riscar/eliminar alternativa (estilo TEC/Qconcursos)" aria-label="Riscar alternativa ${String.fromCharCode(65+i)}">✂</button></div>`).join('')+`<div class="questionAnswerControls"><span id="questionSelectionStatus" class="small muted" role="status" aria-live="polite">Selecione uma alternativa e confirme abaixo.</span><button type="button" class="action" id="confirmQuestionAnswerBtn" disabled>${answerKeyDetails(item).scored?'Responder':'Ver explicação (sem pontuar)'}</button></div><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px"><button type="button" class="ghost small" id="skipQuestionBlankBtn" style="width:auto;padding:6px 12px;font-size:.77rem" title="Pular sem marcar alternativa (Estratégia Líquida Cebraspe/Caveira: não perde ponto líquido)">⚪ Deixar em Branco (Modo Líquido Caveira)</button><button type="button" class="ghost small" id="toggleModalPaperModeBtn" style="width:auto;padding:6px 10px;font-size:.75rem">☀️ Modo Papel</button></div>`;
     q('#questionFeedback').innerHTML='';
     q('#nextQuestion').hidden=true;
     battle.answered=false;
@@ -6637,7 +6808,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     const defaultSubject=opts.defaultSubject||'Conteúdo Geral';
     const defaultBoard=opts.defaultBoard||'Prova Oficial';
     const report={expected:0,extracted:0,annulled:0,skipped:0,missingKey:0,ambiguous:false,reason:'',percent:0,classificationReviewCount:0,sourceLocatedCount:0,unknownFormatCount:0,structureReviewCount:0};
-    const finish=list=>{report.classificationReviewCount=list.filter(item=>item.classification_needs_review===true).length;report.structureReviewCount=list.filter(item=>qualityOf(item).needs_review).length;report.sourceLocatedCount=list.filter(item=>Number.isInteger(item.question_number)&&Number.isInteger(item.source_page)).length;Object.defineProperty(list,'report',{value:report,enumerable:false});return list};
+    const finish=list=>{list=list.map(item=>{const cleaned=window.JCQuestionText?window.JCQuestionText.cleanQuestion(item):{...item,statement:repairText(item.statement),options:(item.options||[]).map(repairText)};window.applyQuestionBoardEvidence?.(cleaned);window.applyQuestionTopicEvidence?.(cleaned);return cleaned});report.classificationReviewCount=list.filter(item=>item.classification_needs_review===true).length;report.structureReviewCount=list.filter(item=>qualityOf(item).needs_review).length;report.sourceLocatedCount=list.filter(item=>Number.isInteger(item.question_number)&&Number.isInteger(item.source_page)).length;Object.defineProperty(list,'report',{value:report,enumerable:false});return list};
     const rawJoined=Array.isArray(rawTextOrPages)?rawTextOrPages.map(p=>String(p?.text||'')).join('\n\n'):String(rawTextOrPages||'');
     const jsonCandidate=rawJoined.trim();
     if(!jsonCandidate)return finish([]);
@@ -6650,7 +6821,9 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         const out=[];
         for(const x of arr){
           if(!x||typeof x!=='object'||!String(x.statement??'').trim()||!Array.isArray(x.options))continue;
-          const options=x.options.map(o=>repairText(o).trim());
+          // Keep source spacing until the final integrity pass captures any
+          // leaked alternative; typography is normalized on that review copy.
+          const options=x.options.map(o=>String(o??'').trim());
           const normalizedOptions=options.map(o=>answerOptionText(o).toLocaleLowerCase('pt-BR'));
           if(options.length<2||options.length>5||normalizedOptions.some(o=>!o)||new Set(normalizedOptions).size!==options.length)continue;
           const idx=x.correct_index;
@@ -6663,7 +6836,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
             subject:canonicalSubjectName(x.subject||defaultSubject),
             topic:x.topic||'Questão Importada',
             board:x.board||defaultBoard,
-            statement:repairText(x.statement).trim(),
+            statement:String(x.statement).trim(),
             options,
             correct_index:unknown?-1:Number(idx),
             explanation:String(x.explanation||'Questão importada pelo usuário.'),
@@ -6674,11 +6847,12 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
           if(annulled)item.annulled=true;
           // Metadados explícitos impedem que exportar/importar promova uma
           // sugestão da IA a gabarito oficial ou apague uma revisão humana.
-          for(const key of ['key_source','answer_key_validation','key_reference','source','source_url','source_label','exam_title','associated_text','command','classification_declared_subject','classification_reason','subject_source','exam_caderno','quality_status','quality_reason']){
+          for(const key of ['key_source','answer_key_validation','key_reference','source','source_url','source_label','exam_title','associated_text','command','classification_declared_subject','classification_reason','subject_source','classification_source','topic_source','topic_classification_source','topic_declared','topic_statement','board_source','board_declared','board_statement','exam_caderno','quality_status','quality_reason']){
             if(typeof x[key]==='string')item[key]=x[key];
           }
-          for(const flag of ['explanation_needs_review','classification_needs_review','topic_classification_needs_review','needs_source','structure_needs_review'])if(typeof x[flag]==='boolean')item[flag]=x[flag];
+          for(const flag of ['explanation_needs_review','classification_needs_review','topic_classification_needs_review','board_needs_review','needs_source','structure_needs_review'])if(typeof x[flag]==='boolean')item[flag]=x[flag];
           if(Array.isArray(x.answer_key_history))item.answer_key_history=x.answer_key_history.filter(h=>h&&typeof h==='object'&&!Array.isArray(h)).slice(-20).map(h=>({...h}));
+          if(x.text_integrity_review&&typeof x.text_integrity_review==='object'&&!Array.isArray(x.text_integrity_review))item.text_integrity_review=JSON.parse(JSON.stringify(x.text_integrity_review));
           for(const key of ['exam_year','question_number','source_question_number','source_page','source_page_end','page_start','page_end']){
             if((typeof x[key]==='number'||typeof x[key]==='string')&&String(x[key]).trim()!==''&&Number.isInteger(Number(x[key])))item[key]=Number(x[key]);
           }
@@ -6798,6 +6972,10 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
             const prev=picked[picked.length-1];
             const between=block.slice(prev.index+prev.len,om.index).replace(/\s+/g,' ').trim();
             if(!between)continue;
+            // A nested question can supply the expected next letter (for
+            // example its e) after an outer D). Keep its entire tail on the
+            // previous option for quarantine instead of inventing outer E.
+            if(window.JCQuestionText?.analyzeOption(block.slice(prev.index+prev.len,om.index)).needs_review)break;
           }
           picked.push({letter,index:om.index,len:om[0].length});
           expect++;
@@ -6805,9 +6983,9 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       }
       let item=null;
       if(picked.length>=2&&picked.length<=5){
-        let statement=repairText(block.slice(0,picked[0].index)).replace(/\s+/g,' ').trim();
+        let statement=block.slice(0,picked[0].index).trim();
         statement=statement.replace(/\bAlternativas\s*$/i,'').trim();
-        const options=picked.map((o,i)=>repairText(block.slice(o.index+o.len,i+1<picked.length?picked[i+1].index:block.length)).replace(/\s+/g,' ').trim());
+        const options=picked.map((o,i)=>block.slice(o.index+o.len,i+1<picked.length?picked[i+1].index:block.length).trim());
         const correctIdx=unknownKey?-1:picked.findIndex(o=>o.letter===key);
         if(statement.length>=10&&(correctIdx>=0||unknownKey)&&options.every(Boolean)&&new Set(options.map(option=>answerOptionText(option).toLocaleLowerCase('pt-BR'))).size===options.length){
           const pTopic='';
@@ -6826,6 +7004,9 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         }
       }
       if(item){
+        // Capture the exact option slices and the complete numbered source
+        // block before typography or classification changes the working copy.
+        if(window.JCQuestionText)item=window.JCQuestionText.cleanQuestion(item,b.text);
         const inExplicitRange=baseRangeStart>0&&baseRangeEnd>=baseRangeStart&&b.num>=baseRangeStart&&b.num<=baseRangeEnd;
         const mentionsTextRef=/\b(texto|trecho|fragmento|charge|tirinha|poema|excerto|cr[ôo]nica|artigo|par[áa]grafo|linha\s*\d|linhas\s*\d|verso\s*\d|estrofe|autor|autora|narrador|eu\s+l[íi]rico|leitura|infere-se|depreende-se|conclui-se|segundo\s+o|de\s+acordo\s+com|conforme\s+o|no\s+contexto|sentido\s+original|reescrita|substitui[cç][aã]o\s+do\s+voc[áa]bulo|termo\s+destacado|express[aã]o\s+destacada|express[aã]o\s+sublinhada|passagem|voc[áa]bulo)\b/i.test(item.statement);
         if(pendingBase&&(inExplicitRange||(baseAge<10&&mentionsTextRef))){
@@ -7045,6 +7226,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     return Array.isArray(battle?.questions)&&battle.questions.length>0&&battle.questions.every(item=>
       (typeof getQuestionQualityDecision!=='function'||!getQuestionQualityDecision(item).needs_review)&&
       (typeof isQuestionDisciplineEligible!=='function'||isQuestionDisciplineEligible(item,'all'))&&
+      (typeof questionMatchesBoardFilter!=='function'||questionMatchesBoardFilter(item,'all'))&&
       (typeof answerKeyStatus!=='function'||!['sem_gabarito','anulada'].includes(answerKeyStatus(item))));
   }
   function startTimedSimuladoClock(){
@@ -7231,7 +7413,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     q('#simuladoOptions').innerHTML=(item.options||[]).map((opt,i)=>{
       const selected=answers[current]===i;
       const isElim=elimSet.has(i);
-      return `<div class="optionWithScissors"><button type="button" class="optionMainBtn ${selected?'selectedOption':''} ${isElim?'eliminatedOption':''}" data-simulado-option="${i}"><b>${String.fromCharCode(65+i)}.</b> ${escText(opt)}</button><button type="button" class="scissorBtn ${isElim?'active':''}" data-simulado-scissor="${i}" title="Riscar/eliminar alternativa">✂</button></div>`;
+      return `<div class="optionWithScissors"><button type="button" class="optionMainBtn ${selected?'selectedOption':''} ${isElim?'eliminatedOption':''}" data-simulado-option="${i}"><b>${String.fromCharCode(65+i)}.</b> ${escText(window.JCQuestionText?window.JCQuestionText.analyzeOption(opt).text:opt)}</button><button type="button" class="scissorBtn ${isElim?'active':''}" data-simulado-scissor="${i}" title="Riscar/eliminar alternativa">✂</button></div>`;
     }).join('');
     qa('[data-simulado-option]').forEach(btn=>btn.onclick=()=>{
       const idx=Number(btn.dataset.simuladoOption);
@@ -8254,8 +8436,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   if(baseRenderQuestionFilters){
     renderQuestionFilters=function(){
       if(window.JCQuestionsWorkspace&&!window.JCQuestionsWorkspace.isRendering('resolver')){
-        window.JCQuestionsWorkspace.invalidate();
-        if(window.JCQuestionsWorkspace.isActive('resolver'))window.JCQuestionsWorkspace.request();
+        window.JCQuestionsWorkspace.request();
         return;
       }
       if (window.JC_MODULES?.telemetry) window.JC_MODULES.telemetry.markStart('jc_questions_tab_open');
@@ -9309,14 +9490,49 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   }
 
   let _commSyncInFlight=null;
-  async function syncCommunityLibraryForActivePortal(force=false){
-    if(!cloudSession)return;
+  function communityContentSignature(value){
+    const transient=new Set(['_fp','_fpSource','_answerStartedAt','_chosenAnswerIndex','_isCorrect','_userAnswered','_userChosenIndex','_userMarkedBlank','communitySourceSignature','communitySourceScopeKey']);
+    const stable=item=>Array.isArray(item)?item.map(stable):item&&typeof item==='object'?Object.fromEntries(Object.keys(item).filter(key=>!transient.has(key)).sort().map(key=>[key,stable(item[key])])):item;
+    return JSON.stringify(stable(value));
+  }
+  function studyContentScopeKey(){
+    const sessionOwner=cloudSession?.user?.id,owner=sessionOwner||state?._ownerUserId||'guest';
+    if(sessionOwner&&state?._ownerUserId&&state._ownerUserId!==sessionOwner)return '';
     const campaign=typeof activeCampaign==='function'?activeCampaign():null;
-    if(!campaign)return;
-    if(_commSyncInFlight&&!force)return _commSyncInFlight;
+    return JSON.stringify([owner,state?.activeCampaignId||campaign?.id||'',campaign?.dbId||'',Number(state?._resetEpoch||0)]);
+  }
+  function communityLibraryScopeKey(){
+    const owner=cloudSession?.user?.id,campaign=typeof activeCampaign==='function'?activeCampaign():null;
+    if(!owner||!campaign||(state?._ownerUserId&&state._ownerUserId!==owner))return '';
+    return studyContentScopeKey();
+  }
+  function refreshContentViews(views=['library','study','learning','report']){
+    window.persistToLocalDatabase?.(state?.activeCampaignId);
+    window.markViewsDirty?.(...views);
+    const active=document.querySelector('.view.active')?.id||'today';
+    if(!views.includes(active))return;
+    if(active==='report'){
+      // Let the workspace coalesce refreshes and retain the selected panel.
+      if(window.JCQuestionsWorkspace)window.JCQuestionsWorkspace.request();
+      else if(typeof renderReport==='function')renderReport();
+    }else if(active==='library'&&typeof renderUserDocuments==='function')renderUserDocuments();
+    else if(active==='study'&&typeof renderStudy==='function')renderStudy();
+    else if(active==='learning'&&typeof renderLearning==='function')renderLearning();
+  }
+  async function syncCommunityLibraryForActivePortal(force=false){
+    const scopeKey=communityLibraryScopeKey();
+    if(!scopeKey)return false;
+    const campaign=typeof activeCampaign==='function'?activeCampaign():null;
+    if(_commSyncInFlight?.scopeKey===scopeKey&&!force)return _commSyncInFlight.promise;
+    const operation={scopeKey};
+    syncCommunityLibraryForActivePortal._operation=operation;
+    const current=()=>syncCommunityLibraryForActivePortal._operation===operation&&communityLibraryScopeKey()===scopeKey;
     const slug='universal';
-    try{
-      if(force||communityCache.slug!==slug||!communityCache.loadedAt||(Date.now()-communityCache.loadedAt>=60000)){
+    const task=(async()=>{try{
+      const session=typeof validSession==='function'?await validSession():cloudSession;
+      if(!current()||session?.user?.id!==cloudSession?.user?.id)return false;
+      const request=(path,options={})=>cloudFetch(path,{...options,headers:{...(typeof authHeaders==='function'?authHeaders(session.access_token):{Authorization:`Bearer ${session.access_token}`}),...(options.headers||{})}});
+      if(force||communityCache.scopeKey!==scopeKey||communityCache.slug!==slug||!communityCache.loadedAt||(Date.now()-communityCache.loadedAt>=60000)){
         // Busca universal: consulta o RPC universal e, caso o banco ainda esteja em versão anterior que filtrava por slug,
         // agrega simultaneamente os principais perfis (PMPE, CBMPE, PPPE, PCPE e o portal ativo) + outros portais da própria conta.
         const probeExams=[
@@ -9326,11 +9542,13 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
           {p_exam_name:'PPPE — Polícia Penal de PE',p_exam_org:'Polícia Penal de Pernambuco'},
           {p_exam_name:'PCPE — Polícia Civil de PE',p_exam_org:'Polícia Civil de Pernambuco'}
         ];
-        const firstRes=await cloudFetch('rpc/get_community_exam_library',{
+        const firstRes=await request('rpc/get_community_exam_library',{
           method:'POST',
           body:JSON.stringify(probeExams[0])
         }).catch(()=>null);
+        if(!current())return false;
         const firstData=firstRes&&firstRes.ok?await firstRes.json().catch(()=>null):null;
+        if(!current())return false;
         const docMap=new Map();
         const sumMap=new Map();
         const isEditalItem=item=>typeof window.isEditalDocumentOrTitle==='function'?window.isEditalDocumentOrTitle(item):(['edital','edital_concurso'].includes(String(item?.document_type||'').toLowerCase())||/\b(edital\s+verticalizado|edital\s+do\s+concurso|edital\s+de\s+abertura)\b/i.test(`${item?.title||''} ${item?.source_name||''} ${item?.content?.source||''}`));
@@ -9353,20 +9571,24 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
             seenSlugs.add(s);
             return true;
           });
-          const extraResults=await Promise.all(extraProbes.map(p=>cloudFetch('rpc/get_community_exam_library',{method:'POST',body:JSON.stringify(p)}).then(r=>r.ok?r.json():null).catch(()=>null)));
+          const extraResults=await Promise.all(extraProbes.map(p=>request('rpc/get_community_exam_library',{method:'POST',body:JSON.stringify(p)}).then(r=>r.ok?r.json():null).catch(()=>null)));
+          if(!current())return false;
           extraResults.forEach(mergePayload);
         }
         // Também inclui documentos e conteúdos prontos de outros portais do próprio usuário (ex.: PMPE <-> CBM PE / BCM PE), NUNCA editais
-        const ownUid=cloudSession?.user?.id||'';
+        const ownUid=session.user.id;
         const [ownOtherDocsRes,ownOtherSumsRes]=ownUid?await Promise.all([
-          cloudFetch(`study_documents?user_id=eq.${encodeURIComponent(ownUid)}&processing_status=eq.ready&document_type=not.in.(edital,edital_concurso)&select=*&order=created_at.desc&limit=200`).catch(()=>null),
-          cloudFetch(`generated_study_content?user_id=eq.${encodeURIComponent(ownUid)}&content_type=in.(summary,question_pack)&select=id,title,content_type,content,source_refs,source_document_id,created_at&order=created_at.asc&limit=500`).catch(()=>null)
+          request(`study_documents?user_id=eq.${encodeURIComponent(ownUid)}&processing_status=eq.ready&document_type=not.in.(edital,edital_concurso)&select=*&order=created_at.desc&limit=200`).catch(()=>null),
+          request(`generated_study_content?user_id=eq.${encodeURIComponent(ownUid)}&content_type=in.(summary,question_pack)&select=id,title,content_type,content,source_refs,source_document_id,created_at&order=created_at.asc&limit=500`).catch(()=>null)
         ]):[null,null];
+        if(!current())return false;
         const ownOtherDocs=ownOtherDocsRes?.ok?await ownOtherDocsRes.json().catch(()=>[]):[];
+        if(!current())return false;
         const ownOtherSums=ownOtherSumsRes?.ok?await ownOtherSumsRes.json().catch(()=>[]):[];
+        if(!current())return false;
         if(Array.isArray(ownOtherDocs)){
           for(const d of ownOtherDocs){
-            if(!d?.id||String(d.campaign_id)===String(campaign.dbId)||isEditalItem(d))continue;
+            if(!d?.id||(d.user_id&&String(d.user_id)!==String(ownUid))||String(d.campaign_id)===String(campaign.dbId)||isEditalItem(d))continue;
             if(d.share_with_community===false||d.metadata?.private_only===true)continue;
             if(!docMap.has(String(d.id))){
               docMap.set(String(d.id),{...d,is_community:true,portal_name:d.portal_name||'Meu Outro Portal',author_name:d.author_name||'Sua Biblioteca'});
@@ -9375,44 +9597,53 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         }
         if(Array.isArray(ownOtherSums)){
           for(const s of ownOtherSums){
-            if(!s?.id||sumMap.has(String(s.id))||isEditalItem(s))continue;
+            if(!s?.id||(s.user_id&&String(s.user_id)!==String(ownUid))||sumMap.has(String(s.id))||isEditalItem(s))continue;
             const pDoc=docMap.get(String(s.source_document_id));
             if(pDoc&&!isEditalItem(pDoc)){
               sumMap.set(String(s.id),{...s,is_community:true,document_type:pDoc?.document_type||'material'});
             }
           }
         }
-        communityCache={slug:'universal',documents:[...docMap.values()],summaries:[...sumMap.values()],editalTopics:[],loadedAt:Date.now()};
+        if(!current())return false;
+        communityCache={scopeKey,slug:'universal',documents:[...docMap.values()],summaries:[...sumMap.values()],editalTopics:[],loadedAt:Date.now()};
       }
+      if(!current()||communityCache.scopeKey!==scopeKey)return false;
       const commDocs=Array.isArray(communityCache.documents)?communityCache.documents:[];
       const commSums=Array.isArray(communityCache.summaries)?communityCache.summaries:[];
 
+      let addedDocs=0;
       // Remover qualquer edital da comunidade que estivesse em memória
       for(let i=cloudDocuments.length-1;i>=0;i--){
         if(cloudDocuments[i]?.is_community&&['edital','edital_concurso'].includes(cloudDocuments[i].document_type)){
           cloudDocuments.splice(i,1);
+          addedDocs++;
         }
       }
 
       // 1) Mesclar todos os materiais, leis, provas, simulados e anotações da comunidade universal em cloudDocuments (SEM storage_path)
       const stdTitle=t=>typeof window.standardizeDocumentTitle==='function'?window.standardizeDocumentTitle(sanitizePersonalWatermarks(t)):sanitizePersonalWatermarks(t).toUpperCase();
-      const ownTitles=new Set((cloudDocuments||[]).filter(d=>!d.is_community).map(d=>`${d.document_type}|${topicKey(stdTitle(d.title))}`));
-      const existingIds=new Set((cloudDocuments||[]).map(d=>d.id));
-      let addedDocs=0;
+      const existingIds=new Map((cloudDocuments||[]).map((d,index)=>[String(d.id),index]));
       for(const cDoc of commDocs){
         const formattedTitle=stdTitle(cDoc.title);
-        const dedupKey=`${cDoc.document_type}|${topicKey(formattedTitle)}`;
-        if(existingIds.has(cDoc.id)||ownTitles.has(dedupKey))continue;
-        cloudDocuments.push({
+        const nextDoc={
           ...cDoc,
           title:formattedTitle,
           storage_path:null,
           source_url:null,
           is_community:true,
           processing_status:'ready'
-        });
-        existingIds.add(cDoc.id);
-        ownTitles.add(dedupKey);
+        };
+        nextDoc.communitySourceSignature=communityContentSignature(nextDoc);
+        nextDoc.communitySourceScopeKey=scopeKey;
+        const existingIndex=existingIds.get(String(cDoc.id));
+        if(existingIndex!==undefined){
+          const previous=cloudDocuments[existingIndex];
+          if(!previous?.is_community||(previous.communitySourceScopeKey===scopeKey&&previous.communitySourceSignature===nextDoc.communitySourceSignature))continue;
+          if(!previous.communitySourceSignature&&communityContentSignature(previous)===communityContentSignature(nextDoc)){previous.communitySourceSignature=nextDoc.communitySourceSignature;previous.communitySourceScopeKey=scopeKey;continue}
+          const merged=previous.communitySourceScopeKey===scopeKey?{...previous,...nextDoc}:nextDoc;
+          if(communityContentSignature(previous)===communityContentSignature(merged)){previous.communitySourceSignature=nextDoc.communitySourceSignature;previous.communitySourceScopeKey=scopeKey;continue}
+          cloudDocuments[existingIndex]=merged;
+        }else{existingIds.set(String(cDoc.id),cloudDocuments.length);cloudDocuments.push(nextDoc)}
         addedDocs++;
       }
 
@@ -9420,7 +9651,12 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       const prevSumLen=(ALL_SUMMARIES||[]).length,prevCardLen=(ALL_FLASHCARDS||[]).length,prevQLen=(ALL_QUESTIONS||[]).length;
       const existingSumKeys=new Set((ALL_SUMMARIES||[]).map(s=>`${topicKey(s.category)}|${topicKey(s.title)}`));
       const existingCardKeys=new Set((ALL_FLASHCARDS||[]).map(c=>`${topicKey(c[0])}|${topicKey(c[1])}`));
-      const existingQKeys=new Set((ALL_QUESTIONS||[]).map(qItem=>`${topicKey(qItem.statement).slice(-90)}|${topicKey(qItem.options?.[0]||'')}`));
+      const existingCommunitySummaries=new Map((ALL_SUMMARIES||[]).map((item,index)=>[item.is_community&&String(item.id),index]).filter(([key])=>key));
+      const existingCommunityCards=new Map((ALL_FLASHCARDS||[]).map((item,index)=>[item[3]?.is_community&&item[3].communityRecordId,index]).filter(([key])=>key));
+      const questionKey=item=>JSON.stringify([String(item.statement||''),item.options||[],item.correct_index,item.key_source||'',item.answer_key_validation||'']);
+      const existingQKeys=new Set((ALL_QUESTIONS||[]).map(questionKey));
+      const existingCommunityQuestions=new Map((ALL_QUESTIONS||[]).map((item,index)=>[item.communityRecordId,index]).filter(([key])=>key));
+      let refreshedContent=false;
 
       for(const row of commSums){
         const parentDoc=(cloudDocuments||[]).find(d=>String(d.id)===String(row.source_document_id))||commDocs.find(d=>String(d.id)===String(row.source_document_id))||null;
@@ -9433,7 +9669,9 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         if(typeof window.isInvalidTrailSubject==='function'&&window.isInvalidTrailSubject(cat,cleanTitle,row.content?.source||'',parentDoc))continue;
         const sumKey=`${topicKey(cat)}|${topicKey(cleanTitle)}`;
         const isValidSum=typeof window.isValidPedagogicalSummary==='function'?window.isValidPedagogicalSummary(row):true;
-        if(!isQuestionPackRow&&isValidSum&&!existingSumKeys.has(sumKey)){
+        const existingSummaryIndex=existingCommunitySummaries.get(String(row.id));
+        const rowSourceSignature=communityContentSignature([row,cat,docType]);
+        if(!isQuestionPackRow&&isValidSum&&(existingSummaryIndex!==undefined||!existingSumKeys.has(sumKey))){
           const rawMnem=sanitizePersonalWatermarks(row.content?.mnemonic||'');
           const _commSumObj={
             id:row.id,
@@ -9447,9 +9685,18 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
             bizu:sanitizePersonalWatermarks(row.content?.bizu||''),
             mnemonic:typeof window.cleanPedagogicalMnemonic==='function'?window.cleanPedagogicalMnemonic(rawMnem):rawMnem,
             trap:sanitizePersonalWatermarks(row.content?.trap||''),
-            is_community:true
+            is_community:true,
+            communitySourceSignature:rowSourceSignature,communitySourceScopeKey:scopeKey
           };
-          ALL_SUMMARIES.push(typeof window.sanitizeSummaryObject==='function'?window.sanitizeSummaryObject(_commSumObj):_commSumObj);
+          const nextSummary=typeof window.sanitizeSummaryObject==='function'?window.sanitizeSummaryObject(_commSumObj):_commSumObj;
+          if(existingSummaryIndex!==undefined){
+            const previous=ALL_SUMMARIES[existingSummaryIndex];
+            if(previous.communitySourceScopeKey!==scopeKey||previous.communitySourceSignature!==rowSourceSignature){
+              const merged=previous.communitySourceScopeKey===scopeKey?{...previous,...nextSummary}:nextSummary;
+              if(communityContentSignature(previous)!==communityContentSignature(merged)){ALL_SUMMARIES[existingSummaryIndex]=merged;refreshedContent=true}
+              else{previous.communitySourceSignature=rowSourceSignature;previous.communitySourceScopeKey=scopeKey}
+            }
+          }else{existingCommunitySummaries.set(String(row.id),ALL_SUMMARIES.length);ALL_SUMMARIES.push(nextSummary)}
           existingSumKeys.add(sumKey);
         }
 
@@ -9458,56 +9705,86 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
           ?window.isAllowedFlashcardRow(row,parentDoc)
           :(!isQuestionPackRow&&['material','anotacao','lei'].includes(docType));
         if(allowFlashcardsForRow){
-          for(const card of (row.content?.flashcards||[])){
+          for(const [cardIndex,card] of (row.content?.flashcards||[]).entries()){
             const qText=sanitizePersonalWatermarks(card.question||'');
             const aText=sanitizePersonalWatermarks(card.answer||'');
             const isValidCard=typeof window.isValidFlashcardItem==='function'?window.isValidFlashcardItem(qText,aText):Boolean(qText&&aText);
             const cKey=`${topicKey(cat)}|${topicKey(qText)}`;
-            if(isValidCard&&!existingCardKeys.has(cKey)){
-              ALL_FLASHCARDS.push([cat,qText,aText]);
+            const recordId=JSON.stringify([row.id,card.id??cardIndex]);
+            const sourceSignature=communityContentSignature([cat,qText,aText]);
+            const existingIndex=existingCommunityCards.get(recordId);
+            const nextCard=[cat,qText,aText,{is_community:true,communityRecordId:recordId,communitySourceSignature:sourceSignature,communitySourceScopeKey:scopeKey}];
+            if(isValidCard&&existingIndex!==undefined){
+              if(ALL_FLASHCARDS[existingIndex][3]?.communitySourceSignature!==sourceSignature||ALL_FLASHCARDS[existingIndex][3]?.communitySourceScopeKey!==scopeKey){
+                if(communityContentSignature(ALL_FLASHCARDS[existingIndex])!==communityContentSignature(nextCard))refreshedContent=true;
+                ALL_FLASHCARDS[existingIndex]=nextCard;
+              }
+              existingCardKeys.add(cKey);
+            }else if(isValidCard&&!existingCardKeys.has(cKey)){
+              existingCommunityCards.set(recordId,ALL_FLASHCARDS.length);
+              ALL_FLASHCARDS.push(nextCard);
               existingCardKeys.add(cKey);
             }
           }
         }
 
-        for(const qObj of (row.content?.questions||[])){
+        for(const [questionIndex,qObj] of (row.content?.questions||[]).entries()){
           if(!Array.isArray(qObj.options)||qObj.options.length<2||qObj.options.length>5||!Number.isInteger(qObj.correct_index)||qObj.correct_index<0||qObj.correct_index>=qObj.options.length)continue;
           const stText=sanitizePersonalWatermarks(qObj.statement||'');if(typeof window.isValidPedagogicalQuestion==='function'&&!window.isValidPedagogicalQuestion({...qObj,statement:stText}))continue;
-          const qKey=`${topicKey(stText).slice(-90)}|${topicKey(qObj.options?.[0]||'')}`;
-          if(stText&&!existingQKeys.has(qKey)){
+          const cleanOptions=qObj.options.map(sanitizePersonalWatermarks);
+          const qKey=questionKey({...qObj,statement:stText,options:cleanOptions});
+          const communityRecordId=JSON.stringify([row.id,qObj.id??questionIndex]);
+          const sourceSignature=communityContentSignature([qObj,cat,cleanTitle,row.source_document_id,row.source_refs]);
+          const existingIndex=existingCommunityQuestions.get(communityRecordId);
+          if(existingIndex!==undefined&&ALL_QUESTIONS[existingIndex].communitySourceScopeKey===scopeKey&&ALL_QUESTIONS[existingIndex].communitySourceSignature===sourceSignature)continue;
+          if(stText&&(existingIndex!==undefined||!existingQKeys.has(qKey))){
             const qSubj=resolveStrictQuestionDiscipline(stText,qObj.topic||cleanTitle,qObj.subject||cat,qObj.options);
-            ALL_QUESTIONS.push({
+            const question={
+              ...qObj,
               subject:qSubj||cat,
               topic:sanitizePersonalWatermarks(qObj.topic||cleanTitle),
               statement:stText,
               associated_text:sanitizePersonalWatermarks(qObj.associated_text||''),
               board:qObj.board||'',
-              options:qObj.options.map(sanitizePersonalWatermarks),
+              options:cleanOptions,
               correct_index:qObj.correct_index,
               explanation:sanitizePersonalWatermarks(qObj.explanation||''),
               difficulty:qObj.difficulty||'medio',
               origin:qObj.origin||'autoral',
               documentId:row.source_document_id,
+              sourceDocumentId:row.source_document_id||qObj.sourceDocumentId,
+              sourceContentId:row.id,
+              source_refs:[...(Array.isArray(row.source_refs)?row.source_refs:[]),...(Array.isArray(qObj.source_refs)?qObj.source_refs:[])],
+              communityRecordId,communitySourceSignature:sourceSignature,communitySourceScopeKey:scopeKey,
               is_community:true
-            });
+            };
+            if(existingIndex!==undefined){
+              const previous=ALL_QUESTIONS[existingIndex],sameScope=previous.communitySourceScopeKey===scopeKey,nextQuestion=sameScope?{...previous,...question}:question;
+              // A source refresh must retain the learner's review and current
+              // answer. A reviewed key only applies to the same alternatives.
+              if(sameScope&&previous.key_source==='manual_revisado'&&previous.answer_key_validation==='revisado'&&communityContentSignature(previous.options)===communityContentSignature(question.options)){
+                for(const key of ['correct_index','key_source','answer_key_validation','key_reference','key_history','answer_key_history','explanation_needs_review'])if(previous[key]!==undefined)nextQuestion[key]=previous[key];
+              }
+              const changed=communityContentSignature(previous)!==communityContentSignature(nextQuestion);
+              if(changed||!sameScope){ALL_QUESTIONS[existingIndex]=nextQuestion;if(changed)refreshedContent=true}
+              else{previous.communitySourceSignature=sourceSignature;previous.communitySourceScopeKey=scopeKey}
+            }
+            else{existingCommunityQuestions.set(communityRecordId,ALL_QUESTIONS.length);ALL_QUESTIONS.push(question)}
             existingQKeys.add(qKey);
           }
         }
       }
 
-      const addedContent=(ALL_SUMMARIES.length>prevSumLen)||(ALL_FLASHCARDS.length>prevCardLen)||(ALL_QUESTIONS.length>prevQLen);
+      const addedContent=refreshedContent||(ALL_SUMMARIES.length>prevSumLen)||(ALL_FLASHCARDS.length>prevCardLen)||(ALL_QUESTIONS.length>prevQLen);
       if(addedDocs>0||addedContent){
         LEARNING_SUBJECTS=typeof window.computeValidLearningSubjects==='function'?window.computeValidLearningSubjects():[...new Set([...ALL_SUMMARIES.map(x=>x.category),...ALL_FLASHCARDS.map(x=>x[0]),...ALL_QUESTIONS.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-        window.persistToLocalDatabase?.(state?.activeCampaignId);
-        window.markViewsDirty?.('library','study','learning','report');
-        const actId=document.querySelector('.view.active')?.id||'today';
-        if(actId==='library'&&typeof renderUserDocuments==='function')renderUserDocuments();
-        else if(actId==='study'&&typeof renderStudy==='function')renderStudy();
-        else if(actId==='learning'&&typeof renderLearning==='function')renderLearning();
-        else if(actId==='report'&&typeof renderQuestionFilters==='function'){renderQuestionFilters();populateTopicFilter();updateQuestionPool();renderExamBankHub()}
+        refreshContentViews();
       }
-      if(document.querySelector('.view.active')?.id==='library')renderCommunityCoopBanner();
-    }catch{}
+      if((addedDocs>0||addedContent)&&document.querySelector('.view.active')?.id==='library')renderCommunityCoopBanner();
+      return addedDocs>0||addedContent;
+    }catch(error){if(current()&&typeof console!=='undefined')console.warn('Não foi possível atualizar o acervo compartilhado.',error);return false;}})();
+    _commSyncInFlight={scopeKey,promise:task};
+    try{return await task}finally{if(_commSyncInFlight?.promise===task)_commSyncInFlight=null}
   }
   window.syncCommunityLibraryForActivePortal=syncCommunityLibraryForActivePortal;
 
@@ -10819,7 +11096,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
             ${(curQ.options||[]).map((opt,i)=>`
               <button type="button" class="duelOptBtn ${wasAnswered?(i===cIdx?'correct':i===uIdx?'wrong':''):''}" data-duel-opt="${i}" ${wasAnswered?'disabled':''}>
                 <b>${letters[i]||i+1}</b>
-                <span>${escText(opt)}</span>
+                <span>${escText(window.JCQuestionText?window.JCQuestionText.analyzeOption(opt).text:opt)}</span>
               </button>
             `).join('')}
           </div>
@@ -11975,13 +12252,14 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     readScope:()=>[cloudSession?.user?.id||state?._ownerUserId||'guest',state?._ownerUserId||'',state?.activeCampaignId||'default',activeCampaign()?.dbId||'',Number(state?._resetEpoch||0)],
     readInputs:()=>{
       const campaign=activeCampaign(),missions=campaign?.customCampaign?.missions||state.customCampaign?.missions||[];
-      return [ALL_QUESTIONS,ALL_QUESTIONS?.length||0,cloudDocuments,cloudDocuments?.length||0,
-        state.customQuestions,state.customQuestions?.length||0,state.errors,Object.keys(state.errors||{}).join('|'),
-        state.answeredQuestionFingerprints,Object.keys(state.answeredQuestionFingerprints||{}).length,
-        state.favoriteQuestions,Object.keys(state.favoriteQuestions||{}).join('|'),
+      const sign=(value,unordered=false)=>window.JCQuestionsWorkspace?.signature?.(value,unordered)??JSON.stringify(value);
+      return [sign(ALL_QUESTIONS,true),sign(cloudDocuments,true),
+        sign(state.customQuestions),sign(state.errors),
+        sign(state.answeredQuestionFingerprints),sign(state.favoriteQuestions),
         Number(state.questionStatsByCampaign?.[state.activeCampaignId]?.total||0),
-        JSON.stringify(missions.map(m=>[m.id,m.subject,m.name]))];
+        sign(missions.map(m=>[m.id,m.subject,m.name]))];
     },
+    onRestored:panel=>{if(panel==='resolver')updateQuestionPool()},
     isVisible:()=>Boolean(q('#report')?.classList.contains('active'))&&(!state?._ownerUserId||!cloudSession?.user?.id||state._ownerUserId===cloudSession.user.id),
     renderers:{
       resolver:()=>{renderQuestionFilters()},
@@ -12226,27 +12504,34 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     }
   }
 
+  let studyDisciplineAlignmentCache=null;
   function realignStudyDisciplinesWithLibrary(){
+    const scopeKey=studyContentScopeKey();
+    if(!scopeKey)return false;
+    const snapshot=()=>communityContentSignature([cloudDocuments||[],ALL_SUMMARIES||[],ALL_FLASHCARDS||[],ALL_QUESTIONS||[],LEARNING_SUBJECTS||[]]);
+    const beforeSignature=snapshot();
+    const previous=studyDisciplineAlignmentCache?.scopeKey===scopeKey?studyDisciplineAlignmentCache:null;
+    if(previous?.signature===beforeSignature)return false;
     let changed=false;
     const questionDocuments=buildExamQuestionDocumentMap(typeof cloudDocuments!=='undefined'?cloudDocuments:[],ALL_QUESTIONS||[]);
     if(typeof window.isInvalidTrailSubject==='function'){
       const beforeSum=(ALL_SUMMARIES||[]).length;
-      ALL_SUMMARIES=(ALL_SUMMARIES||[]).filter(s=>{
+      const validSummaries=(ALL_SUMMARIES||[]).filter(s=>{
         const doc=Array.isArray(cloudDocuments)?cloudDocuments.find(d=>String(d.id)===String(s.documentId)):null;
         return !window.isInvalidTrailSubject(s.category,s.title,s.source,doc);
       });
-      if(ALL_SUMMARIES.length!==beforeSum)changed=true;
+      if(validSummaries.length!==beforeSum){ALL_SUMMARIES=validSummaries;changed=true}
 
       const beforeCards=(ALL_FLASHCARDS||[]).length;
-      ALL_FLASHCARDS=(ALL_FLASHCARDS||[]).filter(c=>!window.isInvalidTrailSubject(c?.[0],c?.[1])&&(typeof window.isValidFlashcardItem!=='function'||window.isValidFlashcardItem(c?.[1],c?.[2])));
-      if(ALL_FLASHCARDS.length!==beforeCards)changed=true;
+      const validCards=(ALL_FLASHCARDS||[]).filter(c=>!window.isInvalidTrailSubject(c?.[0],c?.[1])&&(typeof window.isValidFlashcardItem!=='function'||window.isValidFlashcardItem(c?.[1],c?.[2])));
+      if(validCards.length!==beforeCards){ALL_FLASHCARDS=validCards;changed=true}
 
       const beforeQs=(ALL_QUESTIONS||[]).length;
-      ALL_QUESTIONS=(ALL_QUESTIONS||[]).filter(qItem=>{
+      const validQuestions=(ALL_QUESTIONS||[]).filter(qItem=>{
         const doc=questionDocuments.get(qItem)||null;
         return !window.isInvalidTrailSubject(qItem.subject,qItem.topic,'',doc);
       });
-      if(ALL_QUESTIONS.length!==beforeQs)changed=true;
+      if(validQuestions.length!==beforeQs){ALL_QUESTIONS=validQuestions;changed=true}
     }
 
     if(Array.isArray(cloudDocuments)&&cloudDocuments.length&&typeof window.resolveDocumentDiscipline==='function'){
@@ -12277,32 +12562,42 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     const nextSubjects=typeof window.computeValidLearningSubjects==='function'
       ?window.computeValidLearningSubjects()
       :[...new Set([...ALL_SUMMARIES.map(x=>x.category),...ALL_FLASHCARDS.map(x=>x[0]),...ALL_QUESTIONS.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-    if(changed||JSON.stringify(nextSubjects)!==JSON.stringify(LEARNING_SUBJECTS)){
-      LEARNING_SUBJECTS=nextSubjects;
-      window.persistToLocalDatabase?.(state?.activeCampaignId);
-      window.markViewsDirty?.('study','learning','report');
-      const actId=document.querySelector('.view.active')?.id||'today';
-      if(actId==='study'&&typeof renderStudy==='function')renderStudy();
-      else if(actId==='learning'&&typeof renderLearning==='function')renderLearning();
-      else if(actId==='report'&&typeof renderQuestionFilters==='function')renderQuestionFilters();
+    const subjectsChanged=JSON.stringify(nextSubjects)!==JSON.stringify(LEARNING_SUBJECTS);
+    if(subjectsChanged)LEARNING_SUBJECTS=nextSubjects;
+    const signature=snapshot();
+    studyDisciplineAlignmentCache={scopeKey,signature};
+    const contentChanged=(changed||subjectsChanged)&&(!previous||previous.signature!==signature);
+    if(contentChanged){
+      refreshContentViews(['study','learning','report']);
+      window.updateLocalDbBadgeUI?.();
+      enhanceSoloLevelingVisuals();
     }
-    window.updateLocalDbBadgeUI?.();
-    enhanceSoloLevelingVisuals();
+    return contentChanged;
   }
   const baseLoadCloudDocsForSync=typeof loadCloudDocuments==='function'?loadCloudDocuments:null;
   if(baseLoadCloudDocsForSync){
-    loadCloudDocuments=async function(){
-      const res=await baseLoadCloudDocsForSync();
+    loadCloudDocuments=async function(...args){
+      const scopeKey=studyContentScopeKey(),operation={};
+      loadCloudDocuments._contentSyncOperation=operation;
+      const current=()=>scopeKey&&studyContentScopeKey()===scopeKey&&loadCloudDocuments._contentSyncOperation===operation;
+      const res=await baseLoadCloudDocsForSync.apply(this,args);
+      if(!current())return false;
       await syncCommunityLibraryForActivePortal(false);
+      if(!current())return false;
       realignStudyDisciplinesWithLibrary();
       return res;
     };
   }
   const baseLoadGenForComm=typeof loadGeneratedContent==='function'?loadGeneratedContent:null;
   if(baseLoadGenForComm){
-    loadGeneratedContent=async function(){
-      const res=await baseLoadGenForComm();
+    loadGeneratedContent=async function(...args){
+      const scopeKey=studyContentScopeKey(),operation={};
+      loadGeneratedContent._contentSyncOperation=operation;
+      const current=()=>scopeKey&&studyContentScopeKey()===scopeKey&&loadGeneratedContent._contentSyncOperation===operation;
+      const res=await baseLoadGenForComm.apply(this,args);
+      if(!current())return false;
       await syncCommunityLibraryForActivePortal(false);
+      if(!current())return false;
       realignStudyDisciplinesWithLibrary();
       return res;
     };
@@ -16119,10 +16414,12 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   function prepareQuestionConsistent(rawQ) {
     if (!rawQ || typeof rawQ !== 'object') return rawQ;
     const override=typeof state!=='undefined'&&typeof questionFingerprint==='function'?state?.questionAnswerOverrides?.[questionFingerprint(rawQ)]:null;
-    const matchingOverride=override&&override.options_signature===answerOptionsSignature(rawQ);
-    const reviewedMatches=matchingOverride?(rawQ.options||[]).map((opt,index)=>answerOptionText(opt)===override.correct_answer?index:-1).filter(index=>index>=0):[];
+    const matchingOverride=answerOverrideMatchesOptions(override,rawQ);
+    const reviewedMatches=matchingOverride?(rawQ.options||[]).map((opt,index)=>answerOptionText(opt)===answerOptionText(override.correct_answer)?index:-1).filter(index=>index>=0):[];
     const reviewedIndex=reviewedMatches.length===1?reviewedMatches[0]:-1;
-    const q = healPedagogicalQuestionDefects(reviewedIndex>=0?{...rawQ,...override,correct_index:reviewedIndex}:override?{...rawQ,correct_index:-1,answer_unknown:true,answer_key_override_stale:true,explanation_needs_review:true}:rawQ);
+    const healed = healPedagogicalQuestionDefects(reviewedIndex>=0?{...rawQ,...override,correct_index:reviewedIndex}:override?{...rawQ,correct_index:-1,answer_unknown:true,answer_key_override_stale:true,explanation_needs_review:true}:rawQ);
+    const q=window.JCQuestionText?window.JCQuestionText.cleanQuestion(healed):healed;
+    window.applyQuestionBoardEvidence?.(q);window.applyQuestionTopicEvidence?.(q);
     const rawOpts = Array.isArray(q.options) ? q.options : [];
     const rawIndex = q.correct_index;
     const validKey = rawOpts.length >= 2 && rawOpts.every(o => String(o ?? '').trim()) && !q.answer_unknown && !q.annulled && !q.anulada &&
@@ -16625,6 +16922,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         document.querySelector('#resumeSavedQuestionSessionBtn').onclick = () => {
           const latest = getQuestionSessionStore()?.read(currentQuestionSessionScope());
           if (!latest) { document.querySelector('#resumeSavedQuestionSessionBar')?.remove(); return; }
+          if(!savedQuestionSessionCanResume(latest.battle))return toast('As questões deste treino não correspondem mais ao recorte salvo ou precisam de revisão. Inicie um novo treino com questões validadas.');
           activeQuestions = latest.battle;
           if (document.querySelector('#questionDialogTitle')) {
             document.querySelector('#questionDialogTitle').textContent = latest.title || 'Treino de Questões';

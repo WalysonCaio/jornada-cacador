@@ -1578,6 +1578,13 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
     shuffle: (arr) => [...arr].reverse() // inverte determinísticamente para testar atualização de letras A, B, C, D
   };
   vm.createContext(vmCtx);
+  // Preparation now uses the same typography and personal-key signature
+  // helpers as the application. Load those real dependencies in this VM.
+  vm.runInContext(readFileSync(new URL("../dist/question-text-quality.js", import.meta.url), "utf8"), vmCtx);
+  const answerTextStart = v77Src.indexOf("  function answerOptionText(");
+  const answerTextEnd = v77Src.indexOf("  function applyReviewedAnswerKey(", answerTextStart);
+  assert.ok(answerTextStart >= 0 && answerTextEnd > answerTextStart, "Normalizadores e assinaturas de alternativas devem existir");
+  vm.runInContext(v77Src.slice(answerTextStart, answerTextEnd), vmCtx);
   vm.runInContext(v77Src.slice(r161Start, r161End), vmCtx);
 
   // 2a) Verifica remoção de prefixos duplicados ("B) 2 + 2 = 5.") e cura da questão "Qual frase NÃO é uma proposição?"
@@ -1649,6 +1656,11 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
     shuffle: (arr) => [...arr]
   };
   vm.createContext(vmCtx);
+  vm.runInContext(readFileSync(new URL("../dist/question-text-quality.js", import.meta.url), "utf8"), vmCtx);
+  const answerTextStart = v77Src.indexOf("  function answerOptionText(");
+  const answerTextEnd = v77Src.indexOf("  function applyReviewedAnswerKey(", answerTextStart);
+  assert.ok(answerTextStart >= 0 && answerTextEnd > answerTextStart, "Normalizadores e assinaturas de alternativas devem existir");
+  vm.runInContext(v77Src.slice(answerTextStart, answerTextEnd), vmCtx);
   vm.runInContext(v77Src.slice(r162Start, r162End), vmCtx);
 
   // 1) Verifica que alternativas de 1 letra ("A.", "B.", "C.", "D.", "E.", "R.", "S.") NUNCA ficam em branco

@@ -4,7 +4,7 @@
 .questionsWorkspaceTabs button:focus-visible{outline:2px solid var(--cyan,#59e6ff);outline-offset:3px}
 .questionsWorkspacePanel{min-width:0}
 .questionsWorkspacePanel[hidden]{display:none!important}
-.questionsWorkspacePanel[aria-busy="true"]>:not(.questionsPanelStatus){display:none!important}
+.questionsWorkspacePanel[data-initial-loading="true"]>:not(.questionsPanelStatus){display:none!important}
 .questionsPanelStatus{padding:18px;border:1px solid #294b67;border-radius:12px}
 .questionsQuickPractice{margin:12px 0;border:1px solid #294b67;border-radius:12px;padding:12px}
 .questionsQuickPractice summary{cursor:pointer;min-height:30px;font-weight:700}
