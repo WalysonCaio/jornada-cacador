@@ -1,0 +1,445 @@
+/* r184: fluxos legíveis sem ocultar conteúdo ou avisos de confiança. */
+.app .view,
+.app .card,
+.app .desktopGrid > *,
+.app .reportColumns > *,
+.app .essayGrid > *,
+.app .questionFilters > *,
+.app .formrow > *,
+.app .simuladoConfigGrid > *,
+.app .jcCaveiraTwoCols > * {
+  min-width: 0;
+}
+.app .questionBox,
+.app .questionOptions,
+.app .optionMainBtn,
+.app .stepResolutionBlock,
+.app .stepOptionItem,
+.app .aiTurn,
+.app .summaryCard,
+.app .docCard {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.app .questionOptions button,
+.app .optionMainBtn {
+  min-width: 0;
+  white-space: normal;
+}
+.app .questionFilters :is(input, select),
+.app .formrow :is(input, select),
+.app .simuladoConfigGrid :is(input, select) {
+  min-width: 0;
+  max-width: 100%;
+}
+.app .aiAnswer pre,
+.app .summaryBody pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.app .questionBox img,
+.app .stepResolutionBlock img,
+.app .summaryBody img {
+  max-width: 100%;
+  height: auto;
+}
+.app .resolutionActionBar,
+.app .jcQuestionCaveiraFooter {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.app .resolutionActionBar button,
+.app .jcQuestionCaveiraFooter button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Leis: ações não herdam width:100% da ação principal da página. */
+#laws,
+#laws .jcLawReader,
+#laws .jcLawsControls {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+#laws .jcLawsControls {
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+#laws .jcLawsControlsHeader,
+#laws .jcLawsFilterTabs,
+#laws .jcLawReaderActions,
+#laws .jcLawReaderSourceActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+#laws .jcLawsControlsHeader {
+  justify-content: space-between;
+}
+#laws .jcOfficialLawImport {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  margin-block: 12px;
+}
+#laws .jcOfficialLawImport > *,
+#laws .jcLawsSearchRow > * {
+  min-width: 0;
+  max-width: 100%;
+}
+#laws .jcLawsSearchRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 8px;
+}
+#laws .jcLawsSearchRow .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+#laws .jcLawsSyncStatus {
+  margin-block: 8px;
+}
+#laws .jcLawsSyncStatus:empty {
+  display: none;
+}
+#laws .jcLawRowItem {
+  min-width: 0;
+  gap: 12px;
+}
+#laws .jcLawRowTitle {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 10px;
+}
+#laws .jcLawRowTitle > div {
+  min-width: 0;
+}
+#laws .jcLawRowTitle > button {
+  flex: 0 0 auto;
+}
+#laws .jcLawReader {
+  border: 1px solid var(--cyan, #59e6ff);
+  margin-bottom: 18px;
+}
+#laws .jcLawReaderHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+#laws .jcLawReaderTitle {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+#laws .jcLawReaderTitle h3 {
+  margin: 8px 0 0;
+}
+#laws .jcLawReaderTitle .tag {
+  max-width: 100%;
+  white-space: normal;
+}
+#laws .jcLawReaderActions {
+  flex: 0 1 auto;
+}
+#laws .jcLawReaderActions > button {
+  width: auto !important;
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  max-width: 100%;
+  white-space: normal;
+}
+#laws .jcLawCoverage {
+  color: var(--muted, #93a9be);
+  margin-block: 14px 8px;
+  line-height: 1.55;
+}
+#laws .jcLawSource {
+  margin-block: 8px;
+}
+#laws .jcLawSourceDetails {
+  margin-block: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line, #22354a);
+  border-radius: 10px;
+}
+#laws .jcLawSourceDetails > summary {
+  cursor: pointer;
+  min-height: 24px;
+  font-size: .82rem;
+  font-weight: 700;
+}
+#laws .jcLawSourceMetadata {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 14px;
+  margin-block: 12px 8px;
+  font-size: .8rem;
+}
+#laws .jcLawSourceMetadata dt {
+  font-weight: 700;
+}
+#laws .jcLawSourceMetadata dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#laws .jcLawSourceMetadata code {
+  white-space: normal;
+  font-size: .78rem;
+}
+#laws .jcLawSourceWarnings {
+  padding-left: 20px;
+  margin-block: 10px;
+  font-size: .8rem;
+  line-height: 1.55;
+}
+#laws .jcLawReaderSourceActions > button {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  text-align: left;
+  white-space: normal;
+}
+#laws .jcLawReaderPagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  margin-block: 12px;
+}
+#laws .jcLawReaderPagination > button {
+  min-height: 44px;
+  flex: 0 0 auto;
+}
+#laws .jcLawReaderPagination > span {
+  min-width: 0;
+  font-size: .85rem;
+}
+#laws .jcLawReaderParagraphs {
+  display: grid;
+  gap: 10px;
+  max-height: min(68svh, 640px);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  margin-top: 12px;
+  padding-right: 4px;
+}
+#laws .jcLawReaderParagraphs:focus-visible {
+  outline: 2px solid var(--cyan, #59e6ff);
+  outline-offset: 3px;
+}
+#laws .jcLawParagraph {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line, #22354a);
+  border-radius: 10px;
+  background: var(--panel, #0b1624);
+}
+#laws .jcLawParagraph > p {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+#laws .jcLawParagraph > button {
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+}
+#laws .jcLawParagraph.isHighlighted {
+  border-color: #ca8a04;
+  background: rgba(202, 138, 4, .14);
+}
+body.lightAppTheme #laws .jcLawSourceDetails,
+body.lightAppTheme #laws .jcLawParagraph {
+  background: #fff;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+body.lightAppTheme #laws .jcLawParagraph.isHighlighted {
+  border-color: #a16207;
+  background: #fef3c7;
+}
+body.lightAppTheme #laws .jcLawCoverage {
+  color: #334155;
+}
+body.lightAppTheme #laws a {
+  color: #075985;
+}
+
+@media (min-width: 960px) {
+  body.jcHasSidebar:not(.jcSidebarCollapsed) .jcSideNavBtn {
+    min-height: 44px;
+    gap: 8px;
+  }
+  body.jcHasSidebar:not(.jcSidebarCollapsed) .jcSideNavLabel {
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.3;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  body.jcHasSidebar:not(.jcSidebarCollapsed) .jcSideNavBadge {
+    flex: 0 0 auto;
+  }
+}
+@media (min-width: 761px) and (max-width: 1100px) {
+  .app .top {
+    flex-wrap: wrap !important;
+  }
+  .app .top > .brand {
+    min-width: 0;
+    flex: 1 1 240px;
+  }
+  .app .top .jcTopUtilityRow {
+    order: 3;
+    flex: 1 1 100%;
+    min-width: 0;
+    margin: 0;
+    justify-content: flex-end;
+  }
+}
+@media (max-width: 960px) {
+  #laws .jcOfficialLawImport {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  #laws .jcOfficialLawImport > label {
+    grid-column: 1 / -1;
+  }
+  #laws .jcOfficialLawImport > select {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+@media (max-width: 640px) {
+  .app .reportColumns,
+  .app .essayGrid,
+  .app .jcCaveiraTwoCols {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .app .performanceBar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .app .performanceBar .performanceTrack {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .app .optionWithScissors {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+  .app .stepOptionItem {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .app .resolutionHeader,
+  .app .simuladoTopBar {
+    flex-wrap: wrap;
+  }
+  #laws .jcLawsControls,
+  #laws .jcLawReader {
+    padding: 12px !important;
+  }
+  #laws .jcOfficialLawImport,
+  #laws .jcLawsSearchRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #laws .jcOfficialLawImport > button,
+  #laws .jcLawsSearchRow > button {
+    min-width: 0;
+    width: 100%;
+    min-height: 44px;
+  }
+  #laws .jcLawReaderTitle {
+    flex-basis: 100%;
+  }
+  #laws .jcLawReaderActions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #laws .jcLawReaderActions #jcInvokeLawAiBtn {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  #laws .jcLawReaderActions > button {
+    width: 100% !important;
+  }
+  #laws .jcLawRowItem {
+    flex-wrap: wrap;
+  }
+  #laws .jcLawRowItem .jcLawStartBtn {
+    width: 100%;
+  }
+  #laws .jcLawSourceMetadata {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+  #laws .jcLawSourceMetadata dd {
+    margin-bottom: 8px;
+  }
+  #laws .jcLawReaderParagraphs {
+    max-height: none;
+    overflow-y: visible;
+    padding-right: 0;
+  }
+  #laws .jcLawParagraph {
+    flex-direction: column;
+    gap: 8px;
+  }
+  #laws .jcLawParagraph > button {
+    align-self: flex-end;
+  }
+  #laws .jcLawReaderPagination {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  #laws .jcLawReaderPagination > span {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+}
+@media (max-width: 390px) {
+  .app .trainerQuickActions,
+  .app .studyCycleGrid,
+  .app .reverseScheduleGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app .jcTopUtilityRow {
+    flex-wrap: wrap !important;
+  }
+  .app .jcTopUtilityRow .jcTopTimerPill {
+    min-width: 0;
+  }
+  #laws .jcLawsControlsHeader > button {
+    width: 100%;
+  }
+}
+/* Revisão de PDFs: ações e comparação legíveis em 320px. */
+.qrHub{min-width:0;margin-block:14px}.qrHub>summary{cursor:pointer;font-weight:750;padding:8px 0}
+.qrActions{display:flex;gap:8px;flex-wrap:wrap}.qrActions>button,.qrRecord>button{width:auto;min-height:44px;max-width:100%;white-space:normal}
+.qrRecord{border:1px solid var(--border,#31536c);border-radius:12px;padding:14px;margin-block:12px;overflow-wrap:anywhere;min-width:0}
+.qrRecord .tag{margin-inline-start:8px}.qrRecord p{line-height:1.5}.qrRecord details{margin-block:10px}.qrRecord input{max-width:100%;min-width:0}
+.qrConfirm{display:flex;align-items:flex-start;gap:10px;margin-block:12px}.qrConfirm input{width:20px;height:20px;flex:0 0 20px}
+@media(max-width:600px){.qrActions{display:grid;grid-template-columns:minmax(0,1fr)}.qrActions>button,.qrRecord>button{width:100%}.qrRecord{padding:12px}.qrRecord .tag{display:block;width:fit-content;margin:8px 0}}

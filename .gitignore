@@ -29,3 +29,8 @@ CLAUDE.md
 .openai/
 /$null
 browser-artifacts/
+
+# Temporários de editor e arquivos acidentais locais
+*.swp
+*.swo
+/-r182

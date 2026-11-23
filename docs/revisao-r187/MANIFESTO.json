@@ -1,0 +1,725 @@
+{
+  "release": "r187",
+  "base_main_commit": "52b236036f5207117918aeb84ddd1df89eacdd1d",
+  "parent_release_commit": "7519ac5970b7accc7364cd685018f50d2d605fff",
+  "generated_on": "2026-11-23",
+  "scope": "Atualizacao completa de codigo desde main r181; sem banco privado/PDFs ou credenciais",
+  "files": [
+    {
+      "path": ".github/workflows/build-android.yml",
+      "bytes": 1159,
+      "sha256": "c9c2f22e9482aedd118e6b6feb32f3ddc60386465a53b994e16cce14b1b45a9a"
+    },
+    {
+      "path": ".github/workflows/build-windows.yml",
+      "bytes": 934,
+      "sha256": "d78c0c71df81fbbdedc71142d6e5f767455c8383b5183fbb8e4fc63e0ba51d5a"
+    },
+    {
+      "path": ".github/workflows/quality-checks.yml",
+      "bytes": 390,
+      "sha256": "010c0034da56eb5a75bd2b9717348ae82120b4df34320394ac62d188ef95e109"
+    },
+    {
+      "path": ".github/workflows/validate.yml",
+      "bytes": 163,
+      "sha256": "c11e14a48668342be50cdc8e700bfd79aaf14ad86688d76427e33749fa531d2a"
+    },
+    {
+      "path": ".github/workflows/windows-installer.yml",
+      "bytes": 914,
+      "sha256": "d69445d77378830e16856076dd4c917587357a429dc5ff35be46ae44b2baccca"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 448,
+      "sha256": "198dd3e049bee132ea915430f7bdc364304773dcea1a43225fc34adad1c91e9d"
+    },
+    {
+      "path": "GUIA-UNIFICADO.md",
+      "bytes": 5348,
+      "sha256": "5a5fbad895ff4291bc854d78d10a9161c3f0332896b43effdcbadb3d12eadbb9"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4793,
+      "sha256": "76ad10d3867b0dc5090ba2c97bb170d354054f630b031cb63c21707193450195"
+    },
+    {
+      "path": "dist/content-summaries.js",
+      "bytes": 50320,
+      "sha256": "f397e76641f76071ccbdfc1a7846bfc95bcc16eee4afaddfcf1596c7a99ce47c"
+    },
+    {
+      "path": "dist/index.html",
+      "bytes": 647634,
+      "sha256": "8514543ba73a71d297147b9bfd552b17640f5b1aead87b30829b4c721a240575"
+    },
+    {
+      "path": "dist/jc-architecture-modules.js",
+      "bytes": 299777,
+      "sha256": "87e55f96861360798c94cbd966801b66b7a53c37334632b9393e7cd583c95099"
+    },
+    {
+      "path": "dist/native-laws-database.json",
+      "bytes": 32262,
+      "sha256": "66ff9564b12b67d3449104e9c436e83f2f88141db9c0b7fdd97f6f03c2a5d524"
+    },
+    {
+      "path": "dist/native-question-bank.json",
+      "bytes": 241280,
+      "sha256": "32771bf6acf70d1c5d769300e991bde4efd827c659812f3d7a18ccba7bbe8f23"
+    },
+    {
+      "path": "dist/pdf-text-client.js",
+      "bytes": 118409,
+      "sha256": "04af5193c794152adc36e6d2c51f04e7e0b12c83368ca82700a35eed028a0799"
+    },
+    {
+      "path": "dist/privacidade.html",
+      "bytes": 9189,
+      "sha256": "acb600933d472dc90a06e9485e56af4dafaff6f06e932f3aa25a3fa16ce33a62"
+    },
+    {
+      "path": "dist/progress-ledger.js",
+      "bytes": 9950,
+      "sha256": "495174ebc9a82fd919426bcb3581df14f3de6b3a21dd72a593e4b8a37d41fa89"
+    },
+    {
+      "path": "dist/question-availability.js",
+      "bytes": 1843,
+      "sha256": "d7173ee56b4fab93806f949d64179fb7548842b6aea12b68c4ed058dd605f7f0"
+    },
+    {
+      "path": "dist/question-review.js",
+      "bytes": 30811,
+      "sha256": "deaf47b50f397303d6fa5ba3d87881404d02e472ed009b0a42bd955d4e075369"
+    },
+    {
+      "path": "dist/question-text-quality.js",
+      "bytes": 8792,
+      "sha256": "a3ce76cb46b1452cc3123b7b0ff489036d5a3d21f8e276e457190cd904d75187"
+    },
+    {
+      "path": "dist/questions-workspace.css",
+      "bytes": 1934,
+      "sha256": "72f6b86e95d9f6e16d0b0484dfe48b500dc7efc99d9925bbe14a53aa745322b5"
+    },
+    {
+      "path": "dist/questions-workspace.js",
+      "bytes": 13849,
+      "sha256": "ef7283d562ca132f3e5583f372b286caf60e7b1e72edfb105ae40bdf10aec776"
+    },
+    {
+      "path": "dist/sw.js",
+      "bytes": 2946,
+      "sha256": "1be38db3c615df01a071aefaf4e768d464152bbe0a773dd699dac3942192d1a6"
+    },
+    {
+      "path": "dist/ui-r184.css",
+      "bytes": 10066,
+      "sha256": "1a6b27f5381e8e011bca6d761f564015b98ea5c5980011cd7a95eba999c639bb"
+    },
+    {
+      "path": "dist/v59-enhancements.js",
+      "bytes": 52679,
+      "sha256": "ff856a8a03e6a174eb92e84fe02844e01ba2b082c0df40dc7ced27885798b1c1"
+    },
+    {
+      "path": "dist/v77-experience.js",
+      "bytes": 1164162,
+      "sha256": "6a37a052e0f408baba1dbe5b12e4d1a120675d9b153d7d9ced3b52728a986ee1"
+    },
+    {
+      "path": "dist/v78-smart-notebook.js",
+      "bytes": 26036,
+      "sha256": "66bf8f486f14062614692efbba9898c1035d0473c1cdf1fd7e1e5102519183eb"
+    },
+    {
+      "path": "docs/revisao-r182/ALTERACOES.md",
+      "bytes": 5362,
+      "sha256": "1a746bddb3feb3ab46ba097636df590018726c39896c42d68272b0b598cb8a14"
+    },
+    {
+      "path": "docs/revisao-r182/ARQUIVOS-ALTERADOS.md",
+      "bytes": 2633,
+      "sha256": "1b5abaf70ff70c4aa8cdfcd2cea1f19a03ca35d5ed98e5929c113c667aba633b"
+    },
+    {
+      "path": "docs/revisao-r182/LEIA-ME.md",
+      "bytes": 8176,
+      "sha256": "6b1ea347da2fe607ec5bc27080af1ca846a6add501ac1256d49266162f289324"
+    },
+    {
+      "path": "docs/revisao-r182/MANIFESTO.json",
+      "bytes": 9924,
+      "sha256": "a552ccf30eb3cdc4ec2e52fe0bbe84d9401cd2c3e66bdd667f6eae52ee924f46"
+    },
+    {
+      "path": "docs/revisao-r182/VALIDACAO.txt",
+      "bytes": 23826,
+      "sha256": "b2c2da9e1c4d46343d49393aa85cae87a70e3732033464f4d2c20eb5405c2d78"
+    },
+    {
+      "path": "docs/revisao-r183/CONFERENCIA-GEMINI.md",
+      "bytes": 12101,
+      "sha256": "6b9781a981e50524c7410883d2e2e9b2b6164a24509419c6dff345469c283e5a"
+    },
+    {
+      "path": "docs/revisao-r183/LEIA-ME.md",
+      "bytes": 8318,
+      "sha256": "b83bdd48acc4bb150556e7cb9e2251db4fae377615321480be8e7f7efbf2fd68"
+    },
+    {
+      "path": "docs/revisao-r183/MANIFESTO.json",
+      "bytes": 13417,
+      "sha256": "cdf08917eeee1e4994bf05755f17853b76dedf86d0a582d61c532e30d3c51a39"
+    },
+    {
+      "path": "docs/revisao-r183/VALIDACAO.txt",
+      "bytes": 5657,
+      "sha256": "3dcb1e904078e7ac024623fbe753d81be19c9563736a011d8f88f21865ec9652"
+    },
+    {
+      "path": "docs/revisao-r184/LEIA-ME.md",
+      "bytes": 9327,
+      "sha256": "649f1f8b1adb7104ab1fdcca05edd02840c584f913c31e75104da09cc6657d32"
+    },
+    {
+      "path": "docs/revisao-r184/MANIFESTO.json",
+      "bytes": 16208,
+      "sha256": "8f013cd7f27566b7debe0481bd410305000ead98dd614f4a12fcbd2f643f7919"
+    },
+    {
+      "path": "docs/revisao-r184/REVISAO.md",
+      "bytes": 5259,
+      "sha256": "23745037c5ca20d07ebbb2b584c679407d3d99c8eaecf2781052b1d70c462951"
+    },
+    {
+      "path": "docs/revisao-r184/VALIDACAO.txt",
+      "bytes": 5632,
+      "sha256": "e16713e0561f0bc28b1e20afa510f604defa83b4345b0357658d1b920be1f806"
+    },
+    {
+      "path": "docs/revisao-r185/LEIA-ME.md",
+      "bytes": 6840,
+      "sha256": "889cda1f8b6e1401fceff66026803b6c9bd477de26dddf3a19beee9993f28b32"
+    },
+    {
+      "path": "docs/revisao-r185/MANIFESTO.json",
+      "bytes": 18555,
+      "sha256": "75a89c827f246082c4bda02118e354518d0613b6b26a250ba28812d19319294c"
+    },
+    {
+      "path": "docs/revisao-r185/VALIDACAO.txt",
+      "bytes": 4940,
+      "sha256": "6bf5c14bd7f244e684acca29af8b0c6423f924eb15d2cb6275f5bbfcb461ca73"
+    },
+    {
+      "path": "docs/revisao-r186/CONFERENCIA.md",
+      "bytes": 6597,
+      "sha256": "e243bc913db5a28ef9ed9777105c403ff754ae1e4974df43645421ce545b59e4"
+    },
+    {
+      "path": "docs/revisao-r186/LEIA-ME.md",
+      "bytes": 9036,
+      "sha256": "8a5209a993c0433d82bf61e11c2d5a6a1f20c7a965954b49f8bdfc0290d30a48"
+    },
+    {
+      "path": "docs/revisao-r186/MANIFESTO.json",
+      "bytes": 21690,
+      "sha256": "724f2228c0ded5459ce0885bf2728c44b752392967cea60bd43a8b9ea71cbe92"
+    },
+    {
+      "path": "docs/revisao-r186/VALIDACAO.txt",
+      "bytes": 35056,
+      "sha256": "5618a0c256900879e788e5c9c9b273b9d0ae7e010b977079d36933fdd9bcdee2"
+    },
+    {
+      "path": "docs/revisao-r187/CONFERENCIA.md",
+      "bytes": 6966,
+      "sha256": "41ea24bd4d0c0834d3cc607d852b1bd6ea9ea44d0597cd4b3a8f03ff4075f4da"
+    },
+    {
+      "path": "docs/revisao-r187/LEIA-ME.md",
+      "bytes": 8763,
+      "sha256": "3ef5ab75857bbfb53c8651109212f609ed28c4dca99a79902a36444789edbb2d"
+    },
+    {
+      "path": "docs/revisao-r187/VALIDACAO.txt",
+      "bytes": 40907,
+      "sha256": "151bfa92cbf7d968f92f49432af1fb88dba948c68f1b8410f9d1034d149eaa9b"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 1625,
+      "sha256": "54b82489094287dcc680217c5c8eb217e9a49ff86ab22a8bfc972eb8f2f53b1b"
+    },
+    {
+      "path": "package.json",
+      "bytes": 574,
+      "sha256": "273f38e5eac0a7f5c9861a3db6e5e09cfd19b98689fc93a078a2226a34ad3fc6"
+    },
+    {
+      "path": "scripts/browser-smoke.mjs",
+      "bytes": 22450,
+      "sha256": "6c5b73cc2b64998a58f4ce64c81baa7b993e39bf812ba6cd47c6e69600721abd"
+    },
+    {
+      "path": "scripts/build-supabase-dashboard.mjs",
+      "bytes": 3356,
+      "sha256": "e002e814a6bffdd99d09e94ebd096b2d8bd5ee1072b95715afe390e944a9c7d0"
+    },
+    {
+      "path": "scripts/cleanup-repository-artifacts.mjs",
+      "bytes": 2781,
+      "sha256": "fb9f20db8bb3e49edf8acbaf87337d76fac67d4de71c3fc4e7dea4fd37e2a907"
+    },
+    {
+      "path": "scripts/fixtures/cleanup-artifacts.json",
+      "bytes": 4800,
+      "sha256": "071a08bb6416f1fe7511c35b263e307581e805c6f68e8fe26ce1613e82d4ff7d"
+    },
+    {
+      "path": "scripts/integration-laws-sql.mjs",
+      "bytes": 4092,
+      "sha256": "3498bbdfbc71901fb7b2821d4f4cda5c3c5afbfa5548cede26ff6d16a062fad2"
+    },
+    {
+      "path": "scripts/integration-question-review-sql.mjs",
+      "bytes": 14398,
+      "sha256": "6f569b2791589dfcfbd64d31353fe6311d92d1cd245992261605f74fed7353ec"
+    },
+    {
+      "path": "scripts/test-attach-answer-key.mjs",
+      "bytes": 5057,
+      "sha256": "2c927425b843feceafa67ebab7f9730d7ca86b76b5e8fd05af30c2ee38f3e441"
+    },
+    {
+      "path": "scripts/test-crud-contracts.mjs",
+      "bytes": 5772,
+      "sha256": "8cfbf42ee435cf896ee5d320e30f9aec72850d76254bd046202ed4fab5a42288"
+    },
+    {
+      "path": "scripts/test-exam-extractor.mjs",
+      "bytes": 22097,
+      "sha256": "46d141923edb9445572d8aea12eaf2abb7fe45afcb408bc1238b0cb04e6274f5"
+    },
+    {
+      "path": "scripts/test-front-study.mjs",
+      "bytes": 138040,
+      "sha256": "cf9ebed25f569dcd85e63dd9777afc646a64479eb4124f4bba693c27de258bf1"
+    },
+    {
+      "path": "scripts/test-material-integrity.mjs",
+      "bytes": 6804,
+      "sha256": "76c99ce28334c67b38940d91b6d055c2280a30eec5af132e887bc47f2934c862"
+    },
+    {
+      "path": "scripts/test-question-bank.mjs",
+      "bytes": 5650,
+      "sha256": "2d55a47cd79836a9aa73679c8b3fea7316a9e2c90d14ac9e20f0fc00e7609fc3"
+    },
+    {
+      "path": "scripts/test-r171-grok.mjs",
+      "bytes": 4396,
+      "sha256": "5ff72efd452e7640ced37aee8b142114bbbca10812e877b8d416c6d1383a7867"
+    },
+    {
+      "path": "scripts/test-r172-audit.mjs",
+      "bytes": 5865,
+      "sha256": "1fe2da5acecf5ed61ebe9f910643c93fc7a4ee51fc9e52035c301f28c886cfc2"
+    },
+    {
+      "path": "scripts/test-r173-navigation.mjs",
+      "bytes": 5664,
+      "sha256": "9ad4d3c2459f300d848dd9c45ee24aec6b6fd08fad3370c628eea01351abcb79"
+    },
+    {
+      "path": "scripts/test-r174-answer-trust.mjs",
+      "bytes": 14246,
+      "sha256": "9a9d23df67a80a18ccaaaab898b8ebf1d6219a399238f0c41a1abfdde3d1b00a"
+    },
+    {
+      "path": "scripts/test-r174-classification.mjs",
+      "bytes": 10432,
+      "sha256": "29614fc6fc4add9c514f32f0cf23c8efdfb69113da132a296647dde068423323"
+    },
+    {
+      "path": "scripts/test-r174-diagnostics.mjs",
+      "bytes": 6629,
+      "sha256": "d3e4e74e38cbdc41727cbe0b58d4ebfaf24930861f943920a87e0e00ceee047b"
+    },
+    {
+      "path": "scripts/test-r174-edital-persistence.mjs",
+      "bytes": 8974,
+      "sha256": "576696b8e0c96f58eac9fbb6643e41e846a17b26e163b446179bd19c1e253d67"
+    },
+    {
+      "path": "scripts/test-r174-error-retry.mjs",
+      "bytes": 9006,
+      "sha256": "85bd7293b215349ebc6e0fdc8a46a66d3c6adc1cc1fca05bfa562caeab07701f"
+    },
+    {
+      "path": "scripts/test-r174-session-performance.mjs",
+      "bytes": 13604,
+      "sha256": "b39666f9765a788b727582ac1a6bfab5253ca5f214556a56e3acada1ce174e3f"
+    },
+    {
+      "path": "scripts/test-r175-study-boundaries.mjs",
+      "bytes": 7242,
+      "sha256": "de3f8415aac72cf746a0b372d20a0ed71c82d3495fe6040b99ddee0a7ae53367"
+    },
+    {
+      "path": "scripts/test-r176-full-audit.mjs",
+      "bytes": 7261,
+      "sha256": "a08aef70aa0bb9ec7f3f3117b84f10cb7aee61dbf27bc9128ff63b051a2e01d3"
+    },
+    {
+      "path": "scripts/test-r178-backend.mjs",
+      "bytes": 14584,
+      "sha256": "82b63786105787ebaff3afa46d50b36dc84418fb68c0182987ddde7c8aed6556"
+    },
+    {
+      "path": "scripts/test-r178-caveira-clean-ui.mjs",
+      "bytes": 5696,
+      "sha256": "61569c052b6fb23abc1ebe5b250e0d50569df6827f0b755cb48f70a16baf996a"
+    },
+    {
+      "path": "scripts/test-r178-sync-scope.mjs",
+      "bytes": 11413,
+      "sha256": "80fb06b43c8e462131fca95d24b9535849234ba5cc901477de8d57e42b12633a"
+    },
+    {
+      "path": "scripts/test-r179-caveira-suite.mjs",
+      "bytes": 5007,
+      "sha256": "5c43bfa27ebe2c3be0b530e2d3873319c398fd15089d81cba343837ec4b08110"
+    },
+    {
+      "path": "scripts/test-r180-speed-laws-palette.mjs",
+      "bytes": 4272,
+      "sha256": "27b648e00d7ffdcf9ec9f1e4dc0a1499e8dc88c6c31efc5cfdf3053ccb582082"
+    },
+    {
+      "path": "scripts/test-r181-mobile-laws-db-pedagogy.mjs",
+      "bytes": 3757,
+      "sha256": "1a91ae88d42df5895d784107ab9447784cb71f7ea7d60a5bde27a4c38e450b1a"
+    },
+    {
+      "path": "scripts/test-r182-ai-study-actions.mjs",
+      "bytes": 10978,
+      "sha256": "58e9add7812b5ad47c6cd177f43e8c1ac91aa11c9b3b795aee969c8fae62c60c"
+    },
+    {
+      "path": "scripts/test-r182-document-scope.mjs",
+      "bytes": 7059,
+      "sha256": "da7bd6120f64346645d0f87dc5688092a04a4d3a4135181ccd39fb68871d6528"
+    },
+    {
+      "path": "scripts/test-r182-flashcard-scope.mjs",
+      "bytes": 2086,
+      "sha256": "9840aa32649bf86199a2c3b4849fa168f9e830ef20ab7d822c230faafe2a4494"
+    },
+    {
+      "path": "scripts/test-r182-generated-content.mjs",
+      "bytes": 5660,
+      "sha256": "41f32a005adb8629abf89dbeca6eb34cb7fb5009d4d0605c44c0ba121ca9175b"
+    },
+    {
+      "path": "scripts/test-r182-laws.mjs",
+      "bytes": 8162,
+      "sha256": "026304076be8a352ddeae894a6444dc32775add00fe320349ae0ffd4df1ac4ba"
+    },
+    {
+      "path": "scripts/test-r182-metrics.mjs",
+      "bytes": 9011,
+      "sha256": "9d6045b5c5baca67d02fabafae23941a6a1f6d783388ea8e45a36a9ca5701926"
+    },
+    {
+      "path": "scripts/test-r182-pedagogy.mjs",
+      "bytes": 5320,
+      "sha256": "912a3bb782ad1067b5b4a9cf6f3ab84ef6eb6d48fd232be664e3ad4ceec0f139"
+    },
+    {
+      "path": "scripts/test-r182-question-cache.mjs",
+      "bytes": 6387,
+      "sha256": "581f8b738156764708b21936734fe1eaddabbf784b22cab3c86c5ff44c8fbcca"
+    },
+    {
+      "path": "scripts/test-r182-questions.mjs",
+      "bytes": 8774,
+      "sha256": "2d0973e69a4ee3a2f2f145a1a5fb916ce236ecb487a058b274c9f4336ed21bf5"
+    },
+    {
+      "path": "scripts/test-r182-upload-safety.mjs",
+      "bytes": 10395,
+      "sha256": "62f6f58ec9bd701caba5fe572dbabbf4c0d278a8c19731b3f3efa9546f584893"
+    },
+    {
+      "path": "scripts/test-r183-clean-focus.mjs",
+      "bytes": 10447,
+      "sha256": "6cde6b7cf31c2cfb0856edf2ed66eeb5fc00a9b336f5c17cc46d9d1dd7ab3a57"
+    },
+    {
+      "path": "scripts/test-r183-hub-actions.mjs",
+      "bytes": 4741,
+      "sha256": "17aacef4b696b87c9ca2f8e2a06f2582c4dca6bdbfdddc067388ad31342d4509"
+    },
+    {
+      "path": "scripts/test-r183-law-import.mjs",
+      "bytes": 13002,
+      "sha256": "463799ca21ba9c2d05423f91712b84cb2fc81f28e4f9c1fd5fc9a943982375a5"
+    },
+    {
+      "path": "scripts/test-r183-law-service.mjs",
+      "bytes": 8882,
+      "sha256": "bf21e13538ffe9b539bca583cb40f2a89368dda380885ac9ab1c8621941b12a3"
+    },
+    {
+      "path": "scripts/test-r183-study-flows.mjs",
+      "bytes": 14308,
+      "sha256": "02676b52420d02e877f42085f8830eb701422e01cf9ab8c84255ffad8d91f0ff"
+    },
+    {
+      "path": "scripts/test-r184-classification.mjs",
+      "bytes": 8496,
+      "sha256": "b234cb9cdabbf4f4c66e897e96a86e31c92ea8c8f1dc6978b97c1b3600b3c896"
+    },
+    {
+      "path": "scripts/test-r184-material-safety.mjs",
+      "bytes": 9370,
+      "sha256": "2fdbc1f091fc980450f97454b4777a33de47da941f998194f9e69dcce4c63bc7"
+    },
+    {
+      "path": "scripts/test-r184-pdf-review.mjs",
+      "bytes": 9455,
+      "sha256": "d7bd7624cdecd08170a5674fe611c21b18272a1872f36f4b825e7a15cda93b35"
+    },
+    {
+      "path": "scripts/test-r184-question-review.mjs",
+      "bytes": 15363,
+      "sha256": "f9f08c0868dc7d023b8bbbd5668c363ae9ad3888c3247d5af123bcf3967061a0"
+    },
+    {
+      "path": "scripts/test-r184-responsive.mjs",
+      "bytes": 5186,
+      "sha256": "9059b6251471432b76ea4658f0cfe1c31e684f74adaafbc1099c826757015be2"
+    },
+    {
+      "path": "scripts/test-r185-cleanup.mjs",
+      "bytes": 2958,
+      "sha256": "55833a3c6d330540c43f6349a268bb10f0640d8e573683491832934e1a8e67d7"
+    },
+    {
+      "path": "scripts/test-r185-service-worker.mjs",
+      "bytes": 7226,
+      "sha256": "b0d8347e485206d76dcc85de40aed499481977fe3f0a1b6bc1af40613b015a3b"
+    },
+    {
+      "path": "scripts/test-r185-smart-notebook-scope.mjs",
+      "bytes": 20388,
+      "sha256": "3b493c7198872d2078776d937e1d033ce3907564f474775cf582fc5c85668d31"
+    },
+    {
+      "path": "scripts/test-r186-answer-key-scope.mjs",
+      "bytes": 6301,
+      "sha256": "61fccbb1abf0a4fffb7850dfb034ec75fdfc9d8f7611ce8f33c000a09c708e1a"
+    },
+    {
+      "path": "scripts/test-r186-exam-link-actions.mjs",
+      "bytes": 11850,
+      "sha256": "fb9cdcd8d21d8e315c6b762788498e2acbf86998b0c968428156611ad9184ae3"
+    },
+    {
+      "path": "scripts/test-r186-generated-provenance.mjs",
+      "bytes": 7160,
+      "sha256": "b5eab5c8dba5879211fa711b9414f2a7a7db64a10c0845a1a101ad41cc76c410"
+    },
+    {
+      "path": "scripts/test-r186-progress-merge.mjs",
+      "bytes": 6055,
+      "sha256": "0cebe7fae8adf01baf332f2e4521a471263c7192154d8b2d7a85fffece242ced"
+    },
+    {
+      "path": "scripts/test-r186-question-quality.mjs",
+      "bytes": 17071,
+      "sha256": "990f47cb7b3a4af5d7e02c371c96a55d4d81555b7ac0e92c9b3307e4dfaed997"
+    },
+    {
+      "path": "scripts/test-r186-questions-lazy.mjs",
+      "bytes": 8907,
+      "sha256": "835913ea3c2c46ee3ec891c12fd7552dc2434e19a15f9aef8b98a2fe95a2cd80"
+    },
+    {
+      "path": "scripts/test-r186-streak.mjs",
+      "bytes": 7871,
+      "sha256": "abde0a8fcfd6788aaa321d8509baa31d48270d3d4aa2e136bcc4e1a3cde53aac"
+    },
+    {
+      "path": "scripts/test-r186-sync-persistence.mjs",
+      "bytes": 10222,
+      "sha256": "005b19f7460f2027b42dec769ad7cdc9741ffd68e01fa7404e4f4a926411b9ee"
+    },
+    {
+      "path": "scripts/test-r186-xp.mjs",
+      "bytes": 14788,
+      "sha256": "ac2a1e6fc3f4d39b9ba4f6edcd97de1dbd7f3ada78984733730331c2497dd864"
+    },
+    {
+      "path": "scripts/test-r187-content-sync.mjs",
+      "bytes": 16060,
+      "sha256": "32bbeb166b36e39ff78a05f8a54eb329a04fa0ffb5d1c5c25f35ad1e9fc894d8"
+    },
+    {
+      "path": "scripts/test-r187-loader-stability.mjs",
+      "bytes": 14725,
+      "sha256": "6b9f86206d440efa0c954cb2ba171db831fb02bc79f90fbb238fb8296bba4af7"
+    },
+    {
+      "path": "scripts/test-r187-pdf-spacing.mjs",
+      "bytes": 8554,
+      "sha256": "0535c47e50d17487d1723e31050c7650bc9fd13afbb82cd986654b921f69ee3f"
+    },
+    {
+      "path": "scripts/test-r187-question-counts.mjs",
+      "bytes": 3782,
+      "sha256": "8d55d9104f1e4c9f316a7b69523812aefeadc89577fb9487f541f4004a6d5b23"
+    },
+    {
+      "path": "scripts/test-r187-question-text.mjs",
+      "bytes": 17518,
+      "sha256": "52f09db64a723e25a092974a238819200b53c3433d7d914d4dbca1dc9c69ecca"
+    },
+    {
+      "path": "scripts/test-r187-report-stability.mjs",
+      "bytes": 11130,
+      "sha256": "542e8139037949ea57ab67b0caf33991e3fd68278b3dfb96c2afeb9d771ee040"
+    },
+    {
+      "path": "scripts/test-r187-sidebar.mjs",
+      "bytes": 8611,
+      "sha256": "15d8001cc692746022a42ce127416dcea80775f0f4b02dffd24b66302d1d4d07"
+    },
+    {
+      "path": "scripts/test-r187-topic-board.mjs",
+      "bytes": 22516,
+      "sha256": "408e8939a6d97c2477e1259d506e3aba8ecfdb91dd9252f1418c84c0ece5c899"
+    },
+    {
+      "path": "scripts/test-security-contracts.mjs",
+      "bytes": 13650,
+      "sha256": "32ea2c1d3f6f7971bc0bcbaa7b6363eb5ecefc353079f20986267802084c1e55"
+    },
+    {
+      "path": "scripts/test-supabase-dashboard.mjs",
+      "bytes": 3189,
+      "sha256": "232276c3357ead657b135d95eccca626d9600ba1c8d82ad6ad9c444e8b9e0b06"
+    },
+    {
+      "path": "scripts/validate-project.mjs",
+      "bytes": 13612,
+      "sha256": "86983f63b7630345c2f9804e5f935742ab8cb2e469e0e28be05890c555bc0e02"
+    },
+    {
+      "path": "supabase/dashboard/MANIFESTO.json",
+      "bytes": 1600,
+      "sha256": "c6befe33795d6631666d64bd22d2eb912e23cb050a7743c3eed53ad65752e4e8"
+    },
+    {
+      "path": "supabase/dashboard/README.md",
+      "bytes": 710,
+      "sha256": "05d40b8382f0a4d721cc1c0252cb52ce3168aaf683c50b0f7f7dd1d29f87f6a6"
+    },
+    {
+      "path": "supabase/dashboard/account-security/index.ts",
+      "bytes": 13437,
+      "sha256": "964ea64cdd2570ac527fc56b436354f072ad9310d8942d41fbb99e5aa9b1d030"
+    },
+    {
+      "path": "supabase/dashboard/assistente-pmpe/index.ts",
+      "bytes": 55481,
+      "sha256": "2f454e199fec352ea8ba2e6f9ea882a24fed058f91f22d2dfdceeb5faf1e2c12"
+    },
+    {
+      "path": "supabase/dashboard/edital-gemini/index.ts",
+      "bytes": 89140,
+      "sha256": "bd22ccdb68ac8f6cee4f50832f8c53f2d926ff71ad0425b0a42e578cc0732a2a"
+    },
+    {
+      "path": "supabase/dashboard/leis-oficiais/index.ts",
+      "bytes": 16116,
+      "sha256": "1803d272db5449ddf4bd2a354b4bb856e8fd848bbfe2c916a24d498835c8b730"
+    },
+    {
+      "path": "supabase/dashboard/material-gemini/index.ts",
+      "bytes": 101552,
+      "sha256": "02831fa707e39709b820f713e767b1300bb9771afb14188edb91f5619712bc75"
+    },
+    {
+      "path": "supabase/dashboard/redacao-gemini/index.ts",
+      "bytes": 24754,
+      "sha256": "b4d64ae8caa8818617d9a1ed09157c4a84f889cea565c75fa7f1008cb7bc0e07"
+    },
+    {
+      "path": "supabase/dashboard/system-diagnostics/index.ts",
+      "bytes": 7597,
+      "sha256": "15695e7181b80581aaa846e657d132344484ebcf9bf7d2f099f669a57f6bc196"
+    },
+    {
+      "path": "supabase/functions/account-security/index.ts",
+      "bytes": 13091,
+      "sha256": "89ca17d176e949530f98f109f899dfeea9bc2b1d415e51ecf9f25dc3008c99b3"
+    },
+    {
+      "path": "supabase/functions/assistente-pmpe/index.ts",
+      "bytes": 55137,
+      "sha256": "4095f397c30d2fcd51957c070c944bc1104c8fe6a0eeae4938b3bc7470eccc8f"
+    },
+    {
+      "path": "supabase/functions/edital-gemini/index.ts",
+      "bytes": 88800,
+      "sha256": "dd9e6d3a458208194e5c2d1ca28911f9fbc4522769d462e3d0b30c417dfcfbd8"
+    },
+    {
+      "path": "supabase/functions/leis-oficiais/index.ts",
+      "bytes": 15776,
+      "sha256": "12e831cdb2ee0edc4fc2c47546f2985b3030c6948ca99c4e9bfb3f418014c9ff"
+    },
+    {
+      "path": "supabase/functions/material-gemini/index.ts",
+      "bytes": 101208,
+      "sha256": "c93055d74382f576a9389a28509fc6bcaf82f0384fb812efc7574d3510b0219c"
+    },
+    {
+      "path": "supabase/functions/redacao-gemini/index.ts",
+      "bytes": 24412,
+      "sha256": "ceb8bf3a72169ede8b27c98c4b03a1b8a190aa24fd42c765704244989e34ebb1"
+    },
+    {
+      "path": "supabase/functions/system-diagnostics/index.ts",
+      "bytes": 7247,
+      "sha256": "2b9c927e34b77a094f35136efe37503c226771e90696464c091df420215eb70a"
+    },
+    {
+      "path": "supabase/migrations/20261118010000_v109_owned_laws_library.sql",
+      "bytes": 1660,
+      "sha256": "1ab953209385e4537d8161ea7c57da19bf474738792bd03aded52c43e848bfda"
+    },
+    {
+      "path": "supabase/migrations/20261120010000_v110_document_question_reviews.sql",
+      "bytes": 24982,
+      "sha256": "d86f6fb5290c625c354ab80924a96ad566e0348fd851631d117dd0d8f312f4d7"
+    }
+  ],
+  "removed_tracked_files": [
+    "$null",
+    "\", gabaritos e recupera\\303\\247\\303\\243o de estudos na r174\\357\\200\\242\"",
+    "0"
+  ],
+  "excluded": [
+    "entregas/** (artefatos historicos e ZIP de saida)",
+    "docs/revisao-r187/MANIFESTO.json (este arquivo, sem auto-hash)",
+    ".git/**",
+    "node_modules/**"
+  ]
+}

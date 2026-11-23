@@ -4,15 +4,16 @@ import vm from "node:vm";
 import assert from "node:assert/strict";
 const src = readFileSync(new URL("../dist/v77-experience.js", import.meta.url), "utf8");
 const grab = (from, to) => { const a = src.indexOf(from), b = src.indexOf(to, a + 1); assert(a >= 0 && b > a, `trecho não encontrado: ${from}`); return src.slice(a, b); };
-const code = [grab("function parseExamAnswerKeyTable(", "window.extractStructuredExamQuestions="), grab("async function attachAnswerKeyToExistingDoc", "window.attachAnswerKeyToExistingDoc=")].join("\n");
+const code = [grab("function answerKeyStatus(", "function classifyQuestion("),grab("function parseExamAnswerKeyTable(", "window.extractStructuredExamQuestions="), grab("function examDocumentScopeAllows(", "function renderExamBankHub(){"), grab("async function attachAnswerKeyToExistingDoc", "window.attachAnswerKeyToExistingDoc=")].join("\n");
 
 async function run({ questions, pasted, preferredCaderno = "" }) {
   const toasts = [], patches = [];
-  const row = { id: "r1", title: "Prova", content: { questions: JSON.parse(JSON.stringify(questions)) } };
-  const doc = { id: "d1", title: "Prova AOCP", metadata: {} };
+  const row = { id: "r1", title: "Prova", user_id:'a',campaign_id:'db',source_document_id:'d1',content: { questions: JSON.parse(JSON.stringify(questions)) } };
+  const doc = { id: "d1", title: "Prova AOCP", user_id:'a',campaign_id:'db',metadata: {} };
   const ctx = {
     cloudDocuments: [doc], toast: (m) => toasts.push(m), window: { askUserExamAnswerKeyOptions: async () => ({ appendedText: pasted, preferredCaderno }) },
-    validSession: async () => ({ ok: true }), canonicalSubjectName: (s, d) => d || "x", render() {}, renderExamBankHub() {}, loadGeneratedContent: async () => {}, loadCloudDocuments: async () => {},
+    state:{_ownerUserId:'a',activeCampaignId:'p',_resetEpoch:0},cloudSession:{user:{id:'a'},access_token:'fixture'},activeCampaign:()=>({id:'p',dbId:'db'}),
+    validSession: async () => ({ user:{id:'a'},access_token:'fixture' }), canonicalSubjectName: (s, d) => d || "x", render() {}, renderExamBankHub() {}, loadGeneratedContent: async () => {}, loadCloudDocuments: async () => {},
     cloudFetch: async (url, init = {}) => { if (init.method === "PATCH") { patches.push({ url, body: JSON.parse(init.body) }); return { ok: true, json: async () => ({}) }; } return { ok: true, json: async () => [row] }; },
   };
   ctx.window.attachAnswerKeyToExistingDoc = null; vm.createContext(ctx); vm.runInContext(code + "\nthis.__run = attachAnswerKeyToExistingDoc;", ctx);

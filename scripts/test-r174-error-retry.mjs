@@ -11,7 +11,10 @@ function section(start, end) {
 const code = [
   section('  function answerOptionText(', '  function applyReviewedAnswerKey('),
   section('  function answerKeyStatus(', '  function answerKeyDetails('),
+  section('  const _TOPIC_REF_CACHE=', '  function activeCampaignErrors('),
   section('  function questionMatchesErrorPool(', '  function isQuestionFavorited('),
+  'let questionFilterPoolCache=null;\n'+section('  function filteredQuestionPool(', '  function questionAvailabilityBreakdown('),
+  section('  function questionSessionFilterContext(', '  function startFilteredBattle('),
   section('  function startErrorReinforcementBattle(){', '  // 2B. Resolução'),
   section('  function launchSingleErrorRetryByKey(', '  window.launchSingleErrorRetryByKey ='),
 ].join('\n');
@@ -21,7 +24,7 @@ const bankQuestion = extra => ({subject:original.subject,topic:original.topic,st
 
 function env(errors, bank = [], preparedInvalid = false) {
   const toasts = [], theory = [];
-  const ui = {'#questionDialogTitle':{},'#questionDialog':{showModal(){ui.opened++;}},opened:0,shown:0};
+  const ui = {'#questionDialogTitle':{},'#followEditalOrderToggle':{checked:false},'#questionDialog':{showModal(){ui.opened++;}},opened:0,shown:0};
   const ctx = {
     window:{openTheoryForSubjectAndTopic:(...args)=>theory.push(args)},
     document:{querySelector:selector=>ui[selector]},
@@ -31,6 +34,9 @@ function env(errors, bank = [], preparedInvalid = false) {
     activeCampaignErrors:()=>Object.entries(errors).filter(([,e])=>!e.campaignId||e.campaignId==='portal-a'),
     deduplicateAndSanitizeErrorNotebook(){},
     topicKey:normalize,
+    normalizeText:normalize,subjectKey:normalize,canonicalSubjectName:String,
+    strictSubjectMatch:(a,b)=>!b||b==='all'||normalize(a)===normalize(b),
+    ensureNativeQuestionBankLoaded(){},sanitizeAllQuestionsAndErrorsSubjects(){},questionMatchesBoardFilter:()=>true,
     resolveStrictQuestionDiscipline:item=>typeof item==='object'?item.subject:original.subject,
     isQuestionDisciplineEligible:(item, subject='all')=>Boolean(item&&!item.needs_review&&(subject==='all'||normalize(item.subject)===normalize(subject))),
     progressiveQuestions:(items,count)=>items.slice(0,count),

@@ -1,8 +1,5 @@
-// ARQUIVO AUTOCONTIDO PARA COLAR NO EDITOR DO SUPABASE: edital-gemini
-// Gerado por: node scripts/build-supabase-dashboard.mjs
-// Fonte: supabase/functions/edital-gemini/index.ts
-// SHA-256 da fonte: bd8a48d2a458254ec0d483db3ec01cf71022a082b8ec6983e3e6f679e82bd8f8
-// Atualize a fonte e regenere; não exclua os validadores incorporados.
+// Jornada do Caçador — função autocontida para CLI e editor do painel.
+// Cópias para publicação: node scripts/build-supabase-dashboard.mjs
 
 // Análise de editais em trechos + extrator determinístico para editais verticalizados/tabelados:
 // nenhuma página é descartada por amostragem, editais verticalizados extraem 100% das disciplinas

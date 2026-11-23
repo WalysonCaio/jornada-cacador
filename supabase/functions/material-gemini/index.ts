@@ -1,8 +1,5 @@
-// ARQUIVO AUTOCONTIDO PARA COLAR NO EDITOR DO SUPABASE: material-gemini
-// Gerado por: node scripts/build-supabase-dashboard.mjs
-// Fonte: supabase/functions/material-gemini/index.ts
-// SHA-256 da fonte: 8bffccda4daecc2291059d1f463c2f378832d754a582c10ed7f73cc0f4b57f93
-// Atualize a fonte e regenere; não exclua os validadores incorporados.
+// Jornada do Caçador — função autocontida para CLI e editor do painel.
+// Cópias para publicação: node scripts/build-supabase-dashboard.mjs
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -1055,14 +1052,17 @@ function preferredSubject(value: unknown) {
   const key = subjectKey(raw);
   const aliases: Array<[RegExp, string]> = [
     [/^(lingua )?portugues(a)?$/, "Língua Portuguesa"],
-    [/^direito constitucional/, "Direito Constitucional"],
-    [/^direito administrativo/, "Direito Administrativo"],
-    [/^direito processual penal/, "Direito Processual Penal"],
-    [/^direito penal/, "Direito Penal"],
+    [/^(?:nocoes de )?direito constitucional$/, "Direito Constitucional"],
+    [/^(?:nocoes de )?direito administrativo$/, "Direito Administrativo"],
+    [/^(?:direito )?processual penal militar$|^cppm$/, "Direito Processual Penal Militar"],
+    [/^(?:direito )?penal militar$|^cpm$/, "Direito Penal Militar"],
+    [/^direito militar$/, "Direito Militar"],
+    [/^(?:nocoes de )?direito processual penal$|^processo penal$|^cpp$/, "Direito Processual Penal"],
+    [/^(?:nocoes de )?direito penal$|^cp$/, "Direito Penal"],
     [/^(raciocinio logico( matematico)?|matematica e rlm|rlm)$/, "Raciocínio Lógico-Matemático"],
     [/^(informatica|nocao de informatica|nocoes de informatica)$/, "Informática"],
-    [/^historia de pernambuco/, "História de Pernambuco"],
-    [/^(direitos humanos|direito humano)/, "Direitos Humanos"],
+    [/^historia de pernambuco$/, "História de Pernambuco"],
+    [/^(direitos humanos|direito humano)$/, "Direitos Humanos"],
   ];
   return aliases.find(([pattern]) => pattern.test(key))?.[1] ?? raw;
 }
@@ -1070,13 +1070,10 @@ function preferredSubject(value: unknown) {
 function resolveSubject(value: unknown, knownSubjects: string[]) {
   const preferred = preferredSubject(value);
   const key = subjectKey(preferred);
-  const exact = knownSubjects.find((subject) => subjectKey(subject) === key);
+  const exact = knownSubjects.find((subject) => subjectKey(preferredSubject(subject)) === key);
   if (exact) return preferredSubject(exact);
-  const close = knownSubjects.find((subject) => {
-    const known = subjectKey(subject);
-    return key.length >= 8 && known.length >= 8 && (known.includes(key) || key.includes(known));
-  });
-  return close ? preferredSubject(close) : preferred;
+  // A ausência no edital não autoriza fundir CPP/CP ou especialidades militares.
+  return preferred;
 }
 
 function sanitizeQuestions(value: unknown, fallbackTopic: string) {
@@ -1093,7 +1090,7 @@ function sanitizeQuestions(value: unknown, fallbackTopic: string) {
     const rawIdx = raw?.correct_index;
     const letterIdx = typeof rawIdx === "string" ? ({ A: 0, B: 1, C: 2, D: 3, E: 4 } as Record<string, number>)[rawIdx.trim().toUpperCase()] : undefined;
     const numIdx = Number(rawIdx);
-    const hasIdx = rawIdx !== null && rawIdx !== undefined && String(rawIdx).trim() !== "";
+    const hasIdx = (typeof rawIdx === "number" || typeof rawIdx === "string") && String(rawIdx).trim() !== "";
     let correctIndex = letterIdx !== undefined ? letterIdx : (hasIdx && Number.isInteger(numIdx) ? numIdx : -1);
     // Gabarito ausente, inválido ou fora das alternativas: descarta a questão em vez de assumir a letra A.
     if (correctIndex < 0 || correctIndex >= options.length) continue;
@@ -1101,7 +1098,7 @@ function sanitizeQuestions(value: unknown, fallbackTopic: string) {
     const normalizedOptions = options.map((option: string) => option.toLocaleLowerCase("pt-BR"));
     const explanation = cleanGeneratedText(raw?.explanation || "Confira a justificativa no resumo deste tópico.", 3000);
     const difficulty = ["facil", "medio", "dificil"].includes(raw?.difficulty) ? raw.difficulty : "medio";
-    const key = statement.toLocaleLowerCase("pt-BR");
+    const key = JSON.stringify([statement.toLocaleLowerCase("pt-BR"), normalizedOptions]);
     // Descarta questões sobre capas, nomes de professores, agradecimentos, estrutura de páginas ou marcas d'água
     const noiseCheck = `${statement} ${options.join(" ")} ${explanation}`.toLocaleLowerCase("pt-BR");
     if (/@prof|gratid[aã]o|pouca densidade conceitual|nome do professor|marca d['’]água|aparenta ser uma capa|bloco textual|nestas p[aá]ginas espec[ií]ficas|quais p[aá]ginas comp[oõ]em|com base exclusivamente nas p[aá]ginas|documento fornecido|material fornecido|o que se observa no conte[uú]do textual|dados de identifica[cç][aã]o pessoal/i.test(noiseCheck)) continue;
@@ -1109,14 +1106,14 @@ function sanitizeQuestions(value: unknown, fallbackTopic: string) {
     if (new Set(normalizedOptions).size !== options.length || !Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= options.length) continue;
     if (explanation.length < 8 || seen.has(key)) continue;
     seen.add(key);
-    valid.push({ statement, options, correct_index: correctIndex, explanation, difficulty, topic: cleanGeneratedText(raw?.topic || fallbackTopic, 300), origin: raw?.origin === "adaptada_do_pdf" ? "adaptada_do_pdf" : "autoral" });
+    // A saída do modelo é uma proposta. A estrutura validada não certifica o gabarito.
+    valid.push({ statement, options, correct_index: -1, suggested_correct_index: correctIndex,
+      key_source: "ia_sugerido", answer_key_validation: "pendente", answer_unknown: true,
+      explanation, difficulty, topic: cleanGeneratedText(raw?.topic || fallbackTopic, 300),
+      origin: "autoral", source_label: "Questão autoral gerada por IA — aguarda validação" });
   }
-  const target = { facil: 1, medio: 2, dificil: 2 } as Record<string, number>;
-  const balanced = ["facil", "medio", "medio", "dificil", "dificil"].flatMap((difficulty) => {
-    const index = valid.findIndex((question) => question.difficulty === difficulty && target[difficulty]-- > 0);
-    return index >= 0 ? valid.splice(index, 1) : [];
-  });
-  return balanced.length === 5 ? balanced : [...balanced, ...valid].slice(0, 5);
+  // Não descartar silenciosamente o sexto item nem mudar a ordem enviada.
+  return valid;
 }
 
 function sanitizeStrings(value: unknown, maxItems: number, maxLength: number) {
@@ -1274,9 +1271,6 @@ Deno.serve(async (request) => {
   if (!user?.id) return response({ error: "Sessão inválida. Entre novamente." }, 401);
   const personalGeminiKey = await userGeminiKey(user.id);
   const activeGeminiKey = personalGeminiKey || GEMINI_KEY;
-  if (!activeGeminiKey && !DEEPSEEK_KEY && !GROQ_KEY) {
-    return response({ error: "Configure sua chave Gemini em Perfil → Configurações de IA." }, 503);
-  }
   const input = await request.json().catch(() => null);
   const path = String(input?.storage_path ?? ""), campaignId = String(input?.campaign_id ?? ""), documentId = String(input?.document_id ?? ""), title = String(input?.title ?? "PDF enviado");
   if (!path || !campaignId || !documentId) return response({ error: "Dados do documento incompletos." }, 400);
@@ -1286,9 +1280,24 @@ Deno.serve(async (request) => {
     const campaignResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_campaigns?id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&select=id,name,organization&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
     const campaigns = campaignResponse.ok ? await campaignResponse.json() : [];
     if (!Array.isArray(campaigns) || !campaigns[0]?.id) return response({ error: "Este portal não pertence à conta conectada." }, 403);
-    const documentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&storage_path=eq.${encodeURIComponent(path)}&select=id,document_type,metadata&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
+    const documentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${encodeURIComponent(documentId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&storage_path=eq.${encodeURIComponent(path)}&select=id,document_type,title,source_name,metadata&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
     const documents = documentResponse.ok ? await documentResponse.json() : [];
     if (!Array.isArray(documents) || !documents[0]?.id) return response({ error: "O documento não pertence a este portal." }, 403);
+    const documentType = String(documents[0].document_type || "material").toLowerCase();
+    // Nunca reescrever uma prova com um gerador: preserve enunciado, numeração e opções do PDF.
+    const examNamed = /\b(?:prova|simulado|caderno\s+de\s+quest[õo]es|banco\s+de\s+quest[õo]es|quest[õo]es\s+comentadas|\d+\s*quest[õo]es)\b/i.test(`${String(documents[0].title || title)} ${String(documents[0].source_name || "")}`);
+    if (["prova", "simulado"].includes(documentType) || examNamed) return response({
+      error: "Provas e simulados devem ser extraídos do PDF e conferidos na Central de revisão. A geração por IA não substitui as questões originais.",
+      code: "EXAM_DETERMINISTIC_REVIEW_REQUIRED", retryable: false, preserved: true
+    }, 409);
+    if (["edital", "edital_concurso"].includes(documentType)) return response({ error: "Use a análise de edital para este documento.", code: "INVALID_MATERIAL_DOCUMENT_TYPE" }, 400);
+    // A primeira análise é a única gravação deste endpoint. Reanálises passam por revisão explícita.
+    const currentContentResponse = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?source_document_id=eq.${encodeURIComponent(documentId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
+    if (!currentContentResponse.ok) return response({ error: "Não foi possível conferir se já existe conteúdo. Nada foi substituído.", code: "CONTENT_CHECK_FAILED", preserved: true }, 503);
+    const currentContent = await currentContentResponse.json().catch(() => null);
+    if (!Array.isArray(currentContent)) return response({ error: "A conferência de conteúdo não retornou uma resposta válida.", code: "CONTENT_CHECK_FAILED", preserved: true }, 503);
+    if (currentContent.length) return response({ error: "Este documento já possui conteúdo. Use a Central de revisão para comparar e aplicar uma reanálise preservando suas correções.", code: "DOCUMENT_REVIEW_REQUIRED", retryable: false, preserved: true }, 409);
+    if (!activeGeminiKey && !DEEPSEEK_KEY && !GROQ_KEY) return response({ error: "Configure sua chave Gemini em Perfil → Configurações de IA." }, 503);
     const topicsResponse = await fetch(`${SUPABASE_URL}/rest/v1/campaign_topics?campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&select=subject,topic&order=edital_order.asc&limit=500`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
     const editalTopics = topicsResponse.ok ? await topicsResponse.json() : [];
     const knownResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?campaign_id=eq.${encodeURIComponent(campaignId)}&user_id=eq.${encodeURIComponent(user.id)}&processing_status=eq.ready&detected_subject=not.is.null&select=detected_subject&limit=500`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
@@ -1298,8 +1307,7 @@ Deno.serve(async (request) => {
       ...(Array.isArray(knownDocuments) ? knownDocuments.map((item: { detected_subject?: string }) => cleanGeneratedText(item.detected_subject, 200)) : []),
     ].filter(Boolean).map(preferredSubject))];
     const campaignContext = [`Concurso: ${campaigns[0].name}`, campaigns[0].organization ? `Órgão: ${campaigns[0].organization}` : "", Array.isArray(editalTopics) && editalTopics.length ? `Conteúdo do edital: ${editalTopics.map((item: { subject?: string; topic?: string }) => `${item.subject}: ${item.topic}`).join("; ")}` : ""].filter(Boolean).join("\n").slice(0, 16000);
-    const documentType = String(documents[0].document_type || "material");
-    const operation = ["prova", "simulado"].includes(documentType) ? "exam" : "material";
+    const operation = "material";
     await fetch(`${SUPABASE_URL}/rest/v1/processing_jobs?on_conflict=document_id,job_type`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ user_id: user.id, campaign_id: campaignId, document_id: documentId, job_type: operation, status: "processing", attempts: 1, locked_at: new Date().toISOString(), locked_by: "material-gemini" }) });
     const preExtractedPages = await loadBrowserExtractedPages(path, input?.extracted_pages);
     let bytes: Uint8Array | null = null;
@@ -1325,33 +1333,9 @@ Deno.serve(async (request) => {
       }
       fingerprint = await sha256(bytes);
     }
-    const cacheFilter = ["prova", "simulado"].includes(documentType)
-      ? `sha256=eq.${fingerprint}&document_id=neq.${encodeURIComponent(documentId)}&select=document_id&limit=1`
-      : `user_id=eq.${encodeURIComponent(user.id)}&sha256=eq.${fingerprint}&document_id=neq.${encodeURIComponent(documentId)}&select=document_id&limit=1`;
-    const cachedResponse = await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints?${cacheFilter}`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
-    const cached = cachedResponse.ok ? await cachedResponse.json() : [];
-    if (Array.isArray(cached) && cached[0]?.document_id) {
-      const contentResponse = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?source_document_id=eq.${cached[0].document_id}&select=content_type,title,content,source_refs,approved`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
-      const rawExisting = contentResponse.ok ? await contentResponse.json() : [];
-      const existing = Array.isArray(rawExisting)
-        ? rawExisting.filter((row: any) => !isNonDidacticSummary(String(row?.title || ""), String(row?.content?.explanation || ""), Array.isArray(row?.content?.points) ? row.content.points : []))
-        : [];
-      if ( !Boolean(input?.force_reanalyze) && existing.length ) {
-        const copies = existing.map((row: Record<string, unknown>) => ({ ...row, campaign_id: campaignId, user_id: user.id, source_document_id: documentId, source_refs: [{ document_id: documentId, title }], server_verified: true }));
-        const copied = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify(copies) });
-        if (copied.ok) {
-          await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ user_id: user.id, document_id: documentId, sha256: fingerprint, byte_size: byteLength }) });
-          const cachedSubjects = existing.map((row: any) => cleanGeneratedText(row?.content?.subject || "", 200)).filter(Boolean);
-          const cachedSubject = resolveSubject(cachedSubjects[0] || "Conteúdo geral", knownSubjects);
-          const cachedDocumentResponse = await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${cached[0].document_id}&select=metadata&limit=1`, { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
-          const cachedDocuments = cachedDocumentResponse.ok ? await cachedDocumentResponse.json() : [];
-          const cachedCoverage = Array.isArray(cachedDocuments) ? cachedDocuments[0]?.metadata?.coverage : null;
-          await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready", detected_subject: cachedSubject, metadata: { primary_subject: cachedSubject, subjects: [...new Set(cachedSubjects)], analyzed_at: new Date().toISOString(), reused_cache: true, ...(cachedCoverage ? { coverage: cachedCoverage } : {}) } }) });
-          await updateJob(documentId, { status: "completed", last_error: null });
-          return response({ cached: true, provider: "cache", message: "Este PDF já havia sido analisado. O conteúdo foi reutilizado sem consumir nova cota." });
-        }
-      }
-    }
+    // Cache entre documentos desativado: conteúdo e revisões pertencem ao documento original.
+    // O catálogo compartilhado continua sendo servido pela projeção autenticada existente,
+    // não por leituras administrativas globais ou publicação automática no shared_question_bank.
     usage = await reserveUsage(user.id, campaignId, operation, personalGeminiKey ? 30 : 12);
     if (!usage.allowed) {
       await updateJob(documentId, { status: usage.reason === "BUSY" ? "queued" : "retry", available_at: new Date(Date.now() + 15 * 60000).toISOString(), last_error: usage.reason });
@@ -1438,50 +1422,26 @@ Deno.serve(async (request) => {
       source_refs: [{ document_id: documentId, title }],
       server_verified: true
     }));
-    const saved = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(rows) });
-    if (!saved.ok) { console.error("Database", saved.status, await saved.text());await setDocumentStatus(documentId, user.id, "pending");await finishUsage(usage.event_id,"error",undefined,undefined,"CONTENT_SAVE_FAILED");await updateJob(documentId,{status:"retry",last_error:"CONTENT_SAVE_FAILED"});return response({ error: "O conteúdo foi criado, mas não pôde ser salvo.", retryable: true }, 502); }
-    const savedRows = await saved.json().catch(() => []);
-    const newIds = Array.isArray(savedRows) ? savedRows.map((row: { id?: string }) => row.id).filter(Boolean) : [];
-    if (newIds.length) {
-      const cleanup = await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?source_document_id=eq.${documentId}&id=not.in.(${newIds.join(",")})`, { method: "DELETE", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
-      if (!cleanup.ok) {
-        await fetch(`${SUPABASE_URL}/rest/v1/generated_study_content?id=in.(${newIds.join(",")})`, { method: "DELETE", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } });
-        await setDocumentStatus(documentId, user.id, "pending");
-        await finishUsage(usage.event_id, "error", undefined, undefined, "CONTENT_REPLACE_FAILED");
-        await updateJob(documentId, { status: "retry", last_error: "CONTENT_REPLACE_FAILED" });
-        return response({ error: "A nova análise ficou pronta, mas não foi possível substituir a versão anterior com segurança. O conteúdo anterior foi preservado.", retryable: true }, 502);
-      }
-    }
     const subjectCounts = summaries.reduce((counts: Record<string, number>, item: Record<string, unknown>) => { const subject = cleanGeneratedText(item.subject || "Conteúdo", 200);counts[subject] = (counts[subject] || 0) + 1;return counts; }, {});
     const detectedSubject = Object.entries(subjectCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "Conteúdo geral";
-    await fetch(`${SUPABASE_URL}/rest/v1/study_documents?id=eq.${documentId}&user_id=eq.${user.id}`, { method: "PATCH", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ processing_status: "ready", detected_subject: detectedSubject, metadata: { ...(documents[0]?.metadata || {}), primary_subject: detectedSubject, subjects: Object.keys(subjectCounts), analyzed_at: new Date().toISOString(), analysis_plan: inventory, analysis_progress: { stage: "completed", percent: 100, completed_sections: coverage.sections_covered.length, total_sections: coverage.sections_detected.length, updated_at: new Date().toISOString() }, coverage } }) });
-    await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ user_id: user.id, document_id: documentId, sha256: fingerprint, byte_size: byteLength }) });
-    if (["prova", "simulado"].includes(documentType)) {
-      const sharedQuestions = summaries.flatMap((s: any) =>
-        (Array.isArray(s.questions) ? s.questions : []).map((q: any) => ({
-          fingerprint: `${fingerprint.slice(0, 12)}-${String(q.statement || "").slice(-64).replace(/\s+/g, "_").toLowerCase()}`,
-          subject: String(s.subject || detectedSubject || "Conteúdo Geral"),
-          topic: String(q.topic || s.title || "Prova Oficial"),
-          board: String(title || "Prova Oficial").slice(0, 80),
-          difficulty: ["facil", "medio", "dificil"].includes(q.difficulty) ? q.difficulty : "medio",
-          // "oficial" só pode ser usado quando houver gabarito oficial verificado; aqui as questões são
-          // adaptadas do PDF ou criadas pela IA, e o aluno precisa saber a diferença.
-          origin: q.origin === "adaptada_do_pdf" ? "adaptada_do_pdf" : "autoral",
-          statement: String(q.statement || ""),
-          options: Array.isArray(q.options) ? q.options.slice(0, 5) : [],
-          correct_index: Number(q.correct_index) || 0,
-          explanation: String(q.explanation || ""),
-          created_by: user.id,
-        }))
-      ).filter((q: any) => q.statement && q.options.length >= 2 && q.options.length <= 5);
-      if (sharedQuestions.length) {
-        await fetch(`${SUPABASE_URL}/rest/v1/shared_question_bank?on_conflict=fingerprint`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" },
-          body: JSON.stringify(sharedQuestions),
-        }).catch(() => undefined);
-      }
+    const saved = await fetch(`${SUPABASE_URL}/rest/v1/rpc/create_generated_document_content`, {
+      method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ p_document_id: documentId, p_campaign_id: campaignId, p_owner_id: user.id,
+        p_rows: rows, p_detected_subject: detectedSubject,
+        p_document_metadata: { primary_subject: detectedSubject, subjects: Object.keys(subjectCounts), analyzed_at: new Date().toISOString(), analysis_plan: inventory, analysis_progress: { stage: "completed", percent: 100, completed_sections: coverage.sections_covered.length, total_sections: coverage.sections_detected.length, updated_at: new Date().toISOString() }, coverage } })
+    });
+    const savedResult = await saved.json().catch(() => null);
+    if (!saved.ok || !savedResult || savedResult.saved !== rows.length || savedResult.status !== "ready") {
+      const conflict = String(savedResult?.message || savedResult?.error || "").includes("DOCUMENT_REVIEW_REQUIRED");
+      const missing = ["PGRST202", "42883"].includes(String(savedResult?.code || "")) || saved.status === 404;
+      await finishUsage(usage.event_id, "error", undefined, undefined, conflict ? "DOCUMENT_REVIEW_REQUIRED" : "CONTENT_SAVE_FAILED");
+      await updateJob(documentId, { status: "failed", last_error: conflict ? "DOCUMENT_REVIEW_REQUIRED" : missing ? "MIGRATION_V110_REQUIRED" : "CONTENT_SAVE_FAILED" });
+      return response({ error: conflict ? "Outra análise já foi salva para este PDF. O conteúdo existente foi preservado; use a Central de revisão."
+        : missing ? "A gravação segura de materiais exige a migração v110. Nenhum conteúdo anterior foi apagado."
+        : "Não foi possível confirmar a gravação atômica do material. O conteúdo anterior foi preservado.",
+        code: conflict ? "DOCUMENT_REVIEW_REQUIRED" : missing ? "MIGRATION_V110_REQUIRED" : "CONTENT_SAVE_FAILED", preserved: true, retryable: false }, conflict ? 409 : 503);
     }
+    await fetch(`${SUPABASE_URL}/rest/v1/document_fingerprints`, { method: "POST", headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY, "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ user_id: user.id, document_id: documentId, sha256: fingerprint, byte_size: byteLength }) }).catch(() => undefined);
     await finishUsage(usage.event_id, "success", generated.provider, generated.model);
     await updateJob(documentId, { status: "completed", last_error: null });
     return response({ summaries: summaries.length, flashcards: summaries.reduce((n: number, x: { flashcards?: unknown[] }) => n + (x.flashcards?.length ?? 0), 0), questions: summaries.reduce((n: number, x: { questions?: unknown[] }) => n + (x.questions?.length ?? 0), 0), coverage, provider: generated.provider, model: generated.model, key_source: personalGeminiKey ? "personal" : "shared", chunks: generated.chunks || 1 });

@@ -63,11 +63,11 @@ assert.equal(full.omissions.length, 0); assert.equal(full.coverage_confidence, 0
 // 3) gabarito nunca é inventado
 const q = (extra) => ({ statement: "Qual alternativa está correta sobre o tema estudado?", options: ["Alfa", "Beta", "Gama", "Delta"], explanation: "Justificativa completa da resposta.", difficulty: "medio", ...extra });
 assert.equal(sanitizeQuestions([q({ correct_index: 2 })], "t").length, 1);
-assert.equal(sanitizeQuestions([q({ correct_index: "C" })], "t")[0].correct_index, 2);
+assert.equal(sanitizeQuestions([q({ correct_index: "C" })], "t")[0].suggested_correct_index, 2);
 for (const bad of [undefined, null, "", "Z", 9, -1, 4]) assert.equal(sanitizeQuestions([q({ correct_index: bad })], "t").length, 0, `gabarito inválido (${bad}) deveria descartar a questão`);
 // questões de 5 alternativas mantêm a correta
 const five = sanitizeQuestions([{ ...q({ correct_index: 4 }), options: ["A1", "B2", "C3", "D4", "E5"] }], "t");
-assert.equal(five.length, 1); assert.equal(five[0].options[five[0].correct_index], "E5");
+assert.equal(five.length, 1); assert.equal(five[0].options[five[0].suggested_correct_index], "E5");
 
 // 4) anti-ruído: descarta questões sobre @prof, gratidão ou pouca densidade conceitual
 const qNoiseProf = q({ statement: "Sobre o documento, o material faz referência ao perfil @PROFGEDSON?", correct_index: 0 });

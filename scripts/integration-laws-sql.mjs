@@ -1,0 +1,43 @@
+// Executa as migrações reais em PostgreSQL isolado; nenhum acesso a banco remoto.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {PGlite} from '@electric-sql/pglite';
+const read = name => fs.readFileSync(new URL('../supabase/migrations/'+name, import.meta.url), 'utf8');
+const db = new PGlite();
+await db.exec(`create role authenticated; create role anon; create schema auth;
+create table auth.users(id uuid primary key);
+create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('test.uid',true),'')::uuid$$;
+grant usage on schema public,auth to authenticated,anon; grant execute on function auth.uid() to authenticated,anon;`);
+await db.exec(read('20261117130000_v106_internal_laws_bank.sql'));
+const a='00000000-0000-0000-0000-000000000001',b='00000000-0000-0000-0000-000000000002';
+await db.query('insert into auth.users(id) values($1),($2)',[a,b]);
+await db.query("insert into study_laws_bank(id,user_id,discipline,title,articles,is_public) values('law-seed',$1,'Direito','Seleção A','[\"Artigo A\"]',false),('legacy',null,'Direito','Legado preservado','[\"Trecho legado\"]',true)",[a]);
+const migration=read('20261118010000_v109_owned_laws_library.sql');
+await db.exec(migration);
+await db.exec('set role authenticated');
+const uid=async user=>db.query("select set_config('test.uid',$1,false)",[user]);
+const upsert=async(user,title)=>db.query(`insert into study_laws_bank(id,user_id,discipline,title,articles,is_public,source_url,source_version,metadata)
+values('law-seed',$1,'Direito',$2,'["Texto preservado"]',false,'https://www.planalto.gov.br/','r182','{"coverage":"selection"}')
+on conflict(user_id,id) do update set title=excluded.title,articles=excluded.articles,source_url=excluded.source_url,source_version=excluded.source_version,metadata=excluded.metadata`,[user,title]);
+await uid(b);await upsert(b,'Seleção B');
+assert.equal((await db.query('select title from study_laws_bank where id=\'law-seed\'')).rows[0].title,'Seleção B','Segunda conta pode salvar a mesma lei');
+assert.equal((await db.query('select * from study_laws_bank where user_id=$1',[a])).rows.length,0,'Dados privados da outra conta não são retornados');
+await assert.rejects(upsert(a,'Tentativa indevida'),/row-level security/);
+await db.query("update study_laws_bank set title='Não permitido' where user_id=$1",[a]);
+await db.query('delete from study_laws_bank where user_id=$1',[a]);
+await uid(a);
+assert.equal((await db.query("select title from study_laws_bank where id='law-seed'")).rows[0].title,'Seleção A','Update/delete da outra conta não alteram proprietário');
+await upsert(a,'Revisão A');
+const own=(await db.query("select source_url,source_version,metadata,articles from study_laws_bank where id='law-seed'")).rows[0];
+assert.equal(own.source_version,'r182');assert.deepEqual(own.articles,['Texto preservado']);assert.equal(own.metadata.coverage,'selection');
+await assert.rejects(db.query("insert into study_laws_bank(id,user_id,discipline,title,articles) values('law-seed',$1,'Direito','Duplicada','[]')",[a]),/duplicate key/);
+await db.exec('reset role');
+await db.exec(migration);
+assert.equal((await db.query("select count(*)::int as n from study_laws_bank where id='law-seed'")).rows[0].n,2,'Reexecução preserva as duas cópias');
+assert.equal((await db.query("select title,user_id from study_laws_bank where id='legacy'")).rows[0].user_id,null,'Registro legado sem dono não é atribuído a outra conta');
+assert.equal((await db.query("select title from study_laws_bank where id='legacy'")).rows[0].title,'Legado preservado');
+await db.exec('grant select on study_laws_bank to anon;set role anon');await uid('');
+const publicRows=(await db.query('select id from study_laws_bank')).rows;
+assert.deepEqual(publicRows.map(row=>row.id),['legacy'],'Compartilhamento público existente preservado sem abrir as cópias privadas');
+await db.close();
+console.log('OK SQL v109: duas contas com mesmo ID, RLS de leitura/escrita, fonte/versão/conteúdo, legado nulo, compartilhamento e reexecução preservados.');

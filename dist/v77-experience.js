@@ -91,10 +91,9 @@
           const allQ=ALL_QUESTIONS||[];
           const cleanMissionSubj=canonicalSubjectName(curMission.subject||'');
           const subjKey=topicKey(cleanMissionSubj);
-          const subjPool=allQ.filter(x=>topicKey(resolveStrictQuestionDiscipline(x))===subjKey);
+          const subjPool=allQ.filter(x=>isQuestionDisciplineEligible(x,cleanMissionSubj)&&!['sem_gabarito','anulada'].includes(answerKeyStatus(x)));
           const topicMatches=subjPool.filter(x=>questionMatchesTopicFilter(x,topicKey(curMission.name||''),cleanMissionSubj,curMission.name||''));
-          const otherSameSubj=subjPool.filter(x=>!topicMatches.includes(x));
-          const pool=topicMatches.length>=3?topicMatches:[...topicMatches,...otherSameSubj];
+          const pool=topicMatches;
           if(pool.length){
             const targetCount=Math.min(20,pool.length);
             const chosen=typeof balancedQuestions==='function'?balancedQuestions(pool,targetCount):pool.slice(0,targetCount);
@@ -102,6 +101,7 @@
               mode:'battle',
               subject:curMission.subject||'Missão Diária',
               missionId:curMission.id,
+              filterContext:questionSessionFilterContext({subject:curMission.subject||'all',topic:curMission.name||'all'}),
               questions:chosen.map(prepareQuestion),
               current:0,
               correct:0,
@@ -132,17 +132,16 @@
   }
 
   function startQuickSprintBattle(){
-    const pool=(ALL_QUESTIONS||[]);
-    if(!pool.length){
-      openView('report');
-      return toast('Envie um PDF ou gere um caderno na Central de Provas para iniciar o Sprint de 5 minutos.');
-    }
     const mission=(typeof missionPool==='function'?missionPool():[]).find(item=>item.id===state?.daily)||null;
-    const subjPool=mission?pool.filter(x=>topicKey(learningCategory(x.subject))===topicKey(mission.subject)):[];
-    const source=subjPool.length>=3?subjPool:pool;
+    const source=(ALL_QUESTIONS||[]).filter(item=>isQuestionDisciplineEligible(item,mission?.subject||'all')&&(!mission?.name||questionMatchesTopicFilter(item,topicKey(mission.name),mission.subject,mission.name))&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item)));
+    if(!source.length){
+      openView('report');
+      return toast(mission?.subject?`Não há questões validadas de ${mission.subject} para este sprint. Revise as classificações ou adicione questões dessa disciplina.`:'Envie um PDF ou gere um caderno na Central de Provas para iniciar o Sprint de 5 minutos.');
+    }
     activeQuestions={
       mode:'progressive',
       subject:mission?.subject?`Sprint 5 min · ${mission.subject}`:'Sprint Rápido 5 min',
+      filterContext:questionSessionFilterContext({subject:mission?.subject||'all',topic:mission?.name||'all'}),
       questions:progressiveQuestions(source,Math.min(4,source.length)).map(prepareQuestion),
       current:0,
       correct:0,
@@ -2405,11 +2404,16 @@
     for (const q of list) {
       q.origin = 'autoral';
       q.norma_base = q.norma_base || inferLegalNormaBase(q);
-      q.verified_at = q.verified_at || '2026-11';
+      q.content_version = q.content_version || q.verified_at || '2026-11';
+      delete q.verified_at;
+      delete q.verificado_em;
       const opts = q.options;
       if (!Array.isArray(opts) || opts.length < 3 || opts.length > 5 || !Number.isInteger(q.correct_index)) continue;
       if (opts.some(o => orderDependent.test(String(o))) || opts.every(o => numeralOnly.test(String(o).trim()))) continue;
       const expl = String(q.explanation || '');
+      // Bare grouped references ("B, C e D") may refer to assertions rather than option labels.
+      // Preserve their order instead of guessing how to rewrite the commentary.
+      if (/\b[A-E](?:\s*,\s*[A-E])*(?:\s+(?:e|ou)\s+[A-E])\b/.test(expl)) continue;
       const stripped = expl.replace(/Alternativa correta:\s*[A-E]\)[^|]*/g, '').replace(/An[aá]lise das alternativas:[^|]*/g, '');
       if (/\b[A-E]\)/.test(stripped) || /\b(?:alternativa|letra)\s+[A-E]\b/i.test(stripped)) continue;
       let h = 2166136261;
@@ -2423,7 +2427,7 @@
       const remap = letter => letters[newPos[letters.indexOf(letter)]];
       let next = expl.replace(/(Alternativa correta:\s*)([A-E])\)/, (_, lead, l) => `${lead}${remap(l)})`);
       next = next.replace(/(An[aá]lise das alternativas:\s*)([^|]*)/, (_, lead, body) => {
-        const items = body.trim().split(/;\s*(?=[A-E]\)\s)/).map(item => item.replace(/^([A-E])\)/, (__, l) => `${remap(l)})`));
+        const items = body.trim().split(/;\s*(?=[A-E]\)\s)/).map(item => item.replace(/\b([A-E])\)/g, (__, l) => `${remap(l)})`));
         items.sort((a, b) => a.charAt(0).localeCompare(b.charAt(0)));
         return `${lead}${items.join('; ')} `;
       });
@@ -2450,17 +2454,54 @@
   if (typeof window !== 'undefined') setTimeout(syncExternalNativeQuestionBank, 1200);
 
   function questionMatchesBoardFilter(item, boardFilter) {
+    const decision=questionBoardDecision(item);
+    if(decision.needs_review)return false;
     if (!boardFilter || boardFilter === 'all') return true;
-    const target = String(boardFilter).toLocaleLowerCase('pt-BR').trim();
-    const hay = `${item?.board || ''} ${item?.statement || ''} ${item?.explanation || ''} ${item?.topic || ''}`.toLocaleLowerCase('pt-BR');
-    if (target.includes('aocp')) return /aocp/.test(hay) || !item?.board || item?.board === 'Prova Oficial' || /\b105\s*quest/i.test(String(item?.board||''));
-    if (target.includes('cebraspe') || target.includes('cespe')) return /cebraspe|cespe/.test(hay);
-    if (target.includes('fgv')) return /\bfgv\b|fundacao getulio vargas/.test(hay);
-    if (target.includes('upenet') || target.includes('iaupe')) return /upenet|iaupe/.test(hay);
-    if (target.includes('ibfc')) return /\bibfc\b/.test(hay);
-    if (target.includes('idecan')) return /idecan/.test(hay);
-    return hay.includes(target);
+    const normalize=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+    return normalize(canonicalQuestionBoard(boardFilter))===normalize(decision.board);
   }
+  function canonicalQuestionBoard(value){
+    const raw=String(value||'').trim(),key=raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const aliases=[['Instituto AOCP',/\baocp\b/],['Cebraspe',/\b(?:cebraspe|cespe)\b/],['FGV',/\bfgv\b|fundacao getulio vargas/],['UPENET/IAUPE',/\b(?:upenet|iaupe)\b/],['FUNCAB',/\bfuncab\b/],['IBFC',/\bibfc\b/],['IDECAN',/\bidecan\b/],['FCC',/\bfcc\b|fundacao carlos chagas/],...['VUNESP','CESGRANRIO','IADES','IBADE','CONSULPLAN','FUNDATEC'].map(name=>[name,new RegExp(`\\b${name.toLowerCase()}\\b`)])];
+    const matches=aliases.filter(([,pattern])=>pattern.test(key));
+    return matches.length===1?matches[0][0]:raw;
+  }
+  function declaredQuestionBoard(statement){
+    // The leading exam attribution is evidence; incidental references in the
+    // support passage, explanation or options are not a second exam board.
+    const text=String(statement||'').trim().replace(/^(?:quest[aã]o\s*)?\d{1,4}\s*[.)\-–:]\s*/i,'');
+    const match=text.match(/^(?:\(([^)\n]{2,110})\)|\[([^\]\n]{2,110})\]|((?:Instituto\s+)?AOCP|FUNCAB|CEBRASPE|CESPE|FGV|UPENET(?:\s*\/\s*IAUPE)?|IAUPE|IBFC|IDECAN|FCC|VUNESP|CESGRANRIO|IADES|IBADE|CONSULPLAN|FUNDATEC)\s*[-–—:])\s*/i);
+    if(!match)return '';
+    const attribution=String(match[1]||match[2]||match[3]||'').trim();
+    if(!/^(?:(?:instituto\s+)?AOCP|FUNCAB|CEBRASPE|CESPE|FGV(?:\s+Conhecimento)?|UPENET(?:\s*\/\s*IAUPE)?|IAUPE|IBFC|IDECAN|FCC|VUNESP|CESGRANRIO|IADES|IBADE|CONSULPLAN|FUNDATEC)(?:$|\s*(?:\/|[-–—]))/i.test(attribution))return '';
+    const canonical=canonicalQuestionBoard(attribution);
+    // An attribution naming two different boards is not an unambiguous prefix.
+    return canonical===attribution&&/[\/–—-]/.test(attribution)&&!/^UPENET\s*\/\s*IAUPE$/i.test(attribution)?'':canonical;
+  }
+  function questionBoardDecision(item){
+    const declared=canonicalQuestionBoard(item?.board||''),explicit=declaredQuestionBoard(item?.statement||item?.question||'');
+    const human=['manual','manual_revisado','humano','humana','revisado','oficial_verificado'].includes(String(item?.board_source||'').toLowerCase());
+    const comparable=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const conflict=Boolean(explicit&&declared&&comparable(explicit)!==comparable(declared)&&human);
+    return {board:explicit||declared,declared_board:declared,explicit_board:explicit,source:explicit?'statement':human?'manual':'metadata',human,needs_review:conflict||item?.board_needs_review===true};
+  }
+  function resolvedQuestionBoard(item){return questionBoardDecision(item).board}
+  function questionBoardLabel(item,fallback='Banca não informada'){const decision=questionBoardDecision(item);return `${decision.board||fallback}${decision.needs_review?' · banca em revisão':''}`}
+  function applyQuestionBoardEvidence(item){
+    if(!item||typeof item!=='object')return item;
+    const decision=questionBoardDecision(item);
+    if(!decision.explicit_board)return item;
+    if(decision.needs_review){item.board_needs_review=true;item.board_statement=decision.explicit_board;return item}
+    if(decision.human)return item;
+    if(item.board!==decision.explicit_board){if(item.board&&!item.board_declared)item.board_declared=item.board;item.board=decision.explicit_board;item.board_source='statement'}
+    return item;
+  }
+  window.canonicalQuestionBoard=canonicalQuestionBoard;
+  window.declaredQuestionBoard=declaredQuestionBoard;
+  window.questionBoardDecision=questionBoardDecision;
+  window.resolvedQuestionBoard=resolvedQuestionBoard;
+  window.questionBoardLabel=questionBoardLabel;
+  window.applyQuestionBoardEvidence=applyQuestionBoardEvidence;
 
   function subjectIconForName(subj) {
     const k = String(subj || '').toLocaleLowerCase('pt-BR');
@@ -2600,7 +2641,10 @@
   };
 
   function formatStatementWithHighlights(rawText, itemObj) {
-    const parsed = splitQuestionAssociatedText(rawText, itemObj);
+    const textTools=window.JCQuestionText;
+    const displayText=textTools?textTools.normalizeTypography(rawText):rawText;
+    const displayItem=textTools&&itemObj?{...itemObj,associated_text:textTools.normalizeTypography(itemObj.associated_text||'')}:itemObj;
+    const parsed = splitQuestionAssociatedText(displayText, displayItem);
     const hasMissingFigureRef = !parsed.associatedText && /\b(observe a tirinha|analise a charge|observe a charge|na tirinha a seguir|no quadrinho acima|observe a figura abaixo|de acordo com o gr[áa]fico a seguir)\b/i.test(parsed.questionStem);
     const figureWarningHtml = hasMissingFigureRef
       ? `<div class="visualFigureAlert"><span>🖼️ <b>Atenção:</b> Esta questão faz referência a uma imagem/tirinha/gráfico do PDF original.</span><button type="button" class="ghost small" onclick="if(typeof window.skipQuestionBlank==='function')window.skipQuestionBlank()" style="width:auto;padding:4px 10px;font-size:.74rem">⚪ Deixar em Branco (0 pt)</button></div>`
@@ -2649,12 +2693,17 @@
   window.formatStatementWithHighlights = formatStatementWithHighlights;
   window.questionMatchesBoardFilter = questionMatchesBoardFilter;
 
+  const nativeBankLoadedSources = new WeakMap();
   function ensureNativeQuestionBankLoaded() {
-    if (typeof ensureNativePedagogicalCouplingLoaded === 'function') ensureNativePedagogicalCouplingLoaded();
     if (typeof ALL_QUESTIONS === 'undefined' || !Array.isArray(ALL_QUESTIONS)) return;
+    let loaded = nativeBankLoadedSources.get(ALL_QUESTIONS);
+    if (!loaded) { loaded = new WeakSet(); nativeBankLoadedSources.set(ALL_QUESTIONS, loaded); }
+    const pending = NATIVE_POLICE_QUESTION_BANK.filter(item => !loaded.has(item));
+    if (!pending.length) return;
     const existingFp = new Set(ALL_QUESTIONS.map(qItem => questionFingerprint(qItem)));
     let added = 0;
-    for (const item of NATIVE_POLICE_QUESTION_BANK) {
+    for (const item of pending) {
+      loaded.add(item);
       const normalized = {
         ...item,
         subject: canonicalSubjectName(item.subject),
@@ -2674,9 +2723,55 @@
   window.ensureNativeQuestionBankLoaded = ensureNativeQuestionBankLoaded;
 
   // ── r145: Acoplamento Pedagógico Fiel ao Edital + Horas Líquidas Compactas + Ciclo Tático Sincronizado com a Missão ──
+  // Platform help is a separate catalogue, never study data or AI context.
+  function isPlatformManualStudyArtifact(value){
+    if(typeof window.isHunterManualArtifact==='function')return window.isHunterManualArtifact(value);
+    if(typeof window.JornadaManuals?.isManual==='function')return window.JornadaManuals.isManual(value);
+    const fields=Array.isArray(value)?[value[0],value[1],value[3],value[4]]:
+      value&&typeof value==='object'?[value.id,value.category,value.subject,value.title,value.source,value.content_kind]:[value];
+    return fields.some(field=>{
+      const text=String(field||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+      return /^manual-(?:01-ciclo-estudos|02-dominando-questoes|03-revisao-pos-edital|04-guia-passo-a-passo|ciclo|metodo)$/.test(text)||
+        /\b(?:manuais|manual(?: oficial)?) do cacador\b/.test(text)||text==='platform_manual';
+    });
+  }
+  function purgeHunterManualStudyArtifacts(){
+    let removed=0;
+    const purge=list=>{
+      if(!Array.isArray(list))return;
+      for(let i=list.length-1;i>=0;i--)if(isPlatformManualStudyArtifact(list[i])){list.splice(i,1);removed++;}
+    };
+    purge(window.BASIC_SUMMARIES);
+    purge(window.MATERIAL_DEEP_DIVES);
+    if(typeof ALL_SUMMARIES!=='undefined')purge(ALL_SUMMARIES);
+    if(typeof ALL_FLASHCARDS!=='undefined')purge(ALL_FLASHCARDS);
+    if(typeof ALL_QUESTIONS!=='undefined')purge(ALL_QUESTIONS);
+    if(typeof LEARNING_SUBJECTS!=='undefined')purge(LEARNING_SUBJECTS);
+    // Remove only obsolete filter choices, without changing study progress.
+    if(typeof libraryUI!=='undefined'&&libraryUI){
+      for(const field of ['summaryFilter','cardFilter','trailSubject']){
+        for(const [portal,value] of Object.entries(libraryUI[field]||{}))if(isPlatformManualStudyArtifact(value)){
+          if(field==='trailSubject')delete libraryUI[field][portal];else libraryUI[field][portal]='all';
+        }
+      }
+    }
+    if(typeof document!=='undefined'){
+      document.querySelector('#openManuaisCacadorBtn')?.remove();
+      for(const selector of ['#summaryFilter','#cardFilter','#questionSubject','#noteSubject']){
+        const select=document.querySelector(selector);
+        if(!select?.options)continue;
+        const reset=isPlatformManualStudyArtifact(select.value);
+        for(const option of [...select.options])if(isPlatformManualStudyArtifact(option.value)||isPlatformManualStudyArtifact(option.textContent))option.remove();
+        if(reset)select.value=[...select.options].some(option=>option.value==='all')?'all':select.options[0]?.value||'';
+      }
+    }
+    return removed;
+  }
+  window.purgeHunterManualStudyArtifacts=purgeHunterManualStudyArtifacts;
+
   function getActiveEditalSubjectsList(){
     try{
-      const missions=typeof missionPool==='function'?missionPool().filter(m=>m&&m.subject&&!String(m.id||'').startsWith('setup-')):[];
+      const missions=typeof missionPool==='function'?missionPool().filter(m=>m&&m.subject&&!isPlatformManualStudyArtifact(m)&&!String(m.id||'').startsWith('setup-')):[];
       const seen=new Set();
       const list=[];
       for(const m of missions){
@@ -2697,6 +2792,7 @@
 
   function ensureNativePedagogicalCouplingLoaded(){
     try{
+      purgeHunterManualStudyArtifacts();
       const allowedSubjects=getActiveEditalSubjectsList();
       const allowedKeys=new Set(allowedSubjects.map(s=>subjectKey(s)));
       const campName=String((typeof activeCampaign==='function'?activeCampaign()?.name:'')||'').toLowerCase();
@@ -2715,15 +2811,14 @@
       const baseList=[
         ...(typeof window.BASIC_SUMMARIES!=='undefined'&&Array.isArray(window.BASIC_SUMMARIES)?window.BASIC_SUMMARIES:[]),
         ...(typeof window.MATERIAL_DEEP_DIVES!=='undefined'&&Array.isArray(window.MATERIAL_DEEP_DIVES)?window.MATERIAL_DEEP_DIVES:[])
-      ];
+      ].filter(item=>!isPlatformManualStudyArtifact(item));
       if(typeof ALL_SUMMARIES!=='undefined'&&Array.isArray(ALL_SUMMARIES)&&baseList.length){
         const existingIds=new Set(ALL_SUMMARIES.map(s=>String(s?.id||s?.title||'').toLowerCase()));
         for(const item of baseList){
           const rawCat=item.category||item.subject||'Conteúdo Geral';
-          const isManual=/manuais do ca[cç]ador|manual oficial do ca[cç]ador/i.test(`${rawCat} ${item.title||''} ${item.source||''}`);
-          if(isManual)continue;
           const normCat=canonicalSubjectName(rawCat);
           const catKey=subjectKey(normCat);
+          // Study material must belong to the active edital; manuals are separate help.
           if(allowedKeys.size&&!allowedKeys.has(catKey))continue;
           const key=String(item?.id||item?.title||'').toLowerCase();
           if(key&&!existingIds.has(key)){
@@ -2735,16 +2830,12 @@
             });
           }
         }
-        const sf=typeof document!=='undefined'?document.querySelector('#summaryFilter'):null;
-        if(sf){
-          [...sf.options].forEach((o,idx)=>{if(/manuais do ca[cç]ador/i.test(o.value||o.textContent))sf.remove(idx);});
-        }
       }
       if(typeof ALL_FLASHCARDS!=='undefined'&&Array.isArray(window.ALL_FLASHCARDS)&&baseList.length){
         const existingFronts=new Set(ALL_FLASHCARDS.map(c=>String(Array.isArray(c)?c[1]:c?.front||'').toLowerCase()));
         for(const item of baseList){
           const rawCat=item.category||item.subject||'Conteúdo Geral';
-          if(/manuais do ca[cç]ador/i.test(rawCat))continue;
+          if(isPlatformManualStudyArtifact(item))continue;
           const subj=canonicalSubjectName(rawCat);
           if(allowedKeys.size&&!allowedKeys.has(subjectKey(subj)))continue;
           const front=`[${item.title}] Qual o bizu e a regra central cobrada pelas bancas?`;
@@ -3072,26 +3163,8 @@
   }
 
   function ensureManuaisCacadorShortcutBar(){
-    if(typeof document==='undefined')return;
-    const oldBtn=document.querySelector('#openManuaisCacadorBtn');
-    if(oldBtn)oldBtn.remove();
-    return;
-    filters.insertAdjacentHTML('beforeend',`<button type="button" class="ghost small" id="openManuaisCacadorBtn" style="white-space:nowrap;border-color:rgba(250,204,21,0.45);color:#fde047;">📚 Manuais do Caçador (Método)</button>`);
-    document.querySelector('#openManuaisCacadorBtn')?.addEventListener('click',()=>{
-      ensureNativePedagogicalCouplingLoaded();
-      const sf=document.querySelector('#summaryFilter');
-      if(sf){
-        let opt=[...sf.options].find(o=>/manuais do ca[cç]ador/i.test(o.value));
-        if(!opt){
-          opt=new Option('Manuais do Caçador (Método & Estratégia)','Manuais do Caçador (Método & Estratégia)');
-          sf.add(opt);
-        }
-        sf.value=opt.value;
-        sf.dispatchEvent(new Event('change'));
-      }
-      if(typeof renderSummaries==='function')renderSummaries('');
-      if(typeof toast==='function')toast('📚 Manuais do Caçador abertos (Ciclo de Estudos, Engenharia Reversa e Revisão 1-7-30)!');
-    });
+    // Cleanup for tabs that were opened before r175. The only entry is now Help in Menu.
+    if(typeof document!=='undefined')document.querySelector('#openManuaisCacadorBtn')?.remove();
   }
 
   function initAllEstudeiUpgrades(){
@@ -3134,15 +3207,9 @@
   }
 
   function getNativeQuestionsForSubject(subject, boardFilter = 'all') {
-    const sKey = subjectKey(learningCategory(subject));
-    let matches = NATIVE_POLICE_QUESTION_BANK.filter(qItem => subjectKey(learningCategory(qItem.subject)) === sKey);
-    if (!matches.length) matches = NATIVE_POLICE_QUESTION_BANK.slice(0, 6);
-    if (boardFilter && boardFilter !== 'all') {
-      const byBoard = matches.filter(qItem => questionMatchesBoardFilter(qItem, boardFilter));
-      const others = matches.filter(qItem => !questionMatchesBoardFilter(qItem, boardFilter));
-      return [...byBoard, ...others];
-    }
-    return matches;
+    // An empty subject/board intersection must stay empty, including daily missions.
+    return NATIVE_POLICE_QUESTION_BANK.filter(qItem =>
+      isQuestionDisciplineEligible(qItem,subject) && questionMatchesBoardFilter(qItem,boardFilter));
   }
   window.getNativeQuestionsForSubject = getNativeQuestionsForSubject;
 
@@ -3151,26 +3218,86 @@
   function normalizedDifficulty(question){const value=String(question?.difficulty||'medio').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();return value.startsWith('fac')?'facil':value.startsWith('dif')?'dificil':'medio'}
   function topicKey(value){const s=String(value||'');if(!s)return'';const c=topicKey._c||(topicKey._c=new Map());if(s.length<=600){const hit=c.get(s);if(hit!==undefined)return hit}const out=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();if(s.length<=600){if(c.size>15000)c.clear();c.set(s,out)}return out}
 
-  function resolveStrictQuestionDiscipline(qOrStmt,topic='',fallbackSubj='',options=[]){
-    if(qOrStmt&&typeof qOrStmt==='object'){
-      const st=qOrStmt.statement||qOrStmt.question||'';
-      const tp=qOrStmt.topic||topic||'';
-      const fb=qOrStmt.subject||fallbackSubj||'';
-      if(qOrStmt._resolvedSubjCache&&qOrStmt._resolvedSubjFb===fb&&qOrStmt._resolvedSubjTp===tp&&qOrStmt._resolvedSubjStLen===st.length){
-        return qOrStmt._resolvedSubjCache;
+  function repairKnownExamTextArtifacts(value){
+    // Known extraction splits only; joining arbitrary words can change a key.
+    if(window.JCQuestionText)return window.JCQuestionText.normalizeTypography(value);
+    return String(value??'').replace(/\breportag\s+em\b/gi,match=>/^R/.test(match)?'Reportagem':'reportagem').replace(/\b([Ll])e\s+i\b/g,'$1ei');
+  }
+  window.repairKnownExamTextArtifacts=repairKnownExamTextArtifacts;
+  function getQuestionQualityDecision(item){
+    const integrity=window.JCQuestionText?.analyzeQuestion(item);
+    if(integrity?.needs_review)return{needs_source:true,needs_review:true,quality_status:'alternative_leak',reason:integrity.reason,missing_assertions:[],alternative_leaks:integrity.leaks};
+    const statement=String(item?.statement||item?.question||''),associated=String(item?.associated_text||'').trim(),options=Array.isArray(item?.options)?item.options:[];
+    const roman=['I','II','III','IV','V','VI','VII','VIII','IX','X'],required=new Set(),declared=new Set();
+    for(const option of options){
+      const text=String(option||'').replace(/^\s*(?:\([A-E]\)|[A-E][).])\s*/i,'').trim();
+      const remainder=text.replace(/\b(?:apenas|somente|e|ou|a|os|as|itens|afirmativas|assertivas|est[aã]o|s[aã]o|corretos?|corretas?|incorretos?|incorretas?)\b/gi,'').replace(/\b(?:VIII|VII|III|VI|IV|IX|II|I|V|X)\b/g,'').replace(/[\s.,;:()\-–]+/g,'');
+      if(!remainder&&/\b(?:VIII|VII|III|VI|IV|IX|II|I|V|X)\b/.test(text)){
+        for(const match of text.matchAll(/\b(VIII|VII|III|VI|IV|IX|II|I|V|X)\b/g))required.add(match[1]);
+        for(const match of text.matchAll(/\b(VIII|VII|III|VI|IV|IX|II|I|V|X)\s*(?:a|–|-)\s*(VIII|VII|III|VI|IV|IX|II|I|V|X)\b/g)){const from=roman.indexOf(match[1]),to=roman.indexOf(match[2]);if(from>=0&&to>=from)for(let i=from;i<=to;i++)required.add(roman[i]);}
       }
-      const opts=Array.isArray(qOrStmt.options)?qOrStmt.options:options;
-      const res=(typeof window.inferStrictQuestionSubject==='function')
-        ?window.inferStrictQuestionSubject(st,tp,fb,opts)
-        :canonicalSubjectName(fb,`${tp} ${st}`);
-      qOrStmt._resolvedSubjCache=res;
-      qOrStmt._resolvedSubjFb=fb;
-      qOrStmt._resolvedSubjTp=tp;
-      qOrStmt._resolvedSubjStLen=st.length;
-      return res;
     }
-    if(typeof window.inferStrictQuestionSubject==='function')return window.inferStrictQuestionSubject(qOrStmt,topic,fallbackSubj,options);
-    return canonicalSubjectName(fallbackSubj,`${topic} ${qOrStmt}`);
+    const full=`${statement}\n${associated}`;
+    for(const match of full.matchAll(/(?:^|[\s:;.!?])(?:\(\s*)?(VIII|VII|III|VI|IV|IX|II|I|V|X)\s*(?:\)|[.:\-–])\s+(?=\S)/g))declared.add(match[1]);
+    const missing=[...required].filter(value=>!declared.has(value));
+    const parts=typeof window.questionCommandParts==='function'?window.questionCommandParts(statement,associated,item?.command||''):{command:statement,base:associated};
+    const referencesSource=/\b(?:(?:no|nesse|neste|do|desse|deste)\s+(?:excerto|trecho|fragmento)|(?:no|do|ao|o|segundo o|conforme o|com o)\s+texto(?:\s+\d+)?(?!\s+(?:constitucional|legal|normativo|da (?:lei|constituicao)|do (?:artigo|codigo)))|nas?\s+linhas?\s+\d+|nos?\s+versos?\s+\d+)\b/.test(topicKey(statement));
+    const quotedSupport=/[“"‘']([^”"’']{12,})[”"’']/.test(statement)&&!/\b(?:em relacao ao texto|segundo o texto|de acordo com o texto|conforme o texto)\b/.test(topicKey(statement));
+    const hasSupport=associated.length>=12||String(parts.base||'').length>=35||quotedSupport;
+    const explicit=item?.needs_source===true||item?.structure_needs_review===true||item?.review_status==='source_not_matched'||['incomplete','needs_source','source_not_matched'].includes(String(item?.quality_status||''));
+    const needsSource=explicit||missing.length>0||(referencesSource&&!hasSupport);
+    const reason=missing.length?`Faltam as assertivas ${missing.join(', ')} citadas nas alternativas. Confira o PDF antes do treino.`:referencesSource&&!hasSupport?'A questão faz referência a um texto ou excerto não recuperado. Confira o PDF antes do treino.':explicit?(item?.quality_reason||'A fonte ou a estrutura da questão aguarda revisão.'):'Estrutura disponível para conferência.';
+    return{needs_source:needsSource,needs_review:needsSource,quality_status:needsSource?'needs_source':'complete',reason,missing_assertions:missing};
+  }
+  window.getQuestionQualityDecision=getQuestionQualityDecision;
+  const questionDisciplineCache=new WeakMap();
+  function questionDisciplineDecision(item){
+    const st=String(item?.statement||item?.question||''),tp=String(item?.topic||''),associated=String(item?.associated_text||''),command=String(item?.command||'');
+    const classificationSources=[item?.subject_source,item?.classification_source].map(value=>String(value||'').toLowerCase());
+    const source=classificationSources.find(value=>['manual','manual_revisado','humano','humana','revisado'].includes(value))||classificationSources.find(Boolean)||'';
+    const declaredRaw=String(['manual','manual_revisado','humano','humana','revisado'].includes(source)?item?.subject||item?.classification_declared_subject||'':item?.classification_declared_subject||item?.subject||'');
+    const options=Array.isArray(item?.options)?item.options:[];
+    const cached=item&&typeof item==='object'?questionDisciplineCache.get(item):null;
+    const qualitySignature=JSON.stringify([item?.needs_source,item?.structure_needs_review,item?.quality_status,item?.quality_reason,item?.text_integrity_review?.pending]);
+    if(cached&&cached.st===st&&cached.tp===tp&&cached.associated===associated&&cached.command===command&&cached.qualitySignature===qualitySignature&&cached.declaredRaw===declaredRaw&&cached.source===source&&cached.review===Boolean(item?.classification_needs_review)&&cached.topicReview===Boolean(item?.topic_classification_needs_review)&&cached.reason===item?.classification_reason&&cached.reviewStatus===item?.review_status&&cached.category===item?.category&&cached.id===item?.id&&cached.options.length===options.length&&options.every((o,i)=>cached.options[i]===o))return cached.result;
+    const valid=s=>Boolean(s&&s!=='Conteúdo Geral'&&!isInvalidTrailSubject(s));
+    const declared=canonicalSubjectName(declaredRaw);
+    let result;
+    if((typeof isPlatformManualStudyArtifact==='function'&&isPlatformManualStudyArtifact(item))||/^manual-(?:01-ciclo-estudos|02-dominando-questoes|03-revisao-pos-edital|04-guia-passo-a-passo|ciclo|metodo)$/i.test(String(item?.id||''))||/manuais do ca[cç]ador/i.test(`${declaredRaw} ${item?.category||''}`)){
+      result={subject:'Conteúdo Geral',source:'manual_da_plataforma',confidence:0,needs_review:true,reason:'Manual de uso da plataforma; fora dos treinos por disciplina.'};
+    }else if(item?.review_status==='source_not_matched'){
+      result={subject:valid(declared)?declared:'Conteúdo Geral',source:'verificacao_pdf',confidence:0,needs_review:true,reason:'A questão não foi localizada com segurança no PDF; confirme a fonte antes do treino.'};
+    }else{
+      const evidence=typeof window.exclusiveQuestionSubjectEvidence==='function'?window.exclusiveQuestionSubjectEvidence(st,tp,options,associated,command):{subject:'',conflict:false};
+      const inference=typeof window.inferStrictQuestionSubjectDecision==='function'
+        ?window.inferStrictQuestionSubjectDecision(st,tp,'Conteúdo Geral',options,{associated_text:associated,command})
+        :{subject:typeof window.inferStrictQuestionSubject==='function'?window.inferStrictQuestionSubject(st,tp,'Conteúdo Geral',options):canonicalSubjectName('Conteúdo Geral',`${tp} ${st}`),ambiguous:false,confidence:0.75};
+      const detected=inference.subject;
+      const human=['manual','manual_revisado','humano','humana','revisado'].includes(source)&&valid(declared);
+      const subject=human?declared:valid(detected)?detected:(valid(declared)?declared:'Conteúdo Geral');
+      const conflict=valid(declared)&&valid(detected)&&subjectKey(declared)!==subjectKey(detected);
+      const ambiguous=inference.ambiguous===true,queued=item?.classification_needs_review===true||item?.topic_classification_needs_review===true;
+      const blockingConflict=human?Boolean(evidence.subject&&subjectKey(evidence.subject)!==subjectKey(declared)):conflict;
+      result={subject,source:human?'manual':valid(detected)?inference.source||'heuristica':'origem',confidence:blockingConflict||ambiguous?0.35:human?1:valid(detected)?inference.confidence:valid(declared)?0.65:0,
+        needs_review:queued||blockingConflict||(!human&&ambiguous)||evidence.conflict||!valid(subject),candidates:inference.candidates||[],reason:queued?(item.classification_reason||'Classificação ou assunto aguardam revisão.'):blockingConflict?`Disciplina declarada: ${declared}; conteúdo identificado: ${detected}. Confirme antes do treino.`:!human&&ambiguous?'O conteúdo apresenta sinais de mais de uma disciplina; confirme a classificação antes do treino.':!valid(subject)?'Não foi possível identificar uma disciplina com segurança.':human?'Disciplina confirmada por revisão humana.':'Classificação automática; sujeita a conferência.'};
+    }
+    const quality=getQuestionQualityDecision(item);
+    if(quality.needs_review)result={...result,needs_review:true,needs_source:true,quality_status:quality.quality_status,reason:quality.reason};
+    if(item&&typeof item==='object')questionDisciplineCache.set(item,{st,tp,associated,command,qualitySignature,declaredRaw,source,review:Boolean(item?.classification_needs_review),topicReview:Boolean(item?.topic_classification_needs_review),reason:item?.classification_reason,reviewStatus:item?.review_status,options:[...options],category:item.category,id:item.id,result});
+    return result;
+  }
+
+  function isQuestionDisciplineEligible(item,subject='all'){
+    if(!item||item.needs_review||item.board_needs_review||item.review_status==='source_not_matched')return false;
+    if(typeof questionBoardDecision==='function'&&questionBoardDecision(item).needs_review)return false;
+    const decision=questionDisciplineDecision(item);
+    return !decision.needs_review&&strictSubjectMatch(decision.subject,subject);
+  }
+  window.isQuestionDisciplineEligible=isQuestionDisciplineEligible;
+
+  function resolveStrictQuestionDiscipline(qOrStmt,topic='',fallbackSubj='',options=[]){
+    const item=qOrStmt&&typeof qOrStmt==='object'?qOrStmt:{statement:qOrStmt,topic,subject:fallbackSubj,options};
+    return questionDisciplineDecision(item).subject;
   }
   window.resolveStrictQuestionDiscipline=resolveStrictQuestionDiscipline;
 
@@ -3234,22 +3361,33 @@
     const errObj=(typeof state==='object'&&state?.errors&&typeof state.errors==='object')?state.errors:null;
     const campId=(typeof state==='object'&&state?.activeCampaignId)||'default';
     const missionsLen=(typeof state==='object'&&Array.isArray(state?.customCampaign?.missions))?state.customCampaign.missions.length:0;
-    const sig=`${qArr.length}|${errObj?Object.keys(errObj).length:0}|${campId}|${missionsLen}|${qArr[0]?.statement?.slice(0,20)||''}|${qArr[qArr.length-1]?.statement?.slice(0,20)||''}`;
-    if(!force&&sanitizeAllQuestionsAndErrorsSubjects._lastSig===sig)return;
+    const sig=`${qArr.length}|${errObj?Object.keys(errObj).length:0}|${campId}|${missionsLen}|${window.JCQuestionsWorkspace?.revision||0}|${qArr[0]?.statement?.slice(0,20)||''}|${qArr[qArr.length-1]?.statement?.slice(0,20)||''}`;
+    if(!force&&sanitizeAllQuestionsAndErrorsSubjects._lastArray===qArr&&sanitizeAllQuestionsAndErrorsSubjects._lastSig===sig)return;
+    if(typeof purgeHunterManualStudyArtifacts==='function')purgeHunterManualStudyArtifacts();
+    sanitizeAllQuestionsAndErrorsSubjects._lastArray=qArr;
     const isValidFn=typeof window.isValidPedagogicalQuestion==='function'?window.isValidPedagogicalQuestion:(()=>true);
     const byStmt=new Map();
     if(Array.isArray(ALL_QUESTIONS)){
       for(let i=ALL_QUESTIONS.length-1;i>=0;i--){
         const qItem=ALL_QUESTIONS[i];
-        if(!qItem||typeof qItem!=='object'||!isValidFn(qItem)){
+        if(!qItem||typeof qItem!=='object'||(typeof isPlatformManualStudyArtifact==='function'&&isPlatformManualStudyArtifact(qItem))||!isValidFn(qItem,{allowSourceReview:true})){
           ALL_QUESTIONS.splice(i,1);
           continue;
         }
-        const realSubj=resolveStrictQuestionDiscipline(qItem);
+        if(typeof window.applyQuestionTopicEvidence==='function')window.applyQuestionTopicEvidence(qItem);
+        if(typeof window.applyQuestionBoardEvidence==='function')window.applyQuestionBoardEvidence(qItem);
+        const decision=questionDisciplineDecision(qItem);
+        const quality=getQuestionQualityDecision(qItem);
+        if(quality.needs_review){qItem.needs_source=true;qItem.structure_needs_review=true;qItem.quality_status=quality.quality_status;qItem.quality_reason=quality.reason;}
+        const realSubj=decision.subject;
+        if(decision.needs_review&&!qItem.classification_declared_subject)qItem.classification_declared_subject=qItem.subject||'';
+        qItem.classification_needs_review=decision.needs_review;
+        qItem.classification_reason=decision.reason;
         if(realSubj&&!isInvalidTrailSubject(realSubj)&&realSubj!==qItem.subject){
           qItem.subject=realSubj;
         }
-        if(isTopicContaminatedByWrongSubject(qItem.topic,qItem.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
+        if(typeof window.applyQuestionTopicEvidence==='function')window.applyQuestionTopicEvidence(qItem);
+        if(!window.questionTopicDecision?.(qItem)?.human&&!['manual','manual_revisado','humano','humana','revisado'].includes(String(qItem.subject_source||qItem.classification_source||'').toLowerCase())&&isTopicContaminatedByWrongSubject(qItem.topic,qItem.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
           qItem.topic=inferQuestionPedagogicalTopic(qItem.statement,qItem.subject);
         }
         qItem.subject_canonical=subjectKey(qItem.subject||'');
@@ -3270,10 +3408,19 @@
     if(state?.customQuestionsByCampaign&&typeof state.customQuestionsByCampaign==='object'){
       for(const [cId,list] of Object.entries(state.customQuestionsByCampaign)){
         if(!Array.isArray(list))continue;
-        state.customQuestionsByCampaign[cId]=list.filter(qItem=>qItem&&typeof qItem==='object'&&isValidFn(qItem)).map(qItem=>{
-          const realSubj=resolveStrictQuestionDiscipline(qItem);
+        state.customQuestionsByCampaign[cId]=list.filter(qItem=>qItem&&typeof qItem==='object'&&isValidFn(qItem,{allowSourceReview:true})).map(qItem=>{
+          if(typeof window.applyQuestionTopicEvidence==='function')window.applyQuestionTopicEvidence(qItem);
+          if(typeof window.applyQuestionBoardEvidence==='function')window.applyQuestionBoardEvidence(qItem);
+          const decision=questionDisciplineDecision(qItem);
+          const quality=getQuestionQualityDecision(qItem);
+          if(quality.needs_review){qItem.needs_source=true;qItem.structure_needs_review=true;qItem.quality_status=quality.quality_status;qItem.quality_reason=quality.reason;}
+          const realSubj=decision.subject;
+          if(decision.needs_review&&!qItem.classification_declared_subject)qItem.classification_declared_subject=qItem.subject||'';
+          qItem.classification_needs_review=decision.needs_review;
+          qItem.classification_reason=decision.reason;
           if(realSubj&&!isInvalidTrailSubject(realSubj))qItem.subject=realSubj;
-          if(isTopicContaminatedByWrongSubject(qItem.topic,qItem.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
+          if(typeof window.applyQuestionTopicEvidence==='function')window.applyQuestionTopicEvidence(qItem);
+          if(!window.questionTopicDecision?.(qItem)?.human&&!['manual','manual_revisado','humano','humana','revisado'].includes(String(qItem.subject_source||qItem.classification_source||'').toLowerCase())&&isTopicContaminatedByWrongSubject(qItem.topic,qItem.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
             qItem.topic=inferQuestionPedagogicalTopic(qItem.statement,qItem.subject);
           }
           return qItem;
@@ -3283,49 +3430,62 @@
     if(state?.errors&&typeof state.errors==='object'){
       let errChanged=false;
       for(const [errKey,err] of Object.entries(state.errors)){
+        if(typeof isPlatformManualStudyArtifact==='function'&&isPlatformManualStudyArtifact({...err,id:errKey}))continue;
         if(!err||typeof err!=='object'){
           delete state.errors[errKey];
           errChanged=true;
           continue;
         }
+        const evidenceBefore=JSON.stringify([err.topic,err.topic_source,err.topic_classification_source,err.topic_classification_needs_review,err.topic_statement,err.topic_declared,err.board,err.board_source,err.board_needs_review,err.board_statement,err.board_declared]);
+        const humanTopic=window.questionTopicDecision?.(err)?.human===true;
+        const humanBoard=['manual','manual_revisado','humano','humana','revisado','oficial_verificado'].includes(String(err.board_source||'').toLowerCase());
         if(err.question){
           const testObj={statement:err.question,options:Array.isArray(err.options)&&err.options.length>=2?err.options:['Opção A','Opção B'],topic:err.topic||'',associated_text:err.associated_text||''};
-          if(!isValidFn(testObj)){
+          if(!isValidFn(testObj,{allowSourceReview:true})){
             delete state.errors[errKey];
             errChanged=true;
             continue;
           }
         }
-        if(/^(?:edital|regras do edital|instru[cç][oõ]es da prova|converg[eê]ncia lingu[ií]stica)$/i.test(String(err.topic||'').trim())&&!err.associated_text&&String(err.question||'').length<220){
-          delete state.errors[errKey];
+        if(/^(?:edital|regras do edital|instru[cç][oõ]es da prova|converg[eê]ncia lingu[ií]stica)$/i.test(String(err.topic||'').trim())&&!err.associated_text&&String(err.question||'').length<220&&err.needs_source!==true){
+          err.needs_source=true;err.structure_needs_review=true;err.quality_status='needs_source';err.quality_reason='Confira o enunciado completo e a fonte antes de retomar esta revisão.';
           errChanged=true;
-          continue;
         }
         const stKey=topicKey(err.question||'');
         const matchedQ=stKey?byStmt.get(stKey):null;
         if(matchedQ){
           if(err.subject!==matchedQ.subject){err.subject=matchedQ.subject;errChanged=true;}
-          if(matchedQ.topic&&(isTopicContaminatedByWrongSubject(err.topic,matchedQ.subject)||err.topic!==matchedQ.topic)){err.topic=matchedQ.topic;errChanged=true;}
+          if(!humanTopic&&matchedQ.topic&&(isTopicContaminatedByWrongSubject(err.topic,matchedQ.subject)||err.topic!==matchedQ.topic)){err.topic=matchedQ.topic;errChanged=true;}
+          if(!humanTopic)for(const field of ['topic_source','topic_classification_source','topic_declared','topic_statement','topic_classification_needs_review'])if(matchedQ[field]!==undefined)err[field]=matchedQ[field];
+          if(!humanBoard)for(const field of ['board','board_source','board_declared','board_statement','board_needs_review'])if(matchedQ[field]!==undefined)err[field]=matchedQ[field];
           if(Array.isArray(matchedQ.options)&&matchedQ.options.length>=2){
             err.options=[...matchedQ.options];
             err.correct_index=matchedQ.correct_index;
           }
+          for(const field of ['associated_text','command','needs_source','structure_needs_review','quality_status','quality_reason','classification_needs_review','classification_reason'])if(matchedQ[field]!==undefined)err[field]=matchedQ[field];
         }else if(err.question||err.topic){
-          const realErrSubj=resolveStrictQuestionDiscipline(err.question||'',err.topic||'',err.subject||'',err.options||[]);
+          const errorDecision=questionDisciplineDecision(err),realErrSubj=errorDecision.subject;
+          err.classification_needs_review=errorDecision.needs_review;err.classification_reason=errorDecision.reason;
           if(realErrSubj&&!isInvalidTrailSubject(realErrSubj)&&err.subject!==realErrSubj){
             err.subject=realErrSubj;
             errChanged=true;
           }
-          if(isTopicContaminatedByWrongSubject(err.topic,err.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
+          if(!humanTopic&&!['manual','manual_revisado','humano','humana','revisado'].includes(String(err.subject_source||err.classification_source||'').toLowerCase())&&isTopicContaminatedByWrongSubject(err.topic,err.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
             err.topic=inferQuestionPedagogicalTopic(err.question||'',err.subject);
             errChanged=true;
           }
         }
+        if(typeof window.applyQuestionTopicEvidence==='function')window.applyQuestionTopicEvidence(err);
+        if(typeof window.applyQuestionBoardEvidence==='function')window.applyQuestionBoardEvidence(err);
+        if(evidenceBefore!==JSON.stringify([err.topic,err.topic_source,err.topic_classification_source,err.topic_classification_needs_review,err.topic_statement,err.topic_declared,err.board,err.board_source,err.board_needs_review,err.board_statement,err.board_declared]))errChanged=true;
+        const errorQuality=getQuestionQualityDecision(err);
+        if(errorQuality.needs_review){err.needs_source=true;err.structure_needs_review=true;err.quality_status=errorQuality.quality_status;err.quality_reason=errorQuality.reason;}
       }
       if(errChanged&&typeof save==='function')save();
     }
     const afterArr=Array.isArray(ALL_QUESTIONS)?ALL_QUESTIONS:[];
-    sanitizeAllQuestionsAndErrorsSubjects._lastSig=`${afterArr.length}|${errObj?Object.keys(errObj).length:0}|${campId}|${missionsLen}|${afterArr[0]?.statement?.slice(0,20)||''}|${afterArr[afterArr.length-1]?.statement?.slice(0,20)||''}`;
+    sanitizeAllQuestionsAndErrorsSubjects._lastArray=afterArr;
+    sanitizeAllQuestionsAndErrorsSubjects._lastSig=`${afterArr.length}|${errObj?Object.keys(errObj).length:0}|${campId}|${missionsLen}|${window.JCQuestionsWorkspace?.revision||0}|${afterArr[0]?.statement?.slice(0,20)||''}|${afterArr[afterArr.length-1]?.statement?.slice(0,20)||''}`;
   }
   window.sanitizeAllQuestionsAndErrorsSubjects=sanitizeAllQuestionsAndErrorsSubjects;
 
@@ -3423,17 +3583,12 @@
   }
   window.updateLocalTopicMastery=updateLocalTopicMastery;
 
-  function applyXpLocal(amount,reason=''){
-    if(!amount||amount<=0||typeof state!=='object'||!state)return;
-    state.learning=state.learning||{};
-    state.learning.xp=(Number(state.learning.xp)||0)+amount;
-    if(reason){
-      state.learning.xpLog=Array.isArray(state.learning.xpLog)?state.learning.xpLog:[];
-      state.learning.xpLog.push({at:new Date().toISOString(),amount,reason});
-      if(state.learning.xpLog.length>50)state.learning.xpLog.shift();
-    }
+  function applyXpLocal(amount,reason='',eventId){
+    if(!Number.isFinite(amount)||amount<=0||typeof state!=='object'||!state||typeof window.creditLearningXp!=='function')return false;
+    const awarded=window.creditLearningXp(amount,reason,eventId);
     if(typeof save==='function')save();
     if(typeof renderHero==='function')renderHero();
+    return awarded;
   }
   window.applyXpLocal=applyXpLocal;
 
@@ -3492,8 +3647,10 @@
     const b = String((q && (q.bank || q.source_bank)) || "").toLowerCase();
     const src = String((q && (q.material_title || q.source_label || q.catalog || q.source)) || "").toLowerCase();
     if (q && (q.from_community === true || q.is_community === true || src.includes("compartilh") || src.includes("comunidade"))) return "COMUNIDADE";
-    if (o.includes("oficial") || (q && q.official === true)) return "OFICIAL";
+    if (o.includes("oficial") || (q && q.official === true)) return q?.source_url ? "OFICIAL (FONTE INFORMADA)" : "DOCUMENTO IMPORTADO";
     if (o.includes("nativ") || b.includes("nativ") || (q && q.native === true)) return "NATIVO";
+    if (o === 'importada') return 'QUESTÃO IMPORTADA';
+    if (o === 'autoral') return 'QUESTÃO AUTORAL';
     return "IA DO SEU MATERIAL";
   }
   window.questionOriginSeal = questionOriginSeal;
@@ -3506,48 +3663,161 @@
 
   function answerKeyStatus(q) {
     if (q?.annulled || q?.anulada) return "anulada";
-    if (q?.origin === "oficial" && Number.isInteger(Number(q?.correct_index)) && Number(q?.correct_index) >= 0) return "oficial";
-    if (q?.answer_unknown || !Number.isInteger(Number(q?.correct_index)) || Number(q?.correct_index) < 0) return "sem_gabarito";
-    return "oficial";
+    if(window.JCQuestionText?.analyzeQuestion(q).needs_review)return 'sem_gabarito';
+    const raw = q?.correct_index;
+    if (isUnreviewedAiAnswer(q) || q?.answer_unknown || typeof raw === 'boolean' || typeof raw === 'object' || raw === null || raw === undefined || String(raw).trim() === '' ||
+        !Number.isInteger(Number(raw)) || Number(raw) < 0 ||
+        !Array.isArray(q?.options) || q.options.length < 2 || q.options.length > 5 || q.options.some(o => !String(o ?? '').trim()) || new Set(q.options.map(answerOptionText)).size!==q.options.length || Number(raw) >= q.options.length) return "sem_gabarito";
+    if (q?.key_source === 'manual_revisado') return 'revisado';
+    return q?.origin === "oficial" ? "oficial" : "provisorio";
   }
   window.answerKeyStatus = answerKeyStatus;
 
-  function gradeAnswer(q, chosen) {
+  function isUnreviewedAiAnswer(q) {
+    if(q?.key_source==='manual_revisado'&&q?.answer_key_validation==='revisado')return false;
+    return (q?.key_source === 'ia_sugerido' && q?.answer_key_validation !== 'revisado') ||
+      /^\s*(?:🤖\s*)?\[?Gabarito sugerido (?:pela|por) IA\b/i.test(String(q?.explanation||''));
+  }
+  window.isUnreviewedAiAnswer = isUnreviewedAiAnswer;
+
+  function answerKeyExportExplanation(item){
+    const explanation=String(item?.explanation||'').trim();
+    return isUnreviewedAiAnswer(item)&&!/^\s*(?:🤖\s*)?\[?Gabarito sugerido (?:pela|por) IA\b/i.test(explanation)
+      ?'🤖 [Gabarito sugerido pela IA — validação humana pendente] '+explanation:explanation;
+  }
+  window.answerKeyExportExplanation=answerKeyExportExplanation;
+
+  function answerKeyDetails(q) {
     const status = answerKeyStatus(q);
-    if (status === "anulada") return { status, scored: false };
-    if (status !== "oficial") return { status, scored: false, chosen };
-    const ok = Number(chosen) === Number(q.correct_index);
-    return { status, scored: true, ok };
+    const pendingAi = isUnreviewedAiAnswer(q);
+    const labels = {anulada:'Questão anulada',sem_gabarito:pendingAi?'Sugestão da IA — aguarda validação humana':'Sem gabarito válido',revisado:'Gabarito revisado por você',oficial:q?.key_source === 'oficial_definitivo'?'Gabarito oficial definitivo':q?.key_source === 'oficial_preliminar'?'Gabarito oficial preliminar':'Gabarito do documento',provisorio:'Gabarito autoral — revisão recomendada'};
+    return {status,pendingAi,scored:!['anulada','sem_gabarito'].includes(status),label:labels[status],source:String(q?.key_reference || q?.source_url || q?.source_label || '')};
+  }
+  window.answerKeyDetails = answerKeyDetails;
+
+  function gradeAnswer(q, chosen) {
+    const quality=typeof getQuestionQualityDecision==='function'?getQuestionQualityDecision(q):{needs_review:false};
+    if(quality.needs_review)return{status:'needs_source',scored:false,chosen,quality};
+    const status = answerKeyStatus(q);
+    if (status === "anulada" || status === "sem_gabarito") return { status, scored: false, chosen };
+    if (typeof chosen === 'boolean' || typeof chosen === 'object' || chosen === null || chosen === undefined || String(chosen).trim() === '' ||
+        !Number.isInteger(Number(chosen)) || Number(chosen) < 0 ||
+        (Array.isArray(q?.options) && Number(chosen) >= q.options.length)) return { status, scored: false, chosen };
+    return { status, scored: true, ok: Number(chosen) === Number(q.correct_index) };
   }
   window.gradeAnswer = gradeAnswer;
 
+  function answerOptionText(value) {
+    const text=(window.JCQuestionText?window.JCQuestionText.normalizeTypography(value):String(value??'')).normalize('NFC').replace(/\s+/g,' ').trim();
+    return text.length<=3?text:text.replace(/^(?:alternativa\s+|letra\s+|item\s+)?(?:\([A-Ea-e]\)|\[[A-Ea-e]\]|[A-Ea-e]\s*[\)\-–—:]|[A-Ea-e]\.\s+)\s*(?=\S)/i,'');
+  }
+  function answerOptionsSignature(item) { return JSON.stringify((item?.options||[]).map(answerOptionText).sort()); }
+  function answerOverrideMatchesOptions(override,item){
+    if(!override||typeof override.options_signature!=='string')return false;
+    const current=answerOptionsSignature(item);
+    if(override.options_signature===current)return true;
+    // Older personal reviews stored PDF spacing literally. Accept only the
+    // same complete alternatives after deterministic typography normalization.
+    try{const previous=JSON.parse(override.options_signature);return Array.isArray(previous)&&previous.every(value=>typeof value==='string')&&answerOptionsSignature({options:previous})===current;}catch{return false;}
+  }
+  window.answerOptionText=answerOptionText;
+  window.answerOptionsSignature=answerOptionsSignature;
+
+  function applyReviewedAnswerKey(item, newIndex, reference = '') {
+    if (!item || !Array.isArray(item.options) || !Number.isInteger(newIndex) || newIndex < 0 || newIndex >= item.options.length) return false;
+    const optionTexts=item.options.map(answerOptionText);
+    if(optionTexts.some(text=>!text)||new Set(optionTexts).size!==optionTexts.length)return false;
+    const previous = item.correct_index;
+    const previousSource = item.key_source || (item.origin === 'oficial' ? 'documento' : 'autoral');
+    item.answer_key_history = [...(Array.isArray(item.answer_key_history) ? item.answer_key_history : []), {previous_index:previous,previous_source:previousSource,previous_explanation:String(item.explanation||'').slice(0,8000),correct_index:newIndex,at:new Date().toISOString(),reference:String(reference).trim()}].slice(-20);
+    if(Number(previous)!==newIndex)item.explanation_needs_review=true;
+    item.correct_index = newIndex;
+    item.key_source = 'manual_revisado';
+    item.answer_key_validation = 'revisado';
+    item.key_reference = String(reference).trim();
+    delete item.answer_unknown;
+    delete item.annulled;
+    delete item.anulada;
+    if(typeof state!=='undefined'&&typeof questionFingerprint==='function'){
+      state.questionAnswerOverrides=state.questionAnswerOverrides||{};
+      state.questionAnswerOverrides[questionFingerprint(item)]={correct_answer:answerOptionText(item.options[newIndex]),options_signature:answerOptionsSignature(item),key_source:item.key_source,answer_key_validation:item.answer_key_validation,key_reference:item.key_reference,answer_key_history:item.answer_key_history,explanation_needs_review:item.explanation_needs_review,answer_unknown:false,annulled:false,anulada:false};
+    }
+    return true;
+  }
+  window.applyReviewedAnswerKey = applyReviewedAnswerKey;
+
+  function recordBoardQuestionAttempt(item,chosen) {
+    const grading=gradeAnswer(item,chosen);
+    if(!grading.scored)return false;
+    const boardDecision=typeof questionBoardDecision==='function'?questionBoardDecision(item):null;
+    if(boardDecision?.needs_review)return false;
+    const boardValue=boardDecision?.board||item.board||'Banca não informada';
+    const raw=String(boardValue).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const board=/aocp/.test(raw)?'Instituto AOCP':/cebraspe|cespe/.test(raw)?'Cebraspe':/\bfgv\b/.test(raw)?'FGV':/upenet|iaupe/.test(raw)?'UPENET/IAUPE':String(boardValue);
+    const subject=String(item.subject||'Disciplina não informada');
+    const origin=item.origin==='oficial'?'documento':'autoral';
+    const campaign=String(state?.activeCampaignId||'default');
+    state.questionBoardStatsByCampaign=state.questionBoardStatsByCampaign||{};
+    const stats=state.questionBoardStatsByCampaign[campaign]||(state.questionBoardStatsByCampaign[campaign]={});
+    const key=JSON.stringify([board,subject,origin]);
+    const bucket=stats[key]||(stats[key]={board,subject,origin,total:0,correct:0,firstTotal:0,firstCorrect:0,timedTotal:0,totalMilliseconds:0,seen:{}});
+    const fp='$'+questionFingerprint(item);
+    bucket.seen=bucket.seen||{};
+    const first=!Object.hasOwn(bucket.seen,fp);
+    bucket.total++;
+    if(grading.ok)bucket.correct++;
+    if(first){bucket.firstTotal++;if(grading.ok)bucket.firstCorrect++;bucket.seen[fp]=true;}
+    const milliseconds=Date.now()-Number(item._answerStartedAt||0);
+    if(item._answerStartedAt&&milliseconds>=0&&milliseconds<=12*60*60*1000){bucket.timedTotal++;bucket.totalMilliseconds+=milliseconds;}
+    bucket.lastAt=new Date().toISOString();
+    return true;
+  }
+  window.recordBoardQuestionAttempt=recordBoardQuestionAttempt;
+
+  function questionBoardPerformanceRows(subject='all') {
+    return Object.values(state?.questionBoardStatsByCampaign?.[String(state?.activeCampaignId||'default')]||{})
+      .filter(row=>row.total>0&&(subject==='all'||row.subject===subject))
+      .map(row=>({...row,rate:Math.round(row.correct/row.total*100),firstRate:row.firstTotal?Math.round(row.firstCorrect/row.firstTotal*100):null,repeatTotal:row.total-row.firstTotal,averageSeconds:row.timedTotal?Math.round(row.totalMilliseconds/row.timedTotal/1000):null,lowSample:row.firstTotal<30}))
+      .sort((a,b)=>b.total-a.total||a.board.localeCompare(b.board,'pt-BR'));
+  }
+  window.questionBoardPerformanceRows=questionBoardPerformanceRows;
+
   function classifyQuestion(q) {
-    const locked = ["edital", "prova", "manual"].includes(q?.subject_source);
-    if (locked && q?.subject && !/geral/i.test(q.subject)) {
-      return { subject: q.subject, source: q.subject_source, confidence: 1 };
-    }
-    if (q?.subject && q.subject !== "Conteúdo Geral" && q.subject !== "Geral") {
-      return { subject: q.subject, source: "origem", confidence: 1 };
-    }
-    return { subject: q?.subject || "Conteúdo Geral", source: "padrao", confidence: 0 };
+    return questionDisciplineDecision(q);
   }
   window.classifyQuestion = classifyQuestion;
 
+  function missionRewardContext(){
+    const sessionOwnerId=cloudSession?.user?.id||null;
+    const ownerId=String(sessionOwnerId||state?._ownerUserId||'guest');
+    const campaignId=String(state?.activeCampaignId||'default');
+    const dbId=String((typeof activeCampaign==='function'&&activeCampaign()?.dbId)||'');
+    const resetEpoch=Number(state?._resetEpoch||0);
+    const accessToken=cloudSession?.access_token;
+    const current=()=>String(cloudSession?.user?.id||state?._ownerUserId||'guest')===ownerId&&(!sessionOwnerId||cloudSession?.user?.id===sessionOwnerId)&&(!state?._ownerUserId||String(state._ownerUserId)===ownerId)&&String(state?.activeCampaignId||'default')===campaignId&&String((typeof activeCampaign==='function'&&activeCampaign()?.dbId)||'')===dbId&&Number(state?._resetEpoch||0)===resetEpoch;
+    return {ownerId,campaignId,dbId,resetEpoch,accessToken,current};
+  }
+
   async function completeMissionHonestServer(missionId,subject,correct,total,isBoss=false){
-    const safeTotal=Math.max(0,Number(total)||0);
-    const safeCorrect=safeTotal>0?Math.max(0,Math.min(safeTotal,Number(correct)||0)):0;
+    const context=missionRewardContext();
+    if(!context.current())return null;
+    const count=value=>(typeof value==='number'||(typeof value==='string'&&value.trim()!==''))&&Number.isSafeInteger(Number(value))&&Number(value)>=0;
+    const valid=count(total)&&count(correct)&&Number(correct)<=Number(total);
+    const safeTotal=valid?Number(total):0;
+    const safeCorrect=valid?Number(correct):0;
     const localScore=safeTotal>0?Number(((safeCorrect/safeTotal)*100).toFixed(1)):0;
     const localPerfXp=safeTotal>0?Math.min(60,Math.floor(localScore*0.6)):0;
     const masteryBonus=(safeTotal>=5&&localScore>=70)?20:0;
     const bossBonus=(isBoss&&safeTotal>=5&&localScore>=70)?200:0;
     const fallbackObj={base_xp:40,performance_xp:localPerfXp,mastery_bonus:masteryBonus,boss_bonus:bossBonus,total_xp:40+localPerfXp+masteryBonus+bossBonus,score:localScore,questions_total:safeTotal,questions_correct:safeCorrect};
-    if(!cloudSession?.access_token||!navigator.onLine)return fallbackObj;
-    const campaignId=(typeof activeCampaign==='function'&&activeCampaign()?.id)||state?.activeCampaignId||'default';
+    if(!context.accessToken||!navigator.onLine)return fallbackObj;
+    // The mastery RPCs use the local text ID; freeze it while guarding the database identity too.
+    const campaignId=context.campaignId;
     try{
       const res=await fetch(`${SUPABASE_URL}/rest/v1/rpc/complete_mission_honest`,{
         method:'POST',
         headers:{
-          ...authHeaders(cloudSession.access_token),
+          ...authHeaders(context.accessToken),
           'Content-Type':'application/json'
         },
         body:JSON.stringify({
@@ -3559,10 +3829,19 @@
           p_is_boss:Boolean(isBoss)
         })
       });
+      if(!context.current())return null;
       if(!res.ok)return fallbackObj;
-      return (await res.json())||fallbackObj;
+      const receipt=await res.json();
+      if(!context.current())return null;
+      // Only the requested, valid counts can justify a performance reward.
+      if(!receipt||Number(receipt.questions_total)!==safeTotal||Number(receipt.questions_correct)!==safeCorrect)return fallbackObj;
+      const bounded=(value,max)=>typeof value==='number'&&Number.isFinite(value)&&value>=0?Math.min(Math.floor(value),max):0;
+      const performance=bounded(receipt.performance_xp,localPerfXp);
+      const mastery=bounded(receipt.mastery_bonus,masteryBonus);
+      const boss=bounded(receipt.boss_bonus,bossBonus);
+      return {...fallbackObj,performance_xp:performance,mastery_bonus:mastery,boss_bonus:boss,total_xp:40+performance+mastery+boss};
     }catch(_e){
-      return fallbackObj;
+      return context.current()?fallbackObj:null;
     }
   }
   window.completeMissionHonestServer=completeMissionHonestServer;
@@ -3570,16 +3849,35 @@
   async function finalizeDailyMissionWithHonestXp(){
     const missionId=state?.daily;
     if(!missionId)return;
+    const context=missionRewardContext();
+    if(!context.current())return;
     const mission=(typeof missionPool==='function'?missionPool():[]).find(m=>m.id===missionId);
+    if(!mission)return;
+    const receiptKey=`mission-performance:${JSON.stringify([context.ownerId,context.dbId||context.campaignId,context.resetEpoch,String(missionId)])}`;
+    const pending=finalizeDailyMissionWithHonestXp.pending||(finalizeDailyMissionWithHonestXp.pending=new Set());
+    if(pending.has(receiptKey)||state?.learning?.missionReceipts?.[receiptKey])return;
     const subject=mission?.subject||'geral';
     const tracker=state?.dailyTracker||{};
-    const total=Math.max(0,Number(tracker.questionsAnswered||0));
-    const correct=total>0?Math.max(0,Math.min(total,Number(tracker.questionsCorrect||0))):0;
+    const count=value=>(typeof value==='number'||(typeof value==='string'&&value.trim()!==''))&&Number.isSafeInteger(Number(value))&&Number(value)>=0;
+    const trackerMatches=(!tracker.missionId||String(tracker.missionId)===String(missionId))&&(!tracker.campaignId||[context.campaignId,context.dbId].includes(String(tracker.campaignId)));
+    const validCounts=trackerMatches&&count(tracker.questionsAnswered)&&count(tracker.questionsCorrect)&&Number(tracker.questionsCorrect)<=Number(tracker.questionsAnswered);
+    const total=validCounts?Number(tracker.questionsAnswered):0;
+    const correct=validCounts?Number(tracker.questionsCorrect):0;
     const isBoss=Boolean(state?.bosses?.[missionId]);
+    pending.add(receiptKey);
+    try{
     if(typeof complete==='function')complete(missionId);
+    if(!context.current())return;
     const server=await completeMissionHonestServer(missionId,subject,correct,total,isBoss);
-    const bonus = Math.max(0, (Number(server?.performance_xp) || 0) + (Number(server?.mastery_bonus) || 0));
-    if (bonus > 0) applyXpLocal(bonus, "bonus_desempenho_missao");
+    if(!server||!context.current())return;
+    // The mission base is already derived from done; only this one-time performance event is credited.
+    state.learning=state.learning||{};
+    state.learning.missionReceipts=state.learning.missionReceipts||{};
+    if(state.learning.missionReceipts[receiptKey])return;
+    state.learning.missionReceipts[receiptKey]={at:new Date().toISOString(),missionId:String(missionId),campaignId:context.dbId||context.campaignId,total,correct};
+    const bonus = server.performance_xp + server.mastery_bonus;
+    if (bonus > 0) applyXpLocal(bonus, "bonus_desempenho_missao", receiptKey);
+    else if(typeof save==='function')save();
     const ac = Number(server?.questions_correct) || 0;
     const n = Number(server?.questions_total) || 0;
     const pct = Number(server?.score) || 0;
@@ -3590,6 +3888,7 @@
     toast(`Recibo da missão: ${ac}/${n} (${pct}%). XP extra: desempenho +${perf}, domínio +${mast}${bossXp ? `, chefe +${bossXp}` : ""}. A base da missão continua no XP do app. 0% de acerto não gera bônus.${sampleNote}`);
     if(typeof renderHero==='function')renderHero();
     if(cloudSession&&navigator.onLine&&typeof pushCloudState==='function')pushCloudState();
+    }finally{pending.delete(receiptKey);}
   }
   window.finalizeDailyMissionWithHonestXp=finalizeDailyMissionWithHonestXp;
 
@@ -3628,47 +3927,129 @@
     return String(text||'').trim();
   };
 
-  const _TOPIC_STOP_WORDS=new Set(['para','como','sobre','entre','pelo','pela','seus','suas','nocoes','conceitos','estudo','aspectos','compreensao','estruturas','disposicoes','gerais','preliminares','capitulo','titulo','secao','artigo','artigos','republica','federativa','brasil']);
   const _TOPIC_REF_CACHE=new Map();
-  function _getParsedTopicRef(topicVal,rawTopicLabel){
-    const ck=`${topicVal}|${rawTopicLabel}`;
-    let cached=_TOPIC_REF_CACHE.get(ck);
+  function normalizedQuestionTopic(value){
+    return topicKey(value).replace(/^\d+(?:\s+\d+)*\s+(?=[a-z])/,'').replace(/\bart(?:igos?)?s?\b/g,'art').replace(/\s+/g,' ').trim();
+  }
+  function topicArticleReferences(value){
+    const text=normalizedQuestionTopic(value),articles=new Set();
+    for(const match of text.matchAll(/\bart\s+(\d{1,3})(?:\s+(?:a|ao|ate|e)\s+(\d{1,3}))?/g)){
+      const first=Number(match[1]),last=Number(match[2]||match[1]);
+      if(last>=first&&last-first<=150)for(let n=first;n<=last;n++)articles.add(n);
+    }
+    return articles;
+  }
+  function constitutionalTopicFamilies(value){
+    const text=normalizedQuestionTopic(value),articles=topicArticleReferences(text),families=new Set();
+    if(/\b(?:reparticao de competencias|organizacao do estado|organizacao politico administrativa|competencias? (?:constitucionais?|legislativas?|comuns?|concorrentes?|privativas?|exclusivas?))\b/.test(text)||[21,22,23,24].some(n=>articles.has(n)))families.add('competencias');
+    if(/\b(?:direitos e deveres individuais|direitos e garantias individuais|direitos individuais|remedios constitucionais|habeas corpus|habeas data|mandado de seguranca|mandado de injuncao|acao popular)\b/.test(text)||articles.has(5))families.add('direitos');
+    if(/\b(?:principios fundamentais|fundamentos da republica|objetivos fundamentais)\b/.test(text)||[1,2,3,4].some(n=>articles.has(n)))families.add('principios');
+    if(/\b(?:seguranca publica|forcas armadas)\b/.test(text)||articles.has(144))families.add('seguranca');
+    if(/\b(?:direitos sociais|direitos dos trabalhadores)\b/.test(text)||[6,7,8,9,10,11].some(n=>articles.has(n)))families.add('sociais');
+    return families;
+  }
+  function _getParsedTopicRef(topicVal,rawTopicLabel=''){
+    // The option value is complete; its rendered label can be truncated or carry a count.
+    const refText=normalizedQuestionTopic(topicVal||rawTopicLabel);
+    let cached=_TOPIC_REF_CACHE.get(refText);
     if(cached)return cached;
-    const refText=topicKey(`${rawTopicLabel||''} ${topicVal}`).replace(/^\d+\s*/,'').trim();
-    const isArt1=/\bart\s*1\b.*\b4\b|\bprincipios fundamentais\b/.test(refText);
-    const isArt5=/\bart\s*5\b|\bdireitos e deveres individuais\b|\bdireitos e garantias\b/.test(refText);
-    const isArt144=/\bart\s*144\b|\bseguranca publica\b/.test(refText);
-    const isRlm=/\bproposic|\bconectiv|\bestruturas logicas/.test(refText);
-    const keywords=refText.split(/\s+/).filter(w=>w.length>=4&&!_TOPIC_STOP_WORDS.has(w));
-    cached={refText,isArt1,isArt5,isArt144,isRlm,keywords};
+    const articles=topicArticleReferences(refText),families=constitutionalTopicFamilies(refText);
+    if(!articles.size&&families.has('competencias')){
+      if(/\bconcorrentes?\b/.test(refText))articles.add(24);
+      else if(/\bprivativas?\b/.test(refText))articles.add(22);
+      else if(/\bcomuns?\b/.test(refText))articles.add(23);
+      else if(/\bexclusivas?\b/.test(refText))articles.add(21);
+    }
+    const remedy=/\b(?:remedios constitucionais|habeas corpus|habeas data|mandado de seguranca|mandado de injuncao|acao popular)\b/.test(refText);
+    const remedyKinds=['habeas corpus','habeas data','mandado de seguranca','mandado de injuncao','acao popular'].filter(kind=>` ${refText} `.includes(` ${kind} `));
+    const scopeWords={competencias:'organizacao estado politico administrativa municipios reparticao competencias competencia constitucionais constitucional legislativas legislativa comuns comum concorrentes concorrente privativas privativa exclusivas exclusiva uniao estados distrito federal',direitos:'direitos direito deveres individuais individual coletivos coletivo garantias fundamentais remedios constitucionais habeas corpus data mandado seguranca injuncao acao popular',sociais:'direitos direito sociais social trabalhadores trabalhador',principios:'principios fundamentais fundamentos republica objetivos',seguranca:'seguranca publica forcas armadas'};
+    const allowed=new Set(`art a ao ate e da do das dos de o os as ${scopeWords[[...families][0]]||''}`.split(' '));
+    const semanticScope=families.size===1&&refText.split(' ').every(word=>/^\d+$/.test(word)||allowed.has(word))&&!(remedyKinds.length&&/\b(?:coletivos?|individuais|individual|preventivos?|repressivos?)\b/.test(refText));
+    cached={refText,articles,families,remedy,remedyKinds,semanticScope};
     if(_TOPIC_REF_CACHE.size>2000)_TOPIC_REF_CACHE.clear();
-    _TOPIC_REF_CACHE.set(ck,cached);
+    _TOPIC_REF_CACHE.set(refText,cached);
     return cached;
   }
+  function topicTargetAcceptsEvidence(target,evidence,strictScope=true){
+    if(!evidence?.family||!target.families.has(evidence.family))return false;
+    if(strictScope&&!target.semanticScope)return false;
+    if(target.remedy&&!evidence.remedy&&strictScope)return false;
+    if(target.remedyKinds.length){
+      if(!evidence.remedyKinds?.length){if(strictScope)return false}
+      else if(!evidence.remedyKinds.every(kind=>target.remedyKinds.includes(kind)))return false;
+    }
+    if(target.articles.size){
+      if(!evidence.articles?.length)return !strictScope;
+      if(!evidence.articles.every(n=>target.articles.has(n)))return false;
+    }
+    return true;
+  }
+  function constitutionalQuestionTopicEvidence(item){
+    const statement=String(item?.statement||item?.question||''),associated=String(item?.associated_text||'');
+    const parts=typeof window.questionCommandParts==='function'?window.questionCommandParts(statement,associated,item?.command||''):null;
+    const rawCommand=item?.command||(associated||/^Texto[- ]base\s*:/i.test(statement)?parts?.command:statement)||statement;
+    const command=normalizedQuestionTopic(rawCommand),constitutional=/\b(?:constituicao|constitucional|cf(?: 88| 1988)?|carta magna)\b/.test(command);
+    const articles=constitutional?[...topicArticleReferences(command)].filter(n=>!new RegExp(`\\bart ${n}\\s+(?:d[ao]s? (?:lei|codigo)|(?:cp|cpp)\\b)`).test(command)):[];
+    const candidates=[];
+    const add=(family,topic,refs,remedy=false)=>{const found=candidates.find(e=>e.family===family);if(found){found.articles=[...new Set([...found.articles,...refs])];found.remedy=found.remedy||remedy;return}candidates.push({family,topic,articles:refs,remedy,remedyKinds:remedy?['habeas corpus','habeas data','mandado de seguranca','mandado de injuncao','acao popular'].filter(kind=>` ${command} `.includes(` ${kind} `)):[],source:'command'})};
+    const concurrent=/\blegislar concorrentemente\b|\bcompetencias? concorrentes?\b/.test(command);
+    const privateLaw=/\blegislar privativamente\b|\bcompetencias? privativas?\b[\s\S]{0,90}\b(?:uniao|estados|distrito federal|municipios)\b|\b(?:uniao|estados|distrito federal|municipios)\b[\s\S]{0,90}\bcompetencias? privativas?\b/.test(command);
+    const common=/\bcompetencias? comuns?\b[\s\S]{0,90}\b(?:uniao|estados|distrito federal|municipios)\b|\b(?:uniao|estados|distrito federal|municipios)\b[\s\S]{0,90}\bcompetencias? comuns?\b/.test(command);
+    const exclusive=/\bcompetencias? exclusivas?\b[\s\S]{0,90}\buniao\b|\buniao\b[\s\S]{0,90}\bcompetencias? exclusivas?\b/.test(command);
+    const competenceArticles=articles.filter(n=>n>=21&&n<=24);
+    if(concurrent||privateLaw||common||exclusive||competenceArticles.length)add('competencias','Organização do Estado e Repartição de Competências (Arts. 21 a 24)',[...new Set([...competenceArticles,...(concurrent?[24]:[]),...(privateLaw?[22]:[]),...(common?[23]:[]),...(exclusive?[21]:[])])]);
+    const remedy=/\b(?:remedios constitucionais|habeas corpus|habeas data|mandado de seguranca|mandado de injuncao|acao popular)\b/.test(command);
+    if(remedy||articles.includes(5)||/\bdireitos (?:e deveres )?individuais\b/.test(command))add('direitos',remedy?'Remédios Constitucionais':'Direitos e Deveres Individuais e Coletivos (Art. 5º)',[5],remedy);
+    if(articles.some(n=>n>=6&&n<=11)||/\bdireitos sociais\b|\bdireitos dos trabalhadores\b/.test(command))add('sociais','Dos Direitos Sociais (Art. 6º ao 11)',articles.filter(n=>n>=6&&n<=11));
+    if(articles.some(n=>n>=1&&n<=4)||/\b(?:principios fundamentais|fundamentos da republica|objetivos fundamentais)\b/.test(command))add('principios','Princípios Fundamentais (Art. 1º ao 4º)',articles.filter(n=>n>=1&&n<=4));
+    if(articles.includes(144)||/\bseguranca publica\b/.test(command))add('seguranca','Da Segurança Pública (Art. 144) e Forças Armadas',[144]);
+    return candidates.length===1?candidates[0]:candidates.length?{ambiguous:true,family:'',topic:'',articles:[],candidates}:null;
+  }
+  function questionTopicDecision(item,subject=item?.subject||''){
+    const declared=String(item?.topic||''),constitutional=/constitucional/.test(topicKey(subject));
+    const evidence=constitutional?constitutionalQuestionTopicEvidence(item):null;
+    const human=[item?.topic_source,item?.topic_classification_source].some(value=>['manual','manual_revisado','humano','humana','revisado','oficial_verificado'].includes(String(value||'').toLowerCase()));
+    const target=_getParsedTopicRef(declared);
+    const generic=!target.refText||target.refText===normalizedQuestionTopic(subject)||/^(?:geral|conteudo geral|questao \d+|item \d+)$/.test(target.refText);
+    const conflict=Boolean(evidence?.family&&!generic&&!topicTargetAcceptsEvidence(target,evidence,false));
+    return {topic:evidence?.topic||declared,declared_topic:declared,family:evidence?.family||'',evidence,ambiguous:evidence?.ambiguous===true,source:evidence?.family?'command':'metadata',conflict,needs_review:Boolean(human&&conflict)||item?.topic_classification_needs_review===true,human};
+  }
+  function applyQuestionTopicEvidence(item){
+    if(!item||typeof item!=='object')return item;
+    const decision=questionTopicDecision(item);
+    if(decision.source!=='command')return item;
+    if(decision.needs_review){item.topic_classification_needs_review=true;item.topic_statement=decision.topic;return item}
+    if(decision.human)return item;
+    // Compatible metadata can carry a narrower topic than the detected family.
+    if(!decision.conflict&&decision.declared_topic&&!_getParsedTopicRef(decision.declared_topic).semanticScope)return item;
+    if(item.topic!==decision.topic){if(item.topic&&!item.topic_declared)item.topic_declared=item.topic;item.topic=decision.topic;item.topic_source='command';delete item.learning_order;delete item._loCampId}
+    return item;
+  }
+  window.constitutionalTopicFamilies=constitutionalTopicFamilies;
+  window.constitutionalQuestionTopicEvidence=constitutionalQuestionTopicEvidence;
+  window.questionTopicDecision=questionTopicDecision;
+  window.applyQuestionTopicEvidence=applyQuestionTopicEvidence;
 
   function questionMatchesTopicFilter(item,topicVal,subject='all',rawTopicLabel=''){
     if(!topicVal||topicVal==='all')return true;
     if(subject&&subject!=='all'){
-      const itemSubjKey=item?.subject_canonical||topicKey(resolveStrictQuestionDiscipline(item));
-      if(itemSubjKey!==topicKey(subject))return false;
+      if(!strictSubjectMatch(resolveStrictQuestionDiscipline(item),subject))return false;
     }
-    const qTopicKey=item?.topic_canonical||topicKey(item?.topic||'');
-    if(qTopicKey&&(qTopicKey===topicVal||qTopicKey.includes(topicVal)||topicVal.includes(qTopicKey)))return true;
-    const hay=item?._hayKey||(item&&typeof item==='object'?(item._hayKey=topicKey(`${item.topic||''} ${item.statement||''}`)):topicKey(`${item?.topic||''} ${item?.statement||''}`));
+    const itemSubject=resolveStrictQuestionDiscipline(item);
+    const topicDecision=questionTopicDecision(item,itemSubject);
+    if(topicDecision.needs_review||topicDecision.ambiguous)return false;
+    const constitutional=topicKey(itemSubject)==='direito constitucional';
     const parsed=_getParsedTopicRef(topicVal,rawTopicLabel);
-    if(parsed.isArt1&&/\b(principios fundamentais|fundamentos da republica|soberania|dignidade da pessoa|pluralismo politico|autodeterminacao|art 1|art 2|art 3|art 4)\b/.test(hay))return true;
-    if(parsed.isArt5&&/\b(art 5|direitos individuais|inviolabilidade|habeas|mandado de seguranca|liberdade|propriedade)\b/.test(hay))return true;
-    if(parsed.isArt144&&/\b(art 144|seguranca publica|policia militar|policia civil|policia federal|policia penal|bombeiro)\b/.test(hay))return true;
-    if(parsed.isRlm&&/\b(proposic|conectiv|bicondicional|condicional|disjuncao|conjuncao|tabela verdade|tautologia|negacao|equivalencia|logicamente)\b/.test(hay))return true;
-    const keywords=parsed.keywords;
-    if(!keywords.length)return false;
-    const minHits=Math.min(2,keywords.length);
-    let hits=0;
-    for(let i=0;i<keywords.length;i++){
-      if(hay.includes(keywords[i])){
-        hits++;
-        if(hits>=minHits)return true;
-      }
+    // An article-specific selection must be justified by that article. A shared
+    // family or a word in the support passage cannot admit another topic.
+    if(constitutional&&topicDecision.family){
+      if(topicTargetAcceptsEvidence(parsed,topicDecision.evidence))return true;
+      return !topicDecision.conflict&&normalizedQuestionTopic(topicDecision.declared_topic)===parsed.refText;
+    }
+    const declared=_getParsedTopicRef(topicDecision.topic);
+    if(declared.refText&&declared.refText===parsed.refText)return true;
+    if(constitutional&&declared.families.size===1){
+      return topicTargetAcceptsEvidence(parsed,{family:[...declared.families][0],articles:[...declared.articles],remedy:declared.remedy,remedyKinds:declared.remedyKinds});
     }
     return false;
   }
@@ -3676,23 +4057,22 @@
 
   function activeCampaignErrors(){
     sanitizeAllQuestionsAndErrorsSubjects();
-    return Object.entries(state?.errors||{}).filter(([,e])=>!e?.campaignId||e.campaignId===state?.activeCampaignId);
+    return Object.entries(state?.errors||{}).filter(([id,e])=>(!e?.campaignId||e.campaignId===state?.activeCampaignId)&&(typeof isPlatformManualStudyArtifact!=='function'||!isPlatformManualStudyArtifact({...e,id})));
   }
 
   function questionMatchesErrorPool(question,errorEntries){
     if(!errorEntries.length)return false;
     const qSubj=topicKey(resolveStrictQuestionDiscipline(question));
-    const qTopic=topicKey(question?.topic);
     const qStmt=topicKey(question?.statement);
-    const isGenericTopic=t=>!t||t.length<5||/^(geral|questao \d*|item \d*|simulado.*|correcao de erro|ponto de atencao|revisao.*|conteudo.*)$/.test(t);
     return errorEntries.some(([,err])=>{
-      const eSubj=topicKey(resolveStrictQuestionDiscipline(err?.question||'',err?.topic||'',err?.subject||'',err?.options||[]));
+      if(!err||questionTopicDecision(err).needs_review)return false;
+      const eSubj=topicKey(resolveStrictQuestionDiscipline(err));
       if(qSubj&&eSubj&&qSubj!==eSubj)return false;
       const eStmt=topicKey(err?.question);
       if(eStmt&&qStmt&&eStmt===qStmt)return true;
-      const eTopic=topicKey(err?.topic);
-      if(!isGenericTopic(eTopic)&&!isGenericTopic(qTopic)&&(qTopic.includes(eTopic)||eTopic.includes(qTopic)))return true;
-      return Boolean(eSubj&&qSubj===eSubj&&!eStmt);
+      const eTopic=questionTopicDecision(err).topic;
+      if(!eTopic||/^(?:geral|questao \d*|item \d*|simulado.*|correcao de erro|ponto de atencao|revisao.*|conteudo.*)$/.test(topicKey(eTopic)))return false;
+      return questionMatchesTopicFilter(question,topicKey(eTopic),err.subject||'all',eTopic);
     });
   }
 
@@ -3707,6 +4087,7 @@
   }
 
   function renderQuickBoaRespostaBar(){
+    if(q('#questionsQuickPractice')&&!q('#questionsQuickPractice').open)return;
     ensureNativeQuestionBankLoaded();
     const trainer=q('.questionTrainer');
     if(!trainer)return;
@@ -3815,9 +4196,8 @@
 
   function startCaveiraSprintSession(){
     ensureNativeQuestionBankLoaded();
-    const currentBoard=q('#questionBoardFilter')?.value||'all';
-    const allPool=(ALL_QUESTIONS||[]).filter(item=>!isInvalidTrailSubject(item?.subject)&&questionMatchesBoardFilter(item,currentBoard));
-    if(!allPool.length)return toast('Nenhuma questão disponível para o Sprint. Selecione "Todas as Bancas" acima.');
+    const allPool=filteredQuestionPool();
+    if(!allPool.length)return toast('Nenhuma questão validada corresponde aos filtros deste Sprint. Revise disciplina, assunto e banca.');
     const errEntries=activeCampaignErrors();
     const errMatched=errEntries.length?allPool.filter(item=>questionMatchesErrorPool(item,errEntries)):[];
     const hardOrOfficial=allPool.filter(item=>normalizedOrigin(item)==='oficial'||normalizedDifficulty(item)==='dificil');
@@ -3834,6 +4214,7 @@
     activeQuestions={
       mode:'caveira_sprint',
       subject:'Sprint Reta Final Caveira',
+      filterContext:questionSessionFilterContext(),
       questions:unique.map(prepareQuestion),
       current:0,
       correct:0,
@@ -3876,7 +4257,7 @@
       q('#questionBattleMode')?.addEventListener('change',updateQuestionPool);
     }
     if(!q('#questionHistoryFilter')){
-      filters.insertAdjacentHTML('beforeend',`<label class="field">Filtro TEC / Caderno<select id="questionHistoryFilter"><option value="all">Todas do banco</option><option value="unanswered">✨ Apenas inéditas (não resolvidas)</option><option value="wrong">❌ Questões que errei</option><option value="correct">✅ Questões que acertei</option><option value="favorites">⭐ Minhas favoritas</option></select></label>`);
+      filters.insertAdjacentHTML('beforeend',`<label class="field">Filtro TEC / Caderno<select id="questionHistoryFilter"><option value="all">Todas do banco</option><option value="answered">✓ Resolvidas</option><option value="unanswered">✨ Apenas inéditas (não resolvidas)</option><option value="wrong">❌ Questões que errei</option><option value="correct">✅ Questões que acertei</option><option value="favorites">⭐ Minhas favoritas</option></select></label>`);
       q('#questionHistoryFilter')?.addEventListener('change',updateQuestionPool);
     }
     const trainer=q('.questionTrainer');
@@ -3895,7 +4276,20 @@
         q('#printQuestionBookletBtn').onclick=exportPrintableQuestionBooklet;
       }
     }
-    renderQuickBoaRespostaBar();
+    ensureLazyQuickPractice();
+  }
+
+  function ensureLazyQuickPractice(){
+    const trainer=q('.questionTrainer');
+    if(!trainer||q('#questionsQuickPractice'))return;
+    const details=document.createElement('details');details.id='questionsQuickPractice';details.className='questionsQuickPractice';
+    details.innerHTML='<summary>Treinos rápidos por banca e disciplina</summary>';
+    trainer.appendChild(details);
+    details.addEventListener('toggle',()=>{
+      if(!details.open)return;
+      renderQuickBoaRespostaBar();
+      const bar=q('#quickBoaRespostaBar');if(bar)details.appendChild(bar);
+    });
   }
 
   function populateTopicFilter(){
@@ -3907,11 +4301,16 @@
     const board=q('#questionBoardFilter')?.value||'all';
     const currentTopic=topicSelect.value||'all';
     const subjKey=subject==='all'?'all':topicKey(canonicalSubjectName(subject));
+    const sourceArray=ALL_QUESTIONS||[];
+    const topicSignature=JSON.stringify([window.JCQuestionsWorkspace?.scopeKey()||state.activeCampaignId,window.JCQuestionsWorkspace?.revision||0,subject,board,sourceArray.length,
+      (typeof orderedMissions==='function'?orderedMissions():[]).map(m=>[m.id,m.subject,m.name])]);
+    if(topicSelect._sourceArray===sourceArray&&topicSelect._sourceSignature===topicSignature)return;
     const bySubjBucket=new Map();
     const byTopicCount=new Map();
     const byTopicSample=new Map();
     const allForSubject=[];
     for(const item of (ALL_QUESTIONS||[])){
+      if(typeof isQuestionDisciplineEligible==='function'&&!isQuestionDisciplineEligible(item,subject))continue;
       const itemSubjKey=item.subject_canonical||topicKey(resolveStrictQuestionDiscipline(item));
       if(subjKey!=='all'&&itemSubjKey!==subjKey)continue;
       if(!questionMatchesBoardFilter(item,board))continue;
@@ -3919,7 +4318,7 @@
       let sArr=bySubjBucket.get(itemSubjKey);
       if(!sArr){sArr=[];bySubjBucket.set(itemSubjKey,sArr);}
       sArr.push(item);
-      const tKey=item.topic_canonical||topicKey(item.topic||'');
+      const tKey=topicKey(item.topic||'');
       if(tKey){
         byTopicCount.set(tKey,(byTopicCount.get(tKey)||0)+1);
         if(!byTopicSample.has(tKey))byTopicSample.set(tKey,item);
@@ -3942,7 +4341,7 @@
       for(let i=0;i<candidateQs.length;i++){
         if(questionMatchesTopicFilter(candidateQs[i],k,m.subject||subject,rawName))matchCnt++;
       }
-      entries.push([k,`${shortLabel(displayLabel,48)} (${matchCnt||candidateQs.length||allForSubject.length}q)`]);
+      entries.push([k,`${shortLabel(displayLabel,48)} (${matchCnt}q)`]);
     });
     // 2) Subtópicos únicos das questões (itera apenas sobre os ~35 tópicos únicos em byTopicSample, nunca sobre 1.070 questões)
     const extraTopicsMap=new Map();
@@ -3969,29 +4368,32 @@
       const cnt=byTopicCount.get(k)||0;
       entries.push([k,`${shortLabel(label,48)} (${cnt}q)`]);
     }
+    topicSelect._sourceArray=sourceArray;
+    topicSelect._sourceSignature=topicSignature;
     topicSelect.innerHTML='<option value="all">Todos os assuntos da disciplina (Ordem Cronológica)</option>'+entries.map(([key,label])=>`<option value="${escText(key)}" title="${escText(label)}">${escText(label)}</option>`).join('');
     topicSelect.value=seenKeys.has(currentTopic)?currentTopic:'all';
-    populateExamHubSelects();
+    if(!window.JCQuestionsWorkspace||window.JCQuestionsWorkspace.isActive('provas'))populateExamHubSelects();
   }
 
+  let questionFilterPoolCache=null;
   function filteredQuestionPool(){
     ensureNativeQuestionBankLoaded();
     sanitizeAllQuestionsAndErrorsSubjects();
     const subject=q('#questionSubject')?.value||'all',board=q('#questionBoardFilter')?.value||'all',topic=q('#questionTopic')?.value||'all',difficulty=q('#questionDifficulty')?.value||'all',origin=q('#questionOrigin')?.value||'all',battleMode=q('#questionBattleMode')?.value||'progressive',historyFilter=q('#questionHistoryFilter')?.value||'all';
-    const subjKey=subject==='all'?'all':topicKey(canonicalSubjectName(subject));
-    const allMatchingSubject=(ALL_QUESTIONS||[]).filter(item=>subjKey==='all'||(item.subject_canonical||topicKey(resolveStrictQuestionDiscipline(item)))===subjKey);
-    const source=allMatchingSubject.length?allMatchingSubject:(typeof questionsForMode==='function'?questionsForMode('battle',subject).filter(item=>subjKey==='all'||topicKey(resolveStrictQuestionDiscipline(item))===subjKey):[]);
     const topicSel=q('#questionTopic');
     const selectedTopicLabel=topicSel&&topicSel.selectedIndex>=0?topicSel.options[topicSel.selectedIndex]?.text||'':'';
+    const followOrder=q('#followEditalOrderToggle')?q('#followEditalOrderToggle').checked:true;
+    const poolSignature=JSON.stringify([window.JCQuestionsWorkspace?.scopeKey()||state.activeCampaignId,window.JCQuestionsWorkspace?.revision||0,(ALL_QUESTIONS||[]).length,subject,board,topic,selectedTopicLabel,difficulty,origin,battleMode,historyFilter,followOrder]);
+    if(window.JCQuestionsWorkspace&&questionFilterPoolCache?.array===ALL_QUESTIONS&&questionFilterPoolCache.signature===poolSignature)return questionFilterPoolCache.pool;
+    const allMatchingSubject=(ALL_QUESTIONS||[]).filter(item=>isQuestionDisciplineEligible(item,subject));
+    const source=allMatchingSubject.length?allMatchingSubject:(typeof questionsForMode==='function'?questionsForMode('battle',subject).filter(item=>isQuestionDisciplineEligible(item,subject)):[]);
     let byTopic=source.filter(item=>questionMatchesBoardFilter(item,board)&&(topic==='all'||questionMatchesTopicFilter(item,topic,subject,selectedTopicLabel))&&(difficulty==='all'||normalizedDifficulty(item)===difficulty)&&(origin==='all'||normalizedOrigin(item)===origin));
-    // Se o usuário selecionou um tópico do Edital ainda sem questões diretas por palavra-chave, usa as questões da própria disciplina para nunca travar o estudo da missão
-    if(!byTopic.length&&topic!=='all'&&source.length){
-      byTopic=source.filter(item=>questionMatchesBoardFilter(item,board)&&(difficulty==='all'||normalizedDifficulty(item)===difficulty)&&(origin==='all'||normalizedOrigin(item)===origin));
-    }
-    let filtered=byTopic;
-    if(historyFilter==='unanswered'){
+    let filtered=byTopic.filter(item => !["sem_gabarito", "anulada"].includes(answerKeyStatus(item)));
+    if(historyFilter==='answered'){
+      filtered=filtered.filter(item=>isQuestionAnsweredBefore(item));
+    }else if(historyFilter==='unanswered'){
       const unanswered=filtered.filter(item=>!isQuestionAnsweredBefore(item));
-      if(unanswered.length)filtered=unanswered;
+      filtered=unanswered;
     }else if(historyFilter==='wrong'){
       const errEntries=activeCampaignErrors();
       filtered=filtered.filter(item=>questionMatchesErrorPool(item,errEntries));
@@ -4004,14 +4406,11 @@
     if(battleMode==='errors'){
       const errEntries=activeCampaignErrors();
       const errPool=filtered.filter(item=>questionMatchesErrorPool(item,errEntries));
-      if(errPool.length)filtered=errPool;
+      filtered=errPool;
     }
     // Filtro estrito quando disciplina específica está selecionada
-    if(subject!=='all'){
-      filtered=filtered.filter(item=>strictSubjectMatch(resolveStrictQuestionDiscipline(item),subject)&&!item.needs_review);
-    }
+    filtered=filtered.filter(item=>isQuestionDisciplineEligible(item,subject));
     // Ordenação pedagógica cronológica do edital (learning_order -> topic_canonical -> origem)
-    const followOrder=q('#followEditalOrderToggle')?q('#followEditalOrderToggle').checked:true;
     if(followOrder){
       filtered=[...filtered].sort((a,b)=>{
         const loA=Number(a.learning_order??computeQuestionEditalLearningOrder(a));
@@ -4023,12 +4422,25 @@
         return difficultyWeight(normalizedDifficulty(a))-difficultyWeight(normalizedDifficulty(b));
       });
     }
+    questionFilterPoolCache={array:ALL_QUESTIONS,signature:poolSignature,pool:filtered};
     return filtered;
   }
 
+  function questionAvailabilityBreakdown(pool){
+    if(!window.JCQuestionAvailability)return null;
+    return window.JCQuestionAvailability.partition(ALL_QUESTIONS,pool,item=>{
+      const classification=typeof questionDisciplineDecision==='function'?questionDisciplineDecision(item):null;
+      if(!item||classification?.needs_source||classification?.needs_review||item.needs_review||item.classification_needs_review||item.board_needs_review||(!classification&&!isQuestionDisciplineEligible(item,'all')))return 'review';
+      const status=answerKeyStatus(item);
+      return status==='anulada'?'annulled':status==='sem_gabarito'?'pendingKey':'otherFilters';
+    });
+  }
+  window.questionAvailabilityBreakdown=questionAvailabilityBreakdown;
   function updateQuestionPool(){
     const pool=filteredQuestionPool(),badge=q('#questionPoolCount'),battleMode=q('#questionBattleMode')?.value||'progressive';
     if(badge)badge.textContent=`${pool.length} disponíve${pool.length===1?'l':'is'}`;
+    const summary=q('#questionAvailabilitySummary'),counts=summary?questionAvailabilityBreakdown(pool):null;
+    if(summary&&counts){const label=window.JCQuestionAvailability.describe(counts);if(summary.textContent!==label)summary.textContent=label;summary.hidden=false;}
     const button=q('#startQuestions');
     if(button){
       button.disabled=!pool.length;
@@ -4042,7 +4454,7 @@
       const errCount=activeCampaignErrors().length;
       errBtn.textContent=`🔥 Reforçar meus erros (${errCount})`;
     }
-    updateSimuladoAvailability();
+    if(!window.JCQuestionsWorkspace||window.JCQuestionsWorkspace.isActive('simulados'))updateSimuladoAvailability();
   }
 
   function progressiveQuestions(pool,count=6){
@@ -4064,6 +4476,20 @@
     return ordered.slice(0,count).sort((a,b)=>difficultyWeight(normalizedDifficulty(a))-difficultyWeight(normalizedDifficulty(b)));
   }
 
+  function questionSessionFilterContext(context=null){
+    if(context)return {subject:'all',board:'all',topic:'all',difficulty:'all',origin:'all',...context};
+    return {subject:q('#questionSubject')?.value||'all',board:q('#questionBoardFilter')?.value||'all',topic:q('#questionTopic')?.value||'all',difficulty:q('#questionDifficulty')?.value||'all',origin:q('#questionOrigin')?.value||'all'};
+  }
+  function questionMatchesSessionFilterContext(item,context={}){
+    return isQuestionDisciplineEligible(item,context.subject||'all')&&questionMatchesBoardFilter(item,context.board||'all')&&questionMatchesTopicFilter(item,context.topic||'all',context.subject||'all')&&( !context.difficulty||context.difficulty==='all'||normalizedDifficulty(item)===context.difficulty)&&(!context.origin||context.origin==='all'||normalizedOrigin(item)===context.origin);
+  }
+  function savedQuestionSessionCanResume(battle){
+    return Boolean(battle&&Array.isArray(battle.questions)&&battle.questions.length&&battle.questions.every(item=>questionMatchesSessionFilterContext(item,battle.filterContext||{})));
+  }
+  window.questionSessionFilterContext=questionSessionFilterContext;
+  window.questionMatchesSessionFilterContext=questionMatchesSessionFilterContext;
+  window.savedQuestionSessionCanResume=savedQuestionSessionCanResume;
+
   function startFilteredBattle(){
     const pool=filteredQuestionPool(),subject=q('#questionSubject')?.value||'all',topicSel=q('#questionTopic'),battleMode=q('#questionBattleMode')?.value||'progressive';
     if(!pool.length)return toast('Não há questões que correspondam aos filtros selecionados.');
@@ -4073,6 +4499,7 @@
     activeQuestions={
       mode:battleMode==='progressive'?'progressive':battleMode==='errors'?'errors':'battle',
       subject:topicLabel?`${subject==='all'?'Treino':subject} · ${topicLabel}`:subject,
+      filterContext:questionSessionFilterContext(),
       questions:chosenQuestions,
       current:0,
       correct:0,
@@ -4092,44 +4519,37 @@
   function startErrorReinforcementBattle(){
     const errEntries=activeCampaignErrors();
     if(!errEntries.length)return toast('Parabéns! Seu Caderno de Erros está zerado neste portal.');
-    const allPool=ALL_QUESTIONS||[];
-    let errQuestions=allPool.filter(item=>questionMatchesErrorPool(item,errEntries));
+    const canRetry=item=>Boolean(item&&String(item.statement||'').trim()&&isQuestionDisciplineEligible(item)&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item)));
+    const allPool=filteredQuestionPool();
+    let errQuestions=allPool.filter(item=>canRetry(item)&&questionMatchesErrorPool(item,errEntries));
     if(!errQuestions.length){
-      errQuestions=errEntries.filter(([,e])=>e?.question&&e?.correctAnswer).map(([,e])=>{
+      const subject=q('#questionSubject')?.value||'all',board=q('#questionBoardFilter')?.value||'all',topic=q('#questionTopic')?.value||'all',difficulty=q('#questionDifficulty')?.value||'all',origin=q('#questionOrigin')?.value||'all';
+      errQuestions=errEntries.filter(([,e])=>e?.question&&Array.isArray(e.options)).map(([key,e])=>{
         const realSubj=resolveStrictQuestionDiscipline(e.question,e.topic,e.subject,e.options);
-        if(Array.isArray(e.options)&&e.options.length>=2&&Number.isInteger(Number(e.correct_index))){
-          return {
-            subject:realSubj||'Revisão de Erros',
-            topic:e.topic||'Ponto de Atenção',
-            statement:e.question,
-            options:[...e.options],
-            correct_index:Number(e.correct_index),
-            explanation:e.explanation||`Você marcou anteriormente: “${e.lastChosen||'outra opção'}”. O gabarito correto é: “${e.correctAnswer}”.`,
-            difficulty:'medio',
-            origin:'autoral'
-          };
-        }
-        const distractors=buildSubjectAppropriateDistractors(realSubj,e.correctAnswer);
-        const wrongChosen=e.lastChosen&&e.lastChosen!==e.correctAnswer?[e.lastChosen]:[];
-        const opts=[e.correctAnswer,...wrongChosen,...distractors].slice(0,4);
         return {
+          ...e,
           subject:realSubj||'Revisão de Erros',
           topic:e.topic||'Ponto de Atenção',
           statement:e.question,
-          options:opts,
-          correct_index:0,
-          explanation:e.explanation||`Você marcou anteriormente: “${e.lastChosen||'outra opção'}”. O gabarito correto é: “${e.correctAnswer}”.`,
+          options:[...e.options],
+          correct_index:e.correct_index,
+          explanation:e.explanation||'',
           difficulty:'medio',
-          origin:'autoral'
+          origin:e.origin||'autoral',
+          _alreadyPreparedConsistent:true,
+          _errorNotebookKey:key
         };
-      });
+      }).filter(item=>canRetry(item)&&isQuestionDisciplineEligible(item,subject)&&questionMatchesBoardFilter(item,board)&&questionMatchesTopicFilter(item,topic,subject)&&(difficulty==='all'||normalizedDifficulty(item)===difficulty)&&(origin==='all'||normalizedOrigin(item)===origin));
     }
-    if(!errQuestions.length)return toast('Envie materiais ou gere questões dos tópicos errados para iniciar a revisão prática.');
+    if(!errQuestions.length)return toast('Estes erros não têm questões completas com gabarito válido. Use “Ler Teoria” ou importe a questão completa para refazer.');
     const count=Math.min(6,errQuestions.length);
+    const questions=progressiveQuestions(errQuestions,count).map(prepareQuestion).filter(canRetry);
+    if(!questions.length)return toast('As questões precisam de revisão antes do treino. Use “Ler Teoria” no Caderno de Erros.');
     activeQuestions={
       mode:'errors',
       subject:'Reforço de Erros',
-      questions:progressiveQuestions(errQuestions,count).map(prepareQuestion),
+      filterContext:questionSessionFilterContext(),
+      questions,
       current:0,
       correct:0,
       streak:0,
@@ -4144,10 +4564,11 @@
   // 2B. Resolução Passo a Passo (Estilo boaResposta) + Recursos TEC / Qconcursos / Caveira / Descomplica
   function findRelatedSummary(question){
     if(!Array.isArray(ALL_SUMMARIES)||!ALL_SUMMARIES.length)return null;
-    const qSubj=topicKey(learningCategory(question?.subject));
+    const qSubj=resolveStrictQuestionDiscipline(question);
     const qTopic=topicKey(question?.topic);
-    return ALL_SUMMARIES.find(s=>topicKey(s.title)===qTopic||(qTopic&&topicKey(s.title).includes(qTopic)))
-      || ALL_SUMMARIES.find(s=>topicKey(s.category)===qSubj)
+    const summaries=ALL_SUMMARIES.filter(s=>!(typeof isPlatformManualStudyArtifact==='function'?isPlatformManualStudyArtifact(s):/^manual-/i.test(String(s.id||''))||/manuais do ca[cç]ador/i.test(String(s.category||'')))&&strictSubjectMatch(s.category||s.subject,qSubj));
+    return summaries.find(s=>topicKey(s.title)===qTopic||(qTopic&&` ${topicKey(s.title)} `.includes(` ${qTopic} `)))
+      || summaries[0]
       || null;
   }
 
@@ -4167,11 +4588,11 @@
     }
     const reasons=[];
     if(/\b(exceto|incorreta|incorreto|desacordo|n[aã]o\s+(?:é|são|constitui|compete|cabe)|falsa|errada)\b/i.test(stmt)){
-      reasons.push(`<b>⚠️ Comando invertido no enunciado:</b> a questão pediu a opção <u>INCORRETA / EXCEÇÃO</u>. A opção <b>${chosenLetter}</b> que você marcou traz uma regra verdadeira ou diferente do erro procurado pela banca.`);
+      reasons.push(`<b>⚠️ Confira o comando:</b> o enunciado contém uma negação ou pedido de exceção. Verifique no comentário se sua escolha atende exatamente ao comando; essa pista textual, sozinha, não explica o erro.`);
     }
     const restrictMatch=chosenText.match(/\b(apenas|somente|exclusivamente|unicamente|sempre|nunca|jamais|em qualquer hip[oó]tese|em nenhuma hip[oó]tese|independentemente|imprescind[ií]vel|prescind[ií]vel|vedad[oa] em qualquer|qualquer caso|obrigatoriamente|facultativamente)\b/i);
     if(restrictMatch){
-      reasons.push(`<b>🎯 Termo restritivo/absoluto na sua escolha:</b> a opção <b>${chosenLetter}</b> utiliza a expressão <b>"${escText(restrictMatch[1])}"</b>, que invalida a assertiva ao generalizar ou restringir indevidamente a regra prevista na norma.`);
+      reasons.push(`<b>🎯 Ponto para conferir:</b> a opção <b>${chosenLetter}</b> utiliza <b>"${escText(restrictMatch[1])}"</b>. Compare o alcance dessa expressão com a regra estudada. Termos absolutos também podem estar corretos; não são prova de erro.`);
     }
     const swapPairs=[
       [/\bprivativa\b/i,/\b(?:concorrente|comum|exclusiva)\b/i,'competência privativa × concorrente/comum/exclusiva'],
@@ -4186,20 +4607,20 @@
     ];
     for(const [reA,reB,label] of swapPairs){
       if((reA.test(chosenText)&&reB.test(correctText))||(reB.test(chosenText)&&reA.test(correctText))){
-        reasons.push(`<b>🔄 Troca conceitual clássica de banca:</b> a alternativa <b>${chosenLetter}</b> trocou <b>${label}</b> em relação ao gabarito oficial (<b>${correctLetter}</b>).`);
+        reasons.push(`<b>🔄 Conceitos para comparar:</b> as alternativas <b>${chosenLetter}</b> e <b>${correctLetter}</b> mencionam <b>${label}</b>. Consulte a fundamentação antes de concluir que houve troca conceitual.`);
         break;
       }
     }
     const chosenNums=(chosenText.match(/\b\d+\b/g)||[]).join(', ');
     const correctNums=(correctText.match(/\b\d+\b/g)||[]).join(', ');
     if(chosenNums&&correctNums&&chosenNums!==correctNums){
-      reasons.push(`<b>🔢 Divergência de prazo, quórum ou numeração:</b> a opção <b>${chosenLetter}</b> indica <b>${escText(chosenNums)}</b>, enquanto a regra correta na alternativa <b>${correctLetter}</b> estabelece <b>${escText(correctNums)}</b>.`);
+      reasons.push(`<b>🔢 Valores diferentes:</b> sua escolha menciona <b>${escText(chosenNums)}</b> e o gabarito indicado menciona <b>${escText(correctNums)}</b>. Confira o significado de cada número; podem representar artigos, datas ou grandezas diferentes.`);
     }
     if(!reasons.length){
       if(isCE){
-        reasons.push(`<b>⚖️ Erro de julgamento no item:</b> você julgou como <b>${chosenLetter}</b>, mas o item está <b>${correctLetter}</b> conforme a literalidade da norma e jurisprudência cobrada no tema <b>"${escText(item.topic||item.subject||'Geral')}"</b>.`);
+        reasons.push(`<b>⚖️ Compare seu julgamento:</b> você marcou <b>${chosenLetter}</b> e o gabarito informado indica <b>${correctLetter}</b>. Consulte a explicação e a fonte de <b>"${escText(item.topic||item.subject||'Geral')}"</b> para identificar a divergência.`);
       }else{
-        reasons.push(`<b>🎯 Onde está o erro na alternativa ${chosenLetter}:</b> o distrator <i>"${escText(shortLabel(chosenText,125))}"</i> contraria o requisito correto previsto na <b>Alternativa ${correctLetter}</b> (<i>"${escText(shortLabel(correctText,125))}"</i>).`);
+        reasons.push(`<b>🎯 Sua escolha e o gabarito diferem:</b> compare <i>"${escText(shortLabel(chosenText,125))}"</i> com a <b>Alternativa ${correctLetter}</b> (<i>"${escText(shortLabel(correctText,125))}"</i>). A justificativa específica deve vir do comentário ou de uma fonte revisada, não desta comparação automática.`);
       }
     }
     return reasons.join('<br>');
@@ -4208,13 +4629,19 @@
 
   function formatStepByStepResolution(item,chosenIndex,ok,interactive=true){
     const optsList=Array.isArray(item.options)?item.options:[];
+    const keyDetails=answerKeyDetails(item);
+    if(!keyDetails.scored){
+      const suggested=Number(item.correct_index);
+      const suggestion=keyDetails.pendingAi&&Number.isInteger(suggested)&&suggested>=0&&suggested<optsList.length?`Sugestão provisória: ${String.fromCharCode(65+suggested)}. ${String(item.explanation||'')}`:String(item.explanation||'');
+      return `<div class="boaRespostaResolution"><div class="stepResolutionBlock concept"><b>${escText(keyDetails.label)}</b><p>Esta questão não gera acerto, erro, XP ou estatística de desempenho enquanto o gabarito estiver pendente.</p>${suggestion?`<p style="white-space:pre-line">${escText(suggestion)}</p>`:''}${interactive?'<button type="button" class="ghost small" id="reportQuestionIssueBtn">🚩 Validar / reportar gabarito</button>':''}</div></div>`;
+    }
     const isCE=optsList.length===2&&/^certo$/i.test(String(optsList[0]||'').trim());
     const correctIndex=Number(item.correct_index)||0;
     const correctLetter=isCE?(correctIndex===0?'CERTO':'ERRADO'):String.fromCharCode(65+correctIndex);
     const chosenLetter=(Number.isInteger(chosenIndex)&&chosenIndex>=0)
       ?(isCE?(chosenIndex===0?'CERTO':'ERRADO'):String.fromCharCode(65+chosenIndex))
       :(chosenIndex===-2?'EM BRANCO (0 pt)':'TEMPO ESGOTADO');
-    const rawExp=String(item.explanation||'').trim();
+    const rawExp=item.explanation_needs_review?'O gabarito foi alterado. O comentário anterior aguarda revisão e não deve ser usado para justificar a nova resposta.':String(item.explanation||'').trim();
     const related=findRelatedSummary(item);
     const fp=questionFingerprint(item);
     const isFav=isQuestionFavorited(item);
@@ -4229,7 +4656,7 @@
       const isRight=idx===correctIndex;
       const isUserPick=idx===chosenIndex;
       const statusTag=isRight?'<span class="stepOptBadge good">✓ Correta</span>':isUserPick?'<span class="stepOptBadge bad">✗ Sua escolha</span>':'<span class="stepOptBadge neutral">Distrator</span>';
-      return `<div class="stepOptionItem ${isRight?'isRight':isUserPick?'isWrong':''}"><div><b>${letter})</b> ${escText(opt)}</div>${statusTag}</div>`;
+      return `<div class="stepOptionItem ${isRight?'isRight':isUserPick?'isWrong':''}"><div><b>${letter})</b> ${escText(window.JCQuestionText?window.JCQuestionText.analyzeOption(opt).text:opt)}</div>${statusTag}</div>`;
     }).join('');
 
     const interactiveControls=interactive?`
@@ -4261,7 +4688,7 @@
           <p>${escText(chosenText)}</p>
         </div>
         <div class="choiceCompareCard rightPick">
-          <span class="choiceCompareLabel">✓ GABARITO OFICIAL (${isCE?correctLetter:`ALTERNATIVA ${correctLetter}`})</span>
+          <span class="choiceCompareLabel">✓ ${escText(keyDetails.label.toUpperCase())} (${isCE?correctLetter:`ALTERNATIVA ${correctLetter}`})</span>
           <p>${escText(correctText)}</p>
         </div>
       </div>
@@ -4272,7 +4699,7 @@
           <p>Você optou por não chutar esta questão para proteger sua pontuação líquida.</p>
         </div>
         <div class="choiceCompareCard rightPick">
-          <span class="choiceCompareLabel">✓ GABARITO OFICIAL (${isCE?correctLetter:`ALTERNATIVA ${correctLetter}`})</span>
+          <span class="choiceCompareLabel">✓ ${escText(keyDetails.label.toUpperCase())} (${isCE?correctLetter:`ALTERNATIVA ${correctLetter}`})</span>
           <p>${escText(correctText)}</p>
         </div>
       </div>
@@ -4284,10 +4711,11 @@
           <span class="eyebrow">${ok?'✓ RESPOSTA CORRETA · +25 XP':chosenIndex===-2?'⚪ QUESTÃO EM BRANCO · CONFIRA A RESOLUÇÃO':'✗ RESPOSTA INCORRETA · APRENDA COM O PASSO A PASSO'}</span>
           <h4>Gabarito: ${isCE?correctLetter:`Alternativa ${correctLetter}`}${!ok?` (${chosenIndex===-2?'deixada em branco':chosenIndex===-1?'tempo esgotado':`você marcou ${chosenLetter}`})`:''}</h4>
         </div>
-        <span class="tag">${escText(item.board||(normalizedOrigin(item)==='oficial'?'Prova Oficial':'Estilo Banca'))}</span>
+        <span class="tag">${escText(questionBoardLabel(item,normalizedOrigin(item)==='oficial'?'Prova Oficial':'Estilo Banca'))}</span>
       </div>
+      <p class="small muted">${escText(keyDetails.label)}${keyDetails.source?` · Fonte informada: ${escText(keyDetails.source)}`:''}. Explicações de IA são apoio ao estudo e devem ser conferidas.</p>
       ${directComparisonHtml}
-      ${!ok?(`<div class="stepResolutionBlock wrongAnalysis" style="border-left:4px solid #f43f5e;background:rgba(136,19,55,.22);margin-bottom:8px"><b>🔍 Diagnóstico do Seu Erro (O que você errou e por quê)</b><p style="margin-top:4px;line-height:1.5">${buildSpecificErrorDiagnosis(item,chosenIndex,correctIndex,isCE)}</p></div>`):''}
+      ${!ok?(`<div class="stepResolutionBlock wrongAnalysis" style="border-left:4px solid #f43f5e;background:rgba(136,19,55,.22);margin-bottom:8px"><b>🔍 Roteiro de revisão da sua resposta (pistas automáticas)</b><p style="margin-top:4px;line-height:1.5">${buildSpecificErrorDiagnosis(item,chosenIndex,correctIndex,isCE)}</p></div>`):''}
       ${stepsHtml}
       <details class="resolutionOptionsDetails" ${!ok?'open':''}>
         <summary>Ver conferência alternativa por alternativa (${optRangeLabel})</summary>
@@ -4299,160 +4727,106 @@
 
   async function saveQuestionsToCampaign(title,subject,questions,sourceLabel='Banco de Questões'){
     if(!Array.isArray(questions)||!questions.length)return 0;
-    const validQuestion=item=>item?.statement&&Array.isArray(item?.options)&&item.options.length>=2&&item.options.length<=5&&item.correct_index!==null&&item.correct_index!==undefined&&item.correct_index!==''&&Number.isInteger(Number(item.correct_index))&&Number(item.correct_index)>=0&&Number(item.correct_index)<item.options.length;
+    const ownerId=cloudSession?.user?.id||state._ownerUserId||'guest',sessionOwnerId=cloudSession?.user?.id||null;
+    const campId=state.activeCampaignId,resetEpoch=Number(state._resetEpoch||0);
+    const campaign=typeof activeCampaign==='function'?activeCampaign():null,dbId=campaign?.dbId;
+    const currentScope=()=>(!sessionOwnerId||cloudSession?.user?.id===sessionOwnerId)&&((cloudSession?.user?.id||state._ownerUserId||'guest')===ownerId)&&(!state._ownerUserId||state._ownerUserId===ownerId)&&state.activeCampaignId===campId&&Number(state._resetEpoch||0)===resetEpoch&&(!dbId||(typeof activeCampaign==='function'&&activeCampaign()?.dbId===dbId));
+    if(!currentScope())return 0;
+    const validQuestion=item=>item?.statement&&Array.isArray(item?.options)&&item.options.length>=2&&item.options.length<=5&&item.options.every(option=>String(option??'').trim())&&new Set(item.options.map(answerOptionText)).size===item.options.length;
+    const hasRawKey=item=>item.correct_index!==null&&item.correct_index!==undefined&&String(item.correct_index).trim()!==''&&typeof item.correct_index!=='boolean'&&typeof item.correct_index!=='object'&&Number.isInteger(Number(item.correct_index))&&Number(item.correct_index)>=0&&Number(item.correct_index)<item.options.length;
     const normalized=questions.filter(validQuestion).map(item=>({
+      ...item,
+      _fp:undefined,
       subject:resolveStrictQuestionDiscipline(item.statement,item.topic,item.subject||subject||'Conteúdo Geral',item.options),
       topic:String(item.topic||title||'Geral').trim(),
       board:String(item.board||sourceLabel).trim(),
       statement:String(item.statement).trim(),
       options:item.options.map(o=>String(o).trim()),
-      correct_index:Number(item.correct_index),
+      correct_index:hasRawKey(item)?Number(item.correct_index):-1,
+      answer_unknown:Boolean(item.answer_unknown||!hasRawKey(item)),
       explanation:String(item.explanation||'').trim(),
       difficulty:['facil','medio','dificil'].includes(normalizedDifficulty(item))?normalizedDifficulty(item):'medio',
-      origin:item.origin==='adaptada_do_pdf'?'adaptada_do_pdf':normalizedOrigin(item)==='oficial'?'oficial':'autoral'
+      origin:['oficial','autoral','adaptada_do_pdf','importada'].includes(item.origin)?item.origin:'importada'
     }));
     if(!normalized.length)return 0;
-
     const existingFp=new Set((ALL_QUESTIONS||[]).map(item=>questionFingerprint(item)));
     const fresh=normalized.filter(item=>!existingFp.has(questionFingerprint(item)));
     const toAdd=fresh.length?fresh:normalized;
-
     state.customQuestionsByCampaign=state.customQuestionsByCampaign||{};
-    const campId=state.activeCampaignId;
     const currentLocal=state.customQuestionsByCampaign[campId]||[];
     const localFp=new Set(currentLocal.map(item=>questionFingerprint(item)));
     for(const item of toAdd){
-      if(!localFp.has(questionFingerprint(item)))currentLocal.push(item);
-      if(!existingFp.has(questionFingerprint(item)))ALL_QUESTIONS.push(item);
+      const fp=questionFingerprint(item);
+      if(!localFp.has(fp)){currentLocal.push(item);localFp.add(fp)}
+      if(!existingFp.has(fp)){ALL_QUESTIONS.push(item);existingFp.add(fp)}
     }
     state.customQuestionsByCampaign[campId]=currentLocal.slice(-400);
     LEARNING_SUBJECTS=typeof window.computeValidLearningSubjects==='function'?window.computeValidLearningSubjects():[...new Set([...LEARNING_SUBJECTS,...toAdd.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
     save();
-
-    const campaign=typeof activeCampaign==='function'?activeCampaign():null;
-    if(cloudSession&&campaign?.dbId){
+    if(cloudSession&&dbId){
       try{
-        await cloudFetch('generated_study_content',{
-          method:'POST',
-          headers:{'Content-Type':'application/json',Prefer:'return=representation'},
-          body:JSON.stringify([{
-            campaign_id:campaign.dbId,
-            user_id:cloudSession.user.id,
-            content_type:'summary',
-            title:String(title||`Caderno ${sourceLabel}`).slice(0,140),
-            content:{
-              is_question_pack:true,
-              subject:toAdd[0].subject,
-              source:sourceLabel,
-              explanation:`Pacote de questões (${sourceLabel}) salvo no banco da campanha.`,
-              points:[],
-              flashcards:[],
-              questions:toAdd
-            },
-            source_refs:[{title:sourceLabel}]
-          }])
+        const session=typeof validSession==='function'?await validSession():cloudSession;
+        if(!session||session.user?.id!==ownerId||!currentScope())return 0;
+        const ownerHeaders={'Content-Type':'application/json',...(session.access_token?{Authorization:`Bearer ${session.access_token}`}:{})};
+        const stored=await cloudFetch('generated_study_content',{
+          method:'POST',headers:{...ownerHeaders,Prefer:'return=representation'},
+          body:JSON.stringify([{campaign_id:dbId,user_id:ownerId,content_type:'summary',title:String(title||`Caderno ${sourceLabel}`).slice(0,140),content:{is_question_pack:true,subject:toAdd[0].subject,source:sourceLabel,explanation:`Pacote de questões (${sourceLabel}) salvo no banco da campanha.`,points:[],flashcards:[],questions:toAdd},source_refs:[{title:sourceLabel}]}])
         });
-        if(sourceLabel!=='Banco Oficial Compartilhado'){
-          const sharedRows=toAdd.filter(qItem=>!qItem.answer_unknown&&Number.isInteger(Number(qItem.correct_index))&&Number(qItem.correct_index)>=0&&Number(qItem.correct_index)<=4).map(qItem=>({
-            fingerprint:questionFingerprint(qItem),
-            subject:canonicalSubjectName(qItem.subject||subject||'Conteúdo Geral'),
-            topic:String(qItem.topic||title||'Geral').trim().slice(0,160),
-            board:String(qItem.board||sourceLabel||'Banca Oficial').trim().slice(0,80),
-            difficulty:['facil','medio','dificil'].includes(qItem.difficulty)?qItem.difficulty:'medio',
-            origin:['oficial','adaptada_do_pdf','autoral'].includes(qItem.origin)?qItem.origin:'oficial',
-            statement:String(qItem.statement).trim(),
-            options:qItem.options,
-            correct_index:Number(qItem.correct_index),
-            explanation:String(qItem.explanation||'').trim(),
-            created_by:cloudSession.user.id
+        if(!currentScope())return 0;
+        if(stored?.ok===false)throw new Error('Não foi possível confirmar o salvamento das questões na nuvem.');
+        if(!['Banco Oficial Compartilhado','Banco Compartilhado'].includes(sourceLabel)){
+          const sharedRows=toAdd.filter(qItem=>!qItem.answer_unknown&&!qItem.annulled&&!qItem.anulada&&hasRawKey(qItem)).map(qItem=>({
+            fingerprint:questionFingerprint(qItem),subject:canonicalSubjectName(qItem.subject||subject||'Conteúdo Geral'),topic:String(qItem.topic||title||'Geral').trim().slice(0,160),board:String(qItem.board||sourceLabel||'Banca não informada').trim().slice(0,80),difficulty:['facil','medio','dificil'].includes(qItem.difficulty)?qItem.difficulty:'medio',origin:['oficial','adaptada_do_pdf','autoral'].includes(qItem.origin)?qItem.origin:'adaptada_do_pdf',statement:String(qItem.statement).trim(),options:qItem.options,correct_index:Number(qItem.correct_index),explanation:(qItem.origin==='importada'&&!isUnreviewedAiAnswer(qItem)?'[Questão importada pelo usuário — fonte não verificada] ':'')+answerKeyExportExplanation(qItem),created_by:ownerId
           }));
           if(sharedRows.length){
-            await cloudFetch('shared_question_bank?on_conflict=fingerprint',{
-              method:'POST',
-              headers:{'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},
-              body:JSON.stringify(sharedRows.slice(0,200))
-            }).catch(()=>{});
+            await cloudFetch('shared_question_bank?on_conflict=fingerprint',{method:'POST',headers:{...ownerHeaders,Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(sharedRows.slice(0,200))});
+            if(!currentScope())return 0;
           }
         }
       }catch(e){
+        if(!currentScope())return 0;
         console.warn('Salvamento em nuvem pendente; mantido localmente',e);
       }
     }
-
-    renderQuestionFilters();
-    populateTopicFilter();
-    updateQuestionPool();
-    renderExamBankHub();
+    if(!currentScope())return 0;
+    renderQuestionFilters();populateTopicFilter();updateQuestionPool();renderExamBankHub();
     return toAdd.length;
   }
 
-  function buildLocalCognitiveTwinQuestion(mold){
-    const subj=learningCategory(mold?.subject||'Conteúdo Geral');
-    const topic=String(mold?.topic||'Fixação de Conceito').replace(/^\[Gêmea\]\s*/i,'').trim();
-    const board=mold?.board||'Estilo Banca';
-    const origOpts=Array.isArray(mold?.options)?mold.options:[];
-    const origCorrectIdx=Math.min(Math.max(0,Number(mold?.correct_index)||0),Math.max(0,origOpts.length-1));
-    const correctText=String(origOpts[origCorrectIdx]||'Aplicação correta da regra prevista no edital.').trim();
-    const attempt=mold?._lastAttempt||null;
-    const wrongDistractors=origOpts.filter((_,i)=>i!==origCorrectIdx).map(x=>String(x).trim()).filter(Boolean);
-    const optionCount=Math.min(5,Math.max(2,origOpts.length||4));
-    const fillers=['Previsão incompatível com o texto normativo e entendimento dominante.','Regra diversa da prevista na norma, apoiada em exceção que não existe.','Interpretação restritiva não admitida pela doutrina e pela jurisprudência.','Aplicação automática da regra, sem observar os requisitos legais.'];
-    let fillerIndex=0;
-    while(wrongDistractors.length<optionCount-1)wrongDistractors.push(fillers[fillerIndex++%fillers.length]);
-    const cleanExp=String(mold?.explanation||'').replace(/\s+/g,' ').trim();
-    const angleNote=attempt&&!attempt.ok&&attempt.chosenText
-      ?`Atenção: na questão anterior você marcou "${shortLabel(attempt.chosenText,65)}". Compare os elementos do caso e identifique a alternativa que aplica a regra exata:`
-      :`Em uma variação de prova da banca ${board} sobre "${topic}", analise as assertivas e assinale a diretriz juridicamente/tecnicamente correta:`;
-    const newStatement=`🧬 [Questão Gêmea de Fixação · ${topic}] ${angleNote}`;
-    let newOptions,newCorrectIndex;
-    if(optionCount===2&&origOpts.length===2){newOptions=origOpts.map(x=>String(x).trim());newCorrectIndex=origCorrectIdx}
-    else{
-      const pool=[{text:correctText,ok:true},...wrongDistractors.slice(0,optionCount-1).map(text=>({text,ok:false}))];
-      for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]]}
-      newOptions=pool.map(x=>x.text);newCorrectIndex=pool.findIndex(x=>x.ok);
-    }
-    const newExplanation=[
-      `Conceito-chave: Fixação ativa do tema "${topic}" (${subj}).`,
-      `✅ Alternativa correta: ${correctText}`,
-      attempt&&!attempt.ok&&attempt.chosenText
-        ?`❌ Análise do distrator que confundiu antes: A opção "${attempt.chosenText}" é incorreta e atua como pegadinha recorrente.`
-        :`❌ Análise das alternativas: As demais opções invertem prazos, requisitos ou generalizam exceções sobre ${topic}.`,
-      `⚠️ Pegadinha da banca (${board}): ${cleanExp?shortLabel(cleanExp,180):'Leia atentamente os termos restritivos ou exceções antes de marcar.'}`
-    ].join('\n');
-    return{
-      subject:subj,
-      topic:`[Gêmea] ${topic}`,
-      board,
-      difficulty:normalizedDifficulty(mold),
-      origin:'autoral',
-      statement:newStatement,
-      options:newOptions,
-      correct_index:newCorrectIndex,
-      explanation:newExplanation
-    };
+  function buildLocalCognitiveTwinQuestion(_mold){
+    // Uma variação inédita exige geração e revisão; o modo offline conserva a questão original.
+    return null;
   }
+
   window.buildLocalCognitiveTwinQuestion=buildLocalCognitiveTwinQuestion;
 
   function reportOrFixCurrentQuestion(item,btnEl){
     if(!item)return;
-    const currentLetter=String.fromCharCode(65+(Number(item.correct_index)||0));
+    const currentLetter=Number.isInteger(Number(item.correct_index))&&Number(item.correct_index)>=0?String.fromCharCode(65+Number(item.correct_index)):'pendente';
     const ans=prompt(`Auditoria Pedagógica da Questão (" ${shortLabel(item.statement,60)} "):
 
-• Digite A, B, C ou D se quiser corrigir o gabarito imediatamente (atual: ${currentLetter});
-• Ou escreva uma observação para reportar erro no enunciado/comentário:`,currentLetter);
+• Digite uma letra existente para validar pessoalmente o gabarito (atual: ${currentLetter});
+• Ou escreva uma observação para reportar erro no enunciado/comentário.
+Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     if(ans===null)return;
     const clean=ans.trim();
     if(/^[A-Ea-e]$/.test(clean)){
       const newIdx=clean.toUpperCase().charCodeAt(0)-65;
-      item.correct_index=newIdx;
+      if(!Array.isArray(item.options)||newIdx>=item.options.length)return toast('Essa alternativa não existe nesta questão. Nenhuma alteração foi salva.');
+      const reference=prompt('Informe a fonte ou justificativa da sua validação (opcional):','');
+      if(reference===null)return;
       const fp=questionFingerprint(item);
+      applyReviewedAnswerKey(item,newIdx,reference);
       for(const qItem of (ALL_QUESTIONS||[])){
-        if(questionFingerprint(qItem)===fp)qItem.correct_index=newIdx;
+        if(qItem!==item&&questionFingerprint(qItem)===fp&&answerOptionsSignature(qItem)===answerOptionsSignature(item)){
+          const sourceIndex=qItem.options.findIndex(opt=>answerOptionText(opt)===answerOptionText(item.options[newIdx]));
+          if(sourceIndex>=0)applyReviewedAnswerKey(qItem,sourceIndex,reference);
+        }
       }
       save();
       window.persistToLocalDatabase?.(state?.activeCampaignId);
       if(btnEl)btnEl.textContent=`✓ Gabarito ajustado p/ ${clean.toUpperCase()}`;
-      toast(`Gabarito atualizado para a alternativa ${clean.toUpperCase()}!`);
+      toast(`Gabarito validado por você: ${clean.toUpperCase()}. Histórico e referência preservados.`);
       return;
     }
     if(clean.length>=3){
@@ -4466,85 +4840,88 @@
   window.reportOrFixCurrentQuestion=reportOrFixCurrentQuestion;
 
   async function spawnTwinQuestionForCurrent(currentItem,btnEl){
+    if(!currentItem||['sem_gabarito','anulada'].includes(answerKeyStatus(currentItem)))return toast('Revise o gabarito da questão original antes de gerar uma questão gêmea.');
+    const ownerId=cloudSession?.user?.id||state._ownerUserId||'guest',sessionOwnerId=cloudSession?.user?.id||null,campId=state.activeCampaignId,resetEpoch=Number(state._resetEpoch||0);
+    const campaign=typeof activeCampaign==='function'?activeCampaign():null,dbId=campaign?.dbId;
+    const battle=typeof activeQuestions==='object'?activeQuestions:null,battleIndex=battle?.current;
+    const currentScope=()=>(!sessionOwnerId||cloudSession?.user?.id===sessionOwnerId)&&((cloudSession?.user?.id||state._ownerUserId||'guest')===ownerId)&&(!state._ownerUserId||state._ownerUserId===ownerId)&&state.activeCampaignId===campId&&Number(state._resetEpoch||0)===resetEpoch&&(!dbId||(typeof activeCampaign==='function'&&activeCampaign()?.dbId===dbId))&&(!battle||(activeQuestions===battle&&battle.current===battleIndex));
+    if(!currentScope())return false;
     if(btnEl){btnEl.disabled=true;btnEl.textContent='⏳ Gerando questão gêmea...'}
-    const attempt=currentItem?._lastAttempt||null;
-    const errorContext=attempt
-      ?(attempt.ok
-          ?`O aluno ACERTOU a questão-molde marcando "${attempt.correctText}". Gere uma questão gêmea um nível mais profunda cobrando um caso prático ou exceção legal do mesmo tópico.`
-          :`O aluno ERROU a questão-molde: marcou o distrator "${attempt.chosenText}" em vez da correta "${attempt.correctText}". Gere uma questão gêmea inédita que trabalhe exatamente a diferença entre esse distrator e a regra verdadeira.`)
-      :'Gere uma questão gêmea cobrando o mesmo tema sob novo caso prático.';
+    let timer;
     try{
-      let twin=null;
-      if(cloudSession&&navigator.onLine){
-        const session=await validSession().catch(()=>null);
-        if(session){
-          const res=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{
-            method:'POST',
-            headers:{...authHeaders(session.access_token)},
-            body:JSON.stringify({
-              action:'generate_structured_questions',
-              submode:'twin',
-              count:1,
-              subject:learningCategory(currentItem.subject),
-              topic:currentItem.topic||'Assunto do Edital',
-              board:currentItem.board||'Instituto AOCP',
-              difficulty:normalizedDifficulty(currentItem),
-              mold_question:currentItem,
-              student_error_context:errorContext,
-              campaign_id:activeCampaign()?.dbId
-            })
-          }).catch(()=>null);
-          if(res?.ok){
-            const data=await res.json().catch(()=>({}));
-            if(data?.questions?.[0])twin=data.questions[0];
-          }
-        }
-      }
-      if(!twin){
-        twin=buildLocalCognitiveTwinQuestion(currentItem);
-      }
-      await saveQuestionsToCampaign(`Questão Gêmea · ${twin.topic}`,twin.subject,[twin],twin.board||'Questão Gêmea IA');
-      if(activeQuestions&&Array.isArray(activeQuestions.questions)){
-        activeQuestions.questions.splice(activeQuestions.current+1,0,prepareQuestion(twin));
-        q('#questionCounter').textContent=`${activeQuestions.current+1}/${activeQuestions.questions.length} · ${normalizedDifficulty(currentItem).toUpperCase()}`;
-        q('#nextQuestion').textContent='Responder questão gêmea →';
-      }
-      if(btnEl)btnEl.textContent='✓ Questão gêmea na fila!';
-      toast(attempt&&!attempt.ok?'🧬 Questão gêmea focada no seu erro criada e colocada como próxima!':'🧬 Questão gêmea de fixação criada e colocada como próxima da fila!');
+      if(!cloudSession)throw new Error('Entre na sua conta para solicitar uma questão gêmea à IA.');
+      if(!navigator.onLine)throw new Error('Conecte-se à internet para gerar uma questão gêmea. A questão original foi preservada.');
+      const session=await validSession();
+      if(!session||session.user?.id!==ownerId||!currentScope())return false;
+      const attempt=currentItem._lastAttempt;
+      const errorContext=attempt&&!attempt.ok&&attempt.chosenText?`Trabalhe a diferença entre a escolha do aluno ("${attempt.chosenText}") e o gabarito informado no molde. A nova solução deve ser conferida.`:'Gere uma questão inédita do mesmo assunto e disciplina; a resposta será uma sugestão pendente de revisão.';
+      const controller=new AbortController();timer=setTimeout(()=>controller.abort(),90000);
+      const res=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{method:'POST',signal:controller.signal,headers:{...authHeaders(session.access_token)},body:JSON.stringify({action:'generate_structured_questions',submode:'twin',count:1,subject:learningCategory(currentItem.subject),topic:currentItem.topic||'Assunto do Edital',board:currentItem.board||'Banca não informada',difficulty:normalizedDifficulty(currentItem),mold_question:currentItem,student_error_context:errorContext,campaign_id:dbId})});
+      if(!currentScope())return false;
+      const data=await res.json().catch(()=>({}));
+      if(!currentScope())return false;
+      if(!res.ok)throw new Error(data.error||'Não foi possível gerar a questão gêmea. Tente novamente; o molde foi preservado.');
+      const raw=data.questions?.[0],options=Array.isArray(raw?.options)?raw.options.map(o=>String(o??'').trim()):[];
+      const key=raw?.correct_index;
+      if(!raw||!String(raw.statement||'').trim()||options.length<2||options.length>5||options.some(o=>!o)||new Set(options.map(answerOptionText)).size!==options.length||key===null||key===undefined||typeof key==='boolean'||typeof key==='object'||String(key).trim()===''||!Number.isInteger(Number(key))||Number(key)<0||Number(key)>=options.length||!String(raw.explanation||'').trim())throw new Error('A IA devolveu uma questão incompleta ou inválida. Nenhuma alternativa ou resposta foi inventada.');
+      const resolved=resolveStrictQuestionDiscipline(raw.statement,raw.topic,raw.subject||currentItem.subject,options);
+      const requested=canonicalSubjectName(currentItem.subject);
+      if(canonicalSubjectName(resolved)!==requested)throw new Error('A questão sugerida não corresponde à disciplina solicitada. Nenhuma questão foi adicionada.');
+      const twin={subject:resolved,topic:String(currentItem.topic||raw.topic||'Assunto do Edital'),board:String(raw.board||currentItem.board||'Banca não informada'),statement:String(raw.statement).trim(),associated_text:String(raw.associated_text||''),options,correct_index:Number(key),difficulty:normalizedDifficulty(raw),origin:'autoral',key_source:'ia_sugerido',answer_key_validation:'pendente',explanation:String(raw.explanation).trim()};
+      twin.explanation=answerKeyExportExplanation(twin);
+      if(typeof window.isValidPedagogicalQuestion==='function'&&!window.isValidPedagogicalQuestion(twin))throw new Error('A questão sugerida não tem estrutura suficiente para estudo. Nenhuma questão foi adicionada.');
+      const added=await saveQuestionsToCampaign(`Questão Gêmea · ${twin.topic}`,twin.subject,[twin],twin.board);
+      if(!currentScope())return false;
+      if(!added)throw new Error('Não foi possível adicionar a sugestão. A questão original foi preservada.');
+      // Não inserir uma sugestão ainda não revisada na fila de treino pontuado.
+      if(btnEl)btnEl.textContent='✓ Sugestão pendente de revisão';
+      toast('🧬 Questão gêmea adicionada ao banco como sugestão da IA. Revise o gabarito antes de treinar.');
+      return twin;
     }catch(error){
+      if(!currentScope())return false;
       if(btnEl){btnEl.disabled=false;btnEl.textContent='⚡ Gerar questão gêmea'}
-      toast(error.message);
-    }
+      toast(error?.name==='AbortError'?'A geração demorou além do limite. Tente novamente; a questão original foi preservada.':error.message);
+      return false;
+    }finally{if(timer)clearTimeout(timer)}
   }
 
   async function explainQuestionWithEasyAnalogy(item,btnEl){
     const outBox=q('#easyAnalogyOutput');
-    if(!outBox)return;
+    if(!outBox)return false;
+    if(!item||['sem_gabarito','anulada'].includes(answerKeyStatus(item)))return toast('Revise o gabarito antes de pedir uma analogia para a resposta correta.');
     if(!cloudSession)return toast('Entre na sua conta para usar a explicação com analogia.');
+    const ownerId=cloudSession.user.id,campId=state.activeCampaignId,resetEpoch=Number(state._resetEpoch||0),key=Number(item.correct_index),signature=answerOptionsSignature(item);
+    const battle=typeof activeQuestions==='object'?activeQuestions:null,battleIndex=battle?.current;
+    const currentScope=()=>cloudSession?.user?.id===ownerId&&(!state._ownerUserId||state._ownerUserId===ownerId)&&state.activeCampaignId===campId&&Number(state._resetEpoch||0)===resetEpoch&&Number(item.correct_index)===key&&answerOptionsSignature(item)===signature&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item))&&(!battle||(activeQuestions===battle&&battle.current===battleIndex));
+    if(!currentScope())return false;
     if(btnEl){btnEl.disabled=true;btnEl.textContent='⏳ Gerando analogia...'}
     try{
       const session=await validSession();
-      if(!session)throw new Error('Sessão expirada.');
-      const correctOpt=item.options?.[Number(item.correct_index)||0]||'';
-      const prompt=`Explique de forma extremamente simples, direta e com uma analogia prática do dia a dia policial por que a resposta correta para a questão abaixo é "${correctOpt}". Máximo de 2 parágrafos curtos.\n\nQuestão: ${item.statement}`;
-      const res=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{
-        method:'POST',
-        headers:{...authHeaders(session.access_token)},
-        body:JSON.stringify({question:prompt,context:item.explanation||'',mode:'explicar',campaign_id:activeCampaign()?.dbId})
-      });
+      if(!session||session.user?.id!==ownerId||!currentScope())return false;
+      const correctOpt=item.options[key];
+      const prompt=`Explique o raciocínio do gabarito informado nesta questão ("${correctOpt}") com uma analogia simples. Não trate a analogia como validação oficial e informe eventuais limites da comparação. Máximo de 2 parágrafos curtos.\n\nQuestão: ${item.statement}`;
+      const res=await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`,{method:'POST',headers:{...authHeaders(session.access_token)},body:JSON.stringify({question:prompt,context:item.explanation||'',mode:'explicar',campaign_id:activeCampaign()?.dbId})});
+      if(!currentScope())return false;
       const data=await res.json().catch(()=>({}));
-      if(!res.ok)throw new Error(data.error||'Não foi possível gerar a analogia.');
+      if(!currentScope())return false;
+      if(!res.ok||!String(data.answer||'').trim())throw new Error(data.error||'Não foi possível gerar a analogia.');
       outBox.hidden=false;
-      outBox.innerHTML=`<b>🧠 Explicação descomplicada com analogia</b><p>${escText(data.answer||'')}</p>`;
+      outBox.innerHTML=`<b>🧠 Analogia sugerida pela IA</b><p>${escText(data.answer)}</p><p class="small muted">Confira a explicação e a referência da questão; a analogia não valida o gabarito.</p>`;
       if(btnEl)btnEl.textContent='✓ Analogia exibida';
+      return true;
     }catch(err){
-      if(btnEl){btnEl.disabled=false;btnEl.textContent='🧠 Explicar fácil (analogia)'}
+      if(!currentScope())return false;
+      if(btnEl)btnEl.textContent='🧠 Explicar fácil (analogia)';
       toast(err.message);
-    }
+      return false;
+    }finally{if(currentScope()&&btnEl)btnEl.disabled=false}
   }
 
   function createFlashcardFromQuestion(item,btnEl){
     if(!item)return false;
+    const ownerId=cloudSession?.user?.id||state._ownerUserId||'guest';
+    if((state._ownerUserId&&state._ownerUserId!==cloudSession?.user?.id)||['sem_gabarito','anulada'].includes(answerKeyStatus(item))){toast('Revise o gabarito da questão antes de criar um flashcard a partir da resposta.');return false}
+    if(typeof isQuestionDisciplineEligible==='function'&&!isQuestionDisciplineEligible(item,item.subject)){toast('Revise a disciplina da questão antes de criar um flashcard.');return false}
     if(btnEl)btnEl.disabled=true;
     const subject=resolveStrictQuestionDiscipline(item)||learningCategory(item.subject)||'Geral';
     const topic=String(item.topic||subject).trim();
@@ -4565,21 +4942,15 @@
       concept=clean.split(/(?<=\.)\s+/).slice(0,2).join(' ').slice(0,220);
     }
     if(!concept||concept.length<25){
-      if(correctText.length>=25){
-        concept=`Regra aplicável sobre ${topic}: ${correctText}`;
-      }else{
-        if(btnEl){btnEl.disabled=false;toast('Esta questão não tem explicação suficiente para gerar um flashcard conceitual.');}
-        return false;
-      }
+      if(btnEl)btnEl.disabled=false;
+      toast('Esta questão não tem explicação suficiente para extrair um flashcard conceitual. Confira a fonte e escreva sua própria nota.');
+      return false;
     }
 
     const front=topic
       ?`O que você precisa lembrar sobre: ${topic}?`
       :`Conceito essencial – ${subject}`;
-    const backParts=[concept];
-    if(correctText&&!concept.includes(correctText)){
-      backParts.push(`\n\nRegra-modelo: ${correctText}`);
-    }
+    const backParts=[concept,'\n\nExtraído do comentário da questão. Confira a fonte e o contexto antes de memorizar.'];
     const back=backParts.join('');
 
     if(typeof window.isValidFlashcardItem==='function'&&!window.isValidFlashcardItem(front,back)){
@@ -4606,6 +4977,8 @@
       content:back,
       subject,
       campaignId:state.activeCampaignId,
+      userId:ownerId,
+      sourceQuestionFingerprint:questionFingerprint(item),
       updated:new Date().toISOString()
     });
     if(typeof save==='function')save();
@@ -4635,14 +5008,18 @@
   window.generateFlashcardsFromNativeBank=generateFlashcardsFromNativeBank;
 
   function saveCurrentQuestionToNotes(item){
-    const correctIdx=Number(item.correct_index)||0;
-    const correctLetter=String.fromCharCode(65+correctIdx);
+    if(!item)return false;
+    const userId=cloudSession?.user?.id||'guest';
+    if(state._ownerUserId&&state._ownerUserId!==userId)return false;
+    const details=answerKeyDetails(item),correctIdx=details.scored?Number(item.correct_index):-1;
+    const answer=details.scored?`Gabarito informado: ${String.fromCharCode(65+correctIdx)}) ${item.options[correctIdx]}`:`Gabarito pendente de conferência: ${details.label}. Nenhuma alternativa foi validada.`;
     const noteTitle=`Questão comentada: ${item.topic||item.subject||'Estudo'}`;
     const noteBody=[
       `Disciplina: ${learningCategory(item.subject)}`,
       `Enunciado: ${item.statement}`,
-      `Alternativa correta: ${correctLetter}) ${item.options?.[correctIdx]||''}`,
-      `Resolução: ${item.explanation||''}`
+      ...(item.options||[]).map((option,index)=>`${String.fromCharCode(65+index)}) ${String(option)}`),
+      answer,
+      `Comentário do material (conferir fonte): ${item.explanation||'Não disponível.'}`
     ].join('\n\n');
     state.userNotes=state.userNotes||[];
     state.userNotes.push({
@@ -4658,14 +5035,62 @@
     toast('Questão e resolução passo a passo salvas nas suas Anotações!');
   }
 
+  window.saveCurrentQuestionToNotes=saveCurrentQuestionToNotes;
+
   // Sobrescreve showQuestion e answerQuestion com Caixa de Pergunta Moderna (Estilo Qconcursos / TEC / boaResposta + Solo Leveling)
+  function questionAnswerNotice(item){
+    const quality=typeof window.getQuestionQualityDecision==='function'?window.getQuestionQualityDecision(item):null;
+    if(quality?.needs_source||quality?.needs_review)return `<div class="questionAnswerNotice needsReview" role="status"><b>Questão aguardando revisão da fonte</b><p>${escText(quality.reason||'O enunciado está incompleto. Confira o PDF antes de responder.')} Esta questão não registra acerto, erro ou XP.</p></div>`;
+    if(typeof isQuestionDisciplineEligible==='function'&&!isQuestionDisciplineEligible(item,'all'))return '<div class="questionAnswerNotice needsReview" role="status"><b>Classificação aguardando revisão</b><p>Confira a disciplina e o assunto desta questão antes de responder. Esta questão não registra acerto, erro ou XP.</p></div>';
+    const key=answerKeyDetails(item);
+    return !key.scored?`<div class="questionAnswerNotice pendingKey" role="status"><b>${escText(key.label)}</b><p>Você pode selecionar uma alternativa e consultar a explicação. Esta prática não registra acerto, erro ou XP até a validação do gabarito.</p></div>`:'';
+  }
+
+  function bindQuestionAnswerConfirmation(battle,item){
+    const confirmBtn=q('#confirmQuestionAnswerBtn'),status=q('#questionSelectionStatus');
+    const quality=typeof window.getQuestionQualityDecision==='function'?window.getQuestionQualityDecision(item):null;
+    const blocked=Boolean(quality?.needs_source||quality?.needs_review||(typeof isQuestionDisciplineEligible==='function'&&!isQuestionDisciplineEligible(item,'all')));
+    battle._selectedAnswerIndex=null;
+    const skipBtn=q('#skipQuestionBlankBtn');
+    if(skipBtn)skipBtn.disabled=Boolean(blocked||battle.answered||!answerKeyDetails(item).scored);
+    if(confirmBtn){confirmBtn.disabled=true;confirmBtn.hidden=Boolean(battle.answered);}
+    if(status)status.textContent=blocked?'Confira a fonte, a disciplina e o assunto na revisão do PDF antes de responder.':battle.answered?'Resposta já registrada nesta bateria.':'Selecione uma alternativa e confirme abaixo.';
+    qa('[data-question-index]').forEach(button=>{
+      button.setAttribute('aria-pressed','false');
+      if(blocked)button.disabled=true;
+      button.onclick=()=>{
+        if(activeQuestions!==battle||battle.questions[battle.current]!==item||battle.answered||blocked||button.disabled)return;
+        const chosen=Number(button.dataset.questionIndex);
+        if(!Number.isInteger(chosen)||chosen<0||chosen>=(item.options||[]).length)return;
+        battle._selectedAnswerIndex=chosen;
+        qa('[data-question-index]').forEach(option=>{
+          const selected=option===button;
+          option.classList.toggle('selectedOption',selected);
+          option.setAttribute('aria-pressed',String(selected));
+        });
+        if(confirmBtn)confirmBtn.disabled=false;
+        if(status)status.textContent=`Alternativa ${String.fromCharCode(65+chosen)} selecionada. Toque em “${answerKeyDetails(item).scored?'Responder':'Ver explicação'}” para confirmar.`;
+      };
+    });
+    if(confirmBtn)confirmBtn.onclick=()=>{
+      if(activeQuestions!==battle||battle.questions[battle.current]!==item||battle.answered||blocked||confirmBtn.disabled)return;
+      const selected=qa('[data-question-index]').find(button=>Number(button.dataset.questionIndex)===battle._selectedAnswerIndex);
+      if(!selected||selected.disabled)return;
+      confirmBtn.disabled=true;
+      window.answerQuestion(selected,item);
+      if(battle.answered){confirmBtn.hidden=true;if(status)status.textContent='Resposta confirmada. Confira a explicação abaixo.';}
+      else confirmBtn.disabled=false;
+    };
+  }
+
   window.showQuestion=function(){
     const battle=activeQuestions;
     if(!battle)return;
     const item=battle.questions[battle.current];
+    item._answerStartedAt=Date.now();
     const diff=normalizedDifficulty(item);
     const diffLabel={facil:'🟢 Fácil',medio:'🟡 Média',dificil:'🔴 Difícil'}[diff]||'🟡 Média'; const sealOrigin = typeof window.questionOriginSeal === 'function' ? window.questionOriginSeal(item) : 'OFICIAL';
-    const boardLabel=item.board||(normalizedOrigin(item)==='oficial'?'Prova Oficial':'Autoral IA');
+    const boardLabel=questionBoardLabel(item,normalizedOrigin(item)==='oficial'?'Prova Oficial':'Autoral IA');
     const subjName=learningCategory(item.subject)||'Disciplina';
     const topicName=shortLabel(item.topic||'Geral',42);
     const pct=Math.round(((battle.current+1)/Math.max(1,battle.questions.length))*100);
@@ -4682,15 +5107,15 @@
     const normaMetaEl=q('#questionNormaBaseMeta');
     if(normaMetaEl){
       const nb=item.norma_base||(typeof inferLegalNormaBase==='function'?inferLegalNormaBase(item):'Bibliografia Oficial');
-      const va=item.verified_at||'2026-11';
-      normaMetaEl.textContent=`⚖️ Norma-base: ${nb} · Conferido: ${va}`;
+      const verified=Boolean(item.verified_by&&item.verified_at);
+      normaMetaEl.textContent=`⚖️ Referência sugerida: ${nb} · ${verified?`Conferência informada: ${item.verified_at}`:'Conferência documental pendente'}`;
     }
     const figUrl=item.figure_data_url||item.image_url||(state?.questionFigures?.[typeof questionFingerprint==='function'?questionFingerprint(item):'']||'');
     const stmtForVis=String(item.statement||'').replace(/\b(?:quadro[\s-]negro|quadro\s+de\s+\w+|quadro\s+cl[íi]nico|quadro\s+funcional|tabela[\s-]verdade|diagramas?\s+l[óo]gicos?|mapa\s+do\s+edital|mapa\s+mental)\b/gi,' ');const needsVisualCue=/\b(?:(?:observe|analise|veja|conforme|segundo|de\s+acordo\s+com|na|no|da|do|pela|pelo)\s+(?:a\s+|o\s+)?(?:figura|imagem|gr[áa]fico|tabela|planilha|charge|tirinha)|(?:figura|imagem|gr[áa]fico|tabela|quadro|diagrama)\s+(?:abaixo|a\s+seguir|\d+)|charge\s+(?:abaixo|a\s+seguir)|tirinha\s+(?:abaixo|a\s+seguir))\b/i.test(stmtForVis);
     const figHtml=figUrl
       ?`<div class="questionFigureBox" style="margin:10px 0;padding:10px;border-radius:12px;background:#071320;border:1px solid rgba(56,189,248,0.35);text-align:center;"><img src="${figUrl}" alt="Figura da questão" style="max-width:100%;max-height:280px;border-radius:8px;margin:0 auto;display:block;"><div class="small muted" style="margin-top:6px;">🖼️ Figura/Tabela extraída do documento original</div></div>`
       :(needsVisualCue?`<div class="questionFigureBox" style="margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(14,34,56,0.65);border:1px dashed rgba(56,189,248,0.4);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><span class="small muted">🖼️ Esta questão menciona uma figura, tabela ou gráfico:</span><label class="ghost small" style="width:auto;padding:4px 10px;font-size:11px;cursor:pointer;margin:0;">📎 Anexar Figura da Questão<input type="file" accept="image/*" id="attachQuestionFigureInput" hidden></label></div>`:'');
-    q('#questionText').innerHTML=formatStatementWithHighlights(item.statement,item)+figHtml;
+    q('#questionText').innerHTML=questionAnswerNotice(item)+formatStatementWithHighlights(item.statement,item)+figHtml;
     const figInput=q('#attachQuestionFigureInput');
     if(figInput){
       figInput.onchange=e=>{
@@ -4710,7 +5135,7 @@
         reader.readAsDataURL(f);
       };
     }
-    q('#questionOptions').innerHTML=(item.options||[]).map((o,i)=>`<div class="optionWithScissors"><button type="button" class="optionMainBtn" data-question-index="${i}"><span class="optLetterBadge">${String.fromCharCode(65+i)}</span><span class="optBodyText">${escText(o)}</span></button><button type="button" class="scissorBtn" data-scissor-index="${i}" title="Riscar/eliminar alternativa (estilo TEC/Qconcursos)" aria-label="Riscar alternativa ${String.fromCharCode(65+i)}">✂</button></div>`).join('')+`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px"><button type="button" class="ghost small" id="skipQuestionBlankBtn" style="width:auto;padding:6px 12px;font-size:.77rem" title="Pular sem marcar alternativa (Estratégia Líquida Cebraspe/Caveira: não perde ponto líquido)">⚪ Deixar em Branco (Modo Líquido Caveira)</button><button type="button" class="ghost small" id="toggleModalPaperModeBtn" style="width:auto;padding:6px 10px;font-size:.75rem">☀️ Modo Papel</button></div>`;
+    q('#questionOptions').innerHTML=(item.options||[]).map((o,i)=>`<div class="optionWithScissors"><button type="button" class="optionMainBtn" data-question-index="${i}"><span class="optLetterBadge">${String.fromCharCode(65+i)}</span><span class="optBodyText">${escText(window.JCQuestionText?window.JCQuestionText.analyzeOption(o).text:o)}</span></button><button type="button" class="scissorBtn" data-scissor-index="${i}" title="Riscar/eliminar alternativa (estilo TEC/Qconcursos)" aria-label="Riscar alternativa ${String.fromCharCode(65+i)}">✂</button></div>`).join('')+`<div class="questionAnswerControls"><span id="questionSelectionStatus" class="small muted" role="status" aria-live="polite">Selecione uma alternativa e confirme abaixo.</span><button type="button" class="action" id="confirmQuestionAnswerBtn" disabled>${answerKeyDetails(item).scored?'Responder':'Ver explicação (sem pontuar)'}</button></div><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px"><button type="button" class="ghost small" id="skipQuestionBlankBtn" style="width:auto;padding:6px 12px;font-size:.77rem" title="Pular sem marcar alternativa (Estratégia Líquida Cebraspe/Caveira: não perde ponto líquido)">⚪ Deixar em Branco (Modo Líquido Caveira)</button><button type="button" class="ghost small" id="toggleModalPaperModeBtn" style="width:auto;padding:6px 10px;font-size:.75rem">☀️ Modo Papel</button></div>`;
     q('#questionFeedback').innerHTML='';
     q('#nextQuestion').hidden=true;
     battle.answered=false;
@@ -4729,8 +5154,11 @@
     if(typeof window.syncQuestionPrevAndRestoreState==='function'){
       window.syncQuestionPrevAndRestoreState(battle, item);
     }
-    qa('[data-question-index]').forEach(b=>b.onclick=()=>window.answerQuestion(b,item));
-    if(q('#skipQuestionBlankBtn'))q('#skipQuestionBlankBtn').onclick=()=>window.skipQuestionBlank(item);
+    bindQuestionAnswerConfirmation(battle,item);
+    if(q('#skipQuestionBlankBtn'))q('#skipQuestionBlankBtn').onclick=()=>{
+      window.skipQuestionBlank(item);
+      if(battle.answered&&q('#confirmQuestionAnswerBtn'))q('#confirmQuestionAnswerBtn').hidden=true;
+    };
     if(q('#toggleModalPaperModeBtn'))q('#toggleModalPaperModeBtn').onclick=()=>togglePaperReadingMode();
     qa('[data-scissor-index]').forEach(sBtn=>sBtn.onclick=e=>{
       e.stopPropagation();
@@ -4740,13 +5168,32 @@
       if(optBtn){
         optBtn.classList.toggle('eliminatedOption');
         sBtn.classList.toggle('active');
+        if(optBtn.classList.contains('eliminatedOption')&&battle._selectedAnswerIndex===Number(idx)){
+          battle._selectedAnswerIndex=null;optBtn.classList.remove('selectedOption');optBtn.setAttribute('aria-pressed','false');
+          if(q('#confirmQuestionAnswerBtn'))q('#confirmQuestionAnswerBtn').disabled=true;
+          if(q('#questionSelectionStatus'))q('#questionSelectionStatus').textContent='Alternativa riscada. Selecione outra opção antes de confirmar.';
+        }
       }
     });
   };
 
   window.answerQuestion=function(button,item){
     const battle=activeQuestions;
-    if(!battle||battle.answered)return;
+    if(!battle||battle.answered||battle.questions[battle.current]!==item)return;
+    const quality=typeof window.getQuestionQualityDecision==='function'?window.getQuestionQualityDecision(item):null;
+    if(quality?.needs_source||quality?.needs_review)return toast('Esta questão está incompleta. Revise a fonte antes de responder; nenhum resultado foi registrado.');
+    if(typeof isQuestionDisciplineEligible==='function'&&!isQuestionDisciplineEligible(item,'all'))return toast('Revise a disciplina e o assunto desta questão antes de responder; nenhum resultado foi registrado.');
+    const grading=gradeAnswer(item,button?.dataset?.questionIndex);
+    if(!grading.scored){
+      battle.answered=true;
+      q('#questionFeedback').innerHTML=formatStepByStepResolution(item,Number(button?.dataset?.questionIndex),false,true);
+      qa('[data-question-index],[data-scissor-index]').forEach(b=>b.disabled=true);
+      const reportBtn=q('#reportQuestionIssueBtn');
+      if(reportBtn)reportBtn.onclick=()=>reportOrFixCurrentQuestion(item,reportBtn);
+      q('#nextQuestion').hidden=false;
+      q('#nextQuestion').textContent='Próxima questão →';
+      return;
+    }
     battle.answered=true;
     const chosen=Number(button.dataset.questionIndex),correct=Number(item.correct_index),ok=chosen===correct;
     const fp=questionFingerprint(item);
@@ -4757,18 +5204,22 @@
       battle.correct++;
       battle.streak=(battle.streak||0)+1;
       button.classList.add('correct');
-      applyXpLocal(25,'acerto_questao');
+      const accountId=cloudSession?.user?.id||state._ownerUserId||'guest',campaignId=state.activeCampaignId,dbId=typeof activeCampaign==='function'?activeCampaign()?.dbId:null,resetEpoch=Number(state._resetEpoch||0);
+      battle.progressSessionId=battle.progressSessionId||createProgressEventId('questions');
+      const attemptEvent=`${battle.progressSessionId}:q:${battle.current}`;
+      const currentContext=()=>accountId===(cloudSession?.user?.id||state._ownerUserId||'guest')&&campaignId===state.activeCampaignId&&dbId===(typeof activeCampaign==='function'?activeCampaign()?.dbId:null)&&resetEpoch===Number(state._resetEpoch||0);
+      applyXpLocal(25,'acerto_questao',attemptEvent);
       recordQuestionAttemptServer(
         item.subject||battle.subject,
         item.topic||'geral',
         true,
         battle.mode||'practice'
       ).then(serverRes=>{
-        if(serverRes?.mastery_bonus>0){
-          applyXpLocal(serverRes.mastery_bonus,'bonus_maestria');
-          toast(`🎯 Bônus de domínio +${serverRes.mastery_bonus} XP (maestria ${Math.round(serverRes.mastery||0)}% no tópico)!`);
+        if(currentContext()&&Number.isFinite(serverRes?.mastery_bonus)&&serverRes.mastery_bonus>0){
+          const paid=applyXpLocal(serverRes.mastery_bonus,'bonus_maestria',`${attemptEvent}:mastery`);
+          if(paid)toast(`🎯 Bônus de domínio +${serverRes.mastery_bonus} XP (maestria ${Math.round(serverRes.mastery||0)}% no tópico)!`);
         }
-      });
+      }).catch(()=>{if(currentContext())toast('Resposta salva; confirmação de domínio pendente.');});
     }else{
       battle.streak=0;
       button.classList.add('wrong');
@@ -4789,11 +5240,11 @@
       const oldBadge=btn.querySelector('.optStatPill');
       if(oldBadge)oldBadge.remove();
       const pillCls=isCorr?'isCorrectStat':isTrap?'isTrapStat':'isNeutralStat';
-      const pillTxt=isCorr?`📊 ${pct}% ✓`:isTrap?`⚠️ ${pct}% (Pegadinha mais marcada!)`:`📊 ${pct}%`;
+      const pillTxt=isCorr?`📊 ${pct}% ✓`:isTrap?`⚠️ ${pct}% (Seu erro mais frequente)`:`📊 ${pct}%`;
       btn.insertAdjacentHTML('beforeend',`<span class="optStatPill ${pillCls}">${pillTxt}</span>`);
     });
     const trapLetter=optStats.trapIndex>=0?String.fromCharCode(65+optStats.trapIndex):'-';
-    const statSummaryHtml=`<div class="communityOptionStatsBar" style="margin-bottom:10px;padding:9px 12px;border-radius:10px;background:rgba(8,22,38,0.9);border:1px solid rgba(56,189,248,0.28);font-size:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><span>📊 <b>Histórico Real na Questão (${optStats.totalSamples} resposta${optStats.totalSamples===1?"":"s"} registrada${optStats.totalSamples===1?"":"s"}):</b> <strong style="color:#34d399;">${optStats.pcts[correct]}% no gabarito (${String.fromCharCode(65+correct)})</strong></span>${optStats.trapIndex>=0?`<span style="color:#fbbf24;">⚠️ Pegadinha principal: <b>Alternativa ${trapLetter} (${optStats.pcts[optStats.trapIndex]}%)</b></span>`:''}</div>`;
+    const statSummaryHtml=`<div class="communityOptionStatsBar" style="margin-bottom:10px;padding:9px 12px;border-radius:10px;background:rgba(8,22,38,0.9);border:1px solid rgba(56,189,248,0.28);font-size:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><span>📊 <b>Seu histórico nesta questão (${optStats.totalSamples} resposta${optStats.totalSamples===1?"":"s"} registrada${optStats.totalSamples===1?"":"s"}):</b> <strong style="color:#34d399;">${optStats.pcts[correct]}% no gabarito (${String.fromCharCode(65+correct)})</strong></span>${optStats.trapIndex>=0?`<span style="color:#fbbf24;">⚠️ Seu erro mais frequente: <b>Alternativa ${trapLetter} (${optStats.pcts[optStats.trapIndex]}%)</b></span>`:''}${optStats.legacySamples?'<span class="small muted">Registros antigos sem vínculo seguro de alternativa/portal não entram nos percentuais.</span>':''}</div>`;
     q('#questionFeedback').innerHTML=statSummaryHtml+formatStepByStepResolution(item,chosen,ok,true);
     qa('[data-question-index],[data-scissor-index]').forEach(b=>b.disabled=true);
 
@@ -4844,7 +5295,7 @@
         aiInput.value=`[Modo QAP Policial] Explique detalhadamente os fundamentos, artigos de lei e pegadinhas de banca sobre esta questão de ${item.subject} (${item.topic}): "${item.statement}"`;
         aiInput.focus();
       }
-      toast('🦅 Questão enviada para o Instrutor Tático em QAP!');
+      toast('🦅 Questão enviada para o Invocador em QAP!');
     };
     if(q('#skipQuestionBlankBtn'))q('#skipQuestionBlankBtn').disabled=true;
     q('#nextQuestion').hidden=false;
@@ -4854,7 +5305,11 @@
 
   window.skipQuestionBlank=function(item){
     const battle=activeQuestions;
-    if(!battle||battle.answered)return;
+    if(!battle||battle.answered||battle.questions[battle.current]!==item)return;
+    const quality=typeof window.getQuestionQualityDecision==='function'?window.getQuestionQualityDecision(item):null;
+    if(quality?.needs_source||quality?.needs_review)return toast('Esta questão está incompleta. Revise a fonte antes de registrar um resultado.');
+    if(typeof isQuestionDisciplineEligible==='function'&&!isQuestionDisciplineEligible(item,'all'))return toast('Revise a disciplina e o assunto desta questão antes de registrar um resultado.');
+    if(!answerKeyDetails(item).scored)return toast('Esta questão aguarda conferência do gabarito; nenhuma alternativa foi marcada como correta.');
     battle.answered=true;
     battle.blankCount=(battle.blankCount||0)+1;
     battle.streak=0;
@@ -4964,7 +5419,8 @@
     const cleanSubj=canonicalSubjectName(subjectName);
     const subjKey=topicKey(cleanSubj);
     const allQ=ALL_QUESTIONS||[];
-    const subjPool=allQ.filter(item=>topicKey(resolveStrictQuestionDiscipline(item))===subjKey);
+    const eligible=item=>isQuestionDisciplineEligible(item,cleanSubj)&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item));
+    const subjPool=allQ.filter(eligible);
     const subjStmtSet=new Set(subjPool.map(item=>topicKey(item.statement||'')));
     const errEntries=activeCampaignErrors().filter(([,e])=>{
       const realErrSubj=resolveStrictQuestionDiscipline(e?.question||'',e?.topic||'',e?.subject||'',e?.options||[]);
@@ -4973,23 +5429,18 @@
     let chosenPool=[];
     if(preferErrors&&errEntries.length){
       const errMatched=subjPool.filter(item=>questionMatchesErrorPool(item,errEntries));
-      const synthFromErrors=errEntries
-        .filter(([,e])=>e?.question&&e?.correctAnswer&&!subjStmtSet.has(topicKey(e.question)))
-        .map(([,e])=>{
-          if(Array.isArray(e.options)&&e.options.length>=2&&Number.isInteger(Number(e.correct_index))){
-            return{subject:cleanSubj,topic:e.topic||'Correção de Erro',statement:e.question,options:[...e.options],correct_index:Number(e.correct_index),explanation:e.explanation||`Revisão de erro: a resposta correta é "${e.correctAnswer}".`,difficulty:'medio',origin:'adaptada_do_pdf'};
-          }
-          const distractors=buildSubjectAppropriateDistractors(cleanSubj,e.correctAnswer);
-          const wrongChosen=e.lastChosen&&e.lastChosen!==e.correctAnswer?[e.lastChosen]:[];
-          const opts=[e.correctAnswer,...wrongChosen,...distractors].slice(0,4);
-          return{subject:cleanSubj,topic:e.topic||'Correção de Erro',statement:e.question,options:opts,correct_index:0,explanation:e.explanation||`Revisão de erro: a resposta correta é "${e.correctAnswer}".`,difficulty:'medio',origin:'adaptada_do_pdf'};
-        });
-      chosenPool=[...errMatched,...synthFromErrors,...subjPool];
+      const originalsFromErrors=errEntries
+        .filter(([,e])=>e?.question&&Array.isArray(e.options)&&!subjStmtSet.has(topicKey(e.question)))
+        .map(([key,e])=>({...e,subject:cleanSubj,topic:e.topic||'Correção de Erro',statement:e.question,
+          options:[...e.options],correct_index:e.correct_index,explanation:e.explanation||'',
+          difficulty:e.difficulty||'medio',origin:e.origin||'autoral',_alreadyPreparedConsistent:true,_errorNotebookKey:key}))
+        .filter(eligible);
+      chosenPool=[...errMatched,...originalsFromErrors,...subjPool];
     }else{
       chosenPool=subjPool;
     }
     // Filtro final estrito: garante que 100% das questões da sessão pertencem exclusivamente à disciplina solicitada
-    chosenPool=chosenPool.filter(item=>topicKey(resolveStrictQuestionDiscipline(item))===subjKey);
+    chosenPool=chosenPool.filter(eligible);
     if(chosenPool.length){
       const seen=new Set();
       const seenStmt=new Set();
@@ -5016,6 +5467,11 @@
       if(q('#questionDialogTitle'))q('#questionDialogTitle').textContent=`🎯 Correção de Gargalo · ${cleanSubj}`;
       q('#questionDialog')?.showModal();
       showQuestion();
+      return;
+    }
+    if(errEntries.length&&typeof window.openTheoryForSubjectAndTopic==='function'){
+      window.openTheoryForSubjectAndTopic(cleanSubj,errEntries[0][1]?.topic||'');
+      toast('Não há questão original completa com gabarito válido para este erro. Revise a teoria ou importe o item original.');
       return;
     }
     const subjSel=q('#questionSubject');
@@ -5089,6 +5545,8 @@
         </div>
       </div>`;
     }).join(''):'<div class="empty">Resolva questões para visualizar sua precisão por disciplina e distância para o corte de 72%.</div>';
+    const boardRows=questionBoardPerformanceRows(q('#questionSubject')?.value||'all');
+    root.insertAdjacentHTML('beforeend',`<section class="card" aria-label="Desempenho por banca"><h4>Desempenho por banca e disciplina</h4><p class="small muted">Respostas registradas a partir desta revisão. Questões autorais no estilo da banca ficam separadas das questões de documentos. Sugestões de gabarito da IA pendentes não pontuam.</p>${boardRows.length?boardRows.slice(0,30).map(row=>`<div class="performanceBar"><div class="perfBarHead"><span>${escText(row.board)} · ${escText(row.subject)} · ${row.origin==='autoral'?'Estilo autoral':'Documento'}</span><b>${row.correct}/${row.total} (${row.rate}%)</b></div><p class="small muted">Primeira tentativa: ${row.firstCorrect}/${row.firstTotal}${row.firstRate!==null?` (${row.firstRate}%)`:''} · Repetições: ${row.repeatTotal}${row.averageSeconds!==null?` · Tempo médio: ${row.averageSeconds}s (${row.timedTotal} cronometradas)`:''}${row.lowSample?' · Amostra pequena (menos de 30 questões distintas)':''}</p></div>`).join(''):'<p class="small muted">Responda questões para iniciar esta estatística. O histórico antigo não permite reconstruir a banca com segurança.</p>'}</section>`);
     root.querySelectorAll('[data-perf-train-subject]').forEach(btn=>{
       btn.onclick=()=>startSubjectTargetedFix(btn.dataset.perfTrainSubject,true);
     });
@@ -5241,6 +5699,12 @@
   }
 
   function switchExamHubTab(tabName){
+    if(window.JCQuestionsWorkspace&&!window.JCQuestionsWorkspace.isActive('provas')){
+      if(!q('#report')?.classList.contains('active'))openView('report');
+      window.JCQuestionsWorkspace.request('provas');
+      ensureExamBankHub();
+      window.JCQuestionsWorkspace.collect();
+    }
     activeExamHubTab=tabName;
     qa('[data-exam-tab]').forEach(btn=>btn.classList.toggle('active',btn.dataset.examTab===tabName));
     qa('[data-exam-panel]').forEach(panel=>{
@@ -5343,11 +5807,106 @@
   }
   window.classifyExamDocumentMeta = classifyExamDocumentMeta;
 
+  function examDocumentScopeAllows(item,shared=false){
+    if(!item)return false;
+    const sessionId=typeof cloudSession!=='undefined'?String(cloudSession?.user?.id||''):'';
+    const savedOwner=typeof state!=='undefined'?String(state?._ownerUserId||''):'';
+    const ownerId=sessionId||savedOwner;
+    const campaign=typeof activeCampaign==='function'?activeCampaign():null;
+    const campaignIds=new Set([campaign?.dbId,campaign?.id,typeof state!=='undefined'?state?.activeCampaignId:''].filter(Boolean).map(String));
+    if(shared&&item.is_community===true)return true;
+    if(sessionId&&savedOwner&&sessionId!==savedOwner)return false;
+    const itemOwner=String(item.user_id||item.owner_id||item.ownerId||item._ownerUserId||'');
+    const itemCampaign=String(item.campaign_id||item.campaignId||'');
+    if(itemOwner&&(!ownerId||itemOwner!==ownerId))return false;
+    return !itemCampaign||campaignIds.has(itemCampaign);
+  }
+  function examDocumentScopeKey(){
+    return JSON.stringify([typeof cloudSession!=='undefined'?cloudSession?.user?.id||'':'',typeof state!=='undefined'?state?._ownerUserId||'':'',typeof state!=='undefined'?state?.activeCampaignId||'':'',typeof activeCampaign==='function'?activeCampaign()?.dbId||'':'',typeof state!=='undefined'?Number(state?._resetEpoch||0):0]);
+  }
+
+  function examQuestionDocumentIds(item){
+    const ids=new Set();
+    const add=value=>{if(typeof value==='string'||typeof value==='number'){const id=String(value).trim();if(id)ids.add(id)}};
+    const read=value=>{
+      if(!value||typeof value!=='object')return;
+      ['sourceDocumentId','documentId','source_document_id','document_id','documentDbId'].forEach(key=>add(value[key]));
+      if(/^(?:document|study_document|pdf)$/i.test(String(value.type||value.kind||'')))add(value.id);
+    };
+    read(item);read(item?.provenance);read(item?.sourceDocument);read(item?.source_document);
+    for(const refs of [item?.source_refs,item?.sourceRefs,item?.rowrefs,item?.provenance?.source_refs]){
+      if(Array.isArray(refs))refs.forEach(read);
+    }
+    return [...ids];
+  }
+
+  function buildExamDocumentQuestionIndex(documents,source=ALL_QUESTIONS||[]){
+    const index=new Map(),byId=new Map(),seen=new Map();
+    for(const doc of documents||[]){
+      if(!doc?.id)continue;
+      for(const id of [doc.id,doc.documentDbId,doc.document_id].filter(Boolean).map(String)){
+        const bucket=byId.get(id)||new Set();bucket.add(doc);byId.set(id,bucket);
+      }
+      if(examDocumentScopeAllows(doc,true)){index.set(String(doc.id),[]);seen.set(String(doc.id),new Set());}
+    }
+    for(const item of source||[]){
+      // A title is descriptive metadata, never proof that a question belongs to a PDF.
+      const matches=new Set();
+      for(const id of examQuestionDocumentIds(item))for(const doc of byId.get(id)||[])matches.add(doc);
+      if(matches.size!==1)continue;
+      const doc=[...matches][0],pool=index.get(String(doc.id));
+      if(!pool||!examDocumentScopeAllows(item,doc.is_community===true))continue;
+      const known=seen.get(String(doc.id));
+      if(!known.has(item)){known.add(item);pool.push(item);}
+    }
+    return index;
+  }
+
+  function examDocumentQuestionPool(doc,source=ALL_QUESTIONS||[]){
+    if(!doc?.id)return[];
+    const documents=typeof cloudDocuments!=='undefined'&&Array.isArray(cloudDocuments)?cloudDocuments:[];
+    return buildExamDocumentQuestionIndex(documents.some(d=>String(d.id)===String(doc.id))?documents:[...documents,doc],source).get(String(doc.id))||[];
+  }
+  function buildExamQuestionDocumentMap(documents,source){
+    const byId=new Map((documents||[]).filter(doc=>doc?.id).map(doc=>[String(doc.id),doc])),result=new WeakMap();
+    for(const [id,questions] of buildExamDocumentQuestionIndex(documents,source))for(const item of questions)result.set(item,byId.get(id));
+    return result;
+  }
+  async function readExamDocumentQuestionRows(doc,session,scopeKey){
+    const ownerId=String(session?.user?.id||''),campaignId=String(doc?.campaign_id||(typeof activeCampaign==='function'?activeCampaign()?.dbId:'')||'');
+    if(!ownerId||!campaignId||!examDocumentScopeAllows(doc)||doc.is_community===true&&String(doc.user_id||'')!==ownerId)throw new Error('Abra uma prova da sua conta e do portal atual para alterar gabaritos.');
+    const current=()=>scopeKey===examDocumentScopeKey()&&examDocumentScopeAllows(doc);
+    if(!current())return[];
+    const suffix=`user_id=eq.${encodeURIComponent(ownerId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&select=id,title,content,source_refs,source_document_id,user_id,campaign_id`;
+    const documentIds=[...new Set([doc.id,doc.documentDbId,doc.document_id].filter(Boolean).map(String))];
+    const filters=documentIds.flatMap(id=>[`source_document_id=eq.${encodeURIComponent(id)}`,`source_refs=cs.${encodeURIComponent(JSON.stringify([{document_id:id}]))}`]);
+    const responses=await Promise.all(filters.map(filter=>cloudFetch(`generated_study_content?${filter}&${suffix}`,{headers:{Authorization:`Bearer ${session.access_token}`}})));
+    if(!current())return[];
+    if(responses.some(response=>!response.ok))throw new Error('Não foi possível conferir a origem das questões. Nenhum gabarito foi alterado.');
+    const groups=await Promise.all(responses.map(response=>response.json()));
+    if(!current())return[];
+    const rows=[...new Map(groups.flat().filter(row=>row?.id&&examDocumentScopeAllows(row)).map(row=>[String(row.id),row])).values()];
+    const sources=buildExamDocumentQuestionIndex(typeof cloudDocuments!=='undefined'?cloudDocuments:[doc],rows);
+    return sources.get(String(doc.id))||[];
+  }
+  function examDocumentQuestionAvailability(doc,linked=examDocumentQuestionPool(doc)){
+    const eligible=linked.filter(item=>isQuestionDisciplineEligible(item,'all')&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item)));
+    return {linked,eligible,indexed:Math.max(0,Number(doc?.metadata?.coverage?.summary_count||0)||0)};
+  }
+  function explainUnavailableExamDocument(doc,linked=examDocumentQuestionPool(doc)){
+    if(!doc)return toast('Esta prova não está disponível neste portal. Atualize o catálogo.');
+    return toast(linked.length?`${linked.length} questões vinculadas, mas nenhuma liberada: confira disciplina, enunciado completo e gabarito na revisão do PDF.`:'Ainda não há questões vinculadas com segurança a este PDF. Use a revisão da fonte para conferir a extração sem duplicar o banco.');
+  }
+  window.examDocumentQuestionPool=examDocumentQuestionPool;
+  window.buildExamDocumentQuestionIndex=buildExamDocumentQuestionIndex;
+
   function renderSingleExamDocCardHtml(doc, docQuestions, meta) {
     const status = doc.processing_status || 'pending';
-    const qCount = docQuestions.length || Number(doc.metadata?.coverage?.summary_count || 0) || 0;
+    const availability=examDocumentQuestionAvailability(doc,docQuestions);
+    const qCount=availability.eligible.length;
+    const ownReview=doc.is_community!==true||Boolean(doc.user_id&&String(doc.user_id)===String(typeof cloudSession!=='undefined'?cloudSession?.user?.id||'':''));
     const statusLabel = {
-      ready: qCount ? `${qCount} questões` : 'Pronta',
+      ready: `${qCount} disponíveis · ${docQuestions.length} vinculadas${availability.indexed>docQuestions.length?` · ${availability.indexed} indexadas no processamento`:''}${!docQuestions.length&&availability.indexed?' · vínculo pendente':''}`,
       processing: '⏳ Extraindo questões...',
       pending: '⏳ Aguardando extração',
       error: '⚠️ Falha — tentar novamente'
@@ -5364,19 +5923,22 @@
         <span class="small muted">${escText(statusLabel)} · ${new Date(doc.created_at).toLocaleDateString('pt-BR')}</span>
       </div>
       <div class="examDocActions">
-        ${hasMissingKey ? `<button type="button" class="action small" data-add-key-doc="${doc.id}" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#040c16;font-weight:900">📋 Adicionar Gabarito</button><button type="button" class="action small" data-solve-ai-key-doc="${doc.id}" style="background:linear-gradient(135deg,#0284c7,#2563eb);color:#fff;font-weight:900" title="A IA resolve cada questão passo a passo e sugere o gabarito">🤖 Resolver com IA</button>` : ''}${status === 'ready' ? `<button type="button" class="ghost small" data-exam-doc-battle="${doc.id}">◎ Treinar</button><button type="button" class="action small" data-exam-doc-simulado="${doc.id}">▶ Simulado</button>` : `<button type="button" class="action small" data-exam-doc-process="${doc.id}">⚡ Extrair Questões</button>`}
+        ${hasMissingKey ? `<button type="button" class="action small" data-add-key-doc="${escText(doc.id)}" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#040c16;font-weight:900">📋 Adicionar Gabarito</button><button type="button" class="action small" data-solve-ai-key-doc="${escText(doc.id)}" style="background:linear-gradient(135deg,#0284c7,#2563eb);color:#fff;font-weight:900" title="A IA resolve cada questão passo a passo e sugere o gabarito">🤖 Resolver com IA</button>` : ''}${qCount ? `<button type="button" class="ghost small" data-exam-doc-battle="${escText(doc.id)}">◎ Treinar</button><button type="button" class="action small" data-exam-doc-simulado="${escText(doc.id)}">▶ Simulado</button>` : status === 'ready' ? `<button type="button" class="ghost small" data-exam-doc-link-info="${escText(doc.id)}">${docQuestions.length?'Por que não está liberada?':'Verificar vínculo'}</button><button type="button" class="action small" data-exam-doc-review="${escText(doc.id)}">${ownReview?'Reanalisar PDF':'Importar PDF para revisar'}</button>` : `<button type="button" class="action small" data-exam-doc-process="${escText(doc.id)}">⚡ Extrair Questões</button>`}
       </div>
     </div>`;
   }
 
   function renderExamBankHub(){
+    if(window.JCQuestionsWorkspace&&!window.JCQuestionsWorkspace.isActive('provas')){window.JCQuestionsWorkspace.invalidate();return}
     ensureExamBankHub();
     const catalogEl=q('#examDocumentsCatalog'),countTag=q('#examHubCountTag');
     if(!catalogEl)return;
     const officialQuestions=(ALL_QUESTIONS||[]).filter(item=>normalizedOrigin(item)==='oficial');
     if(countTag)countTag.textContent=`${officialQuestions.length} oficia${officialQuestions.length===1?'l':'is'} · ${(ALL_QUESTIONS||[]).length} total`;
 
-    const examDocs=(typeof cloudDocuments!=='undefined'?cloudDocuments:[]).filter(d=>['prova','simulado'].includes(d.document_type));
+    const examDocs=(typeof cloudDocuments!=='undefined'?cloudDocuments:[]).filter(d=>['prova','simulado'].includes(d.document_type)&&examDocumentScopeAllows(d,true));
+    const hubScope=examDocumentScopeKey();
+    const currentExamDoc=id=>hubScope===examDocumentScopeKey()?examDocs.find(d=>String(d.id)===String(id)&&examDocumentScopeAllows(d,true)):null;
     if(!examDocs.length){
       catalogEl.innerHTML=`<div class="examEmptyState">
         <b>Nenhuma prova ou simulado em PDF enviado ainda neste portal</b>
@@ -5391,31 +5953,12 @@
       return;
     }
 
-    // Enriquecimento O(1) ultra-rápido por Map de IDs/Títulos (evita 183 x 6065 = 1,1 milhão de iterações!)
-    const qsByDocId = new Map();
-    const qsByBoardKey = new Map();
-    for (const item of (ALL_QUESTIONS || [])) {
-      const dId = String(item.sourceDocumentId || item.documentId || '');
-      if (dId) {
-        let arr = qsByDocId.get(dId);
-        if (!arr) { arr = []; qsByDocId.set(dId, arr); }
-        arr.push(item);
-      }
-      const bKey = topicKey(item.board || '');
-      if (bKey) {
-        let arrB = qsByBoardKey.get(bKey);
-        if (!arrB) { arrB = []; qsByBoardKey.set(bKey, arrB); }
-        arrB.push(item);
-      }
-    }
+    // One provenance index serves the cards and actions; cached metadata is not a playable pool.
+    const qsByDocId=buildExamDocumentQuestionIndex(typeof cloudDocuments!=='undefined'?cloudDocuments:examDocs);
     const enrichedDocs = examDocs.map(doc => {
-      const docQuestions = qsByDocId.get(String(doc.id)) || qsByBoardKey.get(topicKey(doc.title)) || [];
-      if (!doc._cachedExamMeta || doc._cachedExamMetaQCount !== docQuestions.length) {
-        doc._cachedExamMeta = classifyExamDocumentMeta(doc, docQuestions);
-        doc._cachedExamMetaQCount = docQuestions.length;
-      }
-      const meta = doc._cachedExamMeta;
-      const qCount = docQuestions.length || Number(doc.metadata?.coverage?.summary_count || 0) || 0;
+      const docQuestions=qsByDocId.get(String(doc.id))||[];
+      const meta = classifyExamDocumentMeta(doc, docQuestions);
+      const qCount=examDocumentQuestionAvailability(doc,docQuestions).eligible.length;
       return { doc, docQuestions, meta, qCount };
     });
 
@@ -5467,7 +6010,7 @@
         const totalQs = grp.items.reduce((acc, x) => acc + x.qCount, 0);
         const bySubj = {};
         for (const it of grp.items) (bySubj[it.meta.subject] ||= []).push(it);
-        const subjBlocks = Object.entries(bySubj).map(([subjName, sItems]) => {
+        const subjBlocks = (isOpen ? Object.entries(bySubj) : []).map(([subjName, sItems]) => {
           const dKey = `examcatsub:${catKey}:${subjectKey(subjName)}`;
           const dOpen = examCatalogState.foldersOpen[dKey] !== undefined ? examCatalogState.foldersOpen[dKey] : true;
           const sQs = sItems.reduce((acc, x) => acc + x.qCount, 0);
@@ -5502,7 +6045,7 @@
         for (const it of sItems) {
           (byCat[it.meta.catKey] ||= { label: it.meta.catLabel, order: it.meta.catOrder, items: [] }).items.push(it);
         }
-        const catBlocks = Object.entries(byCat).sort((a, b) => a[1].order - b[1].order).map(([cKey, cGrp]) => {
+        const catBlocks = (isOpen ? Object.entries(byCat) : []).sort((a, b) => a[1].order - b[1].order).map(([cKey, cGrp]) => {
           const dKey = `examsubjcat:${subjectKey(subjName)}:${cKey}`;
           const dOpen = examCatalogState.foldersOpen[dKey] !== undefined ? examCatalogState.foldersOpen[dKey] : true;
           const cQs = cGrp.items.reduce((acc, x) => acc + x.qCount, 0);
@@ -5552,8 +6095,8 @@
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             ${pendingDocs.length ? `<button type="button" class="action small" id="extractAllPendingExamsBtn" style="width:auto;padding:6px 12px;font-size:.76rem;background:linear-gradient(135deg,#f59e0b,#d97706);color:#040c16;font-weight:900">⚡ Extrair ${pendingDocs.length} Pendente(s) em Lote</button>` : ''}
             <button type="button" class="action small" id="goBatchImportFromCatalogBtn" style="width:auto;padding:6px 12px;font-size:.76rem">➕ Importar Lote de Arquivos (PDF/Pasta)</button>
-            <button type="button" class="ghost small" id="consolidateToNativeBankBtn" style="width:auto;padding:6px 11px;font-size:.75rem;border-color:#34d399;color:#34d399;font-weight:800" title="Transforma suas questões importadas em um Banco Nativo permanente separado por Disciplina e Assunto">🏛️ Consolidar Meu Banco como Nativo</button>
-            <button type="button" class="ghost small" id="exportNativeBankJsonBtn" style="width:auto;padding:6px 10px;font-size:.74rem" title="Baixar o arquivo JSON do seu Banco Nativo consolidado por disciplina e assunto">📥 Exportar Banco Nativo (.json)</button>
+            <button type="button" class="ghost small" id="consolidateToNativeBankBtn" style="width:auto;padding:6px 11px;font-size:.75rem;border-color:#34d399;color:#34d399;font-weight:800" title="Organiza uma cópia das questões desta conta e portal, preservando origem e gabarito">🏛️ Organizar meu banco</button>
+            <button type="button" class="ghost small" id="exportNativeBankJsonBtn" style="width:auto;padding:6px 10px;font-size:.74rem" title="Baixar o arquivo JSON do seu Banco Nativo consolidado por disciplina e assunto">📥 Exportar meu banco (.json)</button>
           </div>
         </div>
       </div>
@@ -5594,6 +6137,7 @@
           d.open = anyClosed;
           if (d.dataset.examSubdetails) examCatalogState.foldersOpen[d.dataset.examSubdetails] = anyClosed;
         });
+        renderExamBankHub();
       };
     }
 
@@ -5656,6 +6200,7 @@
       const open = !folder.classList.contains('open');
       folder.classList.toggle('open', open);
       examCatalogState.foldersOpen[btn.dataset.examFolderToggle] = open;
+      renderExamBankHub();
     });
 
     qa('[data-exam-subdetails]').forEach(det => det.ontoggle = () => {
@@ -5667,12 +6212,13 @@
       e.stopPropagation();
       const targetSubj = btn.dataset.trainExamGroupSubj;
       const targetCat = btn.dataset.trainExamGroupCat;
+      if(hubScope!==examDocumentScopeKey())return toast('O portal mudou. Abra novamente a Central de Provas.');
       const matchingDocs = enrichedDocs.filter(x =>
         (!targetSubj || subjectKey(x.meta.subject) === subjectKey(targetSubj)) &&
         (!targetCat || x.meta.catKey === targetCat)
       );
-      const pool = matchingDocs.flatMap(x => x.docQuestions);
-      if (!pool.length) return toast('Extraia as questões dos arquivos desta pasta primeiro.');
+      const pool = matchingDocs.flatMap(x => x.docQuestions).filter(item=>isQuestionDisciplineEligible(item,targetSubj||'all')&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item)));
+      if (!pool.length) return toast('Esta pasta ainda não tem questões liberadas. Confira os vínculos, a estrutura e os gabaritos na revisão dos PDFs.');
       activeQuestions = {
         mode: 'progressive',
         subject: `${targetSubj || 'Caderno'} (${matchingDocs.length} arq.)`,
@@ -5688,8 +6234,30 @@
       showQuestion();
     });
 
+    qa('[data-exam-doc-link-info]').forEach(btn=>btn.onclick=()=>{
+      const doc=currentExamDoc(btn.dataset.examDocLinkInfo);
+      explainUnavailableExamDocument(doc);
+    });
+    qa('[data-exam-doc-review]').forEach(btn=>btn.onclick=async()=>{
+      const doc=currentExamDoc(btn.dataset.examDocReview);
+      if(!doc)return explainUnavailableExamDocument(null);
+      if(doc.is_community===true&&(!doc.user_id||String(doc.user_id)!==String(typeof cloudSession!=='undefined'?cloudSession?.user?.id||'':''))){
+        switchExamHubTab('import');
+        return toast('Para conferir a extração de um PDF compartilhado, importe sua cópia do arquivo. A biblioteca compartilhada foi preservada.');
+      }
+      if(typeof window.JCQuestionReview?.reviewDocument!=='function')return toast('A revisão do PDF ainda está carregando. Aguarde e tente novamente.');
+      btn.disabled=true;
+      try{
+        await window.JCQuestionReview.reviewDocument(doc.id,{title:doc.title});
+      }catch(error){
+        toast(error?.message||'Não foi possível revisar o PDF. Seu banco foi preservado.');
+      }finally{
+        if(hubScope===examDocumentScopeKey())renderExamBankHub();
+      }
+    });
     qa('[data-exam-doc-process]').forEach(btn=>btn.onclick=async()=>{
       const id=btn.dataset.examDocProcess;
+      if(!currentExamDoc(id))return explainUnavailableExamDocument(null);
       btn.disabled=true;
       btn.textContent='⏳ Extraindo questões...';
       try{
@@ -5703,10 +6271,9 @@
       }
     });
     qa('[data-exam-doc-battle]').forEach(btn=>btn.onclick=()=>{
-      const doc=examDocs.find(d=>d.id===btn.dataset.examDocBattle);
-      let docPool=(ALL_QUESTIONS||[]).filter(item=>String(item.sourceDocumentId||item.documentId||'')===String(doc?.id)||topicKey(item.board)===topicKey(doc?.title));
-      if(!docPool.length)docPool=(ALL_QUESTIONS||[]).filter(item=>normalizedOrigin(item)==='oficial');
-      if(!docPool.length)return toast('Extraia as questões desta prova primeiro.');
+      const doc=currentExamDoc(btn.dataset.examDocBattle);
+      const docPool=examDocumentQuestionPool(doc).filter(item=>isQuestionDisciplineEligible(item,'all')&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item)));
+      if(!docPool.length)return explainUnavailableExamDocument(doc);
       activeQuestions={
         mode:'progressive',
         subject:doc?.title||'Prova Oficial',
@@ -5722,14 +6289,10 @@
       showQuestion();
     });
     qa('[data-exam-doc-simulado]').forEach(btn=>btn.onclick=()=>{
-      const doc=examDocs.find(d=>d.id===btn.dataset.examDocSimulado);
-      let docPool=(ALL_QUESTIONS||[]).filter(item=>String(item.sourceDocumentId||item.documentId||'')===String(doc?.id)||topicKey(item.board)===topicKey(doc?.title));
-      if(!docPool.length)docPool=(ALL_QUESTIONS||[]).filter(item=>normalizedOrigin(item)==='oficial');
-      if(!docPool.length)return toast('Extraia as questões desta prova primeiro.');
-      if(q('#questionOrigin'))q('#questionOrigin').value='oficial';
-      if(q('#simuladoScope'))q('#simuladoScope').value='filtered';
-      updateQuestionPool();
-      startTimedSimulado();
+      const doc=currentExamDoc(btn.dataset.examDocSimulado);
+      const docPool=examDocumentQuestionPool(doc).filter(item=>isQuestionDisciplineEligible(item,'all')&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item)));
+      if(!docPool.length)return explainUnavailableExamDocument(doc);
+      startTimedSimulado(docPool);
     });
   }
 
@@ -5768,9 +6331,9 @@
         toast('Nenhuma questão nova encontrada no catálogo compartilhado.');
         return;
       }
-      const added=await saveQuestionsToCampaign('Catálogo Oficial Compartilhado','Conteúdo Geral',combined,'Banco Oficial Compartilhado');
-      if(statusEl)statusEl.textContent=`✓ Catálogo sincronizado: ${combined.length} questão(ões) oficial(is) verificada(s) (${added} nova(s) adicionada(s) à campanha)!`;
-      toast(added>0?`${added} questão(ões) oficial(is) sincronizada(s) para o seu banco!`:`Seu banco já contém todas as ${combined.length} questões oficiais do catálogo!`);
+      const added=await saveQuestionsToCampaign('Catálogo Compartilhado','Conteúdo Geral',combined,'Banco Compartilhado');
+      if(statusEl)statusEl.textContent=`✓ Catálogo sincronizado: ${combined.length} questão(ões) disponíveis (${added} nova(s) adicionada(s) à campanha)!`;
+      toast(added>0?`${added} questão(ões) sincronizada(s) para o seu banco!`:`Seu banco já contém todas as ${combined.length} questões do catálogo!`);
     }catch(error){
       toast(error.message);
     }finally{
@@ -6026,7 +6589,7 @@
     keyMap.ambiguous=false;keyMap.reason='';keyMap.start=-1;keyMap.cadernos=[];
     const heads=[...raw.matchAll(EXAM_KEY_HEADING_RE)].map(m=>m.index);
     const regions=heads.length
-      ?heads.map((h,i)=>({from:h,text:raw.slice(h,Math.min(raw.length,h+8000,i+1<heads.length?heads[i+1]:raw.length))}))
+      ?heads.map((h,i)=>({from:h,text:raw.slice(h,i+1<heads.length?heads[i+1]:raw.length)}))
       :[{from:Math.max(0,raw.length-4000),text:raw.slice(-4000)}];
     const blocks=[];
     for(const region of regions){
@@ -6043,7 +6606,7 @@
       };
       while((m=EXAM_KEY_PAIR_RE.exec(region.text))!==null){
         const num=Number(m[1]);
-        if(num<1||num>250)continue;
+        if(num<1||num>10000)continue;
         if(prevEnd>=0&&!/^[\s|;,]*$/.test(region.text.slice(prevEnd,m.index)))flush();
         if(run.some(r=>r.num===num))flush();
         run.push({num,val:m[2],index:m.index});
@@ -6055,10 +6618,14 @@
     let chosen=hasFinal?blocks.filter(b=>!/preliminar/i.test(b.label)):blocks;
     keyMap.cadernos=[...new Set(chosen.map(b=>b.caderno).filter(Boolean))];
     if(preferredCaderno&&typeof preferredCaderno==='string'&&preferredCaderno.trim()){
-      const want=preferredCaderno.replace(/\s+/g,' ').trim().toUpperCase();
-      const filtered=chosen.filter(b=>b.caderno===want||b.caderno.includes(want)||want.includes(b.caderno));
-      if(filtered.length)chosen=filtered;
-    }
+      const normalizeCaderno=value=>String(value||'').toUpperCase().replace(/\b(?:CADERNO|TIPO|PROVA)\b/g,' ').replace(/\s+/g,' ').trim();
+      const want=normalizeCaderno(preferredCaderno);
+      const filtered=chosen.filter(b=>b.caderno&&normalizeCaderno(b.caderno)===want);
+      if(filtered.length){chosen=filtered;keyMap.selectedCaderno=filtered[0].caderno;}
+      else {keyMap.ambiguous=true;keyMap.reason='O caderno selecionado não foi localizado de forma exata no gabarito.';return keyMap;}
+    }else if(keyMap.cadernos.length>1){
+      keyMap.ambiguous=true;keyMap.reason='Há mais de um caderno no gabarito; selecione explicitamente o correspondente ao PDF.';
+    }else if(keyMap.cadernos.length===1)keyMap.selectedCaderno=keyMap.cadernos[0];
     for(const block of chosen){
       for(const[num,val]of block.pairs){
         const norm=/^(ANULAD[AO]|NULA|X|\*)$/i.test(val)?'ANULADA':/^certo$/i.test(val)?'C':/^errado$/i.test(val)?'E':val.toUpperCase();
@@ -6077,9 +6644,9 @@
   }
 
   const EXAM_KEY_HEADING_RE=/\b(?:gabaritos?(?:\s+(?:oficia(?:l|is)|definitivos?|preliminares?|comentados?|geral|das\s+quest[õo]es|da\s+prova|do\s+caderno|do\s+simulado))?|respostas?(?:\s+(?:oficia(?:l|is)|do\s+simulado|corretas?|das\s+quest[õo]es|da\s+prova))|folha\s+de\s+respostas|chave\s+de\s+respostas|tabela\s+de\s+respostas|quadro\s+de\s+respostas)\b/gi;
-  const EXAM_KEY_PAIR_RE=/(?:^|[\s|;,(])0*(\d{1,3})\s*(?:[-–—.:)]\s*|\s+)(ANULADA|ANULADO|Anulada|NULA|X|\*|CERTO|ERRADO|Certo|Errado|[A-E])(?=$|[\s|;,.)])/g;
+  const EXAM_KEY_PAIR_RE=/(?:^|[\s|;,(])0*(\d{1,5})\s*(?:[-–—.:)]\s*|\s+)(ANULADA|ANULADO|Anulada|NULA|X|\*|CERTO|ERRADO|Certo|Errado|[A-E])(?=$|[\s|;,.)])/g;
   const EXAM_OPTION_RE=/(?:^|\n|\s)(?:[\(\[]([A-Ea-e])[\)\]]|([A-Ea-e])[ \t]*[0\)\.\-–:])\s*/g;
-  const EXAM_BASE_TEXT_RE=/(?:^|\n)[ \t]*(?:TEXTO\s+(?:[IVX]+|\d+|ASSOCIADO|DE\s+APOIO)\b|Leia\s+(?:atentamente\s+)?(?:o|os|a|as)\s+(?:texto|textos|trecho|fragmento|cr[ôo]nica|poema|artigo|charge|tirinha)|O\s+texto\s+(?:a\s+seguir|abaixo)\s+(?:serve\s+de\s+base|refere-se)|As\s+quest[õo]es\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*\d{1,3}\s*(?:a|at[ée]|e|-|–)\s*0*\d{1,3}\s+referem-se\s+ao\s+texto|Texto\s+para\s+(?:responder\s+)?(?:[àa]s\s+)?(?:quest[õo]es|os\s+itens)\s+(?:de\s+)?0*\d{1,3})/i;
+  const EXAM_BASE_TEXT_RE=/(?:^|\n)[ \t]*(?:TEXTO\s+(?:[IVX]+|\d+|ASSOCIADO|DE\s+APOIO)\b|Leia\s+(?:atentamente\s+)?(?:o|os|a|as)\s+(?:texto|textos|trecho|fragmento|cr[ôo]nica|poema|artigo|charge|tirinha)|O\s+texto\s+(?:a\s+seguir|abaixo)\s+(?:serve\s+de\s+base|refere-se)|As\s+quest[õo]es\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*\d{1,5}\s*(?:a|at[ée]|e|-|–)\s*0*\d{1,5}\s+referem-se\s+ao\s+texto|Texto\s+para\s+(?:responder\s+)?(?:[àa]s\s+)?(?:quest[õo]es|os\s+itens)\s+(?:de\s+)?0*\d{1,5})/i;
 
   function parseBaseTextMeta(rawBaseChunk){
     const raw=String(rawBaseChunk||'').replace(/\r\n/g,'\n').trim();
@@ -6087,12 +6654,12 @@
     const cleaned=paragraphs.join('\n\n').slice(0,6000);
     let rangeStart=0,rangeEnd=0;
     const headSlice=cleaned.slice(0,550);
-    const rangeMatch=headSlice.match(/(?:quest[õo]es|itens)\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*(\d{1,3})\s*(?:a|at[ée]|-|–)\s*0*(\d{1,3})\b/i);
+    const rangeMatch=headSlice.match(/(?:quest[õo]es|itens)\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*(\d{1,5})\s*(?:a|at[ée]|-|–)\s*0*(\d{1,5})\b/i);
     if(rangeMatch){
       rangeStart=Number(rangeMatch[1])||0;
       rangeEnd=Number(rangeMatch[2])||0;
     }else{
-      const listMatch=headSlice.match(/(?:quest[õo]es|itens)\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*(\d{1,3})(?:\s*,\s*0*\d{1,3})*\s+e\s+0*(\d{1,3})\b/i);
+      const listMatch=headSlice.match(/(?:quest[õo]es|itens)\s+(?:de\s+)?(?:n[úu]meros?\s+)?0*(\d{1,5})(?:\s*,\s*0*\d{1,5})*\s+e\s+0*(\d{1,5})\b/i);
       if(listMatch){
         rangeStart=Number(listMatch[1])||0;
         rangeEnd=Number(listMatch[2])||0;
@@ -6115,10 +6682,10 @@
   }
   window.isValidExtractedQuestion=isValidExtractedQuestion;
 
-  function cleanExamPages(rawTextOrPages){
+  function cleanExamPages(rawTextOrPages,opts={}){
     const pages=Array.isArray(rawTextOrPages)?rawTextOrPages.map(p=>String(p?.text||'').replace(/\u00a0/g,' ').replace(/(\p{L})-\n(\p{L})/gu,'$1$2')):[String(rawTextOrPages||'').replace(/\u00a0/g,' ').replace(/(\p{L})-\n(\p{L})/gu,'$1$2')];
     const norm=l=>l.trim().replace(/\s+/g,' ').toLowerCase();
-    const pageNumberOnly=/^\s*(?:p[áa]g(?:ina)?\.?\s*\d+(?:\s*(?:de|\/)\s*\d+)?|\d+\s*\/\s*\d+|\d{1,3})\s*$/i;
+    const pageNumberOnly=/^\s*(?:p[áa]g(?:ina)?\.?\s*\d+(?:\s*(?:de|\/)\s*\d+)?|\d+\s*\/\s*\d+|\d{1,5})\s*$/i;
     const trailingPageNumber=/\s+p[áa]g(?:ina)?\.?\s*\d+(?:\s*(?:de|\/)\s*\d+)?\s*$/i;
     const cadernoHeader=/^[^\n]{0,50}\bcaderno\s+(?:[A-Z]|\d{1,2})\s*$/i;
     const isWatermarkLine=l=>/@|\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|Leonardo\s+Thom[eé]/i.test(l);
@@ -6137,19 +6704,20 @@
       const threshold=Math.max(4,Math.ceil(pages.length*0.4));
       repeated=new Set([...counts].filter(([,n])=>n>=threshold).map(([key])=>key));
     }
-    return pages.map(text=>text.split('\n')
+    const cleaned=pages.map(text=>text.split('\n')
       .map(line=>line.replace(trailingPageNumber,''))
       .map(line=>line.replace(/(?:^|\n|\s)(\d)\s+(\d)\s*\)/g,' $1$2)').replace(/(?:^|\n|\s)(\d)\s+(\d)\s+(\d)\s*\)/g,' $1$2$3)'))
       .map(stripChrome)
       .filter(line=>!pageNumberOnly.test(line)&&!cadernoHeader.test(line)&&!isWatermarkLine(line)&&!repeated.has(norm(line)))
-      .join('\n')).join('\n\n');
+      .join('\n'));
+    return opts.preservePages?cleaned.map((text,index)=>({page:Array.isArray(rawTextOrPages)&&Number.isInteger(Number(rawTextOrPages[index]?.page))&&Number(rawTextOrPages[index].page)>0?Number(rawTextOrPages[index].page):index+1,text})):cleaned.join('\n\n');
   }
 
   function inferQuestionPedagogicalTopic(statement, subject, num = 0) {
     const s = String(statement || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const sub = String(subject || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
-    if (/constitucional/.test(sub) || /constituicao|crfb/.test(s)) {
+    if (/constitucional/.test(sub)) {
       if (/\b(?:habeas corpus|habeas data|mandado de seguranca|mandado de injuncao|acao popular|remedios? constitucionais?)\b/i.test(s)) {
         return "Remédios Constitucionais";
       }
@@ -6183,7 +6751,7 @@
       if (/\b(?:preambulo|principios? fundamentais|objetivos? fundamentais|republica federativa|soberania|dignidade da pessoa|art\.?\s*[1-4]\b)\b/i.test(s)) {
         return "Princípios Fundamentais (Art. 1º ao 4º)";
       }
-      if (/\b(?:art\.?\s*5|direitos? individuais|direitos? e garantias|inviolabilidade|liberdade|igualdade|propriedade)\b/i.test(s) || (num > 0 && num <= 40)) {
+      if (/\b(?:art\.?\s*5|direitos? individuais|direitos? e garantias|inviolabilidade|liberdade|igualdade|propriedade)\b/i.test(s)) {
         return "Direitos e Deveres Individuais e Coletivos (Art. 5º)";
       }
       return "Direito Constitucional Geral";
@@ -6235,36 +6803,62 @@
   window.inferQuestionPedagogicalTopic = inferQuestionPedagogicalTopic;
 
   function extractStructuredExamQuestions(rawTextOrPages,opts={}){
+    const repairText=typeof repairKnownExamTextArtifacts==='function'?repairKnownExamTextArtifacts:value=>String(value??'');
+    const qualityOf=typeof getQuestionQualityDecision==='function'?getQuestionQualityDecision:()=>({needs_review:false});
     const defaultSubject=opts.defaultSubject||'Conteúdo Geral';
     const defaultBoard=opts.defaultBoard||'Prova Oficial';
-    const report={expected:0,extracted:0,annulled:0,skipped:0,missingKey:0,ambiguous:false,reason:'',percent:0};
-    const finish=list=>{Object.defineProperty(list,'report',{value:report,enumerable:false});return list};
+    const report={expected:0,extracted:0,annulled:0,skipped:0,missingKey:0,ambiguous:false,reason:'',percent:0,classificationReviewCount:0,sourceLocatedCount:0,unknownFormatCount:0,structureReviewCount:0};
+    const finish=list=>{list=list.map(item=>{const cleaned=window.JCQuestionText?window.JCQuestionText.cleanQuestion(item):{...item,statement:repairText(item.statement),options:(item.options||[]).map(repairText)};window.applyQuestionBoardEvidence?.(cleaned);window.applyQuestionTopicEvidence?.(cleaned);return cleaned});report.classificationReviewCount=list.filter(item=>item.classification_needs_review===true).length;report.structureReviewCount=list.filter(item=>qualityOf(item).needs_review).length;report.sourceLocatedCount=list.filter(item=>Number.isInteger(item.question_number)&&Number.isInteger(item.source_page)).length;Object.defineProperty(list,'report',{value:report,enumerable:false});return list};
     const rawJoined=Array.isArray(rawTextOrPages)?rawTextOrPages.map(p=>String(p?.text||'')).join('\n\n'):String(rawTextOrPages||'');
     const jsonCandidate=rawJoined.trim();
     if(!jsonCandidate)return finish([]);
 
-    // 1) JSON direto: exige alternativas (2–5) e gabarito válido; nunca assume a letra A.
+    // 1) JSON direto: mantém a posição das alternativas e a situação do gabarito.
     if(jsonCandidate.startsWith('[')||jsonCandidate.startsWith('{')){
       try{
         const parsed=JSON.parse(jsonCandidate);
         const arr=Array.isArray(parsed)?parsed:(Array.isArray(parsed?.questions)?parsed.questions:[]);
         const out=[];
         for(const x of arr){
-          if(!x?.statement||!Array.isArray(x?.options))continue;
-          const options=x.options.map(o=>String(o).trim()).filter(Boolean);
+          if(!x||typeof x!=='object'||!String(x.statement??'').trim()||!Array.isArray(x.options))continue;
+          // Keep source spacing until the final integrity pass captures any
+          // leaked alternative; typography is normalized on that review copy.
+          const options=x.options.map(o=>String(o??'').trim());
+          const normalizedOptions=options.map(o=>answerOptionText(o).toLocaleLowerCase('pt-BR'));
+          if(options.length<2||options.length>5||normalizedOptions.some(o=>!o)||new Set(normalizedOptions).size!==options.length)continue;
           const idx=x.correct_index;
-          if(options.length<2||options.length>5||idx===null||idx===undefined||idx===''||!Number.isInteger(Number(idx))||Number(idx)<0||Number(idx)>=options.length)continue;
-          out.push({
+          const validIndex=(typeof idx==='number'||typeof idx==='string')&&String(idx).trim()!==''&&Number.isInteger(Number(idx))&&Number(idx)>=0&&Number(idx)<options.length;
+          const annulled=x.annulled===true||x.anulada===true;
+          const unknown=x.answer_unknown===true||!validIndex;
+          if(unknown&&!annulled){report.missingKey++;if(!opts.allowWithoutKey)continue;}
+          if(annulled)report.annulled++;
+          const item={
             subject:canonicalSubjectName(x.subject||defaultSubject),
             topic:x.topic||'Questão Importada',
             board:x.board||defaultBoard,
             statement:String(x.statement).trim(),
             options,
-            correct_index:Number(idx),
+            correct_index:unknown?-1:Number(idx),
             explanation:String(x.explanation||'Questão importada pelo usuário.'),
             difficulty:x.difficulty||'medio',
-            origin:['oficial','adaptada_do_pdf','autoral'].includes(x.origin)?x.origin:'adaptada_do_pdf'
-          });
+            origin:['oficial','adaptada_do_pdf','autoral','importada'].includes(x.origin)?x.origin:'adaptada_do_pdf'
+          };
+          if(unknown&&!annulled)item.answer_unknown=true;
+          if(annulled)item.annulled=true;
+          // Metadados explícitos impedem que exportar/importar promova uma
+          // sugestão da IA a gabarito oficial ou apague uma revisão humana.
+          for(const key of ['key_source','answer_key_validation','key_reference','source','source_url','source_label','exam_title','associated_text','command','classification_declared_subject','classification_reason','subject_source','classification_source','topic_source','topic_classification_source','topic_declared','topic_statement','board_source','board_declared','board_statement','exam_caderno','quality_status','quality_reason']){
+            if(typeof x[key]==='string')item[key]=x[key];
+          }
+          for(const flag of ['explanation_needs_review','classification_needs_review','topic_classification_needs_review','board_needs_review','needs_source','structure_needs_review'])if(typeof x[flag]==='boolean')item[flag]=x[flag];
+          if(Array.isArray(x.answer_key_history))item.answer_key_history=x.answer_key_history.filter(h=>h&&typeof h==='object'&&!Array.isArray(h)).slice(-20).map(h=>({...h}));
+          if(x.text_integrity_review&&typeof x.text_integrity_review==='object'&&!Array.isArray(x.text_integrity_review))item.text_integrity_review=JSON.parse(JSON.stringify(x.text_integrity_review));
+          for(const key of ['exam_year','question_number','source_question_number','source_page','source_page_end','page_start','page_end']){
+            if((typeof x[key]==='number'||typeof x[key]==='string')&&String(x[key]).trim()!==''&&Number.isInteger(Number(x[key])))item[key]=Number(x[key]);
+          }
+          const quality=qualityOf(item);
+          if(quality.needs_review){item.needs_source=true;item.structure_needs_review=true;item.quality_status=quality.quality_status;item.quality_reason=quality.reason;}
+          out.push(item);
         }
         report.expected=arr.length;report.extracted=out.length;report.skipped=arr.length-out.length;
         report.percent=arr.length?Math.round(out.length/arr.length*100):0;
@@ -6273,9 +6867,15 @@
     }
 
     // 2) Extração determinística de blocos numerados, só com gabarito confiável do próprio documento.
-    const text=cleanExamPages(rawTextOrPages).trim();
+    const cleanPages=cleanExamPages(rawTextOrPages,{preservePages:true});
+    const text=cleanPages.map(page=>page.text).join('\n\n');
+    let pageOffset=0;const pageSpans=cleanPages.map(page=>{const start=pageOffset;pageOffset+=page.text.length+2;return{page:page.page,start,end:start+page.text.length};});
+    const pageAt=offset=>pageSpans.find(page=>offset>=page.start&&offset<page.end)?.page||pageSpans.find(page=>offset<page.start)?.page||pageSpans.at(-1)?.page||1;
+    const sectionPattern=/^(?:(?:NO[CÇ][OÕ]ES|ELEMENTOS)\s+DE\s+)?(?:L[IÍ]NGUA\s+PORTUGUESA|PORTUGU[EÊ]S|RACIOC[IÍ]NIO\s+L[OÓ]GICO(?:[-–\s]+MATEM[AÁ]TICO)?|MATEM[AÁ]TICA|INFORM[AÁ]TICA|DIREITO\s+(?:CONSTITUCIONAL|ADMINISTRATIVO|PROCESSUAL\s+PENAL(?:\s+MILITAR)?|PENAL(?:\s+MILITAR)?|MILITAR)|DIREITOS\s+HUMANOS|LEGISLA[CÇ][AÃ]O\s+EXTRAVAGANTE|EXECU[CÇ][AÃ]O\s+PENAL|HIST[OÓ]RIA(?:\s+DE\s+PERNAMBUCO)?|GEOGRAFIA(?:\s+DE\s+PERNAMBUCO)?|F[IÍ]SICA|BIOLOGIA|QU[IÍ]MICA)$/i;
+    const sections=[];let lineOffset=0;for(const line of text.split('\n')){const label=line.trim().replace(/^\d+[.)-]\s*/, '');if(sectionPattern.test(label))sections.push({index:lineOffset,subject:canonicalSubjectName(label)});else if(/^(?:CONHECIMENTOS|DISCIPLINA|MAT[EÉ]RIA)\s+(?:GERAIS|ESPEC[IÍ]FICOS|B[AÁ]SICOS)$/i.test(label))sections.push({index:lineOffset,subject:''});lineOffset+=line.length+1;}
+    const sectionAt=offset=>sections.filter(section=>section.index<offset).at(-1)?.subject||'';
     const keyMap=parseExamAnswerKeyTable(text,opts.preferredCaderno||'');
-    report.ambiguous=keyMap.ambiguous;report.reason=keyMap.reason;report.cadernos=keyMap.cadernos||[];
+    report.ambiguous=keyMap.ambiguous;report.reason=keyMap.reason;report.cadernos=keyMap.cadernos||[];if(keyMap.selectedCaderno)report.pickedCaderno=keyMap.selectedCaderno;
     const inlineKeys=(text.match(/(?:gabarito(?:\s+(?:oficial|definitivo|preliminar|comentado|da\s+quest[aã]o))?|respostas?(?:\s+(?:oficiais?|do\s+simulado|corretas?|comentadas?))?|alternativa\s+correta|item\s+correto)\s*[:\-–=—]?\s*(?:(?:letra|alternativa|op[cç][aã]o|correta)\s+)?[\(\[]?\s*(ANULADA|ANULADO|CERTO|ERRADO|[A-Ea-e])\s*[\)\]]?/gi)||[]).length;
     const inlineMode=keyMap.size===0&&inlineKeys>=1;
     if(keyMap.ambiguous){if(!opts.allowWithoutKey)return finish([]);keyMap.clear();}
@@ -6285,12 +6885,13 @@
       return finish([]);
     }
     const body=!inlineMode&&keyMap.start>0?text.slice(0,keyMap.start):text;
-    const isCE=!inlineMode&&[...keyMap.values()].every(v=>v==='C'||v==='E'||v==='ANULADA');
-    const explicitMarks=(body.match(/(?:^|\n)[ \t]*(?:QUEST[AÃ]O|Q\.|Q\b)\s*0*\d{1,3}\b/gi)||[]).length;
+    const declaredCE=/\b(?:julgue(?:\s+os?\s+itens?)?|certo\s*(?:ou|e|\/)\s*errado|verdadeiro\s*(?:ou|e|\/)\s*falso)\b/i.test(body);
+    const isCE=declaredCE;
+    const explicitMarks=(body.match(/(?:^|\n)[ \t]*(?:QUEST[AÃ]O|Q\.|Q\b)\s*0*\d{1,5}\b/gi)||[]).length;
     const explicitMode=explicitMarks>=1;
     const startRe=explicitMode
-      ?/(?:^|\n)[ \t]*(?:QUEST[AÃ]O|Q\.|Q\b)\s*0*(\d{1,3})\b[ \t]*[:.\-–)]?[ \t]*/gi
-      :/(?:^|\n)[ \t]*(?:QUEST[AÃ]O\s*)?0*(\d{1,3})\s*(?:[.)\-–]\s*|\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ“"(]))/gi;
+      ?/(?:^|\n)[ \t]*(?:QUEST[AÃ]O|Q\.|Q\b)\s*0*(\d{1,5})\b[ \t]*[:.\-–)]?[ \t]*/gi
+      :/(?:^|\n)[ \t]*(?:QUEST[AÃ]O\s*)?0*(\d{1,5})\s*(?:[.)\-–]\s*|\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ“"(]))/gi;
     const countOptions=t=>[...t.matchAll(EXAM_OPTION_RE)].length;
     const cands=[];
     let sm;
@@ -6303,8 +6904,9 @@
       const c=cands[i],end=i+1<cands.length?cands[i+1].index:body.length;
       const last=blocks[blocks.length-1];
       // Numeração de afirmativas dentro do enunciado ("1. ... 2. ...") não abre questão nova.
-      if(last&&(c.num<=last.num||(!explicitMode&&!isCE&&countOptions(last.text)<2))){last.text+='\n'+body.slice(c.index,end).trim();continue}
-      blocks.push({num:c.num,text:body.slice(c.bodyStart,end).trim()});
+      if(last&&(c.num<=last.num||(!explicitMode&&!isCE&&countOptions(last.text)<2))){last.text+='\n'+body.slice(c.index,end).trim();last.end=end;continue}
+      const rawBlock=body.slice(c.bodyStart,end);
+      blocks.push({num:c.num,start:c.bodyStart,end:end-(rawBlock.length-rawBlock.trimEnd().length),sectionSubject:sectionAt(c.bodyStart),text:rawBlock.trim()});
     }
 
     const results=[];
@@ -6370,27 +6972,31 @@
             const prev=picked[picked.length-1];
             const between=block.slice(prev.index+prev.len,om.index).replace(/\s+/g,' ').trim();
             if(!between)continue;
+            // A nested question can supply the expected next letter (for
+            // example its e) after an outer D). Keep its entire tail on the
+            // previous option for quarantine instead of inventing outer E.
+            if(window.JCQuestionText?.analyzeOption(block.slice(prev.index+prev.len,om.index)).needs_review)break;
           }
           picked.push({letter,index:om.index,len:om[0].length});
           expect++;
         }
       }
       let item=null;
-      if(picked.length>=4){
-        let statement=block.slice(0,picked[0].index).replace(/\s+/g,' ').trim();
+      if(picked.length>=2&&picked.length<=5){
+        let statement=block.slice(0,picked[0].index).trim();
         statement=statement.replace(/\bAlternativas\s*$/i,'').trim();
-        const options=picked.map((o,i)=>block.slice(o.index+o.len,i+1<picked.length?picked[i+1].index:block.length).replace(/\s+/g,' ').trim());
+        const options=picked.map((o,i)=>block.slice(o.index+o.len,i+1<picked.length?picked[i+1].index:block.length).trim());
         const correctIdx=unknownKey?-1:picked.findIndex(o=>o.letter===key);
-        if(statement.length>=10&&(correctIdx>=0||unknownKey)&&options.every(Boolean)){
-          const pTopic=inferQuestionPedagogicalTopic(statement,defaultSubject,b.num);
+        if(statement.length>=10&&(correctIdx>=0||unknownKey)&&options.every(Boolean)&&new Set(options.map(option=>answerOptionText(option).toLocaleLowerCase('pt-BR'))).size===options.length){
+          const pTopic='';
           item={statement,options,correct_index:correctIdx,topic:pTopic,difficulty:'medio',
             explanation:inlineComment||(unknownKey?'Questão importada SEM gabarito: ainda não pode ser corrigida. Adicione o gabarito oficial para usá-la em simulados.':`Gabarito do documento: alternativa ${key} ("${options[correctIdx]}").`)};
           if(unknownKey)item.answer_unknown=true;
         }
-      }else if((key==='C'||key==='E'||opts.allowWithoutKey)&&picked.length===0&&(isCE||inlineMode||opts.allowWithoutKey||/\bcerto\b[\s\S]*\berrado\b|\bjulgue\b/i.test(block))){
+      }else if((key==='C'||key==='E'||unknownKey)&&picked.length===0&&(isCE||/\bcerto\b[\s\S]*\berrado\b|\bjulgue\b/i.test(block))){
         let statement=block.replace(/Alternativas\s+Certo\s+Errado[\s\S]*$/i,'').replace(/\(\s*\)\s*Certo[\s\S]*$/i,'').replace(/\s+/g,' ').trim();
         if(statement.length>=12){
-          const pTopic=inferQuestionPedagogicalTopic(statement,defaultSubject,b.num);
+          const pTopic='';
           item={statement:`[Julgue o item em CERTO ou ERRADO] ${statement}`,options:['CERTO','ERRADO'],correct_index:unknownKey?-1:(key==='E'?1:0),
             topic:pTopic,difficulty:'dificil',
             explanation:inlineComment||(unknownKey?'Item C/E importado SEM gabarito: ainda não pode ser corrigido. Adicione o gabarito oficial para usá-lo em simulados.':`Gabarito do documento: ${key==='C'?'CERTO':'ERRADO'}.`)};
@@ -6398,6 +7004,9 @@
         }
       }
       if(item){
+        // Capture the exact option slices and the complete numbered source
+        // block before typography or classification changes the working copy.
+        if(window.JCQuestionText)item=window.JCQuestionText.cleanQuestion(item,b.text);
         const inExplicitRange=baseRangeStart>0&&baseRangeEnd>=baseRangeStart&&b.num>=baseRangeStart&&b.num<=baseRangeEnd;
         const mentionsTextRef=/\b(texto|trecho|fragmento|charge|tirinha|poema|excerto|cr[ôo]nica|artigo|par[áa]grafo|linha\s*\d|linhas\s*\d|verso\s*\d|estrofe|autor|autora|narrador|eu\s+l[íi]rico|leitura|infere-se|depreende-se|conclui-se|segundo\s+o|de\s+acordo\s+com|conforme\s+o|no\s+contexto|sentido\s+original|reescrita|substitui[cç][aã]o\s+do\s+voc[áa]bulo|termo\s+destacado|express[aã]o\s+destacada|express[aã]o\s+sublinhada|passagem|voc[áa]bulo)\b/i.test(item.statement);
         if(pendingBase&&(inExplicitRange||(baseAge<10&&mentionsTextRef))){
@@ -6406,18 +7015,31 @@
             item.statement=`Texto-base: ${pendingBase}\n\n${item.statement}`;
           }
         }
-        const inferred=typeof resolveStrictQuestionDiscipline==='function'?resolveStrictQuestionDiscipline(item.statement,item.topic,defaultSubject,item.options):canonicalSubjectName(item.statement,defaultSubject);
-        item.subject=inferred&&inferred!=='Conteúdo Geral'?inferred:canonicalSubjectName(defaultSubject);
+        const declared=b.sectionSubject||'';
+        const input={...item,topic:'',subject:declared||'Conteúdo Geral'};
+        const decision=typeof questionDisciplineDecision==='function'?questionDisciplineDecision(input):{subject:canonicalSubjectName(item.statement,declared||defaultSubject),needs_review:true,reason:'Classificador indisponível; confirme disciplina e assunto.'};
+        item.subject=decision.subject&&decision.subject!=='Conteúdo Geral'?decision.subject:canonicalSubjectName(declared||defaultSubject);
+        item.topic=inferQuestionPedagogicalTopic(item.statement,item.subject);
+        item.classification_declared_subject=declared||item.subject;
+        item.classification_needs_review=decision.needs_review||!decision.subject||decision.subject==='Conteúdo Geral';
+        item.classification_reason=decision.reason;item.classification_confidence=decision.confidence||0;
+        item.subject_source=declared?'cabecalho_pdf':'heuristica';
+        const quality=qualityOf(item);
+        if(quality.needs_review){item.needs_source=true;item.structure_needs_review=true;item.quality_status=quality.quality_status;item.quality_reason=quality.reason;}
+        item.question_number=b.num;item.source_question_number=b.num;
+        item.source_page=pageAt(b.start);item.source_page_end=pageAt(Math.max(b.start,b.end-1));
+        item.page_start=item.source_page;item.page_end=item.source_page_end;
+        if(keyMap.selectedCaderno||opts.preferredCaderno)item.exam_caderno=String(keyMap.selectedCaderno||opts.preferredCaderno);
         item.board=defaultBoard;
         item.origin=item.answer_unknown?'adaptada_do_pdf':'oficial';
         if(item.answer_unknown)report.answerUnknown=(report.answerUnknown||0)+1;
         results.push(item);
-      }else report.skipped++;
+      }else {report.skipped++;report.unknownFormatCount++;}
       if(newBase){pendingBase=newBase;baseAge=0;baseRangeStart=newRangeStart;baseRangeEnd=newRangeEnd}else baseAge++;
     }
     report.extracted=results.length;
     const lastNum=blocks.length?blocks[blocks.length-1].num:0;
-    if(!inlineMode)report.expected=Math.max(report.expected,keyMap.size,lastNum);
+    if(!inlineMode)report.expected=Math.max(report.expected,keyMap.size);
     const valid=Math.max(0,report.expected-report.annulled);
     report.percent=valid?Math.min(100,Math.round(results.length/valid*100)):0;
     return finish(results);
@@ -6510,10 +7132,12 @@
   }
 
   async function handleGenerateBoardPack(){
+    if(isPlatformManualStudyArtifact(q('#genBankSubject')?.value||''))return toast('Os Manuais do Caçador são guias de ajuda; escolha uma disciplina do edital para gerar questões.');
     if(!cloudSession)return toast('Entre na sua conta para gerar cadernos comentados no estilo da banca.');
     const board=q('#genBankBoard')?.value||'Instituto AOCP';
     const subject=q('#genBankSubject')?.value||'Direito Constitucional';
     const topic=q('#genBankTopic')?.value||`Tópicos essenciais de ${subject}`;
+    if(isPlatformManualStudyArtifact(subject)||isPlatformManualStudyArtifact(topic))return toast('Os Manuais do Caçador são guias de ajuda. Escolha uma disciplina do edital para gerar questões.');
     const difficulty=q('#genBankDifficulty')?.value||'progressivo';
     const count=Number(q('#genBankCount')?.value)||5;
     const btn=q('#generateBoardPackBtn');
@@ -6570,6 +7194,93 @@
   // 4. Modo Simulado Cronometrado com Folha de Respostas + Modalidade Líquida Caveira/Cebraspe + Tesoura
   let activeSimulado=null,simuladoTimer=null;
 
+  function currentTimedSimuladoScope(){return {...currentQuestionSessionScope(),kind:'timed'}}
+  function saveActiveTimedSimulado(){
+    if(!activeSimulado||activeSimulado.finished)return null;
+    const scope=currentTimedSimuladoScope(),previous=activeSimulado._sessionScope;
+    if(previous&&(previous.userId!==scope.userId||previous.campaignId!==scope.campaignId||previous.resetEpoch!==scope.resetEpoch))return null;
+    activeSimulado._sessionScope=scope;
+    activeSimulado.sessionId=activeSimulado.sessionId||crypto.randomUUID();
+    activeSimulado.remainingSeconds=window.JornadaQuestionSessions.timedRemainingSeconds(activeSimulado);
+    const battle={...activeSimulado,eliminated:activeSimulado.eliminated.map(items=>Array.from(items))};
+    const saved=getQuestionSessionStore()?.save(scope,{title:q('#simuladoTitle')?.textContent||'Simulado cronometrado',battle})||null;
+    if(saved!=='local'&&!window._timedSimuladoStorageWarned){
+      window._timedSimuladoStorageWarned=true;
+      toast(saved==='session'?'Armazenamento cheio: este simulado só poderá ser retomado enquanto esta aba permanecer aberta.':'Não foi possível salvar o simulado. Libere espaço antes de fechar a página.');
+    }
+    return saved;
+  }
+  function clearSavedTimedSimulado(){
+    getQuestionSessionStore()?.clear(currentTimedSimuladoScope());
+    q('#resumeTimedSimuladoBar')?.remove();
+  }
+  function readSavedTimedSimulado(){
+    const saved=getQuestionSessionStore()?.read(currentTimedSimuladoScope());
+    if(saved&&(state.completedTimedSimuladoIds||[]).includes(saved.battle.sessionId)){
+      clearSavedTimedSimulado();
+      return null;
+    }
+    return saved;
+  }
+  function timedSimuladoQualityReady(battle){
+    return Array.isArray(battle?.questions)&&battle.questions.length>0&&battle.questions.every(item=>
+      (typeof getQuestionQualityDecision!=='function'||!getQuestionQualityDecision(item).needs_review)&&
+      (typeof isQuestionDisciplineEligible!=='function'||isQuestionDisciplineEligible(item,'all'))&&
+      (typeof questionMatchesBoardFilter!=='function'||questionMatchesBoardFilter(item,'all'))&&
+      (typeof answerKeyStatus!=='function'||!['sem_gabarito','anulada'].includes(answerKeyStatus(item))));
+  }
+  function startTimedSimuladoClock(){
+    clearInterval(simuladoTimer);
+    function tick(){
+      if(!activeSimulado||activeSimulado.finished)return;
+      const scope=currentTimedSimuladoScope(),savedScope=activeSimulado._sessionScope;
+      if(savedScope&&(savedScope.userId!==scope.userId||savedScope.campaignId!==scope.campaignId||savedScope.resetEpoch!==scope.resetEpoch)){
+        clearInterval(simuladoTimer);activeSimulado=null;q('#simuladoDialog')?.close();return;
+      }
+      activeSimulado.remainingSeconds=window.JornadaQuestionSessions.timedRemainingSeconds(activeSimulado);
+      const clockEl=q('#simuladoClock');
+      if(clockEl){clockEl.textContent=formatSimuladoClock(activeSimulado.remainingSeconds);clockEl.classList.toggle('warnText',activeSimulado.remainingSeconds<=300)}
+      if(activeSimulado.remainingSeconds<=0){
+        toast('Tempo esgotado! Entregando o simulado automaticamente.');
+        finishTimedSimulado(true);
+      }
+    }
+    simuladoTimer=setInterval(tick,1000);
+    tick();
+  }
+  function showActiveTimedSimulado(){
+    if(!activeSimulado)return;
+    if(!timedSimuladoQualityReady(activeSimulado)){
+      clearInterval(simuladoTimer);activeSimulado=null;
+      toast('Este caderno contém questões que precisam de revisão de fonte, disciplina ou gabarito. As respostas salvas foram preservadas. Reanalise o PDF antes de iniciar outro simulado.');return;
+    }
+    ensureSimuladoUI();
+    q('#simuladoStage').hidden=false;q('#simuladoResultStage').hidden=true;q('#simuladoResultStage').innerHTML='';
+    q('#simuladoMetaLabel').textContent=activeSimulado.scoringMode==='liquid'?'SIMULADO CAVEIRA / CEBRASPE (1 ERRADA ANULA 1 CERTA)':'SIMULADO CRONOMETRADO TRADICIONAL';
+    q('#simuladoTitle').textContent=`Caderno com ${activeSimulado.questions.length} questões · o relógio continua ao sair`;
+    renderSimuladoQuestion();
+    if(!q('#simuladoDialog').open)q('#simuladoDialog').showModal();
+    startTimedSimuladoClock();
+  }
+  function offerSavedTimedSimuladoResume(){
+    q('#resumeTimedSimuladoBar')?.remove();
+    if(activeSimulado&&!activeSimulado.finished)return;
+    const saved=readSavedTimedSimulado(),report=q('#report');
+    if(!saved||!report)return;
+    const remaining=window.JornadaQuestionSessions.timedRemainingSeconds(saved.battle);
+    report.insertAdjacentHTML('afterbegin',`<div class="card" id="resumeTimedSimuladoBar" style="margin-bottom:12px"><b>Simulado cronometrado salvo neste aparelho</b><p class="small muted">Questão ${saved.battle.current+1} de ${saved.battle.questions.length} · ${remaining>0?`${formatSimuladoClock(remaining)} restantes`:'Tempo esgotado: abra para entregar e conferir o resultado'}. O relógio continua mesmo com a página fechada.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="action small" id="resumeTimedSimuladoBtn">Retomar simulado</button><button type="button" class="ghost small" id="discardTimedSimuladoResumeBtn">Descartar retomada</button></div></div>`);
+    q('#resumeTimedSimuladoBtn').onclick=()=>{
+      const latest=readSavedTimedSimulado();if(!latest)return offerSavedTimedSimuladoResume();
+      activeSimulado={...latest.battle,eliminated:latest.battle.eliminated.map(items=>new Set(items))};
+      q('#resumeTimedSimuladoBar')?.remove();showActiveTimedSimulado();
+    };
+    q('#discardTimedSimuladoResumeBtn').onclick=()=>{if(confirm('Descartar este simulado salvo sem registrar um resultado?'))clearSavedTimedSimulado()};
+  }
+  window.offerSavedTimedSimuladoResume=offerSavedTimedSimuladoResume;
+  setTimeout(offerSavedTimedSimuladoResume,350);
+  window.addEventListener('pagehide',saveActiveTimedSimulado);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')saveActiveTimedSimulado()});
+
   function ensureSimuladoUI(){
     const trainer=q('.questionTrainer');
     if(trainer&&!q('#simuladoLauncher')){
@@ -6589,12 +7300,23 @@
         renderSimuladoQuestion();
       };
     }
+    const simDialog=q('#simuladoDialog');
+    if(simDialog&&!simDialog.dataset.timedSafetyBound){
+      simDialog.dataset.timedSafetyBound='1';
+      simDialog.addEventListener('cancel',event=>{event.preventDefault();abortTimedSimulado()});
+    }
+    window.JCQuestionsWorkspace?.collect();
   }
 
   function simuladoCandidatePool(){
     const scope=q('#simuladoScope')?.value||'all';
-    if(scope==='filtered')return filteredQuestionPool();
-    return ALL_QUESTIONS||[];
+    const source=scope==='filtered'?filteredQuestionPool():(ALL_QUESTIONS||[]);
+    const portalSubjects=new Set((typeof missionPool==='function'?missionPool():[])
+      .filter(m=>m?.subject&&!String(m.id||'').startsWith('setup-'))
+      .map(m=>subjectKey(canonicalSubjectName(m.subject))));
+    return source.filter(item=>isQuestionDisciplineEligible(item,scope==='filtered'?(q('#questionSubject')?.value||'all'):'all')
+      &&!['sem_gabarito','anulada'].includes(answerKeyStatus(item))
+      &&(scope==='filtered'||!portalSubjects.size||portalSubjects.has(subjectKey(resolveStrictQuestionDiscipline(item)))));
   }
 
   function updateSimuladoAvailability(){
@@ -6642,8 +7364,10 @@
     return h>0?`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`:`${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
   }
 
-  function startTimedSimulado(){
-    const pool=simuladoCandidatePool();
+  function startTimedSimulado(providedPool=null){
+    ensureSimuladoUI();
+    if(readSavedTimedSimulado()&&!confirm('Há um simulado salvo neste portal. Iniciar outro substituirá essa retomada. Deseja continuar?'))return offerSavedTimedSimuladoResume();
+    const pool=Array.isArray(providedPool)?providedPool.filter(item=>isQuestionDisciplineEligible(item,'all')&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item))):simuladoCandidatePool();
     if(!pool.length)return toast('Envie um PDF na Biblioteca ou gere questões na Central de Provas para montar o simulado.');
     const wanted=Math.min(pool.length,Math.max(1,Number(q('#simuladoCount')?.value)||20));
     const minutes=Math.max(5,Number(q('#simuladoMinutes')?.value)||60);
@@ -6661,32 +7385,11 @@
       totalSeconds:minutes*60,
       remainingSeconds:minutes*60,
       startedAt:Date.now(),
+      sessionId:crypto.randomUUID(),
+      _sessionScope:currentTimedSimuladoScope(),
       finished:false
     };
-
-    q('#simuladoStage').hidden=false;
-    q('#simuladoResultStage').hidden=true;
-    q('#simuladoResultStage').innerHTML='';
-    q('#simuladoMetaLabel').textContent=scoringMode==='liquid'?'SIMULADO CAVEIRA / CEBRASPE (1 ERRADA ANULA 1 CERTA)':'SIMULADO CRONOMETRADO TRADICIONAL';
-    q('#simuladoTitle').textContent=`Caderno com ${questions.length} ${questions.length===1?'questão':'questões'}`;
-    q('#simuladoClock').textContent=formatSimuladoClock(activeSimulado.remainingSeconds);
-    q('#simuladoClock').classList.remove('warnText');
-    renderSimuladoQuestion();
-    q('#simuladoDialog').showModal();
-
-    simuladoTimer=setInterval(()=>{
-      if(!activeSimulado||activeSimulado.finished)return;
-      activeSimulado.remainingSeconds=Math.max(0,activeSimulado.totalSeconds-Math.floor((Date.now()-activeSimulado.startedAt)/1000));
-      const clockEl=q('#simuladoClock');
-      if(clockEl){
-        clockEl.textContent=formatSimuladoClock(activeSimulado.remainingSeconds);
-        clockEl.classList.toggle('warnText',activeSimulado.remainingSeconds<=300);
-      }
-      if(activeSimulado.remainingSeconds<=0){
-        toast('Tempo esgotado! Entregando o simulado automaticamente.');
-        finishTimedSimulado(true);
-      }
-    },1000);
+    showActiveTimedSimulado();
   }
 
   function renderSimuladoQuestion(){
@@ -6710,7 +7413,7 @@
     q('#simuladoOptions').innerHTML=(item.options||[]).map((opt,i)=>{
       const selected=answers[current]===i;
       const isElim=elimSet.has(i);
-      return `<div class="optionWithScissors"><button type="button" class="optionMainBtn ${selected?'selectedOption':''} ${isElim?'eliminatedOption':''}" data-simulado-option="${i}"><b>${String.fromCharCode(65+i)}.</b> ${escText(opt)}</button><button type="button" class="scissorBtn ${isElim?'active':''}" data-simulado-scissor="${i}" title="Riscar/eliminar alternativa">✂</button></div>`;
+      return `<div class="optionWithScissors"><button type="button" class="optionMainBtn ${selected?'selectedOption':''} ${isElim?'eliminatedOption':''}" data-simulado-option="${i}"><b>${String.fromCharCode(65+i)}.</b> ${escText(window.JCQuestionText?window.JCQuestionText.analyzeOption(opt).text:opt)}</button><button type="button" class="scissorBtn ${isElim?'active':''}" data-simulado-scissor="${i}" title="Riscar/eliminar alternativa">✂</button></div>`;
     }).join('');
     qa('[data-simulado-option]').forEach(btn=>btn.onclick=()=>{
       const idx=Number(btn.dataset.simuladoOption);
@@ -6726,6 +7429,7 @@
     });
     q('#simuladoPrevBtn').disabled=current<=0;
     q('#simuladoNextBtn').disabled=current>=questions.length-1;
+    saveActiveTimedSimulado();
   }
 
   function navigateSimulado(delta){
@@ -6742,10 +7446,23 @@
       q('#simuladoDialog')?.close();
       return;
     }
-    if(!confirm('Sair do simulado em andamento? As respostas atuais não serão salvas.'))return;
-    clearInterval(simuladoTimer);
-    activeSimulado=null;
-    q('#simuladoDialog')?.close();
+    let exit=q('#confirmExitTimedSimuladoDialog');
+    if(!exit){
+      document.body.insertAdjacentHTML('beforeend','<dialog id="confirmExitTimedSimuladoDialog" aria-labelledby="exitTimedSimuladoTitle"><h3 id="exitTimedSimuladoTitle">Sair do simulado?</h3><p>Continuar depois salva as respostas e a posição neste aparelho. O relógio continua correndo, inclusive com a página fechada. Encerrar descarta este caderno sem registrar resultado.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="action" id="stayTimedSimuladoBtn">Permanecer</button><button type="button" class="ghost" id="pauseTimedSimuladoBtn">Continuar depois</button><button type="button" class="ghost danger" id="discardTimedSimuladoBtn">Encerrar simulado</button></div></dialog>');
+      exit=q('#confirmExitTimedSimuladoDialog');
+    }
+    q('#stayTimedSimuladoBtn').onclick=()=>exit.close();
+    q('#pauseTimedSimuladoBtn').onclick=()=>{
+      const saved=saveActiveTimedSimulado();
+      if(!saved)return toast('Não foi possível salvar. Libere espaço antes de sair do simulado.');
+      clearInterval(simuladoTimer);activeSimulado=null;exit.close();q('#simuladoDialog')?.close();
+      offerSavedTimedSimuladoResume();openView('report');
+      toast('Simulado salvo. O relógio continua correndo enquanto você estiver fora.');
+    };
+    q('#discardTimedSimuladoBtn').onclick=()=>{
+      clearSavedTimedSimulado();clearInterval(simuladoTimer);activeSimulado=null;exit.close();q('#simuladoDialog')?.close();openView('report');
+    };
+    if(!exit.open)exit.showModal();
   }
 
   function confirmSubmitSimulado(){
@@ -6760,6 +7477,22 @@
 
   function finishTimedSimulado(){
     if(!activeSimulado||activeSimulado.finished)return;
+    const scope=currentTimedSimuladoScope(),savedScope=activeSimulado._sessionScope;
+    if(savedScope&&(savedScope.userId!==scope.userId||savedScope.campaignId!==scope.campaignId||savedScope.resetEpoch!==scope.resetEpoch)){
+      clearInterval(simuladoTimer);activeSimulado=null;q('#simuladoDialog')?.close();return;
+    }
+    if(!timedSimuladoQualityReady(activeSimulado)){
+      saveActiveTimedSimulado();clearInterval(simuladoTimer);activeSimulado=null;q('#simuladoDialog')?.close();offerSavedTimedSimuladoResume();
+      toast('A correção foi suspensa: há questões pendentes de revisão. Suas respostas continuam salvas; este caderno não alterou XP nem estatísticas.');return;
+    }
+    const sessionId=activeSimulado.sessionId;
+    if((state.completedTimedSimuladoIds||[]).includes(sessionId)){
+      activeSimulado.finished=true;
+      clearInterval(simuladoTimer);clearSavedTimedSimulado();
+      toast('O resultado deste simulado já foi registrado.');
+      return;
+    }
+    activeSimulado.remainingSeconds=window.JornadaQuestionSessions.timedRemainingSeconds(activeSimulado);
     activeSimulado.finished=true;
     clearInterval(simuladoTimer);
     const {questions,answers,scoringMode,totalSeconds,remainingSeconds}=activeSimulado;
@@ -6793,9 +7526,10 @@
 
     const missions=typeof missionPool==='function'?missionPool():[];
     for(const [subj,data] of Object.entries(bySubject)){
-      const missionId=missions.find(m=>normalizeText(m.subject).includes(normalizeText(subj)))?.id||missions[0]?.id||null;
+      const missionId=missions.find(m=>subjectKey(canonicalSubjectName(m.subject))===subjectKey(canonicalSubjectName(subj)))?.id||null;
       state.scores.push({
         id:missionId,
+        sessionId:`${sessionId}:${subjectKey(canonicalSubjectName(subj))}`,
         total:data.total,
         correct:data.correct,
         date:new Date().toISOString(),
@@ -6804,7 +7538,9 @@
         source:'simulado'
       });
     }
+    state.completedTimedSimuladoIds=[...(state.completedTimedSimuladoIds||[]),sessionId].filter(Boolean).slice(-500);
     save();
+    clearSavedTimedSimulado();
     render();
 
     const rawRate=Math.round(totalCorrect/questions.length*100);
@@ -7160,42 +7896,7 @@
         btn.onclick=()=>startSubjectTargetedFix(btn.dataset.cutoffFixSubj,true);
       });
       actionBox.querySelectorAll('[data-cutoff-fix-topic-key]').forEach(btn=>{
-        btn.onclick=()=>{
-          sanitizeAllQuestionsAndErrorsSubjects();
-          const errKey=btn.dataset.cutoffFixTopicKey;
-          const err=state?.errors?.[errKey];
-          if(err&&err.question&&err.correctAnswer){
-            const cleanSubj=resolveStrictQuestionDiscipline(err.question,err.topic,err.subject,err.options);
-            const matchedReal=(ALL_QUESTIONS||[]).find(qItem=>topicKey(qItem.statement||'')===topicKey(err.question));
-            let targetQ;
-            if(matchedReal){
-              targetQ={...matchedReal,subject:cleanSubj};
-            }else if(Array.isArray(err.options)&&err.options.length>=2&&Number.isInteger(Number(err.correct_index))){
-              targetQ={subject:cleanSubj,topic:err.topic||'Correção de Erro',statement:err.question,options:[...err.options],correct_index:Number(err.correct_index),explanation:err.explanation||`A alternativa correta é: ${err.correctAnswer}`,difficulty:'medio',origin:'adaptada_do_pdf'};
-            }else{
-              const distractors=buildSubjectAppropriateDistractors(cleanSubj,err.correctAnswer);
-              const wrongChosen=err.lastChosen&&err.lastChosen!==err.correctAnswer?[err.lastChosen]:[];
-              const opts=[err.correctAnswer,...wrongChosen,...distractors].slice(0,4);
-              targetQ={subject:cleanSubj,topic:err.topic||'Correção de Erro',statement:err.question,options:opts,correct_index:0,explanation:err.explanation||`A alternativa correta é: ${err.correctAnswer}`,difficulty:'medio',origin:'adaptada_do_pdf'};
-            }
-            const extraPool=(ALL_QUESTIONS||[]).filter(qItem=>topicKey(resolveStrictQuestionDiscipline(qItem))===topicKey(cleanSubj)&&topicKey(qItem.statement||'')!==topicKey(err.question)).slice(0,4);
-            activeQuestions={
-              mode:'battle',
-              subject:cleanSubj,
-              questions:[{...targetQ,_errorNotebookKey:errKey},...extraPool].map(qItem=>{const p=prepareQuestion(qItem);if(qItem._errorNotebookKey)p._errorNotebookKey=qItem._errorNotebookKey;return p}),
-              current:0,
-              correct:0,
-              streak:0,
-              level:1,
-              answered:false
-            };
-            if(q('#questionDialogTitle'))q('#questionDialogTitle').textContent=`⚔️ Correção Cirúrgica · ${err.topic||cleanSubj}`;
-            q('#questionDialog')?.showModal();
-            showQuestion();
-            return;
-          }
-          startSubjectTargetedFix(btn.dataset.cutoffFixSubj,true);
-        };
+        btn.onclick=()=>launchSingleErrorRetryByKey(btn.dataset.cutoffFixTopicKey);
       });
       actionBox.querySelectorAll('[data-cutoff-study-subj]').forEach(btn=>{
         btn.onclick=(ev)=>{
@@ -7726,22 +8427,18 @@
   }
 
   function bindQuestionCenter(){
-    ensureTopicFilterSelect();
-    ensureSimuladoUI();
-    ensureTacticalDiagnosisPanel();
-    ensureExamBankHub();
     q('#questionSubject')?.addEventListener('change',()=>{populateTopicFilter();updateQuestionPool()});
     for(const selector of ['#questionDifficulty','#questionOrigin','#questionBattleMode','#questionHistoryFilter'])q(selector)?.addEventListener('change',updateQuestionPool);
     if(q('#startQuestions'))q('#startQuestions').onclick=startFilteredBattle;
-    populateTopicFilter();
-    updateQuestionPool();
-    renderPerformanceChart();
-    renderExamBankHub();
   }
 
   const baseRenderQuestionFilters=typeof renderQuestionFilters==='function'?renderQuestionFilters:null;
   if(baseRenderQuestionFilters){
     renderQuestionFilters=function(){
+      if(window.JCQuestionsWorkspace&&!window.JCQuestionsWorkspace.isRendering('resolver')){
+        window.JCQuestionsWorkspace.request();
+        return;
+      }
       if (window.JC_MODULES?.telemetry) window.JC_MODULES.telemetry.markStart('jc_questions_tab_open');
       baseRenderQuestionFilters();
       populateTopicFilter();
@@ -7751,7 +8448,7 @@
         const sample = window.JC_MODULES.telemetry.markEnd('jc_questions_tab_open');
         const countEl = q('#questionPoolCount');
         if (countEl && sample) {
-          countEl.title = `Filtro carregado em ${sample.durationMs}ms (p50: ${window.JC_MODULES.telemetry.getStats().p50Ms}ms · banco: ${sample.bankSize} questões)`;
+          countEl.title = `Renderização local dos filtros: ${sample.durationMs}ms (p50: ${window.JC_MODULES.telemetry.getStats().p50Ms}ms · banco: ${sample.bankSize} questões)`;
         }
       }
     };
@@ -7940,17 +8637,22 @@
   }
 
   function computeAuditedHunterXpCeiling(missionsDone=0,missionsMastered=0,questionsTotal=0,bossesDone=0,streakDays=0){
-    const mDone=Math.max(0,Number(missionsDone||0));
-    const mMast=Math.max(0,Math.min(mDone,Number(missionsMastered||0)));
-    const qTot=Math.max(0,Number(questionsTotal||0));
-    const bDone=Math.max(0,Number(bossesDone||0));
-    const sDays=Math.max(0,Number(streakDays||0));
-    // Teto auditável: 40 XP por tópico estudado + 60 XP por tópico dominado + 300 XP por Boss + até 15 XP por questão + 40 XP por dia de ofensiva + margem de trilha (800)
-    return (mDone*40)+(mMast*60)+(bDone*300)+(qTot*15)+(sDays*40)+800;
+    const count=value=>(typeof value==='number'||(typeof value==='string'&&value.trim()!==''))&&Number.isSafeInteger(Number(value))&&Number(value)>=0?Number(value):0;
+    const mDone=count(missionsDone);
+    const mMast=Math.min(mDone,count(missionsMastered));
+    const validCount=value=>(typeof value==='number'||(typeof value==='string'&&value.trim()!==''))&&Number.isSafeInteger(Number(value))&&Number(value)>=0;
+    const qTot=Array.isArray(state?.scores)?state.scores.reduce((sum,score)=>sum+(validCount(score?.total)&&validCount(score?.correct)&&Number(score.correct)<=Number(score.total)?Number(score.total):0),0):count(questionsTotal);
+    const localBosses=typeof window.validHunterBossCount==='function'?window.validHunterBossCount():Object.values(state?.bosses||{}).filter(Boolean).length;
+    const bDone=state?.bosses&&typeof state.bosses==='object'?Math.min(count(bossesDone),localBosses):count(bossesDone);
+    const sDays=typeof window.historicalEarnedStreakDays==='function'?window.historicalEarnedStreakDays():Math.max(count(state?.bestStreak),Object.entries(state?.streakDaysByHalfMission||{}).filter(([day,value])=>value&&/^\d{4}-\d{2}-\d{2}$/.test(day)&&Number.isFinite(Date.parse(day+'T12:00:00Z'))).length);
+    // This historical allowance limits recorded XP; a broken current streak never removes earned XP.
+    const earnedEvents=typeof window.verifiedLearningEventXp==='function'?window.verifiedLearningEventXp():0;
+    return (mDone*40)+(mMast*60)+(bDone*300)+(qTot*15)+(sDays*40)+800+earnedEvents;
   }
   window.computeAuditedHunterXpCeiling=computeAuditedHunterXpCeiling;
 
   function syncHunterStatsSnapshot(){
+    if(!rankingAccountReady())return;
     try{
       const taf=ensureTafState();
       const tests=TAF_ORDER.map(k=>taf.tests[k]).filter(Boolean);
@@ -7971,7 +8673,7 @@
       const defaultName=user?.user_metadata?.full_name||user?.user_metadata?.name||(user?.email?user.email.split('@')[0]:'')||'Caçador';
       const defaultRole=(typeof activeCampaign==='function'?activeCampaign()?.name:'')||'PMPE — Soldado';
       state.publicProfile=state.publicProfile||{};
-      const myAvatar = typeof window.renderHunterAvatarHtml === 'function' ? (state.profileAvatarDataUrl || state.publicProfile.avatar || localStorage.getItem('jc_profile_avatar_v1') || '') : '';
+      const myAvatar = typeof window.getHunterAvatarDataUrl === 'function' ? window.getHunterAvatarDataUrl() : '';
       state.hunterStats={
         name:state.profileDisplayName||state.publicProfile.name||defaultName,
         role:state.profileTargetRole||state.publicProfile.role||defaultRole,
@@ -8362,7 +9064,7 @@
   }
 
   // 12. Ranking Geral de Caçadores (Perfis Primário + Secundário ex.: PMPE e PPPE, sem TAF no Ranking)
-  let leaderboardRows=[],leaderboardBusy=false,leaderboardSort='streak',leaderboardRoleFilter='all',leaderboardSqlMissing=false;
+  let leaderboardRows=[],leaderboardBusy=false,leaderboardSort='streak',leaderboardRoleFilter='all',leaderboardSqlMissing=false,leaderboardRequestId=0,leaderboardRowsScope='';
 
   function normalizeExamSlug(name='',org=''){
     const raw=topicKey(`${name} ${org}`);
@@ -8425,35 +9127,61 @@
     return 'E III - Caçador Iniciante';
   }
 
-  function localHunterRow(){
-    syncHunterStatsSnapshot();
-    const roles=detectUserRoles();
-    const hs=state.hunterStats||{};
-    if(state.hunterStats){
-      state.hunterStats.role=roles.primary;
-      state.hunterStats.secondaryRole=roles.secondary;
+  function rankingScope(){return `${cloudSession?.user?.id||'guest'}:${Number(state?._resetEpoch||0)}`;}
+  function rankingAccountReady(){
+    const owner=cloudSession?.user?.id||'guest';
+    return owner==='guest'?(!state?._ownerUserId||state._ownerUserId==='guest'):state?._ownerUserId===owner;
+  }
+  function rankMetric(value){
+    if(value===null||value===undefined||value==='')return null;
+    const n=Number(value);return Number.isFinite(n)&&n>=0?n:null;
+  }
+  function rankValue(value,suffix=''){const n=rankMetric(value);return n===null?'—':`${n}${suffix}`;}
+  function rankingPeriodMetrics(row,weekly=false){
+    const result={...row};
+    result.accuracy=rankMetric(row[weekly?'weekly_accuracy':'accuracy']);
+    for(const [target,source] of [['_displayXp','xp'],['_displayStreak','streak'],['_displayMissions','missions_done'],['_displayHours','hours'],['_displayQuestions','questions_total']]){
+      result[target]=rankMetric(row[weekly?`weekly_${source}`:source]);
     }
+    const privacy=row.privacy||{};
+    if(!row.is_me){
+      if(privacy.showStreak===false){result.streak=null;result.best_streak=null;result.last_study='';result._displayStreak=null;}
+      if(privacy.showAccuracy===false){result.accuracy=null;result.missions_done=null;result.questions_total=null;result._displayMissions=null;result._displayQuestions=null;}
+      if(privacy.showHours===false){result.hours=null;result._displayHours=null;}
+      if(privacy.showTargetRole===false){result.role='Cargo privado';result.secondary_role='';}
+      if(privacy.showAvatar===false)result.avatar='';
+      if(privacy.showBio===false)result.bio='';
+    }
+    return result;
+  }
+  function localHunterRow(){
+    if(!rankingAccountReady())return {user_id:'local',is_me:true,name:'Carregando conta',privacy:{}};
+    syncHunterStatsSnapshot();
+    const roles=detectUserRoles(),hs=state.hunterStats||{};
+    if(state.hunterStats){state.hunterStats.role=roles.primary;state.hunterStats.secondaryRole=roles.secondary;}
+    const scores=Array.isArray(state.scores)?state.scores:[];
+    const sumScores=list=>list.reduce((n,item)=>n+(rankMetric(item.total)??0),0);
+    const questionsTotal=Math.max(sumScores(scores),Object.values(state.questionStatsByCampaign||{}).reduce((n,item)=>n+(rankMetric(item?.total)??0),0));
+    const auditedXpCeiling=computeAuditedHunterXpCeiling(rankMetric(hs.missionsDone)??0,rankMetric(hs.missionsMastered)??0,questionsTotal,Object.keys(state.bosses||{}).length,rankMetric(state.streak)??0);
+    const sunday=new Date();sunday.setDate(sunday.getDate()-sunday.getDay());
+    const weekKey=typeof localDayKey==='function'?localDayKey(sunday):sunday.toISOString().slice(0,10);
+    const today=typeof localDayKey==='function'?localDayKey():new Date().toISOString().slice(0,10);
+    const studyEntries=Object.entries(state.studyByDay||{});
+    const hours=entries=>Math.round(entries.reduce((n,[,seconds])=>n+(rankMetric(seconds)??0),0)/3600*10)/10;
     return {
-      user_id:cloudSession?.user?.id||'local',
-      is_me:true,
-      name:hs.name||'Você (Caçador)',
-      role:roles.primary,
-      secondary_role:roles.secondary,
-      streak:Number(hs.streak||state?.streak||0),
-      best_streak:Number(hs.bestStreak||state?.bestStreak||0),
-      last_study:state?.lastStudy||'',
-      missions_done:Number(hs.missionsDone||0),
-      accuracy:Number(hs.accuracy||0),
-      xp:Number(hs.xp||0),
-      avatar:hs.avatar||state?.profileAvatarDataUrl||localStorage.getItem('jc_profile_avatar_v1')||'',
-      bio:hs.bio||state?.profileBioMotto||'',
-      privacy:hs.privacy||state?.publicProfile?.privacy||{},
-      updated_at:new Date().toISOString()
+      user_id:cloudSession?.user?.id||'local',is_me:true,name:hs.name||'Você (Caçador)',role:roles.primary,secondary_role:roles.secondary,
+      streak:rankMetric(hs.streak??state.streak)??0,best_streak:rankMetric(hs.bestStreak??state.bestStreak)??0,last_study:state.lastStudy||'',
+      missions_done:rankMetric(hs.missionsDone)??0,accuracy:questionsTotal?rankMetric(hs.accuracy):null,xp:Math.min(rankMetric(hs.xp)??0,auditedXpCeiling),
+      hours:hours(studyEntries),questions_total:questionsTotal,
+      weekly_hours:hours(studyEntries.filter(([date])=>date>=weekKey&&date<=today)),
+      weekly_questions_total:scores.every(item=>item.date)?sumScores(scores.filter(item=>String(item.date).slice(0,10)>=weekKey&&String(item.date).slice(0,10)<=today)):null,
+      avatar:typeof window.getHunterAvatarDataUrl==='function'?window.getHunterAvatarDataUrl():'',
+      bio:hs.bio||state.profileBioMotto||'',privacy:hs.privacy||state.publicProfile?.privacy||{},updated_at:new Date().toISOString()
     };
   }
 
   function renderRoleBadgesHtml(primaryRole,secondaryRole,centered=false){
-    const p=formatExamRoleLabel(primaryRole||'PMPE — Soldado');
+    const p=formatExamRoleLabel(primaryRole||'Cargo não informado');
     const s=(secondaryRole&&normalizeExamSlug(secondaryRole)!==normalizeExamSlug(primaryRole))?formatExamRoleLabel(secondaryRole):'';
     return `
       <div class="roleBadgesWrap" style="${centered?'justify-content:center':''}">
@@ -8464,89 +9192,58 @@
   }
 
   async function loadHuntersLeaderboard(forceToast=false){
-    if(leaderboardBusy)return;
-    leaderboardBusy=true;
-    renderHuntersLeaderboard();
+    const scope=rankingScope();
+    if(!rankingAccountReady()||(leaderboardBusy&&leaderboardRowsScope===scope))return;
+    const requestId=++leaderboardRequestId;
+    if(leaderboardRowsScope!==scope)leaderboardRows=[];
+    leaderboardRowsScope=scope;leaderboardBusy=true;renderHuntersLeaderboard();
+    const active=()=>requestId===leaderboardRequestId&&scope===rankingScope()&&rankingAccountReady();
     try{
-      syncHunterStatsSnapshot();
-      const roles=detectUserRoles();
-      if(state.hunterStats){
-        state.hunterStats.role=roles.primary;
-        state.hunterStats.secondaryRole=roles.secondary;
-      }
-      if(!cloudSession){
-        leaderboardRows=[localHunterRow()];
-        return;
-      }
+      if(!cloudSession){leaderboardRows=[localHunterRow()];return;}
       const response=await cloudFetch('rpc/get_hunters_leaderboard',{method:'POST',body:JSON.stringify({})});
+      if(!active())return;
       const rows=await response.json();
-      if(Array.isArray(rows)&&rows.length){
-        leaderboardSqlMissing=false;
-        const meLocal=localHunterRow();
-        leaderboardRows=rows.map(r=>{
-          if(!r.is_me)return r;
-          const activeDaysCount=state?.studyByDay?Object.keys(state.studyByDay).length:0;
-          const maxHonestStreak=Math.max(1,activeDaysCount+2,Number(r.streak||0));
-          const serverXp=Number(r.xp||0);
-          const ceilingXp=computeAuditedHunterXpCeiling(
-            Math.max(Number(r.missions_done||0),meLocal.missions_done),
-            Number(state?.hunterStats?.missionsMastered||0),
-            Math.max(Number(r.questions_total||0),(state?.scores||[]).reduce((a,s)=>a+Number(s.total||0),0)),
-            Object.keys(state?.bosses||{}).length,
-            maxHonestStreak
-          );
-          const safeXp=serverXp>0?Math.min(Math.max(serverXp,meLocal.xp),ceilingXp):Math.min(meLocal.xp,ceilingXp);
-          return {
-            ...r,
-            name:meLocal.name||r.name,
-            role:meLocal.role||r.role,
-            secondary_role:meLocal.secondary_role||(r.secondary_role||''),
-            streak:Math.min(Math.max(Number(r.streak||0),meLocal.streak),maxHonestStreak),
-            best_streak:Math.min(Math.max(Number(r.best_streak||0),meLocal.best_streak),maxHonestStreak+3),
-            missions_done:Math.max(Number(r.missions_done||0),meLocal.missions_done),
-            accuracy:meLocal.accuracy||Number(r.accuracy||0),
-            xp:safeXp
-          };
-        });
-        if(forceToast)toast(`Ranking atualizado: ${leaderboardRows.length} caçador(es) na disputa!`);
-      }else{
-        leaderboardRows=[localHunterRow()];
-      }
+      if(!active())return;
+      if(!response.ok||!Array.isArray(rows))throw new Error(rows?.message||'Não foi possível carregar o ranking.');
+      leaderboardSqlMissing=false;
+      const me=localHunterRow();
+      leaderboardRows=rows.filter(row=>row&&typeof row==='object').map(row=>row.user_id===cloudSession.user.id?{...row,...me}:({...row,is_me:false}));
+      if(!leaderboardRows.some(row=>row.is_me))leaderboardRows.push(me);
+      if(forceToast)toast(`Ranking atualizado: ${leaderboardRows.length} caçador(es).`);
     }catch(err){
-      const msg=String(err?.message||err||'');
-      if(/get_hunters_leaderboard|Could not find the function|PGRST202/i.test(msg)){
-        leaderboardSqlMissing=true;
-      }
+      if(!active())return;
+      leaderboardSqlMissing=/get_hunters_leaderboard|Could not find the function|PGRST202/i.test(String(err?.message||err||''));
       leaderboardRows=[localHunterRow()];
+      if(forceToast)toast('Não foi possível atualizar. Exibindo apenas seu perfil local.');
     }finally{
-      leaderboardBusy=false;
-      renderHuntersLeaderboard();
+      if(requestId===leaderboardRequestId){
+        leaderboardBusy=false;
+        if(scope!==rankingScope()){leaderboardRows=[];leaderboardRowsScope='';}
+        renderHuntersLeaderboard();
+      }
     }
   }
 
   function deduplicateHunterRows(rows=[]){
-    const byName=new Map();
-    for(const item of rows){
-      const key=topicKey(item?.name||'cacador')||String(item?.user_id||Math.random());
-      const prev=byName.get(key);
-      if(!prev){
-        byName.set(key,item);
-        continue;
-      }
-      const prevScore=(prev.is_me?1000000:0)+Number(prev.xp||0)*10+Number(prev.streak||0)*100+Number(prev.missions_done||0)*50+Number(prev.accuracy||0);
-      const curScore=(item.is_me?1000000:0)+Number(item.xp||0)*10+Number(item.streak||0)*100+Number(item.missions_done||0)*50+Number(item.accuracy||0);
-      if(curScore>prevScore)byName.set(key,item);
-    }
-    return [...byName.values()];
+    const byId=new Map();
+    rows.forEach((item,index)=>{
+      if(!item||typeof item!=='object')return;
+      const key=item.user_id?String(item.user_id):`anonymous:${index}`;
+      if(!byId.has(key)||item.is_me)byId.set(key,item);
+    });
+    return [...byId.values()];
   }
 
   function renderHuntersLeaderboard(){
     const root=q('#rankingRoot');
     if(!root)return;
+    if(!rankingAccountReady()){root.innerHTML='<div class="empty">Aguardando carregar os dados desta conta…</div>';return;}
+    const renderScope=rankingScope();
+    if(leaderboardRowsScope!==renderScope){leaderboardRows=[];leaderboardRowsScope=renderScope;}
     const me=localHunterRow();
-    const list=deduplicateHunterRows((leaderboardRows&&leaderboardRows.length?leaderboardRows:[me]).slice());
+    const list=deduplicateHunterRows((leaderboardRows&&leaderboardRows.length?leaderboardRows:[me]).slice()).map(row=>rankingPeriodMetrics(row));
     const mySlugs=new Set([normalizeExamSlug(me.role),me.secondary_role?normalizeExamSlug(me.secondary_role):''].filter(Boolean));
-    const filtered=leaderboardRoleFilter==='same'
+    let filtered=leaderboardRoleFilter==='same'
       ?list.filter(r=>{
         const r1=normalizeExamSlug(r.role);
         const r2=r.secondary_role?normalizeExamSlug(r.secondary_role):'';
@@ -8554,28 +9251,18 @@
       })
       :list;
 
-    const isWeekly=(window._rankPeriod||'weekly')==='weekly';
-    const nowDt=new Date();
-    const dayOfWeek=nowDt.getDay(); // 0=Dom..6=Sáb
-    const sundayDt=new Date(nowDt.getFullYear(),nowDt.getMonth(),nowDt.getDate()-dayOfWeek);
-    const sundayKey=typeof localDayKey==='function'?localDayKey(sundayDt):sundayDt.toISOString().slice(0,10);
-
-    filtered.forEach(r=>{
-      const studiedThisWeek=r.last_study&&String(r.last_study)>=sundayKey;
-      const daysSinceSunday=Math.max(1,dayOfWeek+1);
-      r._displayStreak=isWeekly?(studiedThisWeek?Math.min(Number(r.streak||0),daysSinceSunday):0):Number(r.streak||0);
-      r._displayMissions=isWeekly?(studiedThisWeek?Math.min(Number(r.missions_done||0),daysSinceSunday*2):0):Number(r.missions_done||0);
-      r._displayXp=isWeekly?(studiedThisWeek?Math.min(Number(r.xp||0),r._displayMissions*120+r._displayStreak*80):0):Number(r.xp||0);
-      r._displayHours=Math.round(((r._displayMissions*50)+(r._displayStreak*30))/60*10)/10;
-      r._displayQuestions=(r._displayMissions*15)+Math.round(r._displayXp/20);
-    });
+    const isWeekly=window._rankPeriod==='weekly';
+    for(let i=0;i<filtered.length;i++)filtered[i]=rankingPeriodMetrics(filtered[i],isWeekly);
+    const sortField={xp:'_displayXp',streak:'_displayStreak',hours:'_displayHours',questions:'_displayQuestions',accuracy:'accuracy'}[leaderboardSort]||'_displayStreak';
+    filtered=filtered.filter(row=>rankMetric(row[sortField])!==null);
+    const metricCompare=(a,b)=>a===null?(b===null?0:1):b===null?-1:b-a;
 
     filtered.sort((a,b)=>{
-      if(leaderboardSort==='xp')return (b._displayXp-a._displayXp)||(b._displayStreak-a._displayStreak)||(b.accuracy-a.accuracy);
-      if(leaderboardSort==='hours')return (b._displayHours-a._displayHours)||(b._displayXp-a._displayXp);
-      if(leaderboardSort==='questions')return (b._displayQuestions-a._displayQuestions)||(b.accuracy-a.accuracy);
-      if(leaderboardSort==='accuracy')return (b.accuracy-a.accuracy)||(b._displayMissions-a._displayMissions)||(b._displayStreak-a._displayStreak);
-      return (b._displayStreak-a._displayStreak)||(b._displayXp-a._displayXp)||(b.accuracy-a.accuracy);
+      if(leaderboardSort==='xp')return metricCompare(a._displayXp,b._displayXp)||metricCompare(a._displayStreak,b._displayStreak)||metricCompare(rankMetric(a.accuracy),rankMetric(b.accuracy));
+      if(leaderboardSort==='hours')return metricCompare(a._displayHours,b._displayHours)||metricCompare(a._displayXp,b._displayXp);
+      if(leaderboardSort==='questions')return metricCompare(a._displayQuestions,b._displayQuestions)||metricCompare(rankMetric(a.accuracy),rankMetric(b.accuracy));
+      if(leaderboardSort==='accuracy')return metricCompare(rankMetric(a.accuracy),rankMetric(b.accuracy))||metricCompare(a._displayMissions,b._displayMissions)||metricCompare(a._displayStreak,b._displayStreak);
+      return metricCompare(a._displayStreak,b._displayStreak)||metricCompare(a._displayXp,b._displayXp)||metricCompare(rankMetric(a.accuracy),rankMetric(b.accuracy));
     });
 
     const todayStr=typeof localDayKey==='function'?localDayKey():new Date().toISOString().slice(0,10);
@@ -8636,11 +9323,11 @@
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(148,163,184,0.16)">
           <div>
             <span class="eyebrow" style="color:#38bdf8">ARENA DE CONSTÂNCIA · PLACAR SEMANAL & GERAL</span>
-            <div class="small muted">Compare seu ritmo na semana (reinicia todo domingo às 23h59) ou no acumulado geral.</div>
+            <div class="small muted">Dados registrados, sem estimativas. A semana vai de domingo a sábado; — indica dado indisponível ou privado.</div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button type="button" class="ghost small ${(window._rankPeriod||'weekly')==='weekly'?'active':''}" data-rank-period="weekly" style="${(window._rankPeriod||'weekly')==='weekly'?'border-color:#38bdf8;color:#38bdf8;font-weight:800':''}">📅 Desta Semana (Dom–Sáb)</button>
-            <button type="button" class="ghost small ${window._rankPeriod==='alltime'?'active':''}" data-rank-period="alltime" style="${window._rankPeriod==='alltime'?'border-color:#38bdf8;color:#38bdf8;font-weight:800':''}">🏆 Histórico Geral</button>
+            <button type="button" class="ghost small ${window._rankPeriod==='weekly'?'active':''}" data-rank-period="weekly" style="${window._rankPeriod==='weekly'?'border-color:#38bdf8;color:#38bdf8;font-weight:800':''}">📅 Desta Semana (Dom–Sáb)</button>
+            <button type="button" class="ghost small ${window._rankPeriod!=='weekly'?'active':''}" data-rank-period="alltime" style="${window._rankPeriod!=='weekly'?'border-color:#38bdf8;color:#38bdf8;font-weight:800':''}">🏆 Histórico Geral</button>
           </div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
@@ -8668,9 +9355,9 @@
               </div>
               <strong style="font-size:1rem;text-decoration:underline;text-decoration-color:rgba(89,230,255,0.4)">${escText(item.name)}${item.is_me?' (Você)':''}</strong>
               ${renderRoleBadgesHtml(item.role,item.secondary_role,true)}
-              <div style="font-size:1.25rem;font-weight:900;color:var(--gold);margin-top:4px">🔥 ${Number(item._displayStreak??item.streak??0)} dia${Number(item._displayStreak??item.streak??0)===1?'':'s'} ${isWeekly?'na semana':'de ofensiva total'}</div>
-              <div class="small muted">${escText(rankLabelForXp(item.xp))} · ${Number(item._displayXp??item.xp??0)} XP ${isWeekly?'(semana)':'(geral)'}</div>
-              <div class="small muted">⏱️ ${item._displayHours||0}h · 📝 ${item._displayQuestions||0} questões · 🎯 ${Number(item.accuracy||0)}% (${Number(item._displayMissions??item.missions_done??0)} missões)</div>
+              <div style="font-size:1.25rem;font-weight:900;color:var(--gold);margin-top:4px">🔥 ${rankValue(item._displayStreak)} dia${Number(item._displayStreak??item.streak??0)===1?'':'s'} ${isWeekly?'na semana':'de ofensiva total'}</div>
+              <div class="small muted">${escText(rankLabelForXp(item.xp))} · ${rankValue(item._displayXp)} XP ${isWeekly?'(semana)':'(geral)'}</div>
+              <div class="small muted">⏱️ ${rankValue(item._displayHours,'h')} · 📝 ${rankValue(item._displayQuestions)} questões · 🎯 ${rankValue(item.accuracy,'%')} (${rankValue(item._displayMissions)} missões)</div>
             </div>
           `).join('')}
         </div>
@@ -8682,6 +9369,7 @@
           <span class="tag">${filtered.length} participante${filtered.length===1?'':'s'}</span>
         </div>
         <div>
+          ${!filtered.length?'<div class="empty">Sem dados registrados para este período e critério. Selecione outro critério ou Histórico Geral.</div>':''}
           ${filtered.map((item,idx)=>{
             const studiedToday=item.last_study===todayStr;
             return `
@@ -8699,16 +9387,16 @@
                   </div>
                 </div>
                 <div class="rankRowMetrics small muted">
-                  <span>⏱️ <b>${item._displayHours||0}h</b></span>
-                  <span>📝 <b>${item._displayQuestions||0}</b> questões</span>
-                  <span>🎯 <b>${Number(item.accuracy||0)}%</b> acertos</span>
-                  <span>✓ <b>${Number(item._displayMissions??item.missions_done??0)}</b> missões</span>
-                  <span>Rec: <b>${Number(item.best_streak||0)}d</b></span>
+                  <span>⏱️ <b>${rankValue(item._displayHours,'h')}</b></span>
+                  <span>📝 <b>${rankValue(item._displayQuestions)}</b> questões</span>
+                  <span>🎯 <b>${rankValue(item.accuracy,'%')}</b> acertos</span>
+                  <span>✓ <b>${rankValue(item._displayMissions)}</b> missões</span>
+                  <span>Rec: <b>${rankValue(item.best_streak,'d')}</b></span>
                   ${!item.is_me?`<button type="button" class="ghost small" style="padding:4px 9px;min-height:28px;font-size:.73rem" data-challenge-from-rank="${escText(item.user_id)}|${escText(item.name)}">⚔️ Desafiar X1</button>`:''}
                 </div>
                 <div class="rankRowRight" style="text-align:right">
-                  <div style="font-weight:900;color:var(--gold);font-size:1.02rem">🔥 ${Number(item._displayStreak??item.streak??0)}d</div>
-                  <div class="small muted">${Number(item._displayXp??item.xp??0)} XP ${isWeekly?'(sem)':'(geral)'}</div>
+                  <div style="font-weight:900;color:var(--gold);font-size:1.02rem">🔥 ${rankValue(item._displayStreak)}d</div>
+                  <div class="small muted">${rankValue(item._displayXp)} XP ${isWeekly?'(sem)':'(geral)'}</div>
                 </div>
               </div>
             `;
@@ -8746,22 +9434,18 @@
       try{await navigator.clipboard.writeText(shareText);toast('Convite copiado! Cole no WhatsApp dos seus amigos.')}catch{toast('Compartilhe o link: https://jornada.wcaio.workers.dev')}
     };
     q('#saveRankProfileBtn').onclick=async()=>{
-      state.publicProfile=state.publicProfile||{};
-      state.publicProfile.name=q('#rankProfileNameInput')?.value?.trim()||me.name;
-      state.publicProfile.role=q('#rankProfileRoleInput')?.value?.trim()||me.role;
-      state.publicProfile.secondaryRole=q('#rankProfileSecRoleInput')?.value?.trim()||'';
-      state.publicProfile.hidden=!!q('#rankProfileHideToggle')?.checked;
-      syncHunterStatsSnapshot();
-      const roles=detectUserRoles();
-      if(state.hunterStats){
-        state.hunterStats.role=roles.primary;
-        state.hunterStats.secondaryRole=roles.secondary;
-      }
-      save();
-      if(cloudSession&&navigator.onLine)await pushCloudState();
-      await loadHuntersLeaderboard(true);
-      toast('Seu perfil primário e secundário no Ranking foi salvo!');
+      if(renderScope!==rankingScope()||!rankingAccountReady())return;
+      const button=q('#saveRankProfileBtn');button.disabled=true;
+      try{
+        const saveProfile=window.JC_MODULES?.socialProfile?.saveChanges;
+        if(typeof saveProfile!=='function'){toast('Abra Meu Perfil para editar sua identidade.');return;}
+        const result=await saveProfile({name:q('#rankProfileNameInput')?.value,role:q('#rankProfileRoleInput')?.value,secondaryRole:q('#rankProfileSecRoleInput')?.value,hidden:!!q('#rankProfileHideToggle')?.checked,city:state.profileCity||'',bio:state.profileBioMotto||state.publicProfile?.bio||'',privacy:{...(state.publicProfile?.privacy||{})}});
+        if(renderScope!==rankingScope()||!rankingAccountReady())return;
+        toast(result.status==='synced'?'Perfil confirmado na nuvem.':result.status==='busy'?'Já existe um salvamento em andamento.':result.status==='storage_error'?'Não foi possível gravar no aparelho. Tente novamente.':'Perfil salvo no aparelho; sincronização pendente.');
+        await loadHuntersLeaderboard();
+      }finally{button.disabled=false;}
     };
+    qa('[data-rank-period]').forEach(btn=>{btn.onclick=()=>{window._rankPeriod=btn.dataset.rankPeriod;renderHuntersLeaderboard();};});
     qa('[data-rank-sort]').forEach(btn=>{
       btn.onclick=()=>{
         leaderboardSort=btn.dataset.rankSort;
@@ -8806,14 +9490,49 @@
   }
 
   let _commSyncInFlight=null;
-  async function syncCommunityLibraryForActivePortal(force=false){
-    if(!cloudSession)return;
+  function communityContentSignature(value){
+    const transient=new Set(['_fp','_fpSource','_answerStartedAt','_chosenAnswerIndex','_isCorrect','_userAnswered','_userChosenIndex','_userMarkedBlank','communitySourceSignature','communitySourceScopeKey']);
+    const stable=item=>Array.isArray(item)?item.map(stable):item&&typeof item==='object'?Object.fromEntries(Object.keys(item).filter(key=>!transient.has(key)).sort().map(key=>[key,stable(item[key])])):item;
+    return JSON.stringify(stable(value));
+  }
+  function studyContentScopeKey(){
+    const sessionOwner=cloudSession?.user?.id,owner=sessionOwner||state?._ownerUserId||'guest';
+    if(sessionOwner&&state?._ownerUserId&&state._ownerUserId!==sessionOwner)return '';
     const campaign=typeof activeCampaign==='function'?activeCampaign():null;
-    if(!campaign)return;
-    if(_commSyncInFlight&&!force)return _commSyncInFlight;
+    return JSON.stringify([owner,state?.activeCampaignId||campaign?.id||'',campaign?.dbId||'',Number(state?._resetEpoch||0)]);
+  }
+  function communityLibraryScopeKey(){
+    const owner=cloudSession?.user?.id,campaign=typeof activeCampaign==='function'?activeCampaign():null;
+    if(!owner||!campaign||(state?._ownerUserId&&state._ownerUserId!==owner))return '';
+    return studyContentScopeKey();
+  }
+  function refreshContentViews(views=['library','study','learning','report']){
+    window.persistToLocalDatabase?.(state?.activeCampaignId);
+    window.markViewsDirty?.(...views);
+    const active=document.querySelector('.view.active')?.id||'today';
+    if(!views.includes(active))return;
+    if(active==='report'){
+      // Let the workspace coalesce refreshes and retain the selected panel.
+      if(window.JCQuestionsWorkspace)window.JCQuestionsWorkspace.request();
+      else if(typeof renderReport==='function')renderReport();
+    }else if(active==='library'&&typeof renderUserDocuments==='function')renderUserDocuments();
+    else if(active==='study'&&typeof renderStudy==='function')renderStudy();
+    else if(active==='learning'&&typeof renderLearning==='function')renderLearning();
+  }
+  async function syncCommunityLibraryForActivePortal(force=false){
+    const scopeKey=communityLibraryScopeKey();
+    if(!scopeKey)return false;
+    const campaign=typeof activeCampaign==='function'?activeCampaign():null;
+    if(_commSyncInFlight?.scopeKey===scopeKey&&!force)return _commSyncInFlight.promise;
+    const operation={scopeKey};
+    syncCommunityLibraryForActivePortal._operation=operation;
+    const current=()=>syncCommunityLibraryForActivePortal._operation===operation&&communityLibraryScopeKey()===scopeKey;
     const slug='universal';
-    try{
-      if(force||communityCache.slug!==slug||!communityCache.loadedAt||(Date.now()-communityCache.loadedAt>=60000)){
+    const task=(async()=>{try{
+      const session=typeof validSession==='function'?await validSession():cloudSession;
+      if(!current()||session?.user?.id!==cloudSession?.user?.id)return false;
+      const request=(path,options={})=>cloudFetch(path,{...options,headers:{...(typeof authHeaders==='function'?authHeaders(session.access_token):{Authorization:`Bearer ${session.access_token}`}),...(options.headers||{})}});
+      if(force||communityCache.scopeKey!==scopeKey||communityCache.slug!==slug||!communityCache.loadedAt||(Date.now()-communityCache.loadedAt>=60000)){
         // Busca universal: consulta o RPC universal e, caso o banco ainda esteja em versão anterior que filtrava por slug,
         // agrega simultaneamente os principais perfis (PMPE, CBMPE, PPPE, PCPE e o portal ativo) + outros portais da própria conta.
         const probeExams=[
@@ -8823,11 +9542,13 @@
           {p_exam_name:'PPPE — Polícia Penal de PE',p_exam_org:'Polícia Penal de Pernambuco'},
           {p_exam_name:'PCPE — Polícia Civil de PE',p_exam_org:'Polícia Civil de Pernambuco'}
         ];
-        const firstRes=await cloudFetch('rpc/get_community_exam_library',{
+        const firstRes=await request('rpc/get_community_exam_library',{
           method:'POST',
           body:JSON.stringify(probeExams[0])
         }).catch(()=>null);
+        if(!current())return false;
         const firstData=firstRes&&firstRes.ok?await firstRes.json().catch(()=>null):null;
+        if(!current())return false;
         const docMap=new Map();
         const sumMap=new Map();
         const isEditalItem=item=>typeof window.isEditalDocumentOrTitle==='function'?window.isEditalDocumentOrTitle(item):(['edital','edital_concurso'].includes(String(item?.document_type||'').toLowerCase())||/\b(edital\s+verticalizado|edital\s+do\s+concurso|edital\s+de\s+abertura)\b/i.test(`${item?.title||''} ${item?.source_name||''} ${item?.content?.source||''}`));
@@ -8850,20 +9571,24 @@
             seenSlugs.add(s);
             return true;
           });
-          const extraResults=await Promise.all(extraProbes.map(p=>cloudFetch('rpc/get_community_exam_library',{method:'POST',body:JSON.stringify(p)}).then(r=>r.ok?r.json():null).catch(()=>null)));
+          const extraResults=await Promise.all(extraProbes.map(p=>request('rpc/get_community_exam_library',{method:'POST',body:JSON.stringify(p)}).then(r=>r.ok?r.json():null).catch(()=>null)));
+          if(!current())return false;
           extraResults.forEach(mergePayload);
         }
         // Também inclui documentos e conteúdos prontos de outros portais do próprio usuário (ex.: PMPE <-> CBM PE / BCM PE), NUNCA editais
-        const ownUid=cloudSession?.user?.id||'';
+        const ownUid=session.user.id;
         const [ownOtherDocsRes,ownOtherSumsRes]=ownUid?await Promise.all([
-          cloudFetch(`study_documents?user_id=eq.${encodeURIComponent(ownUid)}&processing_status=eq.ready&document_type=not.in.(edital,edital_concurso)&select=*&order=created_at.desc&limit=200`).catch(()=>null),
-          cloudFetch(`generated_study_content?user_id=eq.${encodeURIComponent(ownUid)}&content_type=in.(summary,question_pack)&select=id,title,content_type,content,source_refs,source_document_id,created_at&order=created_at.asc&limit=500`).catch(()=>null)
+          request(`study_documents?user_id=eq.${encodeURIComponent(ownUid)}&processing_status=eq.ready&document_type=not.in.(edital,edital_concurso)&select=*&order=created_at.desc&limit=200`).catch(()=>null),
+          request(`generated_study_content?user_id=eq.${encodeURIComponent(ownUid)}&content_type=in.(summary,question_pack)&select=id,title,content_type,content,source_refs,source_document_id,created_at&order=created_at.asc&limit=500`).catch(()=>null)
         ]):[null,null];
+        if(!current())return false;
         const ownOtherDocs=ownOtherDocsRes?.ok?await ownOtherDocsRes.json().catch(()=>[]):[];
+        if(!current())return false;
         const ownOtherSums=ownOtherSumsRes?.ok?await ownOtherSumsRes.json().catch(()=>[]):[];
+        if(!current())return false;
         if(Array.isArray(ownOtherDocs)){
           for(const d of ownOtherDocs){
-            if(!d?.id||String(d.campaign_id)===String(campaign.dbId)||isEditalItem(d))continue;
+            if(!d?.id||(d.user_id&&String(d.user_id)!==String(ownUid))||String(d.campaign_id)===String(campaign.dbId)||isEditalItem(d))continue;
             if(d.share_with_community===false||d.metadata?.private_only===true)continue;
             if(!docMap.has(String(d.id))){
               docMap.set(String(d.id),{...d,is_community:true,portal_name:d.portal_name||'Meu Outro Portal',author_name:d.author_name||'Sua Biblioteca'});
@@ -8872,44 +9597,53 @@
         }
         if(Array.isArray(ownOtherSums)){
           for(const s of ownOtherSums){
-            if(!s?.id||sumMap.has(String(s.id))||isEditalItem(s))continue;
+            if(!s?.id||(s.user_id&&String(s.user_id)!==String(ownUid))||sumMap.has(String(s.id))||isEditalItem(s))continue;
             const pDoc=docMap.get(String(s.source_document_id));
             if(pDoc&&!isEditalItem(pDoc)){
               sumMap.set(String(s.id),{...s,is_community:true,document_type:pDoc?.document_type||'material'});
             }
           }
         }
-        communityCache={slug:'universal',documents:[...docMap.values()],summaries:[...sumMap.values()],editalTopics:[],loadedAt:Date.now()};
+        if(!current())return false;
+        communityCache={scopeKey,slug:'universal',documents:[...docMap.values()],summaries:[...sumMap.values()],editalTopics:[],loadedAt:Date.now()};
       }
+      if(!current()||communityCache.scopeKey!==scopeKey)return false;
       const commDocs=Array.isArray(communityCache.documents)?communityCache.documents:[];
       const commSums=Array.isArray(communityCache.summaries)?communityCache.summaries:[];
 
+      let addedDocs=0;
       // Remover qualquer edital da comunidade que estivesse em memória
       for(let i=cloudDocuments.length-1;i>=0;i--){
         if(cloudDocuments[i]?.is_community&&['edital','edital_concurso'].includes(cloudDocuments[i].document_type)){
           cloudDocuments.splice(i,1);
+          addedDocs++;
         }
       }
 
       // 1) Mesclar todos os materiais, leis, provas, simulados e anotações da comunidade universal em cloudDocuments (SEM storage_path)
       const stdTitle=t=>typeof window.standardizeDocumentTitle==='function'?window.standardizeDocumentTitle(sanitizePersonalWatermarks(t)):sanitizePersonalWatermarks(t).toUpperCase();
-      const ownTitles=new Set((cloudDocuments||[]).filter(d=>!d.is_community).map(d=>`${d.document_type}|${topicKey(stdTitle(d.title))}`));
-      const existingIds=new Set((cloudDocuments||[]).map(d=>d.id));
-      let addedDocs=0;
+      const existingIds=new Map((cloudDocuments||[]).map((d,index)=>[String(d.id),index]));
       for(const cDoc of commDocs){
         const formattedTitle=stdTitle(cDoc.title);
-        const dedupKey=`${cDoc.document_type}|${topicKey(formattedTitle)}`;
-        if(existingIds.has(cDoc.id)||ownTitles.has(dedupKey))continue;
-        cloudDocuments.push({
+        const nextDoc={
           ...cDoc,
           title:formattedTitle,
           storage_path:null,
           source_url:null,
           is_community:true,
           processing_status:'ready'
-        });
-        existingIds.add(cDoc.id);
-        ownTitles.add(dedupKey);
+        };
+        nextDoc.communitySourceSignature=communityContentSignature(nextDoc);
+        nextDoc.communitySourceScopeKey=scopeKey;
+        const existingIndex=existingIds.get(String(cDoc.id));
+        if(existingIndex!==undefined){
+          const previous=cloudDocuments[existingIndex];
+          if(!previous?.is_community||(previous.communitySourceScopeKey===scopeKey&&previous.communitySourceSignature===nextDoc.communitySourceSignature))continue;
+          if(!previous.communitySourceSignature&&communityContentSignature(previous)===communityContentSignature(nextDoc)){previous.communitySourceSignature=nextDoc.communitySourceSignature;previous.communitySourceScopeKey=scopeKey;continue}
+          const merged=previous.communitySourceScopeKey===scopeKey?{...previous,...nextDoc}:nextDoc;
+          if(communityContentSignature(previous)===communityContentSignature(merged)){previous.communitySourceSignature=nextDoc.communitySourceSignature;previous.communitySourceScopeKey=scopeKey;continue}
+          cloudDocuments[existingIndex]=merged;
+        }else{existingIds.set(String(cDoc.id),cloudDocuments.length);cloudDocuments.push(nextDoc)}
         addedDocs++;
       }
 
@@ -8917,7 +9651,12 @@
       const prevSumLen=(ALL_SUMMARIES||[]).length,prevCardLen=(ALL_FLASHCARDS||[]).length,prevQLen=(ALL_QUESTIONS||[]).length;
       const existingSumKeys=new Set((ALL_SUMMARIES||[]).map(s=>`${topicKey(s.category)}|${topicKey(s.title)}`));
       const existingCardKeys=new Set((ALL_FLASHCARDS||[]).map(c=>`${topicKey(c[0])}|${topicKey(c[1])}`));
-      const existingQKeys=new Set((ALL_QUESTIONS||[]).map(qItem=>`${topicKey(qItem.statement).slice(-90)}|${topicKey(qItem.options?.[0]||'')}`));
+      const existingCommunitySummaries=new Map((ALL_SUMMARIES||[]).map((item,index)=>[item.is_community&&String(item.id),index]).filter(([key])=>key));
+      const existingCommunityCards=new Map((ALL_FLASHCARDS||[]).map((item,index)=>[item[3]?.is_community&&item[3].communityRecordId,index]).filter(([key])=>key));
+      const questionKey=item=>JSON.stringify([String(item.statement||''),item.options||[],item.correct_index,item.key_source||'',item.answer_key_validation||'']);
+      const existingQKeys=new Set((ALL_QUESTIONS||[]).map(questionKey));
+      const existingCommunityQuestions=new Map((ALL_QUESTIONS||[]).map((item,index)=>[item.communityRecordId,index]).filter(([key])=>key));
+      let refreshedContent=false;
 
       for(const row of commSums){
         const parentDoc=(cloudDocuments||[]).find(d=>String(d.id)===String(row.source_document_id))||commDocs.find(d=>String(d.id)===String(row.source_document_id))||null;
@@ -8930,7 +9669,9 @@
         if(typeof window.isInvalidTrailSubject==='function'&&window.isInvalidTrailSubject(cat,cleanTitle,row.content?.source||'',parentDoc))continue;
         const sumKey=`${topicKey(cat)}|${topicKey(cleanTitle)}`;
         const isValidSum=typeof window.isValidPedagogicalSummary==='function'?window.isValidPedagogicalSummary(row):true;
-        if(!isQuestionPackRow&&isValidSum&&!existingSumKeys.has(sumKey)){
+        const existingSummaryIndex=existingCommunitySummaries.get(String(row.id));
+        const rowSourceSignature=communityContentSignature([row,cat,docType]);
+        if(!isQuestionPackRow&&isValidSum&&(existingSummaryIndex!==undefined||!existingSumKeys.has(sumKey))){
           const rawMnem=sanitizePersonalWatermarks(row.content?.mnemonic||'');
           const _commSumObj={
             id:row.id,
@@ -8944,9 +9685,18 @@
             bizu:sanitizePersonalWatermarks(row.content?.bizu||''),
             mnemonic:typeof window.cleanPedagogicalMnemonic==='function'?window.cleanPedagogicalMnemonic(rawMnem):rawMnem,
             trap:sanitizePersonalWatermarks(row.content?.trap||''),
-            is_community:true
+            is_community:true,
+            communitySourceSignature:rowSourceSignature,communitySourceScopeKey:scopeKey
           };
-          ALL_SUMMARIES.push(typeof window.sanitizeSummaryObject==='function'?window.sanitizeSummaryObject(_commSumObj):_commSumObj);
+          const nextSummary=typeof window.sanitizeSummaryObject==='function'?window.sanitizeSummaryObject(_commSumObj):_commSumObj;
+          if(existingSummaryIndex!==undefined){
+            const previous=ALL_SUMMARIES[existingSummaryIndex];
+            if(previous.communitySourceScopeKey!==scopeKey||previous.communitySourceSignature!==rowSourceSignature){
+              const merged=previous.communitySourceScopeKey===scopeKey?{...previous,...nextSummary}:nextSummary;
+              if(communityContentSignature(previous)!==communityContentSignature(merged)){ALL_SUMMARIES[existingSummaryIndex]=merged;refreshedContent=true}
+              else{previous.communitySourceSignature=rowSourceSignature;previous.communitySourceScopeKey=scopeKey}
+            }
+          }else{existingCommunitySummaries.set(String(row.id),ALL_SUMMARIES.length);ALL_SUMMARIES.push(nextSummary)}
           existingSumKeys.add(sumKey);
         }
 
@@ -8955,56 +9705,86 @@
           ?window.isAllowedFlashcardRow(row,parentDoc)
           :(!isQuestionPackRow&&['material','anotacao','lei'].includes(docType));
         if(allowFlashcardsForRow){
-          for(const card of (row.content?.flashcards||[])){
+          for(const [cardIndex,card] of (row.content?.flashcards||[]).entries()){
             const qText=sanitizePersonalWatermarks(card.question||'');
             const aText=sanitizePersonalWatermarks(card.answer||'');
             const isValidCard=typeof window.isValidFlashcardItem==='function'?window.isValidFlashcardItem(qText,aText):Boolean(qText&&aText);
             const cKey=`${topicKey(cat)}|${topicKey(qText)}`;
-            if(isValidCard&&!existingCardKeys.has(cKey)){
-              ALL_FLASHCARDS.push([cat,qText,aText]);
+            const recordId=JSON.stringify([row.id,card.id??cardIndex]);
+            const sourceSignature=communityContentSignature([cat,qText,aText]);
+            const existingIndex=existingCommunityCards.get(recordId);
+            const nextCard=[cat,qText,aText,{is_community:true,communityRecordId:recordId,communitySourceSignature:sourceSignature,communitySourceScopeKey:scopeKey}];
+            if(isValidCard&&existingIndex!==undefined){
+              if(ALL_FLASHCARDS[existingIndex][3]?.communitySourceSignature!==sourceSignature||ALL_FLASHCARDS[existingIndex][3]?.communitySourceScopeKey!==scopeKey){
+                if(communityContentSignature(ALL_FLASHCARDS[existingIndex])!==communityContentSignature(nextCard))refreshedContent=true;
+                ALL_FLASHCARDS[existingIndex]=nextCard;
+              }
+              existingCardKeys.add(cKey);
+            }else if(isValidCard&&!existingCardKeys.has(cKey)){
+              existingCommunityCards.set(recordId,ALL_FLASHCARDS.length);
+              ALL_FLASHCARDS.push(nextCard);
               existingCardKeys.add(cKey);
             }
           }
         }
 
-        for(const qObj of (row.content?.questions||[])){
+        for(const [questionIndex,qObj] of (row.content?.questions||[]).entries()){
           if(!Array.isArray(qObj.options)||qObj.options.length<2||qObj.options.length>5||!Number.isInteger(qObj.correct_index)||qObj.correct_index<0||qObj.correct_index>=qObj.options.length)continue;
           const stText=sanitizePersonalWatermarks(qObj.statement||'');if(typeof window.isValidPedagogicalQuestion==='function'&&!window.isValidPedagogicalQuestion({...qObj,statement:stText}))continue;
-          const qKey=`${topicKey(stText).slice(-90)}|${topicKey(qObj.options?.[0]||'')}`;
-          if(stText&&!existingQKeys.has(qKey)){
+          const cleanOptions=qObj.options.map(sanitizePersonalWatermarks);
+          const qKey=questionKey({...qObj,statement:stText,options:cleanOptions});
+          const communityRecordId=JSON.stringify([row.id,qObj.id??questionIndex]);
+          const sourceSignature=communityContentSignature([qObj,cat,cleanTitle,row.source_document_id,row.source_refs]);
+          const existingIndex=existingCommunityQuestions.get(communityRecordId);
+          if(existingIndex!==undefined&&ALL_QUESTIONS[existingIndex].communitySourceScopeKey===scopeKey&&ALL_QUESTIONS[existingIndex].communitySourceSignature===sourceSignature)continue;
+          if(stText&&(existingIndex!==undefined||!existingQKeys.has(qKey))){
             const qSubj=resolveStrictQuestionDiscipline(stText,qObj.topic||cleanTitle,qObj.subject||cat,qObj.options);
-            ALL_QUESTIONS.push({
+            const question={
+              ...qObj,
               subject:qSubj||cat,
               topic:sanitizePersonalWatermarks(qObj.topic||cleanTitle),
               statement:stText,
               associated_text:sanitizePersonalWatermarks(qObj.associated_text||''),
               board:qObj.board||'',
-              options:qObj.options.map(sanitizePersonalWatermarks),
+              options:cleanOptions,
               correct_index:qObj.correct_index,
               explanation:sanitizePersonalWatermarks(qObj.explanation||''),
               difficulty:qObj.difficulty||'medio',
               origin:qObj.origin||'autoral',
               documentId:row.source_document_id,
+              sourceDocumentId:row.source_document_id||qObj.sourceDocumentId,
+              sourceContentId:row.id,
+              source_refs:[...(Array.isArray(row.source_refs)?row.source_refs:[]),...(Array.isArray(qObj.source_refs)?qObj.source_refs:[])],
+              communityRecordId,communitySourceSignature:sourceSignature,communitySourceScopeKey:scopeKey,
               is_community:true
-            });
+            };
+            if(existingIndex!==undefined){
+              const previous=ALL_QUESTIONS[existingIndex],sameScope=previous.communitySourceScopeKey===scopeKey,nextQuestion=sameScope?{...previous,...question}:question;
+              // A source refresh must retain the learner's review and current
+              // answer. A reviewed key only applies to the same alternatives.
+              if(sameScope&&previous.key_source==='manual_revisado'&&previous.answer_key_validation==='revisado'&&communityContentSignature(previous.options)===communityContentSignature(question.options)){
+                for(const key of ['correct_index','key_source','answer_key_validation','key_reference','key_history','answer_key_history','explanation_needs_review'])if(previous[key]!==undefined)nextQuestion[key]=previous[key];
+              }
+              const changed=communityContentSignature(previous)!==communityContentSignature(nextQuestion);
+              if(changed||!sameScope){ALL_QUESTIONS[existingIndex]=nextQuestion;if(changed)refreshedContent=true}
+              else{previous.communitySourceSignature=sourceSignature;previous.communitySourceScopeKey=scopeKey}
+            }
+            else{existingCommunityQuestions.set(communityRecordId,ALL_QUESTIONS.length);ALL_QUESTIONS.push(question)}
             existingQKeys.add(qKey);
           }
         }
       }
 
-      const addedContent=(ALL_SUMMARIES.length>prevSumLen)||(ALL_FLASHCARDS.length>prevCardLen)||(ALL_QUESTIONS.length>prevQLen);
+      const addedContent=refreshedContent||(ALL_SUMMARIES.length>prevSumLen)||(ALL_FLASHCARDS.length>prevCardLen)||(ALL_QUESTIONS.length>prevQLen);
       if(addedDocs>0||addedContent){
         LEARNING_SUBJECTS=typeof window.computeValidLearningSubjects==='function'?window.computeValidLearningSubjects():[...new Set([...ALL_SUMMARIES.map(x=>x.category),...ALL_FLASHCARDS.map(x=>x[0]),...ALL_QUESTIONS.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-        window.persistToLocalDatabase?.(state?.activeCampaignId);
-        window.markViewsDirty?.('library','study','learning','report');
-        const actId=document.querySelector('.view.active')?.id||'today';
-        if(actId==='library'&&typeof renderUserDocuments==='function')renderUserDocuments();
-        else if(actId==='study'&&typeof renderStudy==='function')renderStudy();
-        else if(actId==='learning'&&typeof renderLearning==='function')renderLearning();
-        else if(actId==='report'&&typeof renderQuestionFilters==='function'){renderQuestionFilters();populateTopicFilter();updateQuestionPool();renderExamBankHub()}
+        refreshContentViews();
       }
-      if(document.querySelector('.view.active')?.id==='library')renderCommunityCoopBanner();
-    }catch{}
+      if((addedDocs>0||addedContent)&&document.querySelector('.view.active')?.id==='library')renderCommunityCoopBanner();
+      return addedDocs>0||addedContent;
+    }catch(error){if(current()&&typeof console!=='undefined')console.warn('Não foi possível atualizar o acervo compartilhado.',error);return false;}})();
+    _commSyncInFlight={scopeKey,promise:task};
+    try{return await task}finally{if(_commSyncInFlight?.promise===task)_commSyncInFlight=null}
   }
   window.syncCommunityLibraryForActivePortal=syncCommunityLibraryForActivePortal;
 
@@ -9232,14 +10012,15 @@
   }
 
   function startActiveReviewSession(targetSubject=''){
+    purgeHunterManualStudyArtifacts();
+    if(isPlatformManualStudyArtifact(targetSubject))return toast('Os Manuais do Caçador ficam na ajuda e não geram treino.');
     const due=typeof dueReviews==='function'?dueReviews():[];
     const dueSubjects=new Set(due.map(x=>topicKey(x.kind==='mission'?x.m?.subject:x.e?.subject)).filter(Boolean));
     let pool=(ALL_QUESTIONS||[]).filter(qItem=>{
-      if(targetSubject)return topicKey(qItem.subject)===topicKey(targetSubject);
-      return dueSubjects.size?dueSubjects.has(topicKey(qItem.subject)):true;
+      if(!isQuestionDisciplineEligible(qItem,targetSubject||'all')||['sem_gabarito','anulada'].includes(answerKeyStatus(qItem)))return false;
+      return targetSubject||!dueSubjects.size?true:dueSubjects.has(topicKey(resolveStrictQuestionDiscipline(qItem)));
     });
-    if(pool.length<3)pool=(ALL_QUESTIONS||[]);
-    if(!pool.length)return toast('Envie um material ou gere questões para iniciar a Revisão Ativa.');
+    if(!pool.length)return toast('Não há questões com gabarito válido para esta disciplina ou revisão. Importe questões desse recorte ou revise a teoria.');
     const count=Math.min(5,pool.length);
     const chosen=typeof balancedQuestions==='function'?balancedQuestions(pool,count):pool.slice(0,count);
     activeQuestions={
@@ -9256,6 +10037,7 @@
   }
 
   function exportVesperaRaioX(subjectFilter='all'){
+    purgeHunterManualStudyArtifacts();
     const campaignName=(typeof activeCampaign==='function'?activeCampaign()?.name:'Meu Concurso')||'Meu Concurso';
     const errors=Object.values(state?.errors||{}).filter(e=>(!e.campaignId||e.campaignId===state?.activeCampaignId)&&(subjectFilter==='all'||topicKey(e.subject)===topicKey(subjectFilter)));
     const summaries=(ALL_SUMMARIES||[]).filter(s=>subjectFilter==='all'||topicKey(s.category)===topicKey(subjectFilter));
@@ -9264,7 +10046,7 @@
       const p=typeof fcProgress==='function'?fcProgress(x):null;
       return !p||p.level==='hard'||p.level==='medium';
     });
-    const notes=(state?.userNotes||[]).filter(n=>subjectFilter==='all'||topicKey(n.subject||'')===topicKey(subjectFilter));
+    const notes=(state?.userNotes||[]).filter(n=>!isPlatformManualStudyArtifact(n)&&(subjectFilter==='all'||topicKey(n.subject||'')===topicKey(subjectFilter)));
 
     const w=window.open('','_blank');
     if(!w)return toast('Permita pop-ups para abrir o Raio-X de Revisão de Véspera.');
@@ -9330,6 +10112,7 @@
   }
 
   function enhanceReviewCenter(){
+    purgeHunterManualStudyArtifacts();
     const reviewSection=q('#review');
     if(!reviewSection)return;
     let hub=q('#smartReviewHub');
@@ -9352,7 +10135,7 @@
       ...(typeof missionPool==='function'?missionPool().map(m=>m.subject):[]),
       ...(ALL_SUMMARIES||[]).map(s=>s.category),
       ...Object.values(state?.errors||{}).map(e=>e.subject)
-    ].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    ].filter(subject=>subject&&!isPlatformManualStudyArtifact(subject)))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
 
     hub.innerHTML=`
       <div class="sectionHead" style="margin:0">
@@ -9571,26 +10354,13 @@
 
   function buildDuelQuestionPack(subjectFilter='all',mode='misto',count=5,boardFilter='all'){
     ensureNativeQuestionBankLoaded();
-    let pool=(ALL_QUESTIONS||[]).filter(qItem=>Array.isArray(qItem.options)&&qItem.options.length>=2&&qItem.options.length<=5&&Number.isInteger(Number(qItem.correct_index))&&Number(qItem.correct_index)>=0&&Number(qItem.correct_index)<qItem.options.length);
-    if(subjectFilter&&subjectFilter!=='all'){
-      const bySubj=pool.filter(qItem=>topicKey(learningCategory(qItem.subject))===topicKey(learningCategory(subjectFilter))||topicKey(qItem.subject)===topicKey(subjectFilter));
-      if(bySubj.length>=3)pool=bySubj;
-    }
-    if(boardFilter&&boardFilter!=='all'){
-      const byBoard=pool.filter(qItem=>questionMatchesBoardFilter(qItem,boardFilter));
-      const others=pool.filter(qItem=>!questionMatchesBoardFilter(qItem,boardFilter));
-      pool=byBoard.length>=count?byBoard:[...byBoard,...others];
-    }
-    if(mode==='dificil'){
-      const hard=pool.filter(qItem=>normalizeText(qItem.difficulty||'').startsWith('dif'));
-      if(hard.length>=3)pool=hard;
-    }else if(mode==='fixacao'){
-      const easyMed=pool.filter(qItem=>!normalizeText(qItem.difficulty||'').startsWith('dif'));
-      if(easyMed.length>=3)pool=easyMed;
-    }
-    if(pool.length<count){
-      pool=[...pool,...NATIVE_POLICE_QUESTION_BANK,...FALLBACK_DUEL_QUESTIONS];
-    }
+    const eligible=qItem=>isQuestionDisciplineEligible(qItem,subjectFilter)&&questionMatchesBoardFilter(qItem,boardFilter)
+      &&!['sem_gabarito','anulada'].includes(answerKeyStatus(qItem))
+      &&(mode!=='dificil'||normalizedDifficulty(qItem)==='dificil')
+      &&(mode!=='fixacao'||normalizedDifficulty(qItem)!=='dificil');
+    let pool=(ALL_QUESTIONS||[]).filter(eligible);
+    // Supplement only inside the same filters; fewer questions is preferable to a different discipline.
+    if(pool.length<count)pool=[...pool,...NATIVE_POLICE_QUESTION_BANK.filter(eligible),...FALLBACK_DUEL_QUESTIONS.filter(eligible)];
     const shuffled=pool.slice().sort(()=>Math.random()-0.5);
     const picked=[];
     const usedStatements=new Set();
@@ -9599,13 +10369,14 @@
       if(usedStatements.has(key))continue;
       usedStatements.add(key);
       picked.push({
-        subject:canonicalSubjectName(item.subject||'Geral'),
+        subject:resolveStrictQuestionDiscipline(item),
         topic:item.topic||item.subject||'Desafio X1',
         board:item.board||(boardFilter!=='all'?boardFilter:'Estilo Banca'),
         difficulty:item.difficulty||'medio',
         statement:typeof window.formatQuestionStatementText==='function'?window.formatQuestionStatementText(item.statement):item.statement,
         options:item.options.slice(0,5),
-        correct_index:Math.min(item.options.length-1,Math.max(0,Number(item.correct_index)||0)),
+        correct_index:Number(item.correct_index),
+        origin:item.origin||'autoral',
         explanation:item.explanation||'Confira o fundamento teórico na Central de Estudo.'
       });
       if(picked.length>=count)break;
@@ -9881,16 +10652,17 @@
         if(s>=0&&e>s){
           const parsed=JSON.parse(raw.slice(s,e+1));
           if(Array.isArray(parsed)&&parsed.length>=3){
-            questions=parsed.filter(x=>Array.isArray(x.options)&&x.options.length>=4).slice(0,count).map(x=>({
+            questions=parsed.filter(x=>typeof x?.statement==='string'&&x.statement.trim().length>=10&&Array.isArray(x.options)&&x.options.length===4&&x.options.every(o=>typeof o==='string'&&o.trim())&&typeof x.correct_index==='number'&&Number.isInteger(x.correct_index)&&x.correct_index>=0&&x.correct_index<x.options.length).slice(0,count).map(x=>({
               subject:canonicalSubjectName(x.subject||subjText),
               topic:String(x.topic||'Desafio IA X1'),
               board:String(x.board||(board!=='all'?board:'Estilo Banca')),
               difficulty:String(x.difficulty||mode),
               statement:typeof window.formatQuestionStatementText==='function'?window.formatQuestionStatementText(x.statement):String(x.statement),
               options:x.options.slice(0,4).map(String),
-              correct_index:Math.min(3,Math.max(0,Number(x.correct_index)||0)),
+              correct_index:x.correct_index,
+              origin:'autoral',generated_by_ai:true,
               explanation:String(x.explanation||'Questão gerada pela IA para o Duelo X1.')
-            }));
+            })).filter(item=>isQuestionDisciplineEligible(item,subj)&&questionMatchesBoardFilter(item,board));
           }
         }
       }catch{}finally{
@@ -9901,6 +10673,7 @@
     if(!questions.length){
       questions=buildDuelQuestionPack(subj,mode,count,board);
     }
+    if(!questions.length)return toast('Não há questões validadas para esta combinação de disciplina, banca e dificuldade. Ajuste os filtros ou adicione questões.');
 
     const subjectLabel=(subj==='all'?'Roleta Mista (Perguntados)':subj)+(board!=='all'?` · ${board}`:'');
 
@@ -10041,9 +10814,10 @@
 
   // ── Mapas Mentais Táticos Esquematizados (Estilo Caveira Pass) ──
   function toggleSummaryTacticalMindMap(summaryId){
+    if(isPlatformManualStudyArtifact({id:summaryId}))return typeof window.openHunterManuals==='function'?window.openHunterManuals():undefined;
     const box=q(`#mindMapBox-${summaryId}`);
     const item=(ALL_SUMMARIES||[]).find(s=>String(s.id)===String(summaryId));
-    if(!box||!item)return;
+    if(!box||!item||isPlatformManualStudyArtifact(item))return;
     if(!box.hidden){box.hidden=true;return}
     const pts=Array.isArray(item.points)&&item.points.length?item.points:[item.explanation||'Conceito central do tópico.'];
     box.innerHTML=`
@@ -10322,7 +11096,7 @@
             ${(curQ.options||[]).map((opt,i)=>`
               <button type="button" class="duelOptBtn ${wasAnswered?(i===cIdx?'correct':i===uIdx?'wrong':''):''}" data-duel-opt="${i}" ${wasAnswered?'disabled':''}>
                 <b>${letters[i]||i+1}</b>
-                <span>${escText(opt)}</span>
+                <span>${escText(window.JCQuestionText?window.JCQuestionText.analyzeOption(opt).text:opt)}</span>
               </button>
             `).join('')}
           </div>
@@ -10814,7 +11588,10 @@
     const baseRecordQ=typeof recordQuestionResult==='function'?recordQuestionResult:null;
     if(baseRecordQ&&!baseRecordQ._dailyHooked){
       window.recordQuestionResult=recordQuestionResult=function(qItem,ok,chosen=null){
+        const grading=window.gradeAnswer?.(qItem,chosen);
+        if(grading&&!grading.scored)return;
         const res=baseRecordQ(qItem,ok,chosen);
+        window.recordBoardQuestionAttempt?.(qItem,chosen);
         const tracker=ensureDailyTracker();
         tracker.questionsAnswered=(Number(tracker.questionsAnswered)||0)+1;
         if(ok)tracker.questionsCorrect=(Number(tracker.questionsCorrect)||0)+1;
@@ -10833,7 +11610,7 @@
         const finishing=activeQuestions&&activeQuestions.current>=activeQuestions.questions.length-1;
         const wasMissionBattle=activeQuestions&&(activeQuestions.missionId===state?.daily||Number(activeQuestions.questions?.length||0)>=4);
         const res=baseNextQ();
-        if(finishing){
+        if(finishing&&res!==false&&!activeQuestions){
           const tracker=ensureDailyTracker();
           tracker.errorsReviewed=(Number(tracker.errorsReviewed)||0)+1;
           if(wasMissionBattle){
@@ -11182,7 +11959,7 @@
     const steps=typeof dailyStepsFor==='function'?dailyStepsFor(state.settings?.dailyMinutes||180):[];
     const doneSteps=Object.values(state.dailySteps||{}).filter(Boolean).length;
     const today=typeof localDayKey==='function'?localDayKey():new Date().toISOString().slice(0,10);
-    if(q('#notificationSync'))q('#notificationSync').textContent=!navigator.onLine?'Offline':cloudSession&&syncReady?'Sincronizado':cloudSession?'Sincronizando':'Somente local';
+    if(q('#notificationSync'))q('#notificationSync').textContent=!navigator.onLine?'Offline':cloudSession&&syncReady&&!state._dirty&&!state._studyLedgerRepairPending&&Number(state._serverRevision)>0?'Sincronizado':cloudSession?'Sincronização pendente':'Somente local';
     if(q('#notificationCampaign'))q('#notificationCampaign').textContent=activeCampaign()?.name||'Nenhuma';
     if(q('#notificationStudy'))q('#notificationStudy').textContent=`${Math.floor(Number(state.studyByDay?.[today]||0)/60)} min`;
     if(q('#notificationMission'))q('#notificationMission').textContent=`${Math.round(doneSteps/Math.max(1,steps.length)*100)}%`;
@@ -11384,7 +12161,7 @@
       const view=q(t.sel);
       if(!view||q(`#${t.id}`))continue;
       const head=view.querySelector('.sectionHead');
-      const html=`<div class="localDbBar" id="${t.id}"><div class="localDbStatus"><span class="localDbDot"></span><span data-local-db-text="1">⚡ <b>Banco Local Ativo:</b> abertura instantânea de abas no aparelho</span></div><button type="button" class="ghost small" data-download-local-db="1">📥 Baixar / Atualizar Banco Local</button></div>`;
+      const html=`<div class="localDbBar" id="${t.id}"><div class="localDbStatus"><span class="localDbDot"></span><span data-local-db-text="1">⚡ <b>Banco Local Ativo:</b> conteúdo disponível no aparelho</span></div><button type="button" class="ghost small" data-download-local-db="1">📥 Baixar / Atualizar Banco Local</button></div>`;
       if(head)head.insertAdjacentHTML('afterend',html);
       else view.insertAdjacentHTML('afterbegin',html);
     }
@@ -11407,8 +12184,8 @@
     const fLen=(typeof ALL_FLASHCARDS!=='undefined'&&Array.isArray(ALL_FLASHCARDS))?ALL_FLASHCARDS.length:0;
     const dLen=(typeof cloudDocuments!=='undefined'&&Array.isArray(cloudDocuments))?cloudDocuments.length:0;
     const label=(sLen||qLen||dLen)
-      ?`⚡ <b>Banco Local Ativo no Aparelho:</b> ${sLen} resumos · ${qLen} questões · ${fLen} flashcards · ${dLen} PDFs (abertura instantânea)`
-      :`⚡ <b>Modo Banco Local:</b> clique ao lado para baixar seus resumos e questões para uso instantâneo sem travamentos`;
+      ?`⚡ <b>Banco Local Ativo no Aparelho:</b> ${sLen} resumos · ${qLen} questões · ${fLen} flashcards · ${dLen} PDFs disponíveis`
+      :`⚡ <b>Modo Banco Local:</b> clique ao lado para baixar seus resumos e questões para consultar no aparelho`;
     qa('[data-local-db-text]').forEach(el=>{el.innerHTML=label});
   };
 
@@ -11441,6 +12218,11 @@
       return;
     }
     baseOpenView(id);
+    if(id==='report'){
+      window.checkAndOfferSavedQuestionSessionResume?.();
+      window.offerSavedTimedSimuladoResume?.();
+      scheduleQuestionReportExtras();
+    }
     try{sessionStorage.setItem(viewKey,id)}catch{}
     runV77ViewEnhancements(id,false);
   };
@@ -11462,17 +12244,31 @@
     }
     runV77ViewEnhancements(activeId,true);
   };
+  function scheduleQuestionReportExtras(){
+    window.JCQuestionsWorkspace?.request();
+  }
   const baseRenderReport=renderReport;
-  renderReport=function(){
-    baseRenderReport();
-    if(Date.now()-(window._lastQuestionFilterSyncTs||0)>250){
-      populateTopicFilter();
-      updateQuestionPool();
-      window._lastQuestionFilterSyncTs=Date.now();
+  window.JCQuestionsWorkspace?.configure({
+    readScope:()=>[cloudSession?.user?.id||state?._ownerUserId||'guest',state?._ownerUserId||'',state?.activeCampaignId||'default',activeCampaign()?.dbId||'',Number(state?._resetEpoch||0)],
+    readInputs:()=>{
+      const campaign=activeCampaign(),missions=campaign?.customCampaign?.missions||state.customCampaign?.missions||[];
+      const sign=(value,unordered=false)=>window.JCQuestionsWorkspace?.signature?.(value,unordered)??JSON.stringify(value);
+      return [sign(ALL_QUESTIONS,true),sign(cloudDocuments,true),
+        sign(state.customQuestions),sign(state.errors),
+        sign(state.answeredQuestionFingerprints),sign(state.favoriteQuestions),
+        Number(state.questionStatsByCampaign?.[state.activeCampaignId]?.total||0),
+        sign(missions.map(m=>[m.id,m.subject,m.name]))];
+    },
+    onRestored:panel=>{if(panel==='resolver')updateQuestionPool()},
+    isVisible:()=>Boolean(q('#report')?.classList.contains('active'))&&(!state?._ownerUserId||!cloudSession?.user?.id||state._ownerUserId===cloudSession.user.id),
+    renderers:{
+      resolver:()=>{renderQuestionFilters()},
+      simulados:()=>{ensureSimuladoUI();updateSimuladoAvailability();renderGuildOfficialSimuladoBanner();enhanceSoloLevelingVisuals()},
+      provas:()=>{ensureExamBankHub();populateExamHubSelects();renderExamBankHub()},
+      desempenho:()=>{baseRenderReport();renderPerformanceChart()}
     }
-    renderPerformanceChart();
-    renderExamBankHub();
-  };
+  });
+  renderReport=function(){offerSavedTimedSimuladoResume();scheduleQuestionReportExtras()};
 
   window.renderNotifications=renderNotifications=renderInteractiveNotifications;if(q('#notificationBtn'))q('#notificationBtn').onclick=()=>{renderInteractiveNotifications();q('#notificationDialog').showModal()};enableBackdropClickToCloseDialogs();enhanceSoloLevelingVisuals();hookAutomaticDailyStepTracking();addTodayCommand();ensureReverseSchedulePanel();bindQuestionCenter();updateTodayCommand();decorateDailyStepProgressLabels();renderReverseSchedule();
   qa('[data-menu-view]').forEach(button=>button.onclick=()=>{q('#moreDialog')?.close();openView(button.dataset.menuView)});
@@ -11499,7 +12295,7 @@
 
     // 2) Banner Masmorra Solo Leveling na Trilha de Aprendizagem (#learning)
     const learningView=q('#learning');
-    if(learningView){
+    if(learningView?.classList.contains('active')){
       let trailBanner=q('#slTrailHeroBanner');
       if(!trailBanner){
         const head=learningView.querySelector('.sectionHead');
@@ -11555,7 +12351,7 @@
             </label>
             <div class="trailHeartsBox">
               <span id="trailHeartsStatusBadge">♥♥♥ 3/3 vidas</span>
-              <button type="button" class="ghost small" id="restoreTrailHeartsToolbarBtn">❤️ Restaurar 3 Vidas</button>
+              <button type="button" class="ghost small" id="restoreTrailHeartsToolbarBtn">⏱ Ver renovação</button>
             </div>
           </div>
         `);
@@ -11586,7 +12382,7 @@
 
     // 3) Banner "Chefes das Bancas (AOCP · CEBRASPE · FGV · IDECAN)" na Central de Questões (#report)
     const reportView=q('#report');
-    if(reportView&&!q('#slBossesRaidBanner')){
+    if(reportView&&(!window.JCQuestionsWorkspace||window.JCQuestionsWorkspace.isRendering('simulados'))&&!q('#slBossesRaidBanner')){
       const anchor=q('#examBankHub')||q('#report .reportColumns')||q('#report .questionTrainer');
       if(anchor){
         const bannerHtml=`
@@ -11646,10 +12442,8 @@
 
           const currentSubj=q('#questionSubject')?.value||'all';
           const shortB=board.replace('Conhecimento','').replace('Instituto ','').trim();
-          const boardRegex=new RegExp(shortB,'i');
-          const matchingBoardQs=(ALL_QUESTIONS||[]).filter(item=>(currentSubj==='all'||learningCategory(item.subject)===currentSubj)&&boardRegex.test(`${item.board||''} ${item.explanation||''}`));
-          const hardPool=(ALL_QUESTIONS||[]).filter(item=>(currentSubj==='all'||learningCategory(item.subject)===currentSubj)&&['dificil','medio'].includes(normalizedDifficulty(item)));
-          const raidPool=matchingBoardQs.length>=3?matchingBoardQs:(hardPool.length?hardPool:(ALL_QUESTIONS||[]));
+          const matchingBoardQs=(ALL_QUESTIONS||[]).filter(item=>isQuestionDisciplineEligible(item,currentSubj)&&questionMatchesBoardFilter(item,board)&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item)));
+          const raidPool=matchingBoardQs;
 
           const panel=q('#slActiveBossPanel');
           if(panel){
@@ -11664,15 +12458,13 @@
               </div>
               <p class="small" style="margin:6px 0 10px;color:#e2e8f0;line-height:1.45"><b>O que muda nesta banca:</b> ${escText(profile.summary)}</p>
               <div class="slBossActionRow">
-                <button type="button" class="action small" id="slStartImmediateRaidBtn">⚔️ Enfrentar Agora (${Math.min(8,Math.max(5,raidPool.length))} Questões Difíceis · +300 XP)</button>
+                <button type="button" class="action small" id="slStartImmediateRaidBtn" ${raidPool.length?'':'disabled'}>${raidPool.length?`⚔️ Enfrentar Agora (${Math.min(8,raidPool.length)} questões · +300 XP)`:'Sem questões validadas neste filtro'}</button>
                 <button type="button" class="ghost small" id="slGenerateBossPackNowBtn">✨ Gerar Caderno Inédito Padrão ${escText(shortB)} (IA)</button>
               </div>
             `;
             q('#slStartImmediateRaidBtn').onclick=()=>{
               if(!raidPool.length){
-                switchExamHubTab('generator');
-                q('#generateBoardPackBtn')?.click();
-                return;
+                return toast('Adicione ou gere questões desta banca e disciplina antes de iniciar.');
               }
               const sortedHard=[...raidPool].sort((a,b)=>{
                 const da=normalizedDifficulty(a)==='dificil'?0:normalizedDifficulty(a)==='medio'?1:2;
@@ -11712,26 +12504,34 @@
     }
   }
 
+  let studyDisciplineAlignmentCache=null;
   function realignStudyDisciplinesWithLibrary(){
+    const scopeKey=studyContentScopeKey();
+    if(!scopeKey)return false;
+    const snapshot=()=>communityContentSignature([cloudDocuments||[],ALL_SUMMARIES||[],ALL_FLASHCARDS||[],ALL_QUESTIONS||[],LEARNING_SUBJECTS||[]]);
+    const beforeSignature=snapshot();
+    const previous=studyDisciplineAlignmentCache?.scopeKey===scopeKey?studyDisciplineAlignmentCache:null;
+    if(previous?.signature===beforeSignature)return false;
     let changed=false;
+    const questionDocuments=buildExamQuestionDocumentMap(typeof cloudDocuments!=='undefined'?cloudDocuments:[],ALL_QUESTIONS||[]);
     if(typeof window.isInvalidTrailSubject==='function'){
       const beforeSum=(ALL_SUMMARIES||[]).length;
-      ALL_SUMMARIES=(ALL_SUMMARIES||[]).filter(s=>{
+      const validSummaries=(ALL_SUMMARIES||[]).filter(s=>{
         const doc=Array.isArray(cloudDocuments)?cloudDocuments.find(d=>String(d.id)===String(s.documentId)):null;
         return !window.isInvalidTrailSubject(s.category,s.title,s.source,doc);
       });
-      if(ALL_SUMMARIES.length!==beforeSum)changed=true;
+      if(validSummaries.length!==beforeSum){ALL_SUMMARIES=validSummaries;changed=true}
 
       const beforeCards=(ALL_FLASHCARDS||[]).length;
-      ALL_FLASHCARDS=(ALL_FLASHCARDS||[]).filter(c=>!window.isInvalidTrailSubject(c?.[0],c?.[1])&&(typeof window.isValidFlashcardItem!=='function'||window.isValidFlashcardItem(c?.[1],c?.[2])));
-      if(ALL_FLASHCARDS.length!==beforeCards)changed=true;
+      const validCards=(ALL_FLASHCARDS||[]).filter(c=>!window.isInvalidTrailSubject(c?.[0],c?.[1])&&(typeof window.isValidFlashcardItem!=='function'||window.isValidFlashcardItem(c?.[1],c?.[2])));
+      if(validCards.length!==beforeCards){ALL_FLASHCARDS=validCards;changed=true}
 
       const beforeQs=(ALL_QUESTIONS||[]).length;
-      ALL_QUESTIONS=(ALL_QUESTIONS||[]).filter(qItem=>{
-        const doc=qItem.documentId&&Array.isArray(cloudDocuments)?cloudDocuments.find(d=>String(d.id)===String(qItem.documentId)):null;
+      const validQuestions=(ALL_QUESTIONS||[]).filter(qItem=>{
+        const doc=questionDocuments.get(qItem)||null;
         return !window.isInvalidTrailSubject(qItem.subject,qItem.topic,'',doc);
       });
-      if(ALL_QUESTIONS.length!==beforeQs)changed=true;
+      if(validQuestions.length!==beforeQs){ALL_QUESTIONS=validQuestions;changed=true}
     }
 
     if(Array.isArray(cloudDocuments)&&cloudDocuments.length&&typeof window.resolveDocumentDiscipline==='function'){
@@ -11745,7 +12545,7 @@
         }
       }
       for(const qItem of (ALL_QUESTIONS||[])){
-        const doc=(qItem.documentId||qItem.sourceDocumentId)?(cloudDocuments||[]).find(d=>String(d.id)===String(qItem.documentId||qItem.sourceDocumentId)):null;
+        const doc=questionDocuments.get(qItem)||null;
         const nextCat=resolveStrictQuestionDiscipline(qItem.statement,qItem.topic,qItem.subject||doc?.detected_subject||'',qItem.options);
         if(nextCat&&!window.isInvalidTrailSubject?.(nextCat,qItem.topic,'',doc)&&nextCat!==qItem.subject){qItem.subject=nextCat;changed=true}
         if(typeof window.inferQuestionPedagogicalTopic==='function'&&(qItem.topic?.startsWith('Questão ')||qItem.topic?.startsWith('Item ')||!qItem.topic)){
@@ -11762,32 +12562,42 @@
     const nextSubjects=typeof window.computeValidLearningSubjects==='function'
       ?window.computeValidLearningSubjects()
       :[...new Set([...ALL_SUMMARIES.map(x=>x.category),...ALL_FLASHCARDS.map(x=>x[0]),...ALL_QUESTIONS.map(x=>x.subject)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-    if(changed||JSON.stringify(nextSubjects)!==JSON.stringify(LEARNING_SUBJECTS)){
-      LEARNING_SUBJECTS=nextSubjects;
-      window.persistToLocalDatabase?.(state?.activeCampaignId);
-      window.markViewsDirty?.('study','learning','report');
-      const actId=document.querySelector('.view.active')?.id||'today';
-      if(actId==='study'&&typeof renderStudy==='function')renderStudy();
-      else if(actId==='learning'&&typeof renderLearning==='function')renderLearning();
-      else if(actId==='report'&&typeof renderQuestionFilters==='function')renderQuestionFilters();
+    const subjectsChanged=JSON.stringify(nextSubjects)!==JSON.stringify(LEARNING_SUBJECTS);
+    if(subjectsChanged)LEARNING_SUBJECTS=nextSubjects;
+    const signature=snapshot();
+    studyDisciplineAlignmentCache={scopeKey,signature};
+    const contentChanged=(changed||subjectsChanged)&&(!previous||previous.signature!==signature);
+    if(contentChanged){
+      refreshContentViews(['study','learning','report']);
+      window.updateLocalDbBadgeUI?.();
+      enhanceSoloLevelingVisuals();
     }
-    window.updateLocalDbBadgeUI?.();
-    enhanceSoloLevelingVisuals();
+    return contentChanged;
   }
   const baseLoadCloudDocsForSync=typeof loadCloudDocuments==='function'?loadCloudDocuments:null;
   if(baseLoadCloudDocsForSync){
-    loadCloudDocuments=async function(){
-      const res=await baseLoadCloudDocsForSync();
+    loadCloudDocuments=async function(...args){
+      const scopeKey=studyContentScopeKey(),operation={};
+      loadCloudDocuments._contentSyncOperation=operation;
+      const current=()=>scopeKey&&studyContentScopeKey()===scopeKey&&loadCloudDocuments._contentSyncOperation===operation;
+      const res=await baseLoadCloudDocsForSync.apply(this,args);
+      if(!current())return false;
       await syncCommunityLibraryForActivePortal(false);
+      if(!current())return false;
       realignStudyDisciplinesWithLibrary();
       return res;
     };
   }
   const baseLoadGenForComm=typeof loadGeneratedContent==='function'?loadGeneratedContent:null;
   if(baseLoadGenForComm){
-    loadGeneratedContent=async function(){
-      const res=await baseLoadGenForComm();
+    loadGeneratedContent=async function(...args){
+      const scopeKey=studyContentScopeKey(),operation={};
+      loadGeneratedContent._contentSyncOperation=operation;
+      const current=()=>scopeKey&&studyContentScopeKey()===scopeKey&&loadGeneratedContent._contentSyncOperation===operation;
+      const res=await baseLoadGenForComm.apply(this,args);
+      if(!current())return false;
       await syncCommunityLibraryForActivePortal(false);
+      if(!current())return false;
       realignStudyDisciplinesWithLibrary();
       return res;
     };
@@ -12772,11 +13582,13 @@
   async function attachAnswerKeyToExistingDoc(docId){
     const doc=(typeof cloudDocuments!=='undefined'?cloudDocuments:[]).find(d=>String(d.id)===String(docId));
     if(!doc)return toast('Documento não localizado.');
+    const operationScope=examDocumentScopeKey(),current=()=>operationScope===examDocumentScopeKey()&&examDocumentScopeAllows(doc);
+    if(!current()||doc.is_community===true&&String(doc.user_id||'')!==String(cloudSession?.user?.id||''))return toast('Para revisar o gabarito de um PDF compartilhado, importe sua própria cópia do arquivo.');
     if(typeof window.askUserExamAnswerKeyOptions!=='function'){
-      if(typeof processEditalDocument==='function')return processEditalDocument(docId);
-      return;
+      return toast('A janela de gabaritos ainda está carregando. Aguarde e tente novamente.');
     }
     const userChoice=await window.askUserExamAnswerKeyOptions(doc,[],{reason:'Cole o gabarito oficial ou anexe o PDF do gabarito para ativar a correção destas questões nos simulados:'});
+    if(!current())return;
     if(!userChoice||userChoice.cancelled)return;
     if(userChoice.resolveWithAi&&typeof window.solveMissingAnswerKeyWithAi==='function'){
       return window.solveMissingAnswerKeyWithAi(docId);
@@ -12796,11 +13608,11 @@
       toast('Aplicando gabarito oficial às questões do caderno...');
       const session=await validSession();
       if(!session)return toast('Entre na sua conta para salvar o gabarito.');
-      const res=await cloudFetch(`generated_study_content?source_document_id=eq.${encodeURIComponent(doc.id)}&select=id,title,content`);
-      const rows=await res.json().catch(()=>[]);
+      if(!current())return;
+      const rows=await readExamDocumentQuestionRows(doc,session,operationScope);
+      if(!current())return;
       if(!Array.isArray(rows)||!rows.length){
-        if(typeof processEditalDocument==='function')return processEditalDocument(docId);
-        return;
+        return explainUnavailableExamDocument(doc);
       }
       let updatedCount=0,stillUnknown=0,qCounter=0;
       for(const row of rows){
@@ -12810,7 +13622,7 @@
           qCounter++;
           const qItem=qs[i];
           // Só completa o que está sem gabarito: nunca sobrescreve uma resposta que já veio do documento.
-          if(!(qItem.answer_unknown||!Number.isInteger(Number(qItem.correct_index))||Number(qItem.correct_index)<0))continue;
+          if(answerKeyStatus(qItem)!=='sem_gabarito')continue;
           const numMatch=String(qItem.topic||'').match(/\b(\d{1,3})\b/);
           const qNum=Number(qItem.exam_order)||(numMatch?Number(numMatch[1]):qCounter);
           // Procura pelo NÚMERO da questão; se ele não está no gabarito, a questão continua sem gabarito
@@ -12821,15 +13633,17 @@
             qItem.correct_index=-1;
             delete qItem.answer_unknown;
             qItem.origin='oficial';
+            qItem.key_source='documento_informado';
+            qItem.key_reference=`Gabarito anexado: ${doc.title}, questão ${qNum}`;
             qItem.explanation='Questão ANULADA oficialmente pela banca examinadora.';
             updatedCount++;
           }else if(ansLetter){
             const opts=Array.isArray(qItem.options)?qItem.options:[];
             const isCE=opts.length===2&&/^certo$/i.test(String(opts[0]||''));
-            const newIdx=isCE?(ansLetter==='E'?1:0):'ABCDE'.indexOf(ansLetter);
+            const newIdx=isCE?(ansLetter==='E'?1:ansLetter==='C'?0:-1):'ABCDE'.indexOf(ansLetter);
             if(newIdx>=0&&newIdx<opts.length){
-              qItem.correct_index=newIdx;
-              delete qItem.answer_unknown;
+              applyReviewedAnswerKey(qItem,newIdx,`Gabarito anexado: ${doc.title}, questão ${qNum}`);
+              qItem.key_source='documento_informado';
               qItem.origin='oficial';
               if(/SEM gabarito/i.test(String(qItem.explanation||''))){
                 qItem.explanation=`Gabarito oficial aplicado: ${isCE?(newIdx===0?'CERTO':'ERRADO'):`alternativa ${ansLetter} ("${opts[newIdx]}")`}.`;
@@ -12840,27 +13654,37 @@
             stillUnknown++;
           }
         }
-        await cloudFetch(`generated_study_content?id=eq.${encodeURIComponent(row.id)}`,{
+        if(!current())return;
+        const saved=await cloudFetch(`generated_study_content?id=eq.${encodeURIComponent(row.id)}&user_id=eq.${encodeURIComponent(session.user.id)}&campaign_id=eq.${encodeURIComponent(row.campaign_id||doc.campaign_id||activeCampaign()?.dbId)}`,{
           method:'PATCH',
+          headers:{Authorization:`Bearer ${session.access_token}`},
           body:JSON.stringify({content:{...row.content,questions:qs}})
         });
+        if(!current())return;
+        if(!saved.ok)throw new Error('Não foi possível salvar o gabarito do documento. Confira a conexão e tente novamente.');
       }
+      stillUnknown=rows.flatMap(row=>Array.isArray(row.content?.questions)?row.content.questions:[]).filter(item=>answerKeyStatus(item)==='sem_gabarito').length;
       const nextCoverage={
         ...(doc.metadata?.coverage||{}),
         needs_review:stillUnknown>0,
         warnings:stillUnknown>0?[`${stillUnknown} questão(ões) ainda permanecem sem gabarito.`]:[]
       };
-      await cloudFetch(`study_documents?id=eq.${encodeURIComponent(doc.id)}`,{
+      if(!current())return;
+      const savedDocument=await cloudFetch(`study_documents?id=eq.${encodeURIComponent(doc.id)}&user_id=eq.${encodeURIComponent(session.user.id)}`,{
         method:'PATCH',
+        headers:{Authorization:`Bearer ${session.access_token}`},
         body:JSON.stringify({metadata:{...(doc.metadata||{}),coverage:nextCoverage}})
       });
+      if(!current())return;
+      if(!savedDocument.ok)throw new Error('O gabarito foi salvo, mas o estado do documento não foi atualizado. Recarregue para conferir.');
       doc.metadata={...(doc.metadata||{}),coverage:nextCoverage};
       await Promise.all([loadGeneratedContent(),loadCloudDocuments()]);
+      if(!current())return;
       render();
       if(typeof renderExamBankHub==='function')renderExamBankHub();
       toast(`✓ Gabarito aplicado com sucesso a ${updatedCount} questão(ões) de “${doc.title}”! Agora elas já estão ativas nos simulados.`);
     }catch(err){
-      toast(err?.message||'Não foi possível salvar o gabarito.');
+      if(current())toast(err?.message||'Não foi possível salvar o gabarito.');
     }
   }
   window.attachAnswerKeyToExistingDoc=attachAnswerKeyToExistingDoc;
@@ -13840,7 +14664,6 @@
       body.lightAppTheme .card:not(.hero) strong {
         color: #090d16 !important;
       }
-      
       /* r179: Correção Definitiva de Contraste no Tema Claro (Trilha Tática, Banners Solo Leveling, Pílulas de Disciplina, Vidas e Painéis) */
       body.lightAppTheme .slBannerCard,
       body.lightAppTheme #slTrailHeroBanner,
@@ -13933,25 +14756,21 @@
       }
 
       /* 10. Modo Visual Limpo / Direto (body.compactCleanUx — elimina poluição visual e excesso de textos explicativos longos) */
-      body.compactCleanUx .questionTrust,
       body.compactCleanUx #docTitleHintBox,
-      body.compactCleanUx .appLegalFooter .small.muted,
       body.compactCleanUx #guildOfficialSimuladoCard .sectionHead .small.muted,
-      body.compactCleanUx #estudeiEditalThermometer > .small.muted,
       body.compactCleanUx #communityCoopBanner .small.muted,
       body.compactCleanUx .reverseScheduleCard > p.small.muted,
       body.compactCleanUx .studyCycleCard .sectionHead p.small.muted,
       body.compactCleanUx .tacticalDiagnosisCard > p.small.muted,
       body.compactCleanUx .examBankHubCard .sectionHead p.small.muted,
       body.compactCleanUx .simuladoLauncher .sectionHead p.small.muted,
-      body.compactCleanUx #topicMasteryRadarCard > p.small.muted,
-      body.compactCleanUx #cutoffAdviceText {
+      body.compactCleanUx #topicMasteryRadarCard > p.small.muted {
         display: none !important;
       }
       body.compactCleanUx .sectionHead p.small.muted,
       body.compactCleanUx .card > p.small.muted {
-        font-size: 11.5px !important;
-        line-height: 1.35 !important;
+        font-size: 12px !important;
+        line-height: 1.45 !important;
         margin-top: 2px !important;
         margin-bottom: 6px !important;
         opacity: 0.9;
@@ -13987,17 +14806,25 @@
     if (typeof document === "undefined") return;
     injectFullLightAppThemeStyles();
     const isClean = mode !== "detailed";
+    if (typeof window.applyCaveiraCleanDashboardMode === 'function') return window.applyCaveiraCleanDashboardMode(isClean, false);
     document.body.classList.toggle("compactCleanUx", isClean);
-    try { localStorage.setItem("jc_clean_ux_v1", isClean ? "clean" : "detailed"); } catch (_e) {}
+    document.body.classList.toggle("jcCleanDashboard", isClean);
+    try {
+      localStorage.setItem("jc_clean_ux_v1", isClean ? "clean" : "detailed");
+      localStorage.setItem("jc_caveira_clean_mode_v1", isClean ? "1" : "0");
+    } catch (_e) {}
     const btn = document.querySelector("#cleanUxToggleBtn");
     if (btn) {
       btn.innerHTML = isClean ? "📖<span>Textos Detalhados</span>" : "✨<span>Visual Enxuto</span>";
       btn.title = isClean ? "Mostrar todas as descrições e textos explicativos" : "Ativar Modo Visual Enxuto (sem excesso de textos)";
+      btn.setAttribute?.('aria-pressed', String(isClean));
     }
     const sBtn = document.querySelector("#settingsCleanUxToggleBtn");
     if (sBtn) {
       sBtn.textContent = isClean ? "📖 Alternar para Modo Detalhado (Mostrar textos explicativos)" : "✨ Alternar para Visual Enxuto (Sem poluição visual)";
+      sBtn.setAttribute?.('aria-pressed', String(isClean));
     }
+    return isClean;
   }
   window.applyCleanUxMode = applyCleanUxMode;
 
@@ -14024,36 +14851,53 @@
   // Aprimoramento 1: Estatística por Alternativa baseada nas respostas reais gravadas em state.optionChoiceTelemetry
   function computeQuestionOptionChoiceStats(item, chosenIndex) {
     const opts = Array.isArray(item?.options) ? item.options : [];
-    const n = opts.length || 4;
-    const correct = Number.isInteger(Number(item?.correct_index)) && Number(item.correct_index) >= 0 ? Number(item.correct_index) : 0;
-    const fp = typeof questionFingerprint === 'function' ? questionFingerprint(item) : String(item?.statement || '').slice(0, 48);
-
+    const n = opts.length;
+    const rawCorrect = item?.correct_index;
+    const correct = typeof rawCorrect !== 'boolean' && rawCorrect !== null && rawCorrect !== undefined && String(rawCorrect).trim() !== '' && Number.isInteger(Number(rawCorrect)) && Number(rawCorrect) >= 0 && Number(rawCorrect) < n ? Number(rawCorrect) : -1;
+    const fp = typeof questionFingerprint === 'function' ? questionFingerprint(item) : String(item?.statement || '');
+    const optionText = value => typeof answerOptionText === 'function' ? answerOptionText(value) : String(value ?? '').normalize('NFC').replace(/\s+/g, ' ').trim();
+    const optionKeys = opts.map(value => '$' + optionText(value));
+    // The option set identifies a version; its sorted form survives shuffling.
+    const recordKey = '$' + fp + ':' + JSON.stringify([...optionKeys].sort());
     const counts = new Array(n).fill(0);
+    let legacySamples = 0;
     try {
       if (typeof state === 'object' && state) {
-        state.optionChoiceTelemetry = state.optionChoiceTelemetry || {};
-        const rec = state.optionChoiceTelemetry[fp] || {};
-        if (Number.isInteger(chosenIndex) && chosenIndex >= 0 && chosenIndex < n) {
-          rec[chosenIndex] = (Number(rec[chosenIndex]) || 0) + 1;
-          state.optionChoiceTelemetry[fp] = rec;
+        // Old index-only data is retained, but cannot be assigned to an option
+        // after a shuffle. Never silently reinterpret it as content-based data.
+        const legacy = state.optionChoiceTelemetry?.[fp];
+        if (legacy && typeof legacy === 'object') legacySamples = Object.entries(legacy).filter(([key]) => /^\d+$/.test(key)).reduce((sum, [, value]) => sum + (Number.isSafeInteger(value) && value > 0 ? value : 0), 0);
+        const campaignKey = '$' + String(state.activeCampaignId || 'default');
+        state.optionChoiceTelemetryByCampaign = state.optionChoiceTelemetryByCampaign || {};
+        const campaignRecords = Object.hasOwn(state.optionChoiceTelemetryByCampaign, campaignKey) ? state.optionChoiceTelemetryByCampaign[campaignKey] : (state.optionChoiceTelemetryByCampaign[campaignKey] = {});
+        const rec = Object.hasOwn(campaignRecords, recordKey) ? campaignRecords[recordKey] : {countsByOption:{}};
+        rec.countsByOption = rec.countsByOption || {};
+        const trustedKey = correct >= 0 && (typeof answerKeyStatus !== 'function' || !['sem_gabarito', 'anulada'].includes(answerKeyStatus(item)));
+        const unambiguousOptions = optionKeys.every(key => key.length > 1) && new Set(optionKeys).size === n;
+        if (trustedKey && unambiguousOptions && Number.isInteger(chosenIndex) && chosenIndex >= 0 && chosenIndex < n) {
+          const key = optionKeys[chosenIndex];
+          const previous = rec.countsByOption[key];
+          rec.countsByOption[key] = (Number.isSafeInteger(previous) && previous > 0 ? previous : 0) + 1;
+          campaignRecords[recordKey] = rec;
         }
         for (let i = 0; i < n; i++) {
-          counts[i] = Number(rec[i]) || 0;
+          const value = rec.countsByOption[optionKeys[i]];
+          counts[i] = Number.isSafeInteger(value) && value > 0 ? value : 0;
         }
       }
     } catch (_e) {}
 
-    const totalSamples = counts.reduce((a, b) => a + b, 0) || 1;
-    const pcts = counts.map(c => Math.round((c / totalSamples) * 100));
+    const totalSamples = counts.reduce((a, b) => a + b, 0);
+    const pcts = counts.map(c => totalSamples ? Math.round((c / totalSamples) * 100) : 0);
     let actualTrapIdx = -1;
     let maxWrongCount = 0;
     for (let i = 0; i < n; i++) {
-      if (i !== correct && counts[i] > maxWrongCount) {
+      if (correct >= 0 && i !== correct && counts[i] > maxWrongCount) {
         maxWrongCount = counts[i];
         actualTrapIdx = i;
       }
     }
-    return { pcts, counts, trapIndex: actualTrapIdx, correctIndex: correct, totalSamples };
+    return { pcts, counts, trapIndex: actualTrapIdx, correctIndex: correct, totalSamples, legacySamples };
   }
   window.computeQuestionOptionChoiceStats = computeQuestionOptionChoiceStats;
 
@@ -14105,6 +14949,7 @@
   // Aprimoramento 4: Simulado Oficial da Guilda usando EXCLUSIVAMENTE os usuários reais cadastrados no banco (get_hunters_leaderboard)
   function renderGuildOfficialSimuladoBanner() {
     if (typeof document === 'undefined') return;
+    if(window.JCQuestionsWorkspace&&!window.JCQuestionsWorkspace.isRendering('simulados'))return;
     const reportSection = document.querySelector('#report');
     if (!reportSection) return;
     const campName = (typeof activeCampaign === 'function' && activeCampaign()?.name) ? activeCampaign().name : 'PMPE — Soldado';
@@ -14309,8 +15154,8 @@
       bar.id = 'questionNormaReportBar';
       bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:8px;border-top:1px solid rgba(148,163,184,0.18);font-size:11.5px;color:#94a3b8;';
       bar.innerHTML = `
-        <span id="questionNormaBaseMeta">⚖️ Norma-base: Bibliografia Oficial · Conferido: 11/2026</span>
-        <button type="button" id="reportQuestionIssueBtn" class="ghost small" style="width:auto;min-height:28px;padding:4px 10px;font-size:11px;color:#fbbf24;border-color:rgba(251,191,36,0.35);">⚠️ Reportar erro ou lei atualizada</button>
+        <span id="questionNormaBaseMeta">⚖️ Referência sugerida · Conferência documental pendente</span>
+        <button type="button" id="reportQuestionGlobalIssueBtn" class="ghost small" style="width:auto;min-height:28px;padding:4px 10px;font-size:11px;color:#fbbf24;border-color:rgba(251,191,36,0.35);">⚠️ Reportar erro ou lei atualizada</button>
       `;
       const footerBar = qDialog.querySelector('.qModalFooterBar') || qDialog.querySelector('.modalActions') || qDialog.querySelector('#nextQuestion')?.parentElement;
       const qBox = qDialog.querySelector('.modernQuestionBox');
@@ -14318,19 +15163,20 @@
       else if (footerBar) footerBar.insertAdjacentElement('beforebegin', bar);
       else qDialog.appendChild(bar);
 
-      bar.querySelector('#reportQuestionIssueBtn')?.addEventListener('click', () => {
+      bar.querySelector('#reportQuestionGlobalIssueBtn')?.addEventListener('click', () => {
         const curQ = (typeof activeQuestions === 'object' && activeQuestions?.questions) ? activeQuestions.questions[activeQuestions.current] : null;
+        if(!curQ)return typeof toast==='function'?toast('Abra uma questão antes de registrar o problema.'):undefined;
         const reason = typeof prompt === 'function' ? prompt('Descreva o erro ou atualização legislativa encontrada nesta questão (ex.: artigo alterado, gabarito divergente):') : 'Revisão solicitada';
         if (!reason || !reason.trim()) return;
         try {
           if (typeof state === 'object' && state) {
             state.contentIssues = state.contentIssues || {};
-            const qKey = curQ?.topic || curQ?.statement?.slice(0, 60) || ('q-' + Date.now());
-            state.contentIssues[qKey] = { reason: reason.trim(), norma_base: curQ?.norma_base || '', reportedAt: new Date().toISOString() };
+            const qKey = `question:${curQ.sourceDocumentId||curQ.documentId||''}:${curQ.id||questionFingerprint(curQ)}`;
+            state.contentIssues[qKey] = { kind:'question',questionId:curQ.id||null,subject:curQ.subject||'',topic:curQ.topic||'',statement:curQ.statement||'',reason:reason.trim(),norma_base:curQ.norma_base||'',reportedAt:new Date().toISOString() };
             if (typeof save === 'function') save();
           }
         } catch (_e) {}
-        if (typeof toast === 'function') toast('✅ Reporte salvo para revisão jurídica! Obrigado por aprimorar o banco.');
+        if (typeof toast === 'function') toast('Problema registrado no seu caderno de conferência.');
       });
     }
 
@@ -14385,11 +15231,13 @@
               </label>
               <label class="field" style="margin:0;font-size:11px;">Gabarito
                 <select data-edit-q-ans="${idx}" style="padding:6px;border-radius:8px;background:#06101d;color:#34d399;border:1px solid #234769;font-weight:800;">
-                  ${opts.map((_,oi)=>`<option value="${oi}" ${Number(qItem.correct_index)===oi?'selected':''}>Letra ${String.fromCharCode(65+oi)}</option>`).join('')}
+                  <option value="keep" selected>Manter situação atual${qItem.key_source==='ia_sugerido'?' (sugestão IA pendente)':''}</option>
+                  ${opts.map((_,oi)=>`<option value="${oi}">Validar letra ${String.fromCharCode(65+oi)}</option>`).join('')}
                 </select>
               </label>
             </div>
             <textarea data-edit-q-stmt="${idx}" rows="2" style="width:100%;padding:8px;border-radius:8px;background:#06101d;color:#e2e8f0;border:1px solid #1e3a5f;font-size:12px;margin-bottom:6px;">${escText(qItem.statement||'')}</textarea>
+            ${qItem.classification_needs_review?`<p class="small" style="color:#fbbf24;margin:4px 0 8px">⚠️ Classificação pendente: ${escText(qItem.classification_reason||'Confirme a disciplina e o assunto antes de incluir esta questão no treino.')}</p>`:''}
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
               <span class="small muted">Origem: <b>${escText(qItem.origin||'autoral')}</b> · Ordem no Edital: #${Number(qItem.learning_order??0)+1}</span>
               <div style="display:flex;gap:6px;">
@@ -14438,9 +15286,22 @@
           const item=ALL_QUESTIONS[i];
           if(!item)return;
           item.subject=canonicalSubjectName(dlg.querySelector(`[data-edit-q-subj="${i}"]`)?.value||item.subject);
+          item.subject_source='manual';
+          item.classification_declared_subject=item.subject;
+          item.classification_needs_review=false;
+          item.classification_reason='Disciplina confirmada por revisão humana.';
           item.topic=String(dlg.querySelector(`[data-edit-q-topic="${i}"]`)?.value||item.topic).trim();
-          item.correct_index=Number(dlg.querySelector(`[data-edit-q-ans="${i}"]`)?.value??item.correct_index);
+          const selectedKey=dlg.querySelector(`[data-edit-q-ans="${i}"]`)?.value;
+          const previousStatement=item.statement;
           item.statement=String(dlg.querySelector(`[data-edit-q-stmt="${i}"]`)?.value||item.statement).trim();
+          delete item._fp;
+          delete item.fingerprint;
+          if(item.statement!==previousStatement){
+            item.explanation_needs_review=true;
+            if(item.origin==='oficial')item.origin='adaptada_do_pdf';
+            if(!selectedKey||selectedKey==='keep')item.answer_unknown=true;
+          }
+          if(selectedKey&&selectedKey!=='keep')applyReviewedAnswerKey(item,Number(selectedKey),'Validação pessoal na fila de revisão');
           item.needs_review=false;
           item.subject_canonical=subjectKey(item.subject);
           item.topic_canonical=topicKey(item.topic);
@@ -14796,7 +15657,8 @@
     }
   ];
 
-  window.BASIC_SUMMARIES = NATIVE_CORE_THEORY_SUMMARIES;
+  // Platform manuals live in JornadaManuals, independently of theory and its caches.
+  window.BASIC_SUMMARIES = NATIVE_CORE_THEORY_SUMMARIES.filter(item=>!isPlatformManualStudyArtifact(item));
   try {
     if (typeof ensureNativePedagogicalCouplingLoaded === 'function') {
       ensureNativePedagogicalCouplingLoaded();
@@ -14804,97 +15666,61 @@
   } catch (_e) {}
 
   function ensureTopicSummaryExistsForStudy(targetSubj, targetTopic) {
-    if (typeof ensureNativePedagogicalCouplingLoaded === 'function') {
-      ensureNativePedagogicalCouplingLoaded();
+    if (isPlatformManualStudyArtifact(targetSubj) || isPlatformManualStudyArtifact(targetTopic)) {
+      return { cleanSubj: '', bestCard: null, isPlatformHelp: true };
     }
-    const cleanSubj = typeof canonicalSubjectName === 'function' ? canonicalSubjectName(targetSubj || 'Conteúdo Geral', targetTopic || '') : (targetSubj || 'Conteúdo Geral');
+    if (typeof ensureNativePedagogicalCouplingLoaded === 'function') ensureNativePedagogicalCouplingLoaded();
+    const cleanSubj = typeof canonicalSubjectName === 'function'
+      ? canonicalSubjectName(targetSubj || 'Conteúdo Geral', targetTopic || '') : (targetSubj || 'Conteúdo Geral');
     const sKey = subjectKey(cleanSubj);
     const tKey = topicKey(targetTopic || '');
-    const tTokens = tKey.split(' ').filter(w => w.length >= 4 && !['topicos', 'essenciais', 'estudo', 'concurso', 'questoes', 'questao', 'sobre', 'geral'].includes(w));
+    const ignoredTokens = new Set(['topicos', 'essenciais', 'estudo', 'concurso', 'questoes', 'questao', 'sobre', 'geral']);
+    const tTokens = [...new Set(tKey.split(' ').filter(token => token.length >= 4 && !ignoredTokens.has(token)))];
+    const isUsableSummary = item => item && !isPlatformManualStudyArtifact(item)
+      && subjectKey(item.category) === sKey
+      // Older releases synthesized these cards without a source or a validated answer key.
+      && !(String(item.id || '').startsWith('dynamic-theory-') && String(item.source || '').startsWith('Caderno Teórico Cirúrgico'));
 
-    // Garante também os resumos nativos daquela disciplina mesmo que o edital ainda não tenha sido carregado
     if (Array.isArray(window.BASIC_SUMMARIES) && typeof ALL_SUMMARIES !== 'undefined' && Array.isArray(ALL_SUMMARIES)) {
-      const existingIds = new Set(ALL_SUMMARIES.map(s => String(s?.id || s?.title || '').toLowerCase()));
-      for (const item of window.BASIC_SUMMARIES) {
-        if (subjectKey(item.category) === sKey || !ALL_SUMMARIES.some(s => subjectKey(s.category) === sKey)) {
-          const k = String(item.id || item.title).toLowerCase();
-          if (!existingIds.has(k) && subjectKey(item.category) === sKey) {
-            existingIds.add(k);
-            ALL_SUMMARIES.push({ ...item, is_native_coupling: true });
-          }
+      const existingIds = new Set(ALL_SUMMARIES.map(item => String(item?.id || item?.title || '').toLowerCase()));
+      for (const item of window.BASIC_SUMMARIES.filter(isUsableSummary)) {
+        const key = String(item.id || item.title).toLowerCase();
+        if (!existingIds.has(key)) {
+          existingIds.add(key);
+          ALL_SUMMARIES.push({ ...item, is_native_coupling: true });
         }
       }
     }
-
-    const subjSummaries = (typeof ALL_SUMMARIES !== 'undefined' && Array.isArray(ALL_SUMMARIES))
-      ? ALL_SUMMARIES.filter(s => subjectKey(s.category) === sKey)
-      : [];
+    const summaries = typeof ALL_SUMMARIES !== 'undefined' && Array.isArray(ALL_SUMMARIES)
+      ? ALL_SUMMARIES.filter(isUsableSummary) : [];
+    if (!tKey) return { cleanSubj, bestCard: summaries[0] || null };
 
     let bestCard = null;
     let bestScore = 0;
-    for (const s of subjSummaries) {
-      const hay = topicKey([s.title, s.explanation, s.bizu, s.mnemonic, ...(s.points || [])].join(' '));
-      if (tKey && topicKey(s.title).includes(tKey)) {
-        bestCard = s;
-        bestScore = 100;
-        break;
-      }
+    for (const item of summaries) {
+      // Topic selection uses the title/explicit topic, never an incidental word in an explanation.
+      const titleKey = topicKey(item.title || '');
+      const explicitTopic = topicKey(item.topic || item.topic_canonical || '');
+      const titleTokens = new Set(titleKey.split(' '));
+      const matchingTokens = tTokens.filter(token => titleTokens.has(token)).length;
       let score = 0;
-      for (const tk of tTokens) {
-        if (topicKey(s.title).includes(tk)) score += 4;
-        else if (hay.includes(tk)) score += 2;
-      }
-      if (score > bestScore) {
-        bestScore = score;
-        bestCard = s;
-      }
+      if (explicitTopic === tKey || titleKey === tKey || (` ${titleKey} `).includes(` ${tKey} `)) score = 100;
+      else if (tTokens.length && matchingTokens / tTokens.length >= 0.6) score = matchingTokens / tTokens.length * 50;
+      if (score > bestScore) { bestScore = score; bestCard = item; }
     }
-
-    // Se ainda não houver um resumo específico cobrindo esse subtópico ou disciplina, sintetiza um card focado com base nas questões e erros daquele tópico
-    if (!bestCard && typeof ALL_SUMMARIES !== 'undefined' && Array.isArray(ALL_SUMMARIES)) {
-      const topicTitle = (targetTopic && targetTopic.trim().length >= 3) ? targetTopic.trim() : `Tópicos Essenciais de ${cleanSubj}`;
-      const relatedQs = (typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS))
-        ? ALL_QUESTIONS.filter(q => subjectKey(q.subject) === sKey && (!tTokens.length || tTokens.some(tk => topicKey(`${q.topic || ''} ${q.statement || ''}`).includes(tk)))).slice(0, 6)
-        : [];
-      const extractedPoints = relatedQs
-        .map(q => {
-          const cOpt = Array.isArray(q.options) ? q.options[Number(q.correct_index) || 0] : '';
-          const exp = String(q.explanation || '').replace(/^🤖\s*\[[^\]]+\]\s*/i, '').trim();
-          return exp && exp.length >= 20 ? exp.slice(0, 240) : (cOpt ? `Gabarito recorrente em prova: ${cOpt}` : '');
-        })
-        .filter(Boolean)
-        .slice(0, 4);
-      const dynamicId = `dynamic-theory-${sKey}-${tKey || 'geral'}`.replace(/[^a-z0-9-_]/g, '-').slice(0, 80);
-      const existingDyn = ALL_SUMMARIES.find(s => s.id === dynamicId);
-      if (existingDyn) {
-        bestCard = existingDyn;
-      } else {
-        bestCard = {
-          id: dynamicId,
-          title: topicTitle,
-          source: `Caderno Teórico Cirúrgico · ${cleanSubj}`,
-          category: cleanSubj,
-          explanation: `Revisão teórica direcionada sobre "${topicTitle}" em ${cleanSubj}, estruturada para corrigir os pontos onde houve erro nas baterias de questões e consolidar os fundamentos cobrados pela banca.`,
-          points: extractedPoints.length ? extractedPoints : [
-            `Domine os conceitos-chave, prazos, exceções legais e classificações cobradas em ${topicTitle}.`,
-            `Compare sempre a regra geral com as exceções expressas ("salvo", "exceto", "independentemente").`,
-            `Ao refazer as questões deste tópico, identifique qual palavra da alternativa errada invalida o item.`
-          ],
-          example: relatedQs[0] ? `Questão de referência do seu banco: "${String(relatedQs[0].statement || '').slice(0, 180)}..." → Alternativa correta: "${relatedQs[0].options?.[Number(relatedQs[0].correct_index) || 0] || ''}".` : `Aplique a leitura ativa grifando os termos restritivos ("somente", "exclusivamente", "nunca") nos enunciados de ${cleanSubj}.`,
-          bizu: `Foque na distinção entre a regra geral de ${topicTitle} e as pegadinhas de troca conceitual da banca.`,
-          mnemonic: `Revisão Ativa 1-7-30 · ${cleanSubj}`,
-          trap: `Cuidado com alternativas que misturam conceitos verdadeiros de outro instituto ou invertem a competência/regra de ${topicTitle}.`,
-          is_native_coupling: true
-        };
-        ALL_SUMMARIES.unshift(bestCard);
-      }
-    }
-
-    return { cleanSubj, bestCard: bestCard || subjSummaries[0] || null };
+    // Missing theory remains missing. Never invent a lesson or assume alternative A from an absent key.
+    return { cleanSubj, bestCard };
   }
 
   function openTheoryForSubjectAndTopic(targetSubj, targetTopic = '') {
+    if (isPlatformManualStudyArtifact(targetSubj) || isPlatformManualStudyArtifact(targetTopic)) {
+      if (typeof window.openHunterManuals === 'function') window.openHunterManuals();
+      return false;
+    }
     const { cleanSubj, bestCard } = ensureTopicSummaryExistsForStudy(targetSubj, targetTopic);
+    const openedCampaignId = state?.activeCampaignId || 'default';
+    const openedOwner = state?._ownerUserId || '';
+    const openedResetEpoch = Number(state?._resetEpoch || 0);
 
     // Pré-configura o filtro e o estado aberto ANTES de openView('study') para que renderStudy() e o MutationObserver abram direto na matéria e no card exato!
     try {
@@ -14948,8 +15774,14 @@
       renderSummaries('');
     }
 
-    // 5. Abre a pasta, expande o card exato do tópico, destaca visualmente e faz scroll suave até ele
+    if (!bestCard?.id) {
+      toast(`Nenhum resumo disponível para ${cleanSubj}${targetTopic ? ` · ${shortLabel(targetTopic, 38)}` : ''}. Importe um material ou gere um resumo com fonte antes de estudar este tópico.`);
+      return false;
+    }
+
+    // 5. Expande somente o resumo correspondente; uma pasta vazia não conta como teoria lida.
     setTimeout(() => {
+      if ((state?.activeCampaignId || 'default') !== openedCampaignId || (state?._ownerUserId || '') !== openedOwner || Number(state?._resetEpoch || 0) !== openedResetEpoch) return;
       document.querySelectorAll('#summaryList .libraryFolder').forEach(f => f.classList.add('open'));
       document.querySelectorAll('#summaryList details.folderSubject').forEach(d => { d.open = true; });
 
@@ -14957,9 +15789,6 @@
       if (bestCard?.id) {
         targetBtn = document.querySelector(`#summaryList [data-summary="${CSS.escape(String(bestCard.id))}"]`)
           || [...document.querySelectorAll('#summaryList [data-summary]')].find(b => String(b.dataset.summary) === String(bestCard.id));
-      }
-      if (!targetBtn) {
-        targetBtn = document.querySelector('#summaryList [data-summary]');
       }
       if (targetBtn) {
         const cardEl = targetBtn.closest('.summaryCard');
@@ -14969,6 +15798,15 @@
           cardEl.style.transition = 'box-shadow 0.35s ease, border-color 0.35s ease';
           cardEl.style.borderColor = '#38bdf8';
           cardEl.style.boxShadow = '0 0 0 2px #38bdf8, 0 12px 32px rgba(56,189,248,0.25)';
+
+          // O resumo existe e foi aberto: agora é possível registrar a ação de estudo.
+          try {
+            const tracker = ensureDailyTracker();
+            tracker.theoryRead = true;
+            if (typeof save === 'function') save();
+            if (typeof evaluateAndAutoCheckDailySteps === 'function') evaluateAndAutoCheckDailySteps('theory_opened');
+          } catch (_e) {}
+          toast(`📖 Teoria aberta: ${cleanSubj}${targetTopic ? ` · ${shortLabel(targetTopic, 38)}` : ''}!`);
 
           // Salva estado aberto para que o MutationObserver do v59-enhancements mantenha o card aberto!
           try {
@@ -15021,15 +15859,28 @@
               wikiBtn.onclick = async () => {
                 wikiBtn.disabled = true;
                 wikiBtn.textContent = '⏳ Consultando acervo...';
-                const res = await window.JC_MODULES?.smartLibrary?.fetchLiveWikipediaTopicExtract?.(topicLabel, cleanSubj);
-                if (res && res.extract) {
+                try {
+                  const res = await window.JC_MODULES?.smartLibrary?.fetchLiveWikipediaTopicExtract?.(topicLabel, cleanSubj);
+                  if ((state?.activeCampaignId || 'default') !== openedCampaignId || (state?._ownerUserId || '') !== openedOwner || Number(state?._resetEpoch || 0) !== openedResetEpoch || !bodyEl.isConnected) return;
                   wikiBox.hidden = false;
-                  wikiBox.innerHTML = `<b>📚 Síntese Verificada (${escText(res.title)}):</b> <p style="margin:5px 0">${escText(res.extract)}</p><a href="${res.pageUrl}" target="_blank" rel="noopener noreferrer" style="color:#34d399;font-weight:700;font-size:.76rem">Ler artigo completo na fonte gratuita ↗</a>`;
-                  wikiBtn.textContent = '✓ Síntese carregada';
-                } else {
+                  if (res && res.extract) {
+                    let sourceUrl = '';
+                    try {
+                      const parsed = new URL(String(res.pageUrl || ''));
+                      if (parsed.protocol === 'https:' && parsed.hostname === 'pt.wikipedia.org') sourceUrl = parsed.href;
+                    } catch (_e) {}
+                    wikiBox.innerHTML = `<b>📚 Resumo externo — confira a fonte (${escText(res.title)}):</b> <p style="margin:5px 0">${escText(res.extract)}</p>${sourceUrl ? `<a href="${escText(sourceUrl)}" target="_blank" rel="noopener noreferrer" style="color:#34d399;font-weight:700;font-size:.76rem">Ler artigo na Wikipédia ↗</a>` : ''}<p class="small muted">O trecho é enciclopédico e não valida a correção de questões. Para legislação, confira o texto oficial atualizado.</p>`;
+                    wikiBtn.textContent = '↻ Consultar novamente';
+                  } else {
+                    wikiBox.textContent = 'Não foi possível obter um resumo. Consulte as fontes abaixo e confira se tratam do tópico solicitado.';
+                    wikiBtn.textContent = '↻ Tentar novamente';
+                  }
+                } catch (_e) {
                   wikiBox.hidden = false;
-                  wikiBox.innerHTML = `<span>Consulte diretamente os links oficiais abaixo para leitura integral gratuita de <b>${escText(topicLabel)}</b>.</span>`;
-                  wikiBtn.textContent = '🌐 Fonte externa pronta abaixo';
+                  wikiBox.textContent = 'Falha ao consultar a fonte externa. Tente novamente ou abra os links abaixo.';
+                  wikiBtn.textContent = '↻ Tentar novamente';
+                } finally {
+                  wikiBtn.disabled = false;
                 }
               };
             }
@@ -15041,69 +15892,31 @@
       }
     }, 50);
 
-    // 6. Registra leitura de teoria na Missão Diária (Etapa 1)
-    try {
-      const tracker = ensureDailyTracker();
-      tracker.theoryRead = true;
-      if (typeof save === 'function') save();
-      if (typeof evaluateAndAutoCheckDailySteps === 'function') evaluateAndAutoCheckDailySteps('theory_opened');
-    } catch (_e) {}
-
-    toast(`📖 Teoria aberta: ${cleanSubj}${targetTopic ? ` · ${shortLabel(targetTopic, 38)}` : ''}!`);
+    return true;
   }
   window.openTheoryForSubjectAndTopic = openTheoryForSubjectAndTopic;
   window.ensureTopicSummaryExistsForStudy = ensureTopicSummaryExistsForStudy;
 
   // ── 2) Resolução de Gabarito com IA para Provas/Simulados sem Gabarito ("🤖 Resolver com IA") ──
-  function solveQuestionLocallyHeuristic(qItem) {
-    const opts = Array.isArray(qItem?.options) ? qItem.options.map(o => String(o || '').trim()) : [];
-    const st = String(qItem?.statement || '').toLowerCase();
-    if (!opts.length) return { correct_index: 0, explanation: '🤖 [Gabarito sugerido pela IA — confira no gabarito oficial quando disponível] Alternativa analisada conforme o enunciado.' };
-
-    const isNegativeQuery = /\b(incorret[ao]|errad[ao]|exceto|n[aã]o\s+[eé]|falso|inexat[ao])\b/i.test(st);
-    const absoluteWordsRe = /\b(sempre|nunca|jamais|exclusivamente|unicamente|em nenhuma hip[oó]tese|sob qualquer hip[oó]tese|absolutamente todos)\b/i;
-    const legalBalancedRe = /\b(salvo|ressalvad[ao]s?|nos termos da lei|conforme|desde que|regra geral|admite-se|mediante)\b/i;
-
-    let bestIdx = 0;
-    let bestScore = -999;
-    opts.forEach((opt, idx) => {
-      let sc = 0;
-      const hasAbs = absoluteWordsRe.test(opt);
-      const hasBal = legalBalancedRe.test(opt);
-      if (isNegativeQuery) {
-        if (hasAbs) sc += 5;
-        if (hasBal) sc -= 2;
-      } else {
-        if (hasAbs) sc -= 4;
-        if (hasBal) sc += 4;
-        if (opt.length >= 35 && opt.length <= 240) sc += 2;
-      }
-      if (sc > bestScore) {
-        bestScore = sc;
-        bestIdx = idx;
-      }
-    });
-
-    const chosenLetter = opts.length === 2 && /^certo$/i.test(opts[0]) ? (bestIdx === 0 ? 'CERTO' : 'ERRADO') : ('ABCDE'[bestIdx] || 'A');
-    return {
-      correct_index: bestIdx,
-      explanation: `🤖 [Gabarito sugerido pela IA — confira no gabarito oficial quando disponível] Conceito-chave: Análise técnica do enunciado de ${qItem?.subject || 'Concurso'}. ✅ Alternativa sugerida: ${chosenLetter} ("${opts[bestIdx] || ''}"), por guardar maior conformidade lógica e normativa com o comando da questão.`
-    };
-  }
-
-  async function solveQuestionsArrayWithAi(questionsArray, doc = null) {
+  async function solveQuestionsArrayWithAi(questionsArray, doc = null, operationGuard = null) {
     if (!Array.isArray(questionsArray) || !questionsArray.length) return 0;
+    const operationScope=typeof examDocumentScopeKey==='function'?examDocumentScopeKey():null;
+    const current=()=>(typeof operationGuard!=='function'||operationGuard())&&(operationScope===null||(operationScope===examDocumentScopeKey()&&(!doc||examDocumentScopeAllows(doc))));
+    if(!current())return 0;
     const targets = [];
     questionsArray.forEach((qItem, idx) => {
-      if (qItem.answer_unknown || !Number.isInteger(Number(qItem.correct_index)) || Number(qItem.correct_index) < 0 || /SEM gabarito/i.test(String(qItem.explanation || ''))) {
-        targets.push({ qItem, idx });
+      if (answerKeyStatus(qItem)==='sem_gabarito' && !isUnreviewedAiAnswer(qItem)) {
+        targets.push({ qItem, idx, signature:JSON.stringify([qItem.statement,qItem.options]) });
       }
     });
-    const listToSolve = targets.length ? targets : questionsArray.map((qItem, idx) => ({ qItem, idx }));
+    const listToSolve = targets.filter(({qItem}) => !qItem.annulled && !qItem.anulada);
     let solvedCount = 0;
     const session = typeof validSession === 'function' ? await validSession().catch(() => null) : null;
+    if(!current())return 0;
+    const campaignId=doc?.campaign_id||(typeof activeCampaign==='function'?activeCampaign()?.dbId:'');
 
     for (let start = 0; start < listToSolve.length; start += 10) {
+      if(!current())return 0;
       const batch = listToSolve.slice(start, start + 10);
       let apiSolved = null;
       if (session?.access_token && typeof navigator !== 'undefined' && navigator.onLine) {
@@ -15113,7 +15926,7 @@
             headers: { ...authHeaders(session.access_token) },
             body: JSON.stringify({
               action: 'solve_exam_questions_key',
-              campaign_id: doc?.campaign_id || (typeof activeCampaign === 'function' ? activeCampaign()?.dbId : ''),
+              campaign_id: campaignId,
               questions: batch.map((b, bi) => ({
                 index: bi,
                 subject: b.qItem.subject || doc?.detected_subject || 'Conteúdo Geral',
@@ -15123,27 +15936,33 @@
               }))
             })
           });
+          if(!current())return 0;
           const data = await res.json().catch(() => ({}));
+          if(!current())return 0;
           if (res.ok && Array.isArray(data?.solved) && data.solved.length) {
             apiSolved = data.solved;
           }
-        } catch (_e) {}
+        } catch (_e) {if(!current())return 0;}
       }
 
       batch.forEach((b, bi) => {
         const qItem = b.qItem;
+        if(!current()||JSON.stringify([qItem.statement,qItem.options])!==b.signature||answerKeyStatus(qItem)!=='sem_gabarito'||isUnreviewedAiAnswer(qItem))return;
         const opts = Array.isArray(qItem.options) ? qItem.options : [];
-        const fromApi = Array.isArray(apiSolved) ? (apiSolved.find(s => Number(s.index) === bi) || apiSolved[bi]) : null;
-        if (fromApi && Number.isInteger(Number(fromApi.correct_index)) && Number(fromApi.correct_index) >= 0 && Number(fromApi.correct_index) < opts.length) {
+        const matches = Array.isArray(apiSolved) ? apiSolved.filter(s => typeof s?.index!=='boolean' && s?.index !== null && s?.index !== undefined && String(s.index).trim() !== "" && Number(s.index) === bi) : [];
+        const fromApi=matches.length===1?matches[0]:null;
+        if (fromApi && typeof fromApi.correct_index!=='boolean' && fromApi.correct_index !== null && fromApi.correct_index !== undefined && String(fromApi.correct_index).trim() !== "" && Number.isInteger(Number(fromApi.correct_index)) && Number(fromApi.correct_index) >= 0 && Number(fromApi.correct_index) < opts.length && typeof fromApi.explanation==='string' && fromApi.explanation.trim().length>=10) {
           qItem.correct_index = Number(fromApi.correct_index);
           qItem.explanation = String(fromApi.explanation || '').trim();
         } else {
-          const localSol = solveQuestionLocallyHeuristic(qItem);
-          qItem.correct_index = Math.min(Math.max(0, localSol.correct_index), Math.max(0, opts.length - 1));
-          qItem.explanation = localSol.explanation;
+          // Falha, ausência de rede ou resposta inválida: mantém a pendência sem inventar gabarito.
+          qItem.answer_unknown = true;
+          qItem.correct_index = -1;
+          return;
         }
         delete qItem.answer_unknown;
         qItem.key_source = 'ia_sugerido';
+        qItem.answer_key_validation = 'pendente';
         qItem.origin = 'adaptada_do_pdf';
         solvedCount++;
       });
@@ -15157,66 +15976,99 @@
       ? cloudDocuments.find(d => String(d.id) === String(docId))
       : null;
     if (!doc) return toast('Documento da prova não encontrado.');
+    const operationScope=examDocumentScopeKey(),operations=solveMissingAnswerKeyWithAi._operations||(solveMissingAnswerKeyWithAi._operations=new Map()),operationKey=`${operationScope}:${doc.id}`,operation={};
+    operations.set(operationKey,operation);
+    const current=()=>operations.get(operationKey)===operation&&operationScope===examDocumentScopeKey()&&examDocumentScopeAllows(doc);
+    if(!current()||doc.is_community===true&&String(doc.user_id||'')!==String(cloudSession?.user?.id||'')){operations.delete(operationKey);return toast('Para revisar o gabarito de um PDF compartilhado, importe sua própria cópia do arquivo.');}
 
     const btns = document.querySelectorAll(`[data-solve-ai-key-doc="${doc.id}"], [data-add-key-doc="${doc.id}"]`);
     btns.forEach(b => { b.disabled = true; if (b.dataset.solveAiKeyDoc) b.textContent = '⏳ IA resolvendo gabarito...'; });
 
     try {
+      if(!navigator.onLine||!cloudSession?.access_token)throw new Error('Entre na sua conta e conecte-se à internet. Nenhum gabarito foi alterado.');
+      const session=await validSession();
+      if(!current())return;
+      if(!session?.access_token||session.user?.id!==cloudSession?.user?.id)throw new Error('Entre novamente na sua conta para salvar sugestões de gabarito.');
       toast(`🤖 Analisando e resolvendo as questões de “${doc.title}” com a IA...`);
       let totalSolved = 0;
+      const inspectedQuestions=[];
 
       if (typeof cloudSession === 'object' && cloudSession?.access_token && navigator.onLine) {
-        const res = await cloudFetch(`generated_study_content?source_document_id=eq.${encodeURIComponent(doc.id)}&select=id,title,content`);
-        const rows = await res.json().catch(() => []);
+        const rows=await readExamDocumentQuestionRows(doc,session,operationScope);
+        if(!current())return;
         if (Array.isArray(rows) && rows.length) {
           for (const row of rows) {
-            const qs = Array.isArray(row.content?.questions) ? row.content.questions : [];
+            const qs = Array.isArray(row.content?.questions) ? row.content.questions.map(item=>({...item,options:Array.isArray(item.options)?[...item.options]:item.options})) : [];
             if (!qs.length) continue;
-            const cnt = await solveQuestionsArrayWithAi(qs, doc);
-            totalSolved += cnt;
-            await cloudFetch(`generated_study_content?id=eq.${encodeURIComponent(row.id)}`, {
+            inspectedQuestions.push(...qs);
+            const cnt = await solveQuestionsArrayWithAi(qs, doc, current);
+            if(!current())return;
+            if(!cnt)continue;
+            const saved=await cloudFetch(`generated_study_content?id=eq.${encodeURIComponent(row.id)}&user_id=eq.${encodeURIComponent(session.user.id)}&campaign_id=eq.${encodeURIComponent(row.campaign_id||doc.campaign_id||activeCampaign()?.dbId)}`, {
               method: 'PATCH',
+              headers:{Authorization:`Bearer ${session.access_token}`},
               body: JSON.stringify({ content: { ...row.content, questions: qs } })
             });
+            if(!current())return;
+            if(!saved.ok)throw new Error('Não foi possível salvar as sugestões da IA. Confira a conexão e tente novamente.');
+            totalSolved += cnt;
           }
         }
       }
 
       // Atualiza também questões já em memória (ALL_QUESTIONS)
       if (typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS)) {
-        const memQs = ALL_QUESTIONS.filter(q => String(q.documentId || q.sourceDocumentId || '') === String(doc.id));
-        if (memQs.length && totalSolved === 0) {
-          totalSolved = await solveQuestionsArrayWithAi(memQs, doc);
+        const memQs=examDocumentQuestionPool(doc,ALL_QUESTIONS);
+        if (memQs.length && !inspectedQuestions.length) {
+          inspectedQuestions.push(...memQs);
+          totalSolved = await solveQuestionsArrayWithAi(memQs, doc, current);
+          if(!current())return;
+          if(totalSolved){if(typeof save==='function')save();await window.persistToLocalDatabase?.(state?.activeCampaignId);}
+          if(!current())return;
         }
       }
 
+      if(!totalSolved){
+        const existing=inspectedQuestions.filter(isUnreviewedAiAnswer).length;
+        return toast(existing?`${existing} sugestão(ões) da IA aguardam validação humana na fila de revisão. Nenhum novo gabarito foi gerado.`:'A IA não retornou sugestões válidas. As questões continuam pendentes; você pode adicionar o gabarito do documento.');
+      }
+      const stillUnknown=inspectedQuestions.filter(q=>answerKeyStatus(q)==='sem_gabarito'&&!isUnreviewedAiAnswer(q)).length;
+      const suggested=inspectedQuestions.filter(isUnreviewedAiAnswer).length;
       const prevWarnings = Array.isArray(doc.metadata?.coverage?.warnings) ? doc.metadata.coverage.warnings : [];
-      const cleanWarnings = prevWarnings.filter(w => !/SEM gabarito/i.test(String(w)));
-      cleanWarnings.push(`🤖 Gabarito resolvido e comentado pela IA (${totalSolved || 'todas as'} questões). Confira na fonte oficial quando disponível.`);
+      const cleanWarnings = prevWarnings.filter(w => !/sem gabarito|gabarito resolvido|sugestões? da IA/i.test(String(w)));
+      if(stillUnknown)cleanWarnings.push(`${stillUnknown} questão(ões) ainda SEM gabarito.`);
+      cleanWarnings.push(`🤖 ${suggested} sugestão(ões) da IA aguardam validação humana. Ainda SEM gabarito validado para treino pontuado.`);
 
       const nextCoverage = {
         ...(doc.metadata?.coverage || {}),
-        needs_review: false,
-        ai_keyed_count: totalSolved,
+        needs_review: true,
+        ai_keyed_count: suggested,
+        missing_key_count: stillUnknown,
         warnings: cleanWarnings
       };
-      doc.metadata = { ...(doc.metadata || {}), coverage: nextCoverage };
+      const nextMetadata = { ...(doc.metadata || {}), coverage: nextCoverage };
 
       if (typeof cloudSession === 'object' && cloudSession?.access_token && navigator.onLine) {
-        await cloudFetch(`study_documents?id=eq.${encodeURIComponent(doc.id)}`, {
+        const saved=await cloudFetch(`study_documents?id=eq.${encodeURIComponent(doc.id)}&user_id=eq.${encodeURIComponent(session.user.id)}`, {
           method: 'PATCH',
-          body: JSON.stringify({ metadata: doc.metadata })
-        }).catch(() => undefined);
+          headers:{Authorization:`Bearer ${session.access_token}`},
+          body: JSON.stringify({ metadata: nextMetadata })
+        });
+        if(!current())return;
+        if(!saved.ok)throw new Error('Sugestões salvas, mas não foi possível atualizar o estado do documento. Recarregue para conferir.');
+        doc.metadata=nextMetadata;
         await Promise.all([loadGeneratedContent(), loadCloudDocuments()]).catch(() => undefined);
+        if(!current())return;
       }
 
       if (typeof render === 'function') render();
       if (typeof renderExamBankHub === 'function') renderExamBankHub();
-      toast(`✅ Gabarito e comentários resolvidos pela IA para ${totalSolved || 'todas as'} questão(ões) de “${doc.title}”! Treino e Simulado liberados.`);
+      toast(`🤖 ${totalSolved} sugestão(ões) salvas para “${doc.title}”. Valide na fila de revisão ou adicione o gabarito do documento antes do treino pontuado.`);
     } catch (err) {
-      toast(err?.message || 'Não foi possível resolver o gabarito com a IA.');
+      if(current())toast(err?.message || 'Não foi possível resolver o gabarito com a IA.');
     } finally {
-      btns.forEach(b => { b.disabled = false; if (b.dataset.solveAiKeyDoc) b.textContent = '🤖 Resolver com IA'; });
+      if(current())btns.forEach(b => { b.disabled = false; if (b.dataset.solveAiKeyDoc) b.textContent = '🤖 Resolver com IA'; });
+      if(operations.get(operationKey)===operation)operations.delete(operationKey);
     }
   }
   window.solveMissingAnswerKeyWithAi = solveMissingAnswerKeyWithAi;
@@ -15494,7 +16346,7 @@
         askInput.value = `Explique detalhadamente a teoria, os artigos/regras, exemplos de prova e pegadinhas de banca sobre "${tp}" na disciplina de ${sb}.`;
         askInput.focus();
       }
-      toast(`🤖 Instrutor IA pronto para aprofundar "${shortLabel(tp, 36)}"!`);
+      toast(`🤖 Invocador pronto para aprofundar "${shortLabel(tp, 36)}"!`);
     }
   });
 
@@ -15530,65 +16382,7 @@
 
   // Corrige automaticamente questões com defeito lógico ou alternativas de 1 letra que tenham ficado vazias (ex.: "ESCOLAR" 2.022ª posição e "Qual frase NÃO é uma proposição?")
   function healPedagogicalQuestionDefects(q) {
-    if (!q || typeof q !== 'object') return q;
-    const st = String(q.statement || '').trim();
-    const rawOpts = Array.isArray(q.options) ? q.options : [];
-    if (!rawOpts.length) return q;
-    let opts = rawOpts.map(o => stripOptionLetterPrefixClean(o));
-
-    // Caso 1: Questão clássica da palavra "ESCOLAR" (2.022ª posição) onde as alternativas de 1 letra ("A.", "E." / "C.") ficaram em branco
-    if (/palavra\s+[“"']?escolar[”"']?/i.test(st) && /2\.?022/i.test(st)) {
-      const hasBlankOrCorrupted = opts.some(o => !String(o || '').trim()) || !opts.some(o => /^A\.?$/i.test(String(o || '').trim()));
-      if (hasBlankOrCorrupted) {
-        const healedOpts = opts.length === 5 ? ['A.', 'C.', 'E.', 'R.', 'S.'] : ['A.', 'E.', 'R.', 'S.'];
-        return {
-          ...q,
-          options: healedOpts,
-          correct_index: 0,
-          origin: 'oficial',
-          explanation: 'Conceito-chave: Ciclos periódicos e divisão euclidiana (resto da divisão pelo número de letras da palavra).\n- ✅ Correta: A) A. A palavra "ESCOLAR" possui 7 letras (1ª=E, 2ª=S, 3ª=C, 4ª=O, 5ª=L, 6ª=A, 7ª=R). Dividindo 2.022 por 7, obtemos 288 ciclos completos (288 × 7 = 2.016) e resto 6. Portanto, a 2.022ª posição corresponde à 6ª letra da palavra ESCOLAR, que é a letra A.\n- ❌ B) E. Ocuparia a posição caso o resto da divisão por 7 fosse 1.\n- ❌ C) R. Ocuparia a posição caso o resto da divisão por 7 fosse 0 (múltiplo exato de 7).\n- ❌ D) S. Ocuparia a posição caso o resto da divisão por 7 fosse 2.'
-        };
-      }
-    }
-
-    // Caso 2: Qualquer outra questão de sequência de letras ou alternativas curtas onde alguma opção tenha ficado vazia ("")
-    if (opts.some(o => !String(o || '').trim())) {
-      const usedLetters = new Set(opts.map(o => String(o || '').replace(/[^a-zA-Z]/g, '').toUpperCase()).filter(Boolean));
-      const candidateLetters = ['A', 'E', 'C', 'B', 'D', 'O', 'L'];
-      const hasTrailingDot = opts.some(o => /\.$/.test(String(o || '').trim()));
-      opts = opts.map((o, idx) => {
-        if (String(o || '').trim()) return o;
-        const defLet = String.fromCharCode(65 + idx);
-        const pick = !usedLetters.has(defLet) ? defLet : (candidateLetters.find(c => !usedLetters.has(c)) || defLet);
-        usedLetters.add(pick);
-        return hasTrailingDot ? `${pick}.` : pick;
-      });
-      q = { ...q, options: opts };
-    }
-
-    if (/qual\s+(?:frase|senten[cç]a|alternativa|item|op[cç][aã]o)\s+n[aã]o\s+[eé]\s+(?:uma\s+)?proposi[cç][aã]o/i.test(st)) {
-      const hasTrueNonProposition = opts.some(o => /\?|!|\b(que horas|quantos|estude|fa[cç]a|pare|sil[eê]ncio|tomara|oxalá|x\s*[+\-=<>]|ele\s+foi)\b/i.test(o));
-      if (!hasTrueNonProposition) {
-        const cIdx = (Number.isInteger(Number(q.correct_index)) && Number(q.correct_index) >= 0 && Number(q.correct_index) < opts.length)
-          ? Number(q.correct_index)
-          : 0;
-        const fixedOpts = [...opts];
-        fixedOpts[cIdx] = 'Que horas começa o plantão policial?';
-        const cLetter = String.fromCharCode(65 + cIdx);
-        const otherLines = fixedOpts.map((optTxt, idx) => {
-          const l = String.fromCharCode(65 + idx);
-          if (idx === cIdx) return `- ✅ Correta: ${l}) "${optTxt}" é uma frase interrogativa (pergunta), portanto não admite valor lógico Verdadeiro ou Falso e NÃO é uma proposição.`;
-          const isComp = /\b(se\s+.*ent[aã]o|\s+ou\s+|\s+e\s+|se e somente se)\b/i.test(optTxt);
-          return `- ❌ ${l}) "${optTxt}" é uma proposição lógica ${isComp ? 'composta' : 'simples'} (toda frase declarativa fechada, mesmo que matematicamente falsa como "2 + 2 = 5", possui valor lógico V ou F e é uma proposição).`;
-        });
-        return {
-          ...q,
-          options: fixedOpts,
-          correct_index: cIdx,
-          explanation: `Conceito-chave: Proposição lógica é toda sentença declarativa fechada que pode ser julgada como Verdadeira (V) ou Falsa (F). Frases interrogativas (?), exclamativas (!), imperativas (ordens) e sentenças abertas (com variáveis sem valor definido) NÃO são proposições (mnemônico NESPEI).\n${otherLines.join('\n')}`
-        };
-      }
-    }
+    // Conteúdo e gabarito precisam de revisão explícita, nunca de reparo por heurística.
     return q;
   }
   window.healPedagogicalQuestionDefects = healPedagogicalQuestionDefects;
@@ -15605,7 +16399,7 @@
     // Se houver mapa de permutação de letras (ex.: A->C, C->A), aplica substituição simultânea nas marcações de alternativas
     if (letterMap && letterMap.size > 0) {
       exp = exp.replace(
-        /((?:^|\n|[•\-✅✓❌✗]|\bCorreta\s*:\s*|\bAlternativa\s+|\bLetra\s+|\bItem\s+|\bOp[cç][aã]o\s+|\.\s+|;\s+)\s*)\(?([A-E])([\)\.\-–—:]|\b)/g,
+        /((?:^|\n|[•\-✅✓❌✗]|\bCorreta\s*:\s*|\bAlternativa\s+|\bLetra\s+|\bItem\s+|\bOp[cç][aã]o\s+|\.\s+|;\s+|\b(?:e|ou)\s+)\s*)\(?([A-E])([\)\.\-–—:]|\b)/g,
         (full, prefix, letter, suffix) => {
           const mapped = letterMap.get(String(letter).toUpperCase());
           return mapped ? `${prefix}${mapped}${suffix}` : full;
@@ -15613,48 +16407,37 @@
       );
     }
 
-    // Garante que "✅ Correta: X)" sempre exiba exatamente a letra do gabarito atual (newCorrectLetter)
-    exp = exp.replace(/(✅\s*Correta\s*:\s*)([A-E])(\s*[\)\.\-–—:])/gi, `$1${newCorrectLetter}$3`);
-    exp = exp.replace(/(\b(?:Alternativa|Letra)\s+correta\s*:\s*)([A-E])\b/gi, `$1${newCorrectLetter}`);
-
     return exp;
   }
   window.remapExplanationOptionLetters = remapExplanationOptionLetters;
 
   function prepareQuestionConsistent(rawQ) {
     if (!rawQ || typeof rawQ !== 'object') return rawQ;
-    const q = healPedagogicalQuestionDefects(rawQ);
+    const override=typeof state!=='undefined'&&typeof questionFingerprint==='function'?state?.questionAnswerOverrides?.[questionFingerprint(rawQ)]:null;
+    const matchingOverride=answerOverrideMatchesOptions(override,rawQ);
+    const reviewedMatches=matchingOverride?(rawQ.options||[]).map((opt,index)=>answerOptionText(opt)===answerOptionText(override.correct_answer)?index:-1).filter(index=>index>=0):[];
+    const reviewedIndex=reviewedMatches.length===1?reviewedMatches[0]:-1;
+    const healed = healPedagogicalQuestionDefects(reviewedIndex>=0?{...rawQ,...override,correct_index:reviewedIndex}:override?{...rawQ,correct_index:-1,answer_unknown:true,answer_key_override_stale:true,explanation_needs_review:true}:rawQ);
+    const q=window.JCQuestionText?window.JCQuestionText.cleanQuestion(healed):healed;
+    window.applyQuestionBoardEvidence?.(q);window.applyQuestionTopicEvidence?.(q);
     const rawOpts = Array.isArray(q.options) ? q.options : [];
-    let originalIdx = Number.isInteger(Number(q.correct_index)) ? Number(q.correct_index) : 0;
-    if (originalIdx < 0 || originalIdx >= Math.max(1, rawOpts.length)) originalIdx = 0;
-
-    // Verifica se a explicação aponta explicitamente o texto da alternativa correta (ex.: "✅ Correta: C) P → Q.")
-    // e reconcilia caso as opções salvas anteriormente estivessem com letras trocadas
-    const expStr = String(q.explanation || '');
-    const explicitCorrMatch = expStr.match(/✅\s*(?:Alternativa\s+)?Correta\s*:\s*([A-E])\s*[\)\.\-–—:]\s*([^\n❌⚠️]+?)(?:\.\s*(?:❌|$)|\n|$)/i);
-    const items = rawOpts.map((rawText, idx) => {
-      const origLetter = detectOriginalOptionLetter(rawText, idx);
-      const cleanText = normalizeLegalText(stripOptionLetterPrefixClean(rawText));
-      return { text: cleanText, index: idx, origLetter };
-    });
-
-    if (explicitCorrMatch) {
-      const expCorrLetter = explicitCorrMatch[1].toUpperCase();
-      const expCorrSnippet = stripOptionLetterPrefixClean(explicitCorrMatch[2]).replace(/\.$/, '').trim().toLowerCase();
-      if (expCorrSnippet.length >= 2) {
-        const textMatchIdx = items.findIndex(it => it.text.toLowerCase().replace(/\.$/, '').trim() === expCorrSnippet || it.text.toLowerCase().includes(expCorrSnippet));
-        if (textMatchIdx >= 0) {
-          originalIdx = textMatchIdx;
-          items[textMatchIdx].origLetter = expCorrLetter;
-        }
-      }
-    }
-
+    const rawIndex = q.correct_index;
+    const validKey = rawOpts.length >= 2 && rawOpts.every(o => String(o ?? '').trim()) && !q.answer_unknown && !q.annulled && !q.anulada &&
+      rawIndex !== null && rawIndex !== undefined && String(rawIndex).trim() !== '' &&
+      Number.isInteger(Number(rawIndex)) && Number(rawIndex) >= 0 && Number(rawIndex) < rawOpts.length;
+    const originalIdx = validKey ? Number(rawIndex) : -1;
+    const items = rawOpts.map((rawText, idx) => ({
+      text: normalizeLegalText(stripOptionLetterPrefixClean(rawText)),
+      index: idx, origLetter: detectOriginalOptionLetter(rawText, idx)
+    }));
+    const orderDependent = rawOpts.some(o => /\b(todas|nenhuma|ambas|anterior(?:es)?|acima|abaixo)\b|\balternativas?\s+[a-e]\b|\b[a-e]\s+e\s+[a-e]\b/i.test(String(o))) ||
+      rawOpts.every(o => /^\s*(?:[IVX]+|\d+)(?:\s*(?:,|e|ou)\s*(?:[IVX]+|\d+))*\s*(?:apenas|somente)?\.?\s*$/.test(String(o)));
     const isCE = items.length === 2 && /^certo$/i.test(items[0]?.text || '');
-    const keepOrder = items.length <= 2 || isCE || q?.origin === 'oficial' || Boolean(q?._alreadyPreparedConsistent);
+    const groupedReferences=/\b[A-E](?:\s*,\s*[A-E])*(?:\s+(?:e|ou)\s+[A-E])\b/.test(String(q.explanation||''));
+    const keepOrder = !validKey || orderDependent || groupedReferences || items.length <= 2 || isCE || q?.origin === 'oficial' || q?.key_source === 'manual_revisado' || q?.key_source === 'ia_sugerido' || Boolean(q?._alreadyPreparedConsistent);
     const mixed = keepOrder ? [...items] : shuffle(items);
 
-    const newCorrectIdx = Math.max(0, mixed.findIndex(it => it.index === originalIdx));
+    const newCorrectIdx = validKey ? mixed.findIndex(it => it.index === originalIdx) : -1;
     const letterMap = new Map();
     mixed.forEach((it, newIdx) => {
       const newLetter = String.fromCharCode(65 + newIdx);
@@ -15663,7 +16446,7 @@
     });
 
     const cleanOptions = mixed.map(it => it.text);
-    const updatedExplanation = remapExplanationOptionLetters(normalizeLegalText(q.explanation || ''), letterMap, cleanOptions, newCorrectIdx);
+    const updatedExplanation = validKey ? remapExplanationOptionLetters(normalizeLegalText(q.explanation || ''), letterMap, cleanOptions, newCorrectIdx) : String(q.explanation || '');
 
     return {
       ...q,
@@ -15683,6 +16466,7 @@
   function splitInlineOptionExplanations(text) {
     if (!text) return [];
     let normalized = String(text)
+      .replace(/\s*\|\s*/g, '\n')
       // Insere quebra de linha antes de marcadores ✅, ❌, ⚠️
       .replace(/\s+(?=[✅✓❌✗⚠️⚠])/g, '\n')
       // Insere quebra de linha antes de "- ✅" ou "- ❌"
@@ -15700,6 +16484,11 @@
 
   function buildFormattedResolutionStepsHtml(rawExp, item, correctIndex, correctLetter, isCE, related) {
     const cleanExp = String(rawExp || '').trim();
+    const positiveReferences=[...cleanExp.matchAll(/(?:✅|✓|\bcorreta\s*:|\balternativa\s+correta\s*:?)\s*(?:Correta\s*:\s*)?([A-E])\)/gi)].map(match=>match[1].toUpperCase());
+    const negativeReferences=[...cleanExp.matchAll(/[❌✗]\s*(?:Incorreta\s*:\s*)?([A-E])\)/gi)].map(match=>match[1].toUpperCase());
+    if(positiveReferences.some(letter=>letter!==correctLetter)||negativeReferences.includes(correctLetter)){
+      return `<div class="stepResolutionBlock trap"><b>⚠️ Comentário inconsistente com o gabarito</b><p>O comentário cita uma alternativa diferente da resposta registrada. A explicação aguarda revisão; confira o documento de origem antes de usá-la para estudar. O gabarito não foi alterado automaticamente.</p></div>`;
+    }
     const rawSegments = splitInlineOptionExplanations(cleanExp);
 
     let conceptParts = [];
@@ -15713,7 +16502,7 @@
       if (/^(?:⚠️|⚠|pegadinha)/i.test(strippedDash)) {
         trapParts.push(strippedDash.replace(/^(?:⚠️|⚠|\s*pegadinha(?:\s+da\s+banca)?(?:\s*\([^)]*\))?)\s*:?\s*/i, '').trim());
       } else if (/^(?:✅|✓)\s*(?:Correta\s*:\s*)?[A-E]\)/i.test(strippedDash) || /^Correta\s*:\s*[A-E]\)/i.test(strippedDash)) {
-        const cleanOpt = strippedDash.replace(/^(?:✅|✓)?\s*Correta\s*:\s*/i, '').trim();
+        const cleanOpt = strippedDash.replace(/^(?:✅|✓)\s*/, '').replace(/^Correta\s*:\s*/i, '').trim();
         optionLines.push({ kind: 'correct', letter: (cleanOpt.match(/^([A-E])\)/i)?.[1] || correctLetter).toUpperCase(), text: cleanOpt });
       } else if (/^(?:❌|✗)\s*(?:Incorreta\s*:\s*)?[A-E]\)/i.test(strippedDash) || /^[A-E]\)\s+\S/i.test(strippedDash)) {
         const cleanOpt = strippedDash.replace(/^(?:❌|✗)\s*(?:Incorreta\s*:\s*)?/i, '').trim();
@@ -15767,7 +16556,7 @@
       : '';
 
     let htmlOut = '';
-    const mainConcept = conceptParts.join(' ') || (generalRightParts.length ? generalRightParts.shift() : '') || `A alternativa ${correctLetter} reproduz corretamente o entendimento aplicável ao tema “${item?.topic || item?.subject || 'Concurso'}”.`;
+    const mainConcept = conceptParts.join(' ') || (generalRightParts.length ? generalRightParts.shift() : '') || `Não há conceito explicado neste comentário. Revise “${item?.topic || item?.subject || 'Concurso'}” em uma fonte confiável antes de memorizar o gabarito.`;
 
     htmlOut += `<div class="stepResolutionBlock concept"><b>💡 Conceito-chave cobrado</b><p style="margin:6px 0 0;line-height:1.55">${escText(mainConcept)}</p>${optionLinesHtml}</div>`;
 
@@ -15793,20 +16582,41 @@
   function saveActiveQuestionSession() {
     try {
       if (!activeQuestions || !Array.isArray(activeQuestions.questions) || !activeQuestions.questions.length) {
-        sessionStorage.removeItem(ACTIVE_QUESTION_SESSION_KEY);
-        return;
+        return null;
       }
+      const scope = currentQuestionSessionScope();
+      const previousScope = activeQuestions._sessionScope;
+      if (previousScope && (previousScope.userId !== scope.userId || previousScope.campaignId !== scope.campaignId || previousScope.resetEpoch !== scope.resetEpoch)) return null;
+      activeQuestions._sessionScope = scope;
       const payload = {
-        savedAt: Date.now(),
         title: document.querySelector('#questionDialogTitle')?.textContent || 'Treino de Questões',
         battle: activeQuestions
       };
-      sessionStorage.setItem(ACTIVE_QUESTION_SESSION_KEY, JSON.stringify(payload));
-    } catch (_e) {}
+      const saved = getQuestionSessionStore()?.save(scope, payload) || null;
+      if (saved !== 'local' && !window._questionSessionStorageWarned) {
+        window._questionSessionStorageWarned = true;
+        toast(saved === 'session' ? 'Armazenamento cheio: a retomada deste treino só está disponível enquanto esta aba permanecer aberta.' : 'Não foi possível salvar o treino neste aparelho. Libere espaço antes de fechar a página.');
+      }
+      return saved;
+    } catch (_e) { return null; }
   }
   window.saveActiveQuestionSession = saveActiveQuestionSession;
 
+  function currentQuestionSessionScope() {
+    return { userId: String(cloudSession?.user?.id || state?._ownerUserId || 'guest'), campaignId: String(state?.activeCampaignId || 'default'), resetEpoch: Number(state?._resetEpoch || 0) };
+  }
+  function getQuestionSessionStore() {
+    if (!window._questionSessionStoreR174 && window.JornadaQuestionSessions) {
+      let storage = null, fallbackStorage = null;
+      try { storage = window.localStorage; } catch {}
+      try { fallbackStorage = window.sessionStorage; } catch {}
+      window._questionSessionStoreR174 = window.JornadaQuestionSessions.createStore({ storage, fallbackStorage });
+    }
+    return window._questionSessionStoreR174;
+  }
+
   function clearSavedQuestionSession() {
+    getQuestionSessionStore()?.clear(currentQuestionSessionScope());
     try {
       sessionStorage.removeItem(ACTIVE_QUESTION_SESSION_KEY);
     } catch (_e) {}
@@ -15814,12 +16624,28 @@
     if (resumeBar) resumeBar.remove();
   }
   window.clearSavedQuestionSession = clearSavedQuestionSession;
+  window.clearAllSavedQuestionSessions = function() {
+    getQuestionSessionStore()?.clearAll();
+    try { sessionStorage.removeItem(ACTIVE_QUESTION_SESSION_KEY); } catch {}
+    activeQuestions = null;
+    clearInterval(simuladoTimer);
+    activeSimulado = null;
+    document.querySelector('#resumeTimedSimuladoBar')?.remove();
+    document.querySelector('#simuladoDialog')?.close();
+    document.querySelector('#confirmExitTimedSimuladoDialog')?.close();
+    document.querySelector('#resumeSavedQuestionSessionBar')?.remove();
+    document.querySelector('#questionDialog')?.close();
+    document.querySelector('#confirmExitSimuladoDialog')?.close();
+  };
+  window.addEventListener('pagehide', saveActiveQuestionSession);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') saveActiveQuestionSession();
+  });
 
   function requestExitQuestionSession() {
     const qDlg = document.querySelector('#questionDialog');
     if (!qDlg || !qDlg.open || !activeQuestions) {
       activeQuestions = null;
-      clearSavedQuestionSession();
       qDlg?.close();
       return;
     }
@@ -15833,7 +16659,8 @@
             <p class="small muted" id="confirmExitSimuladoText" style="margin:0 0 16px;line-height:1.55">Seu progresso e suas respostas poderão ser perdidos caso você encerre o treino.</p>
             <div class="slExitDuelActions">
               <button type="button" class="action" id="stayInSimuladoBtn">Permanecer</button>
-              <button type="button" class="ghost danger" id="confirmExitSimuladoBtn">Sair do simulado</button>
+              <button type="button" class="ghost" id="pauseQuestionSessionBtn">Continuar depois</button>
+              <button type="button" class="ghost danger" id="confirmExitSimuladoBtn">Encerrar treino</button>
             </div>
           </div>
         </dialog>
@@ -15843,6 +16670,23 @@
 
     const stayBtn = confirmDlg.querySelector('#stayInSimuladoBtn');
     const exitBtn = confirmDlg.querySelector('#confirmExitSimuladoBtn');
+    if (!confirmDlg.querySelector('#pauseQuestionSessionBtn')) {
+      exitBtn?.insertAdjacentHTML('beforebegin', '<button type="button" class="ghost" id="pauseQuestionSessionBtn">Continuar depois</button>');
+    }
+    const pauseBtn = confirmDlg.querySelector('#pauseQuestionSessionBtn');
+    const exitText = confirmDlg.querySelector('#confirmExitSimuladoText');
+    if (exitText) exitText.textContent = 'Continuar depois salva a questão atual e suas respostas neste aparelho por até 7 dias. Encerrar treino descarta a retomada; as respostas já registradas continuam no histórico.';
+    if (exitBtn) exitBtn.textContent = 'Encerrar treino';
+    if (pauseBtn) pauseBtn.onclick = () => {
+      const saved = saveActiveQuestionSession();
+      if (!saved) return toast('Não foi possível salvar o treino. Permaneça aqui e libere espaço no aparelho.');
+      activeQuestions = null;
+      confirmDlg.close();
+      qDlg.close();
+      checkAndOfferSavedQuestionSessionResume();
+      if (typeof openView === 'function') openView('report');
+      toast(saved === 'local' ? 'Treino salvo neste aparelho. Use “Continuar de onde parei” para retomar.' : 'Treino pausado nesta aba. Mantenha a aba aberta para poder retomar.');
+    };
 
     if (stayBtn) {
       stayBtn.onclick = () => {
@@ -15898,12 +16742,13 @@
     if (item._userAnswered) {
       battle.answered = true;
       const chosen = item._userChosenIndex;
-      const correct = Number(item.correct_index) || 0;
-      const ok = chosen === correct;
+      const grading = window.gradeAnswer?.(item, chosen);
+      const correct = grading?.scored ? Number(item.correct_index) : -1;
+      const ok = Boolean(grading?.scored && grading.ok);
       document.querySelectorAll('#questionOptions [data-question-index]').forEach(btn => {
         const idx = Number(btn.dataset.questionIndex);
-        if (idx === correct) btn.classList.add('correct');
-        else if (idx === chosen && !ok) btn.classList.add('wrong');
+        if (correct >= 0 && idx === correct) btn.classList.add('correct');
+        else if (grading?.scored && idx === chosen && !ok) btn.classList.add('wrong');
         btn.disabled = true;
       });
       document.querySelectorAll('#questionOptions [data-scissor-index]').forEach(b => { b.disabled = true; });
@@ -15927,8 +16772,9 @@
   const origAnswerQ = window.answerQuestion;
   if (typeof origAnswerQ === 'function' && !origAnswerQ._r161Hooked) {
     window.answerQuestion = function(button, item) {
+      if (!activeQuestions || activeQuestions.answered || item?._userAnswered) return;
       const res = origAnswerQ(button, item);
-      if (item && typeof item === 'object') {
+      if (activeQuestions?.answered && item && typeof item === 'object') {
         item._userAnswered = true;
         item._userChosenIndex = Number(button?.dataset?.questionIndex);
       }
@@ -15943,8 +16789,9 @@
   const origSkipQ = window.skipQuestionBlank;
   if (typeof origSkipQ === 'function' && !origSkipQ._r161Hooked) {
     window.skipQuestionBlank = function(item) {
+      if (!activeQuestions || activeQuestions.answered || item?._userAnswered) return;
       const res = origSkipQ(item);
-      if (item && typeof item === 'object') {
+      if (activeQuestions?.answered && item && typeof item === 'object') {
         item._userAnswered = true;
         item._userChosenIndex = -2;
       }
@@ -15959,9 +16806,30 @@
   const origNextQ = window.nextQuestion;
   if (typeof origNextQ === 'function' && !origNextQ._r161SessionHooked) {
     window.nextQuestion = nextQuestion = function() {
-      const finishing = activeQuestions && activeQuestions.current >= activeQuestions.questions.length - 1;
+      const scope=typeof currentQuestionSessionScope==='function'?currentQuestionSessionScope():null,savedScope=activeQuestions?._sessionScope;
+      if(scope&&savedScope&&(savedScope.userId!==scope.userId||savedScope.campaignId!==scope.campaignId||savedScope.resetEpoch!==scope.resetEpoch)){
+        activeQuestions=null;q('#questionDialog')?.close?.();
+        toast('O contexto deste treino mudou. Reabra a sessão na conta e no portal de origem.');
+        return false;
+      }
+      // An older saved session may already contain answered items that current
+      // source/classification checks would exclude. Keep history and the saved
+      // answers, but do not mint a new aggregate result from that notebook.
+      if(activeQuestions&&activeQuestions.current>=activeQuestions.questions.length-1&&typeof isQuestionDisciplineEligible==='function'&&activeQuestions.questions.some(item=>!isQuestionDisciplineEligible(item,'all'))){
+        saveActiveQuestionSession();
+        toast('A conclusão foi suspensa: este treino contém questões aguardando revisão. Suas respostas continuam salvas; encerre o caderno e revise a fonte antes de iniciar outro.');
+        return false;
+      }
+      if(activeQuestions&&activeQuestions.current>=activeQuestions.questions.length-1&&typeof gradeAnswer==='function'&&activeQuestions.questions.some(item=>!gradeAnswer(item,0).scored)){
+        // Pending/annulled keys are explanation-only practice. A zero in the
+        // aggregate score would turn them into false errors and could grant a
+        // completion bonus. Valid individual answers have already been saved.
+        activeQuestions=null;q('#questionDialog')?.close?.();clearSavedQuestionSession();
+        toast('Prática concluída sem placar agregado: há gabaritos pendentes ou anulados. Os registros individuais já validados foram mantidos; questões pendentes não contam como erro nem concedem XP.');
+        return false;
+      }
       const res = origNextQ();
-      if (finishing || !activeQuestions) {
+      if (!activeQuestions) {
         clearSavedQuestionSession();
       } else {
         saveActiveQuestionSession();
@@ -16031,14 +16899,10 @@
   // Se o usuário atualizou a página com um treino em andamento, oferece barra de retomada imediata na aba Questões
   function checkAndOfferSavedQuestionSessionResume() {
     try {
-      const raw = sessionStorage.getItem(ACTIVE_QUESTION_SESSION_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (!parsed?.battle?.questions?.length) return;
-      if (Date.now() - Number(parsed.savedAt || 0) > 6 * 3600 * 1000) {
-        sessionStorage.removeItem(ACTIVE_QUESTION_SESSION_KEY);
-        return;
-      }
+      document.querySelector('#resumeSavedQuestionSessionBar')?.remove();
+      if (activeQuestions) return;
+      const parsed = getQuestionSessionStore()?.read(currentQuestionSessionScope());
+      if (!parsed) return;
       const reportSection = document.querySelector('#report');
       if (reportSection && !document.querySelector('#resumeSavedQuestionSessionBar')) {
         const curNum = (Number(parsed.battle.current) || 0) + 1;
@@ -16047,7 +16911,7 @@
           <div id="resumeSavedQuestionSessionBar" class="card" style="margin-bottom:12px;padding:12px 16px;border:1px solid #38bdf8;background:rgba(14,34,56,0.9);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
             <div>
               <b style="color:#38bdf8;font-size:.92rem">🔄 Treino em andamento salvo: ${escText(parsed.title || 'Simulado')}</b>
-              <div class="small muted">Você estava na <b>Questão ${curNum} de ${totNum}</b> (${Number(parsed.battle.correct) || 0} acerto(s) até aqui).</div>
+              <div class="small muted">Você estava na <b>Questão ${curNum} de ${totNum}</b>. Retomada disponível neste aparelho por até 7 dias.</div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button type="button" class="action small" id="resumeSavedQuestionSessionBtn" style="width:auto;padding:7px 14px">▶ Continuar de onde parei</button>
@@ -16056,20 +16920,25 @@
           </div>
         `);
         document.querySelector('#resumeSavedQuestionSessionBtn').onclick = () => {
-          activeQuestions = parsed.battle;
+          const latest = getQuestionSessionStore()?.read(currentQuestionSessionScope());
+          if (!latest) { document.querySelector('#resumeSavedQuestionSessionBar')?.remove(); return; }
+          if(!savedQuestionSessionCanResume(latest.battle))return toast('As questões deste treino não correspondem mais ao recorte salvo ou precisam de revisão. Inicie um novo treino com questões validadas.');
+          activeQuestions = latest.battle;
           if (document.querySelector('#questionDialogTitle')) {
-            document.querySelector('#questionDialogTitle').textContent = parsed.title || 'Treino de Questões';
+            document.querySelector('#questionDialogTitle').textContent = latest.title || 'Treino de Questões';
           }
           document.querySelector('#resumeSavedQuestionSessionBar')?.remove();
           document.querySelector('#questionDialog')?.showModal();
           window.showQuestion();
         };
         document.querySelector('#discardSavedQuestionSessionBtn').onclick = () => {
+          if (!confirm('Descartar a retomada deste treino? As respostas já registradas continuarão no histórico.')) return;
           clearSavedQuestionSession();
         };
       }
     } catch (_e) {}
   }
+  window.checkAndOfferSavedQuestionSessionResume = checkAndOfferSavedQuestionSessionResume;
   setTimeout(checkAndOfferSavedQuestionSessionResume, 350);
 
   // CSS para .expAltLine e #confirmExitSimuladoDialog no Tema Claro e Modo Papel
@@ -16132,6 +17001,7 @@
     let changed = false;
     for (const [k, err] of entries) {
       if (!err || typeof err !== 'object') continue;
+      if (typeof isPlatformManualStudyArtifact==='function'&&isPlatformManualStudyArtifact({...err,id:k})) continue;
       if (err.campaignId && err.campaignId !== state.activeCampaignId) continue;
       // Corrige disciplina se estiver com nome de arquivo (ex.: "500 Questões Pmpe")
       const cleanSubj = typeof resolveStrictQuestionDiscipline === 'function'
@@ -16166,61 +17036,50 @@
     deduplicateAndSanitizeErrorNotebook();
     const err = state.errors[errKey];
     if (!err) return;
+    if (err.campaignId && err.campaignId !== state.activeCampaignId) return toast('Este erro pertence a outro portal. Abra o portal correspondente para revisá-lo.');
     const cleanSubj = typeof resolveStrictQuestionDiscipline === 'function'
       ? resolveStrictQuestionDiscipline(err.question || '', err.topic || '', err.subject || '', err.options || [])
       : (err.subject || 'Revisão de Erros');
+    const canRetry = item => Boolean(item && String(item.statement || '').trim() && isQuestionDisciplineEligible(item, cleanSubj) && !['sem_gabarito','anulada'].includes(answerKeyStatus(item)));
+    const reviewTheory = () => {
+      if (typeof window.openTheoryForSubjectAndTopic === 'function') window.openTheoryForSubjectAndTopic(cleanSubj, err.topic || '');
+      return toast('O registro não contém uma questão completa com gabarito válido. Revise a teoria ou importe a questão original para refazer.');
+    };
     const matchedReal = (typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS))
-      ? ALL_QUESTIONS.find(qItem => topicKey(qItem.statement || '') === topicKey(err.question || ''))
+      ? ALL_QUESTIONS.find(qItem => canRetry(qItem) && topicKey(qItem.statement || '') === topicKey(err.question || ''))
       : null;
 
     let targetQ = null;
     if (matchedReal) {
-      targetQ = { ...matchedReal, subject: cleanSubj, _errorNotebookKey: errKey };
-    } else if (Array.isArray(err.options) && err.options.length >= 2 && Number.isInteger(Number(err.correct_index))) {
+      targetQ = { ...matchedReal, _errorNotebookKey: errKey };
+    } else if (Array.isArray(err.options)) {
       targetQ = {
+        ...err,
         subject: cleanSubj,
         topic: err.topic || 'Correção de Erro',
         statement: err.question,
         options: [...err.options],
-        correct_index: Number(err.correct_index),
-        explanation: err.explanation || `A alternativa correta é: ${err.correctAnswer || ''}`,
+        correct_index: err.correct_index,
+        explanation: err.explanation || '',
         difficulty: 'medio',
-        origin: 'adaptada_do_pdf',
-        _errorNotebookKey: errKey
-      };
-    } else if (err.question && err.correctAnswer) {
-      const distractors = typeof buildSubjectAppropriateDistractors === 'function'
-        ? buildSubjectAppropriateDistractors(cleanSubj, err.correctAnswer)
-        : ['Alternativa incorreta para contraste.', 'Hipótese não prevista na norma.', 'Afirmação incompatível com o comando.'];
-      const wrongChosen = err.lastChosen && err.lastChosen !== err.correctAnswer ? [err.lastChosen] : [];
-      const opts = [err.correctAnswer, ...wrongChosen, ...distractors].slice(0, 4);
-      targetQ = {
-        subject: cleanSubj,
-        topic: err.topic || 'Correção de Erro',
-        statement: err.question,
-        options: opts,
-        correct_index: 0,
-        explanation: err.explanation || `A alternativa correta é: ${err.correctAnswer}`,
-        difficulty: 'medio',
-        origin: 'adaptada_do_pdf',
+        origin: err.origin || 'autoral',
+        _alreadyPreparedConsistent: true,
         _errorNotebookKey: errKey
       };
     }
 
-    if (!targetQ) {
-      if (typeof startSubjectTargetedFix === 'function') return startSubjectTargetedFix(cleanSubj, true);
-      return;
-    }
+    if (!canRetry(targetQ)) return reviewTheory();
 
     const extraPool = (typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS))
-      ? ALL_QUESTIONS.filter(qItem => topicKey(resolveStrictQuestionDiscipline(qItem)) === topicKey(cleanSubj) && topicKey(qItem.statement || '') !== topicKey(err.question || '')).slice(0, 4)
+      ? ALL_QUESTIONS.filter(qItem => canRetry(qItem) && questionMatchesErrorPool(qItem, [[errKey, err]]) && topicKey(qItem.statement || '') !== topicKey(err.question || '')).slice(0, 4)
       : [];
 
     const preparedList = [targetQ, ...extraPool].map(qItem => {
       const p = prepareQuestionConsistent(qItem);
       if (qItem._errorNotebookKey) p._errorNotebookKey = qItem._errorNotebookKey;
       return p;
-    });
+    }).filter(canRetry);
+    if (!preparedList.some(item => item._errorNotebookKey === errKey)) return reviewTheory();
 
     activeQuestions = {
       mode: 'retry_errors',
