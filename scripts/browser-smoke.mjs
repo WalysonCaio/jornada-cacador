@@ -65,8 +65,20 @@ async function openQuestions(page) {
   const sidebar = page.locator('[data-jc-side-view="report"]');
   if (await sidebar.isVisible()) await sidebar.click();
   else await page.locator('button[data-view="report"]').click();
+  await selectQuestionPanel(page, 'resolver');
   await visible(page, '#report.active #questionSubject');
   await visible(page, '#report.active #questionTopic');
+}
+
+async function selectQuestionPanel(page, panel) {
+  await visible(page, `#questionsTab-${panel}`);
+  await page.locator(`#questionsTab-${panel}`).click();
+  await visible(page, `#questionsPanel-${panel}[aria-busy="false"]`);
+  assert.equal(await page.locator(`#questionsTab-${panel}`).getAttribute('aria-selected'), 'true');
+  for (const other of ['resolver', 'simulados', 'provas', 'desempenho'].filter(value => value !== panel)) {
+    assert.equal(await page.locator(`#questionsPanel-${other}`).isVisible(), false,
+      `Somente o painel ${panel} deve estar visível.`);
+  }
 }
 
 async function pickSubjectAndTopic(page, subject, topic) {
@@ -90,7 +102,14 @@ async function assertQuestionScope(page, subject, questions) {
 }
 
 async function answerFirstOption(page) {
+  await visible(page, '#confirmQuestionAnswerBtn');
+  assert(await page.locator('#confirmQuestionAnswerBtn').isDisabled(), 'Confirmar fica indisponível até selecionar uma alternativa.');
   await page.locator('#questionOptions [data-question-index="0"]').click();
+  assert.equal(await page.locator('#questionOptions [data-question-index="0"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('#nextQuestion').isVisible(), false,
+    'Selecionar a alternativa deve aguardar confirmação antes de corrigir.');
+  assert.match(await page.locator('#questionSelectionStatus').innerText(), /Alternativa A selecionada/);
+  await page.locator('#confirmQuestionAnswerBtn').click();
   await visible(page, '#nextQuestion');
   assert(await page.locator('#questionFeedback').innerText(), 'A resposta deve produzir feedback pedagógico.');
   assert(await page.locator('#questionFeedback .stepResolutionBlock').count(), 'O feedback deve apresentar explicação em blocos.');
@@ -120,6 +139,7 @@ async function assertNoHorizontalOverflow(page, selector) {
 }
 
 async function timedSimuladoRecovery(page, questions) {
+  await selectQuestionPanel(page, 'simulados');
   await page.locator('#simuladoScope').selectOption('filtered');
   await page.locator('#simuladoCount').selectOption('10');
   await page.locator('#simuladoMinutes').selectOption('20');
@@ -162,6 +182,27 @@ async function timedSimuladoRecovery(page, questions) {
   await page.locator('#discardTimedSimuladoBtn').click();
   await page.locator('#simuladoDialog').waitFor({ state: 'hidden' });
   assert.equal(await page.locator('#resumeTimedSimuladoBar').count(), 0, 'Encerrar o simulado deve descartar a retomada.');
+}
+
+async function pendingKeyNotice(page, source) {
+  // Um caso temporário de DADOS exercita o modal real. O visitante e o banco
+  // permanecem locais: nenhum handler de correção é substituído.
+  const pending = {...source, id:'browser-pending-key', key_source:'ia_sugerido', answer_key_validation:'pendente'};
+  const before = await page.evaluate(() => JSON.stringify({learning:state.learning, scores:state.scores}));
+  await page.evaluate(item => {
+    activeQuestions={mode:'practice',subject:item.subject,questions:[item],current:0,correct:0,answered:false};
+    document.querySelector('#questionDialog').showModal();
+    window.showQuestion();
+  }, pending);
+  await visible(page, '#questionDialog .questionAnswerNotice.pendingKey');
+  assert.match(await page.locator('#questionDialog .questionAnswerNotice').innerText(), /não registra acerto, erro ou XP/);
+  assert.match(await page.locator('#confirmQuestionAnswerBtn').innerText(), /Ver explicação/);
+  await page.locator('#questionOptions [data-question-index="0"]').click();
+  await page.locator('#confirmQuestionAnswerBtn').click();
+  await visible(page, '#nextQuestion');
+  assert.equal(await page.evaluate(() => JSON.stringify({learning:state.learning, scores:state.scores})), before,
+    'Uma sugestão de IA não pode conceder XP nem registrar um resultado confirmado.');
+  await exitAndDiscard(page);
 }
 
 async function runScenario(browser, name, viewport) {
@@ -210,6 +251,10 @@ async function runScenario(browser, name, viewport) {
     const started = Date.now();
     await openQuestions(page);
     const questionsOpenMs = Date.now() - started;
+    assert.equal(await page.locator('#questionsWorkspaceTabs [role="tab"]').count(), 4);
+    await assertNoHorizontalOverflow(page, '#questionsWorkspaceTabs');
+    assert.equal(await page.locator('#simuladoLauncher').count(), 0,
+      'Resolver não deve montar a configuração do simulado antes de abrir esse painel.');
     await assertNoHorizontalOverflow(page, '.questionTrainer');
     const subjectOptions = await page.locator('#questionSubject option').allTextContents();
     assert(!subjectOptions.some(containsManual), 'Manuais de uso não devem aparecer como disciplinas de questões.');
@@ -266,6 +311,13 @@ async function runScenario(browser, name, viewport) {
     await assertQuestionScope(page, 'Direito Penal', penal);
     await exitAndDiscard(page);
     await timedSimuladoRecovery(page, penal);
+    await openQuestions(page);
+    await pendingKeyNotice(page, portuguese[0]);
+    await selectQuestionPanel(page, 'provas');
+    await assertNoHorizontalOverflow(page, '#questionsPanel-provas');
+    await selectQuestionPanel(page, 'desempenho');
+    await assertNoHorizontalOverflow(page, '#questionsPanel-desempenho');
+    await selectQuestionPanel(page, 'resolver');
 
     // Guias vivem em Ajuda: nunca são resumos ou disciplinas do edital.
     await page.locator('button[data-view="study"]').click();
@@ -296,7 +348,7 @@ async function runScenario(browser, name, viewport) {
     });
     assert.deepEqual(errors, [], 'Não deve haver exceções JavaScript durante os fluxos do estudante.');
     assert.deepEqual(localFailures, [], 'Todos os arquivos locais solicitados devem carregar.');
-    console.log(`OK browser ${name}: filtros, vazio honesto, resposta, saída, retomada de treino e simulado, manuais e largura; aba Questões ${questionsOpenMs} ms (amostra local, sem meta de desempenho).`);
+    console.log(`OK browser ${name}: quatro painéis, filtros, vazio honesto, confirmação de resposta, chave pendente, saída, retomada de treino e simulado, manuais e largura; aba Questões ${questionsOpenMs} ms (amostra local, sem meta de desempenho).`);
   } catch (error) {
     if (artifactDir) {
       await mkdir(artifactDir, { recursive: true });

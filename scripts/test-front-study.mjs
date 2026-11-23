@@ -11,6 +11,7 @@ const code = [
   slice("function fcKey(", "function belongsToActiveCampaign("),
   slice("function questionPriority(", "function learningUnits("),
   slice("function questionFingerprint(", "function questionsForMode("),
+  slice("function persistProgressLocally(", "function save(){"),
   slice("function save(){", "function level("),
   "function difficultyWeight(v){return({facil:0,medio:1,dificil:2})[v]??1} function learningCategory(s){return String(s||'')} function shuffle(a){return[...a]} function scheduleCloudSync(){} function renderStreak(){}",
 ].join("\n");
@@ -84,7 +85,7 @@ const cards = (n) => Array.from({ length: n }, (_, i) => ["Direito", `Pergunta n
   const { ctx, toasts, run } = makeEnv();
   ctx.localStorage = { setItem() { throw new Error("QuotaExceededError"); } };
   run("save(); save()");
-  assert.equal(toasts.filter((m) => /armazenamento/i.test(m)).length, 1);
+  assert.equal(toasts.filter((m) => /armazenamento|salvar neste navegador/i.test(m)).length, 1);
 }
 console.log("OK: regras de estudo do front validadas (flashcards, fila, filtro, legado, questões, armazenamento).");
 
@@ -116,8 +117,8 @@ console.log("OK: reanálise preserva/arquiva progresso.");
 // 8) ofensiva diária adapta o mínimo quando a meta diária é menor que 50 min (ex.: 30 min)
 {
   const sc = [
+    slice("function localDayKey(", "function persistProgressLocally("),
     slice("const STREAK_MIN_SECONDS=50*60;", "function repairStudyLedger("),
-    "function localDayKey(d){return d.toISOString().slice(0,10)}",
   ].join("\n");
   const ctx = { state: { settings: { dailyMinutes: 30 }, studyByDay: { "2026-10-28": 30 * 60 }, done: { "m1": "2026-10-28T12:00:00Z" }, dailyHistory: [] } };
   vm.createContext(ctx); vm.runInContext(sc, ctx);
@@ -1488,7 +1489,14 @@ console.log("OK: Duelo X1 de 60s, suporte 2-5 alternativas (C/E e A-E), seleçã
   assert.equal(vmMastery.getTopicPedagogicalStatus({ id: "dc-2", name: "2. Da Segurança Pública (Art. 144)", subject: "Direito Constitucional" }), "studied", "Tópico dc-2 da mesma disciplina mas sem questões próprias deve permanecer como studied (Estudado), nunca Dominado");
 
   // 3) Verifica correções r159: sem 75% inventado, bônus único, adiar erro 7d, selo simulado honesto, redacao-gemini reconciliada e hyper-endpoint 410
-  assert.ok(!v77Src.includes("Math.round(total*0.75)") && v77Src.includes("const correct=total>0?Math.max(0,Math.min(total,Number(tracker.questionsCorrect||0))):0;"), "Fechar missão sem questões não pode inventar 75% de acerto");
+  for(const [tracker,expectedBonus] of [[{},0],[{questionsAnswered:10,questionsCorrect:0},0],[{questionsAnswered:10,questionsCorrect:7},62]]){
+    const credits=[],messages=[],missionContext={state:{_ownerUserId:'a',activeCampaignId:'p',daily:'m',dailyTracker:tracker,learning:{},bosses:{}},cloudSession:null,navigator:{onLine:false},activeCampaign:()=>({id:'p',dbId:'db-p'}),missionPool:()=>[{id:'m',subject:'Português'}],complete(){},applyXpLocal:points=>credits.push(points),toast:message=>messages.push(message),save(){},renderHero(){}};
+    missionContext.window=missionContext;vm.createContext(missionContext);
+    vm.runInContext(v77Src.slice(v77Src.indexOf('  function missionRewardContext()'),v77Src.indexOf('  window.loadNativeBank=')),missionContext);
+    await missionContext.finalizeDailyMissionWithHonestXp();
+    assert.equal(credits.reduce((sum,points)=>sum+points,0),expectedBonus,'Bônus de missão usa somente acertos registrados; ausência de questões não inventa 75%');
+    if(!Object.keys(tracker).length)assert(messages[0].includes('0/0 (0%)'),'Recibo sem questões informa a amostra zero');
+  }
   assert.ok(v77Src.includes("bonus70Paid") && v77Src.includes("bonus85Paid") && htmlSrc.includes("state.masteryBonusPaid"), "Bônus de maestria (+8/+15 e missão) deve ser pago apenas uma vez por tópico");
   assert.ok(htmlSrc.includes("Adiar revisão (7 dias)") && !htmlSrc.includes(">Marcar como dominado<"), "Caderno de erros deve apenas adiar revisão por 7 dias em vez de apagar o erro manualmente");
   assert.ok(v77Src.includes("Meta interna atingida (≥70% · não é aprovação oficial)") && !v77Src.includes("Caveira Aprovado (≥70%)"), "Selo do simulado deve indicar meta interna e não aprovação oficial");

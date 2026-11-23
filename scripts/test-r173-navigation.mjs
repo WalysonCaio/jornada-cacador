@@ -40,11 +40,16 @@ context.ALL_QUESTIONS.splice(0,1);context.ensureNativeQuestionBankLoaded();asser
 let renders=0,html='';const select={value:'all',set innerHTML(v){renders++;html=v},get innerHTML(){return html}};
 const fields={'#questionTopic':select,'#questionSubject':{value:'all'},'#questionBoardFilter':{value:'all'}};
 const missions=[{id:'m1',subject:'Português',name:'Crase'}];
-const ctx={q:s=>fields[s],state:{activeCampaignId:'a'},ALL_QUESTIONS:[{statement:'Texto',subject:'Português',topic:'Verbos',board:'A'}],ensureTopicFilterSelect(){},sanitizeAllQuestionsAndErrorsSubjects(){},canonicalSubjectName:s=>s,topicKey:s=>s.toLowerCase(),resolveStrictQuestionDiscipline:q=>q.subject,orderedMissions:()=>missions,questionMatchesBoardFilter:(q,b)=>b==='all'||b===q.board,questionMatchesTopicFilter:(q,t)=>q.topic.toLowerCase()===t,isTopicContaminatedByWrongSubject:()=>false,shortLabel:s=>s,escText:s=>s,populateExamHubSelects(){}};
+const ctx={window:{},q:s=>fields[s],state:{activeCampaignId:'a'},ALL_QUESTIONS:[{statement:'Texto',subject:'Português',topic:'Verbos',board:'A'}],ensureTopicFilterSelect(){},sanitizeAllQuestionsAndErrorsSubjects(){},canonicalSubjectName:s=>s,topicKey:s=>s.toLowerCase(),resolveStrictQuestionDiscipline:q=>q.subject,orderedMissions:()=>missions,questionMatchesBoardFilter:(q,b)=>b==='all'||b===q.board,questionMatchesTopicFilter:(q,t)=>q.topic.toLowerCase()===t,isTopicContaminatedByWrongSubject:()=>false,shortLabel:s=>s,escText:s=>s,populateExamHubSelects(){}};
+let revision=0;
+ctx.window.JCQuestionsWorkspace={scopeKey:()=>ctx.state.activeCampaignId,get revision(){return revision},isActive:()=>false};
+// Production edits call save() -> markViewsDirty(), which invalidates the data
+// revision without serializing every question's complete statement on reads.
+ctx.window.markViewsDirty=()=>revision++;
 vm.createContext(ctx);vm.runInContext(section('  function populateTopicFilter(){','  function filteredQuestionPool(){'),ctx);
 ctx.populateTopicFilter();assert(html.includes('Crase (0q)'));
 select.value='verbos';ctx.populateTopicFilter();assert.equal(renders,1);assert.equal(select.value,'verbos');
-ctx.ALL_QUESTIONS[0].topic='Crase';ctx.populateTopicFilter();assert.equal(renders,2);assert(html.includes('Crase (1q)'));assert.equal(select.value,'all');
+ctx.ALL_QUESTIONS[0].topic='Crase';ctx.window.markViewsDirty('report');ctx.populateTopicFilter();assert.equal(renders,2);assert(html.includes('Crase (1q)'));assert.equal(select.value,'all');
 ctx.state.activeCampaignId='b';ctx.populateTopicFilter();assert.equal(renders,3);
 fields['#questionBoardFilter'].value='B';ctx.populateTopicFilter();assert.equal(renders,4);assert(html.includes('Crase (0q)'));
 console.log('OK r173/r175: 4 guias preservados fora do estudo, banco incremental, troca de dados/portal, cache de tópicos e contagem zero honesta.');

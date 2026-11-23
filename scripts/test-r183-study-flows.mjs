@@ -27,6 +27,8 @@ function trailEnv(hearts=3){
     missionPool:()=>[{id:'portugues',subject:'Português'}],normalizeText:value=>String(value).toLowerCase()
   };
   ctx.window=ctx;vm.createContext(ctx);
+  vm.runInContext(readFileSync(new URL('../dist/progress-ledger.js',import.meta.url),'utf8'),ctx);
+  vm.runInContext(section(html,'function createProgressEventId(', 'function prepareProgressForSync('),ctx);
   vm.runInContext(section(html,'const TRAIL_HEART_REGEN_MS =','function renderCampaigns()'),ctx);
   return{ctx,nodes,messages,records,renders,question,get saves(){return saves;},get now(){return now;},set now(value){now=value;}};
 }

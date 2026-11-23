@@ -1,7 +1,7 @@
-> Versão atual r185: [correção do Caderno IA, aplicação e GitHub](docs/revisao-r185/LEIA-ME.md). O conteúdo abaixo registra os recursos anteriores preservados.
-# Jornada do Caçador — Guia Unificado (r185)
+> Versão atual r186: [Questões, sincronização e publicação](docs/revisao-r186/LEIA-ME.md). O conteúdo abaixo registra os recursos anteriores preservados.
+# Jornada do Caçador — Guia Unificado (r186)
 
-Revisão de 20/11/2026. [Aplicação da versão, GitHub e Supabase](docs/revisao-r183/LEIA-ME.md) · [Conferência do texto do Gemini](docs/revisao-r183/CONFERENCIA-GEMINI.md) · [Validação](docs/revisao-r183/VALIDACAO.txt).
+Revisão de 23/11/2026. [Aplicação da versão, GitHub e Supabase](docs/revisao-r186/LEIA-ME.md) · [Conferência do relato do Gemini e limites](docs/revisao-r186/CONFERENCIA.md) · [Validação](docs/revisao-r186/VALIDACAO.txt).
 
 Este guia substitui as instruções históricas que citavam cache r148, contagens fixas de questões e garantias sem evidência. Publicar código no GitHub e atualizar Supabase/Cloudflare são etapas distintas.
 
@@ -9,7 +9,7 @@ Este guia substitui as instruções históricas que citavam cache r148, contagen
 
 1. Escolha o portal do concurso e o edital correspondente. Um portal que já possui edital é preservado: para outro edital, crie outro portal ou use a exclusão explícita existente.
 2. Em Hoje, escolha a missão, a modalidade e o bloco de foco. O cronômetro no topo abre o modo de tela cheia; regressivo e tempo acumulado de hoje são modos diferentes. Wake Lock e fullscreen dependem do navegador.
-3. Em Questões, filtre disciplina e assunto antes de iniciar. A seleção é mantida nos modos de treino. Sem questões compatíveis, o aplicativo informa a ausência.
+3. Em Questões → Resolver, filtre disciplina e assunto antes de iniciar. Simulados, Central de Provas e Desempenho carregam ao abrir seu próprio painel. A seleção é mantida nos modos de treino. Sem questões compatíveis, o aplicativo informa a ausência.
 4. Confira origem, fonte e situação do gabarito. Sem chave válida, anulação ou sugestão de IA não se tornam acerto/erro confirmado. Comentário gerado não equivale a revisão factual.
 5. Use Continuar depois para preservar a sessão. O salvamento é conferido antes de atalhos que saem do treino.
 6. Em Estudar, alterne Resumos, Flashcards, Anotações, Caderno IA e Leis & Textos. Os Manuais do Caçador ficam em Menu → ajuda e não são material de disciplina, revisão ou fonte de XP.

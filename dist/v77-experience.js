@@ -3178,14 +3178,45 @@
   function normalizedDifficulty(question){const value=String(question?.difficulty||'medio').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();return value.startsWith('fac')?'facil':value.startsWith('dif')?'dificil':'medio'}
   function topicKey(value){const s=String(value||'');if(!s)return'';const c=topicKey._c||(topicKey._c=new Map());if(s.length<=600){const hit=c.get(s);if(hit!==undefined)return hit}const out=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();if(s.length<=600){if(c.size>15000)c.clear();c.set(s,out)}return out}
 
+  function repairKnownExamTextArtifacts(value){
+    // Known extraction splits only; joining arbitrary words can change a key.
+    return String(value??'').replace(/\breportag\s+em\b/gi,match=>/^R/.test(match)?'Reportagem':'reportagem').replace(/\b([Ll])e\s+i\b/g,'$1ei');
+  }
+  window.repairKnownExamTextArtifacts=repairKnownExamTextArtifacts;
+  function getQuestionQualityDecision(item){
+    const statement=String(item?.statement||item?.question||''),associated=String(item?.associated_text||'').trim(),options=Array.isArray(item?.options)?item.options:[];
+    const roman=['I','II','III','IV','V','VI','VII','VIII','IX','X'],required=new Set(),declared=new Set();
+    for(const option of options){
+      const text=String(option||'').replace(/^\s*(?:\([A-E]\)|[A-E][).])\s*/i,'').trim();
+      const remainder=text.replace(/\b(?:apenas|somente|e|ou|a|os|as|itens|afirmativas|assertivas|est[aã]o|s[aã]o|corretos?|corretas?|incorretos?|incorretas?)\b/gi,'').replace(/\b(?:VIII|VII|III|VI|IV|IX|II|I|V|X)\b/g,'').replace(/[\s.,;:()\-–]+/g,'');
+      if(!remainder&&/\b(?:VIII|VII|III|VI|IV|IX|II|I|V|X)\b/.test(text)){
+        for(const match of text.matchAll(/\b(VIII|VII|III|VI|IV|IX|II|I|V|X)\b/g))required.add(match[1]);
+        for(const match of text.matchAll(/\b(VIII|VII|III|VI|IV|IX|II|I|V|X)\s*(?:a|–|-)\s*(VIII|VII|III|VI|IV|IX|II|I|V|X)\b/g)){const from=roman.indexOf(match[1]),to=roman.indexOf(match[2]);if(from>=0&&to>=from)for(let i=from;i<=to;i++)required.add(roman[i]);}
+      }
+    }
+    const full=`${statement}\n${associated}`;
+    for(const match of full.matchAll(/(?:^|[\s:;.!?])(?:\(\s*)?(VIII|VII|III|VI|IV|IX|II|I|V|X)\s*(?:\)|[.:\-–])\s+(?=\S)/g))declared.add(match[1]);
+    const missing=[...required].filter(value=>!declared.has(value));
+    const parts=typeof window.questionCommandParts==='function'?window.questionCommandParts(statement,associated,item?.command||''):{command:statement,base:associated};
+    const referencesSource=/\b(?:(?:no|nesse|neste|do|desse|deste)\s+(?:excerto|trecho|fragmento)|(?:no|do|ao|o|segundo o|conforme o|com o)\s+texto(?:\s+\d+)?(?!\s+(?:constitucional|legal|normativo|da (?:lei|constituicao)|do (?:artigo|codigo)))|nas?\s+linhas?\s+\d+|nos?\s+versos?\s+\d+)\b/.test(topicKey(statement));
+    const quotedSupport=/[“"‘']([^”"’']{12,})[”"’']/.test(statement)&&!/\b(?:em relacao ao texto|segundo o texto|de acordo com o texto|conforme o texto)\b/.test(topicKey(statement));
+    const hasSupport=associated.length>=12||String(parts.base||'').length>=35||quotedSupport;
+    const explicit=item?.needs_source===true||item?.structure_needs_review===true||item?.review_status==='source_not_matched'||['incomplete','needs_source','source_not_matched'].includes(String(item?.quality_status||''));
+    const needsSource=explicit||missing.length>0||(referencesSource&&!hasSupport);
+    const reason=missing.length?`Faltam as assertivas ${missing.join(', ')} citadas nas alternativas. Confira o PDF antes do treino.`:referencesSource&&!hasSupport?'A questão faz referência a um texto ou excerto não recuperado. Confira o PDF antes do treino.':explicit?(item?.quality_reason||'A fonte ou a estrutura da questão aguarda revisão.'):'Estrutura disponível para conferência.';
+    return{needs_source:needsSource,needs_review:needsSource,quality_status:needsSource?'needs_source':'complete',reason,missing_assertions:missing};
+  }
+  window.getQuestionQualityDecision=getQuestionQualityDecision;
   const questionDisciplineCache=new WeakMap();
   function questionDisciplineDecision(item){
-    const st=String(item?.statement||item?.question||''),tp=String(item?.topic||'');
-    const declaredRaw=String(item?.classification_declared_subject||item?.subject||'');
-    const source=String(item?.subject_source||'').toLowerCase();
+    const st=String(item?.statement||item?.question||''),tp=String(item?.topic||''),associated=String(item?.associated_text||''),command=String(item?.command||'');
+    const classificationSources=[item?.subject_source,item?.classification_source].map(value=>String(value||'').toLowerCase());
+    const source=classificationSources.find(value=>['manual','manual_revisado','humano','humana','revisado'].includes(value))||classificationSources.find(Boolean)||'';
+    const declaredRaw=String(['manual','manual_revisado','humano','humana','revisado'].includes(source)?item?.subject||item?.classification_declared_subject||'':item?.classification_declared_subject||item?.subject||'');
     const options=Array.isArray(item?.options)?item.options:[];
     const cached=item&&typeof item==='object'?questionDisciplineCache.get(item):null;
-    if(cached&&cached.st===st&&cached.tp===tp&&cached.declaredRaw===declaredRaw&&cached.source===source&&cached.review===Boolean(item?.classification_needs_review)&&cached.topicReview===Boolean(item?.topic_classification_needs_review)&&cached.reason===item?.classification_reason&&cached.reviewStatus===item?.review_status&&cached.category===item?.category&&cached.id===item?.id&&cached.options.length===options.length&&options.every((o,i)=>cached.options[i]===o))return cached.result;
+    const qualitySignature=JSON.stringify([item?.needs_source,item?.structure_needs_review,item?.quality_status,item?.quality_reason]);
+    if(cached&&cached.st===st&&cached.tp===tp&&cached.associated===associated&&cached.command===command&&cached.qualitySignature===qualitySignature&&cached.declaredRaw===declaredRaw&&cached.source===source&&cached.review===Boolean(item?.classification_needs_review)&&cached.topicReview===Boolean(item?.topic_classification_needs_review)&&cached.reason===item?.classification_reason&&cached.reviewStatus===item?.review_status&&cached.category===item?.category&&cached.id===item?.id&&cached.options.length===options.length&&options.every((o,i)=>cached.options[i]===o))return cached.result;
     const valid=s=>Boolean(s&&s!=='Conteúdo Geral'&&!isInvalidTrailSubject(s));
     const declared=canonicalSubjectName(declaredRaw);
     let result;
@@ -3193,23 +3224,23 @@
       result={subject:'Conteúdo Geral',source:'manual_da_plataforma',confidence:0,needs_review:true,reason:'Manual de uso da plataforma; fora dos treinos por disciplina.'};
     }else if(item?.review_status==='source_not_matched'){
       result={subject:valid(declared)?declared:'Conteúdo Geral',source:'verificacao_pdf',confidence:0,needs_review:true,reason:'A questão não foi localizada com segurança no PDF; confirme a fonte antes do treino.'};
-    }else if(['manual','humano','humana','revisado'].includes(source)&&valid(declared)){
-      result={subject:declared,source:'manual',confidence:1,needs_review:false,reason:'Disciplina confirmada por revisão humana.'};
     }else{
-      // The grammatical command takes precedence over the subject of a quoted legal text.
-      const command=topicKey(st);
-      const grammaticalCommand=/\b(?:concordancia (?:verbal|nominal)|regencia (?:verbal|nominal)|correcao gramatical|sinal indicativo de crase|funcao sintatica|classe gramatical|colocacao pronominal|voz passiva|voz ativa|voc[aá]bulo .{0,35}classifica se|conjuncao .{0,45}(?:exprime|expressa|introduz)|pronome .{0,35}(?:refere|retoma))\b/.test(command);
-      const inference=grammaticalCommand?{subject:'Língua Portuguesa',ambiguous:false,confidence:0.9}:(typeof window.inferStrictQuestionSubjectDecision==='function'
-        ?window.inferStrictQuestionSubjectDecision(st,tp,'Conteúdo Geral',options)
-        :{subject:typeof window.inferStrictQuestionSubject==='function'?window.inferStrictQuestionSubject(st,tp,'Conteúdo Geral',options):canonicalSubjectName('Conteúdo Geral',`${tp} ${st}`),ambiguous:false,confidence:0.75});
+      const evidence=typeof window.exclusiveQuestionSubjectEvidence==='function'?window.exclusiveQuestionSubjectEvidence(st,tp,options,associated,command):{subject:'',conflict:false};
+      const inference=typeof window.inferStrictQuestionSubjectDecision==='function'
+        ?window.inferStrictQuestionSubjectDecision(st,tp,'Conteúdo Geral',options,{associated_text:associated,command})
+        :{subject:typeof window.inferStrictQuestionSubject==='function'?window.inferStrictQuestionSubject(st,tp,'Conteúdo Geral',options):canonicalSubjectName('Conteúdo Geral',`${tp} ${st}`),ambiguous:false,confidence:0.75};
       const detected=inference.subject;
-      const subject=valid(detected)?detected:(valid(declared)?declared:'Conteúdo Geral');
+      const human=['manual','manual_revisado','humano','humana','revisado'].includes(source)&&valid(declared);
+      const subject=human?declared:valid(detected)?detected:(valid(declared)?declared:'Conteúdo Geral');
       const conflict=valid(declared)&&valid(detected)&&subjectKey(declared)!==subjectKey(detected);
       const ambiguous=inference.ambiguous===true,queued=item?.classification_needs_review===true||item?.topic_classification_needs_review===true;
-      result={subject,source:valid(detected)?'heuristica':'origem',confidence:conflict||ambiguous?0.35:valid(detected)?inference.confidence:valid(declared)?0.65:0,
-        needs_review:queued||conflict||ambiguous||!valid(subject),candidates:inference.candidates||[],reason:queued?(item.classification_reason||'Classificação ou assunto aguardam revisão.'):conflict?`Disciplina declarada: ${declared}; conteúdo identificado: ${detected}. Confirme antes do treino.`:ambiguous?'O conteúdo apresenta sinais de mais de uma disciplina; confirme a classificação antes do treino.':!valid(subject)?'Não foi possível identificar uma disciplina com segurança.':'Classificação automática; sujeita a conferência.'};
+      const blockingConflict=human?Boolean(evidence.subject&&subjectKey(evidence.subject)!==subjectKey(declared)):conflict;
+      result={subject,source:human?'manual':valid(detected)?inference.source||'heuristica':'origem',confidence:blockingConflict||ambiguous?0.35:human?1:valid(detected)?inference.confidence:valid(declared)?0.65:0,
+        needs_review:queued||blockingConflict||(!human&&ambiguous)||evidence.conflict||!valid(subject),candidates:inference.candidates||[],reason:queued?(item.classification_reason||'Classificação ou assunto aguardam revisão.'):blockingConflict?`Disciplina declarada: ${declared}; conteúdo identificado: ${detected}. Confirme antes do treino.`:!human&&ambiguous?'O conteúdo apresenta sinais de mais de uma disciplina; confirme a classificação antes do treino.':!valid(subject)?'Não foi possível identificar uma disciplina com segurança.':human?'Disciplina confirmada por revisão humana.':'Classificação automática; sujeita a conferência.'};
     }
-    if(item&&typeof item==='object')questionDisciplineCache.set(item,{st,tp,declaredRaw,source,review:Boolean(item?.classification_needs_review),topicReview:Boolean(item?.topic_classification_needs_review),reason:item?.classification_reason,reviewStatus:item?.review_status,options:[...options],category:item.category,id:item.id,result});
+    const quality=getQuestionQualityDecision(item);
+    if(quality.needs_review)result={...result,needs_review:true,needs_source:true,quality_status:quality.quality_status,reason:quality.reason};
+    if(item&&typeof item==='object')questionDisciplineCache.set(item,{st,tp,associated,command,qualitySignature,declaredRaw,source,review:Boolean(item?.classification_needs_review),topicReview:Boolean(item?.topic_classification_needs_review),reason:item?.classification_reason,reviewStatus:item?.review_status,options:[...options],category:item.category,id:item.id,result});
     return result;
   }
 
@@ -3281,25 +3312,27 @@
   }
 
   function sanitizeAllQuestionsAndErrorsSubjects(force=false){
-    if(typeof purgeHunterManualStudyArtifacts==='function')purgeHunterManualStudyArtifacts();
     if(typeof ensureNativeQuestionBankLoaded==='function')ensureNativeQuestionBankLoaded();
     const qArr=Array.isArray(ALL_QUESTIONS)?ALL_QUESTIONS:[];
     const errObj=(typeof state==='object'&&state?.errors&&typeof state.errors==='object')?state.errors:null;
     const campId=(typeof state==='object'&&state?.activeCampaignId)||'default';
     const missionsLen=(typeof state==='object'&&Array.isArray(state?.customCampaign?.missions))?state.customCampaign.missions.length:0;
-    const sig=`${qArr.length}|${errObj?Object.keys(errObj).length:0}|${campId}|${missionsLen}|${qArr[0]?.statement?.slice(0,20)||''}|${qArr[qArr.length-1]?.statement?.slice(0,20)||''}`;
+    const sig=`${qArr.length}|${errObj?Object.keys(errObj).length:0}|${campId}|${missionsLen}|${window.JCQuestionsWorkspace?.revision||0}|${qArr[0]?.statement?.slice(0,20)||''}|${qArr[qArr.length-1]?.statement?.slice(0,20)||''}`;
     if(!force&&sanitizeAllQuestionsAndErrorsSubjects._lastArray===qArr&&sanitizeAllQuestionsAndErrorsSubjects._lastSig===sig)return;
+    if(typeof purgeHunterManualStudyArtifacts==='function')purgeHunterManualStudyArtifacts();
     sanitizeAllQuestionsAndErrorsSubjects._lastArray=qArr;
     const isValidFn=typeof window.isValidPedagogicalQuestion==='function'?window.isValidPedagogicalQuestion:(()=>true);
     const byStmt=new Map();
     if(Array.isArray(ALL_QUESTIONS)){
       for(let i=ALL_QUESTIONS.length-1;i>=0;i--){
         const qItem=ALL_QUESTIONS[i];
-        if(!qItem||typeof qItem!=='object'||(typeof isPlatformManualStudyArtifact==='function'&&isPlatformManualStudyArtifact(qItem))||!isValidFn(qItem)){
+        if(!qItem||typeof qItem!=='object'||(typeof isPlatformManualStudyArtifact==='function'&&isPlatformManualStudyArtifact(qItem))||!isValidFn(qItem,{allowSourceReview:true})){
           ALL_QUESTIONS.splice(i,1);
           continue;
         }
         const decision=questionDisciplineDecision(qItem);
+        const quality=getQuestionQualityDecision(qItem);
+        if(quality.needs_review){qItem.needs_source=true;qItem.structure_needs_review=true;qItem.quality_status=quality.quality_status;qItem.quality_reason=quality.reason;}
         const realSubj=decision.subject;
         if(decision.needs_review&&!qItem.classification_declared_subject)qItem.classification_declared_subject=qItem.subject||'';
         qItem.classification_needs_review=decision.needs_review;
@@ -3307,7 +3340,7 @@
         if(realSubj&&!isInvalidTrailSubject(realSubj)&&realSubj!==qItem.subject){
           qItem.subject=realSubj;
         }
-        if(isTopicContaminatedByWrongSubject(qItem.topic,qItem.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
+        if(!['manual','manual_revisado','humano','humana','revisado'].includes(String(qItem.subject_source||qItem.classification_source||'').toLowerCase())&&isTopicContaminatedByWrongSubject(qItem.topic,qItem.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
           qItem.topic=inferQuestionPedagogicalTopic(qItem.statement,qItem.subject);
         }
         qItem.subject_canonical=subjectKey(qItem.subject||'');
@@ -3328,14 +3361,16 @@
     if(state?.customQuestionsByCampaign&&typeof state.customQuestionsByCampaign==='object'){
       for(const [cId,list] of Object.entries(state.customQuestionsByCampaign)){
         if(!Array.isArray(list))continue;
-        state.customQuestionsByCampaign[cId]=list.filter(qItem=>qItem&&typeof qItem==='object'&&isValidFn(qItem)).map(qItem=>{
+        state.customQuestionsByCampaign[cId]=list.filter(qItem=>qItem&&typeof qItem==='object'&&isValidFn(qItem,{allowSourceReview:true})).map(qItem=>{
           const decision=questionDisciplineDecision(qItem);
+          const quality=getQuestionQualityDecision(qItem);
+          if(quality.needs_review){qItem.needs_source=true;qItem.structure_needs_review=true;qItem.quality_status=quality.quality_status;qItem.quality_reason=quality.reason;}
           const realSubj=decision.subject;
           if(decision.needs_review&&!qItem.classification_declared_subject)qItem.classification_declared_subject=qItem.subject||'';
           qItem.classification_needs_review=decision.needs_review;
           qItem.classification_reason=decision.reason;
           if(realSubj&&!isInvalidTrailSubject(realSubj))qItem.subject=realSubj;
-          if(isTopicContaminatedByWrongSubject(qItem.topic,qItem.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
+          if(!['manual','manual_revisado','humano','humana','revisado'].includes(String(qItem.subject_source||qItem.classification_source||'').toLowerCase())&&isTopicContaminatedByWrongSubject(qItem.topic,qItem.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
             qItem.topic=inferQuestionPedagogicalTopic(qItem.statement,qItem.subject);
           }
           return qItem;
@@ -3353,16 +3388,15 @@
         }
         if(err.question){
           const testObj={statement:err.question,options:Array.isArray(err.options)&&err.options.length>=2?err.options:['Opção A','Opção B'],topic:err.topic||'',associated_text:err.associated_text||''};
-          if(!isValidFn(testObj)){
+          if(!isValidFn(testObj,{allowSourceReview:true})){
             delete state.errors[errKey];
             errChanged=true;
             continue;
           }
         }
-        if(/^(?:edital|regras do edital|instru[cç][oõ]es da prova|converg[eê]ncia lingu[ií]stica)$/i.test(String(err.topic||'').trim())&&!err.associated_text&&String(err.question||'').length<220){
-          delete state.errors[errKey];
+        if(/^(?:edital|regras do edital|instru[cç][oõ]es da prova|converg[eê]ncia lingu[ií]stica)$/i.test(String(err.topic||'').trim())&&!err.associated_text&&String(err.question||'').length<220&&err.needs_source!==true){
+          err.needs_source=true;err.structure_needs_review=true;err.quality_status='needs_source';err.quality_reason='Confira o enunciado completo e a fonte antes de retomar esta revisão.';
           errChanged=true;
-          continue;
         }
         const stKey=topicKey(err.question||'');
         const matchedQ=stKey?byStmt.get(stKey):null;
@@ -3373,22 +3407,27 @@
             err.options=[...matchedQ.options];
             err.correct_index=matchedQ.correct_index;
           }
+          for(const field of ['associated_text','command','needs_source','structure_needs_review','quality_status','quality_reason','classification_needs_review','classification_reason'])if(matchedQ[field]!==undefined)err[field]=matchedQ[field];
         }else if(err.question||err.topic){
-          const realErrSubj=resolveStrictQuestionDiscipline(err.question||'',err.topic||'',err.subject||'',err.options||[]);
+          const errorDecision=questionDisciplineDecision(err),realErrSubj=errorDecision.subject;
+          err.classification_needs_review=errorDecision.needs_review;err.classification_reason=errorDecision.reason;
           if(realErrSubj&&!isInvalidTrailSubject(realErrSubj)&&err.subject!==realErrSubj){
             err.subject=realErrSubj;
             errChanged=true;
           }
-          if(isTopicContaminatedByWrongSubject(err.topic,err.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
+          if(!['manual','manual_revisado','humano','humana','revisado'].includes(String(err.subject_source||err.classification_source||'').toLowerCase())&&isTopicContaminatedByWrongSubject(err.topic,err.subject)&&typeof inferQuestionPedagogicalTopic==='function'){
             err.topic=inferQuestionPedagogicalTopic(err.question||'',err.subject);
             errChanged=true;
           }
         }
+        const errorQuality=getQuestionQualityDecision(err);
+        if(errorQuality.needs_review){err.needs_source=true;err.structure_needs_review=true;err.quality_status=errorQuality.quality_status;err.quality_reason=errorQuality.reason;}
       }
       if(errChanged&&typeof save==='function')save();
     }
     const afterArr=Array.isArray(ALL_QUESTIONS)?ALL_QUESTIONS:[];
-    sanitizeAllQuestionsAndErrorsSubjects._lastSig=`${afterArr.length}|${errObj?Object.keys(errObj).length:0}|${campId}|${missionsLen}|${afterArr[0]?.statement?.slice(0,20)||''}|${afterArr[afterArr.length-1]?.statement?.slice(0,20)||''}`;
+    sanitizeAllQuestionsAndErrorsSubjects._lastArray=afterArr;
+    sanitizeAllQuestionsAndErrorsSubjects._lastSig=`${afterArr.length}|${errObj?Object.keys(errObj).length:0}|${campId}|${missionsLen}|${window.JCQuestionsWorkspace?.revision||0}|${afterArr[0]?.statement?.slice(0,20)||''}|${afterArr[afterArr.length-1]?.statement?.slice(0,20)||''}`;
   }
   window.sanitizeAllQuestionsAndErrorsSubjects=sanitizeAllQuestionsAndErrorsSubjects;
 
@@ -3486,17 +3525,12 @@
   }
   window.updateLocalTopicMastery=updateLocalTopicMastery;
 
-  function applyXpLocal(amount,reason=''){
-    if(!amount||amount<=0||typeof state!=='object'||!state)return;
-    state.learning=state.learning||{};
-    state.learning.xp=(Number(state.learning.xp)||0)+amount;
-    if(reason){
-      state.learning.xpLog=Array.isArray(state.learning.xpLog)?state.learning.xpLog:[];
-      state.learning.xpLog.push({at:new Date().toISOString(),amount,reason});
-      if(state.learning.xpLog.length>50)state.learning.xpLog.shift();
-    }
+  function applyXpLocal(amount,reason='',eventId){
+    if(!Number.isFinite(amount)||amount<=0||typeof state!=='object'||!state||typeof window.creditLearningXp!=='function')return false;
+    const awarded=window.creditLearningXp(amount,reason,eventId);
     if(typeof save==='function')save();
     if(typeof renderHero==='function')renderHero();
+    return awarded;
   }
   window.applyXpLocal=applyXpLocal;
 
@@ -3603,6 +3637,8 @@
   window.answerKeyDetails = answerKeyDetails;
 
   function gradeAnswer(q, chosen) {
+    const quality=typeof getQuestionQualityDecision==='function'?getQuestionQualityDecision(q):{needs_review:false};
+    if(quality.needs_review)return{status:'needs_source',scored:false,chosen,quality};
     const status = answerKeyStatus(q);
     if (status === "anulada" || status === "sem_gabarito") return { status, scored: false, chosen };
     if (typeof chosen === 'boolean' || typeof chosen === 'object' || chosen === null || chosen === undefined || String(chosen).trim() === '' ||
@@ -3681,21 +3717,37 @@
   }
   window.classifyQuestion = classifyQuestion;
 
+  function missionRewardContext(){
+    const sessionOwnerId=cloudSession?.user?.id||null;
+    const ownerId=String(sessionOwnerId||state?._ownerUserId||'guest');
+    const campaignId=String(state?.activeCampaignId||'default');
+    const dbId=String((typeof activeCampaign==='function'&&activeCampaign()?.dbId)||'');
+    const resetEpoch=Number(state?._resetEpoch||0);
+    const accessToken=cloudSession?.access_token;
+    const current=()=>String(cloudSession?.user?.id||state?._ownerUserId||'guest')===ownerId&&(!sessionOwnerId||cloudSession?.user?.id===sessionOwnerId)&&(!state?._ownerUserId||String(state._ownerUserId)===ownerId)&&String(state?.activeCampaignId||'default')===campaignId&&String((typeof activeCampaign==='function'&&activeCampaign()?.dbId)||'')===dbId&&Number(state?._resetEpoch||0)===resetEpoch;
+    return {ownerId,campaignId,dbId,resetEpoch,accessToken,current};
+  }
+
   async function completeMissionHonestServer(missionId,subject,correct,total,isBoss=false){
-    const safeTotal=Math.max(0,Number(total)||0);
-    const safeCorrect=safeTotal>0?Math.max(0,Math.min(safeTotal,Number(correct)||0)):0;
+    const context=missionRewardContext();
+    if(!context.current())return null;
+    const count=value=>(typeof value==='number'||(typeof value==='string'&&value.trim()!==''))&&Number.isSafeInteger(Number(value))&&Number(value)>=0;
+    const valid=count(total)&&count(correct)&&Number(correct)<=Number(total);
+    const safeTotal=valid?Number(total):0;
+    const safeCorrect=valid?Number(correct):0;
     const localScore=safeTotal>0?Number(((safeCorrect/safeTotal)*100).toFixed(1)):0;
     const localPerfXp=safeTotal>0?Math.min(60,Math.floor(localScore*0.6)):0;
     const masteryBonus=(safeTotal>=5&&localScore>=70)?20:0;
     const bossBonus=(isBoss&&safeTotal>=5&&localScore>=70)?200:0;
     const fallbackObj={base_xp:40,performance_xp:localPerfXp,mastery_bonus:masteryBonus,boss_bonus:bossBonus,total_xp:40+localPerfXp+masteryBonus+bossBonus,score:localScore,questions_total:safeTotal,questions_correct:safeCorrect};
-    if(!cloudSession?.access_token||!navigator.onLine)return fallbackObj;
-    const campaignId=(typeof activeCampaign==='function'&&activeCampaign()?.id)||state?.activeCampaignId||'default';
+    if(!context.accessToken||!navigator.onLine)return fallbackObj;
+    // The mastery RPCs use the local text ID; freeze it while guarding the database identity too.
+    const campaignId=context.campaignId;
     try{
       const res=await fetch(`${SUPABASE_URL}/rest/v1/rpc/complete_mission_honest`,{
         method:'POST',
         headers:{
-          ...authHeaders(cloudSession.access_token),
+          ...authHeaders(context.accessToken),
           'Content-Type':'application/json'
         },
         body:JSON.stringify({
@@ -3707,10 +3759,19 @@
           p_is_boss:Boolean(isBoss)
         })
       });
+      if(!context.current())return null;
       if(!res.ok)return fallbackObj;
-      return (await res.json())||fallbackObj;
+      const receipt=await res.json();
+      if(!context.current())return null;
+      // Only the requested, valid counts can justify a performance reward.
+      if(!receipt||Number(receipt.questions_total)!==safeTotal||Number(receipt.questions_correct)!==safeCorrect)return fallbackObj;
+      const bounded=(value,max)=>typeof value==='number'&&Number.isFinite(value)&&value>=0?Math.min(Math.floor(value),max):0;
+      const performance=bounded(receipt.performance_xp,localPerfXp);
+      const mastery=bounded(receipt.mastery_bonus,masteryBonus);
+      const boss=bounded(receipt.boss_bonus,bossBonus);
+      return {...fallbackObj,performance_xp:performance,mastery_bonus:mastery,boss_bonus:boss,total_xp:40+performance+mastery+boss};
     }catch(_e){
-      return fallbackObj;
+      return context.current()?fallbackObj:null;
     }
   }
   window.completeMissionHonestServer=completeMissionHonestServer;
@@ -3718,16 +3779,35 @@
   async function finalizeDailyMissionWithHonestXp(){
     const missionId=state?.daily;
     if(!missionId)return;
+    const context=missionRewardContext();
+    if(!context.current())return;
     const mission=(typeof missionPool==='function'?missionPool():[]).find(m=>m.id===missionId);
+    if(!mission)return;
+    const receiptKey=`mission-performance:${JSON.stringify([context.ownerId,context.dbId||context.campaignId,context.resetEpoch,String(missionId)])}`;
+    const pending=finalizeDailyMissionWithHonestXp.pending||(finalizeDailyMissionWithHonestXp.pending=new Set());
+    if(pending.has(receiptKey)||state?.learning?.missionReceipts?.[receiptKey])return;
     const subject=mission?.subject||'geral';
     const tracker=state?.dailyTracker||{};
-    const total=Math.max(0,Number(tracker.questionsAnswered||0));
-    const correct=total>0?Math.max(0,Math.min(total,Number(tracker.questionsCorrect||0))):0;
+    const count=value=>(typeof value==='number'||(typeof value==='string'&&value.trim()!==''))&&Number.isSafeInteger(Number(value))&&Number(value)>=0;
+    const trackerMatches=(!tracker.missionId||String(tracker.missionId)===String(missionId))&&(!tracker.campaignId||[context.campaignId,context.dbId].includes(String(tracker.campaignId)));
+    const validCounts=trackerMatches&&count(tracker.questionsAnswered)&&count(tracker.questionsCorrect)&&Number(tracker.questionsCorrect)<=Number(tracker.questionsAnswered);
+    const total=validCounts?Number(tracker.questionsAnswered):0;
+    const correct=validCounts?Number(tracker.questionsCorrect):0;
     const isBoss=Boolean(state?.bosses?.[missionId]);
+    pending.add(receiptKey);
+    try{
     if(typeof complete==='function')complete(missionId);
+    if(!context.current())return;
     const server=await completeMissionHonestServer(missionId,subject,correct,total,isBoss);
-    const bonus = Math.max(0, (Number(server?.performance_xp) || 0) + (Number(server?.mastery_bonus) || 0));
-    if (bonus > 0) applyXpLocal(bonus, "bonus_desempenho_missao");
+    if(!server||!context.current())return;
+    // The mission base is already derived from done; only this one-time performance event is credited.
+    state.learning=state.learning||{};
+    state.learning.missionReceipts=state.learning.missionReceipts||{};
+    if(state.learning.missionReceipts[receiptKey])return;
+    state.learning.missionReceipts[receiptKey]={at:new Date().toISOString(),missionId:String(missionId),campaignId:context.dbId||context.campaignId,total,correct};
+    const bonus = server.performance_xp + server.mastery_bonus;
+    if (bonus > 0) applyXpLocal(bonus, "bonus_desempenho_missao", receiptKey);
+    else if(typeof save==='function')save();
     const ac = Number(server?.questions_correct) || 0;
     const n = Number(server?.questions_total) || 0;
     const pct = Number(server?.score) || 0;
@@ -3738,6 +3818,7 @@
     toast(`Recibo da missão: ${ac}/${n} (${pct}%). XP extra: desempenho +${perf}, domínio +${mast}${bossXp ? `, chefe +${bossXp}` : ""}. A base da missão continua no XP do app. 0% de acerto não gera bônus.${sampleNote}`);
     if(typeof renderHero==='function')renderHero();
     if(cloudSession&&navigator.onLine&&typeof pushCloudState==='function')pushCloudState();
+    }finally{pending.delete(receiptKey);}
   }
   window.finalizeDailyMissionWithHonestXp=finalizeDailyMissionWithHonestXp;
 
@@ -3865,6 +3946,7 @@
   }
 
   function renderQuickBoaRespostaBar(){
+    if(q('#questionsQuickPractice')&&!q('#questionsQuickPractice').open)return;
     ensureNativeQuestionBankLoaded();
     const trainer=q('.questionTrainer');
     if(!trainer)return;
@@ -4052,7 +4134,20 @@
         q('#printQuestionBookletBtn').onclick=exportPrintableQuestionBooklet;
       }
     }
-    renderQuickBoaRespostaBar();
+    ensureLazyQuickPractice();
+  }
+
+  function ensureLazyQuickPractice(){
+    const trainer=q('.questionTrainer');
+    if(!trainer||q('#questionsQuickPractice'))return;
+    const details=document.createElement('details');details.id='questionsQuickPractice';details.className='questionsQuickPractice';
+    details.innerHTML='<summary>Treinos rápidos por banca e disciplina</summary>';
+    trainer.appendChild(details);
+    details.addEventListener('toggle',()=>{
+      if(!details.open)return;
+      renderQuickBoaRespostaBar();
+      const bar=q('#quickBoaRespostaBar');if(bar)details.appendChild(bar);
+    });
   }
 
   function populateTopicFilter(){
@@ -4064,10 +4159,10 @@
     const board=q('#questionBoardFilter')?.value||'all';
     const currentTopic=topicSelect.value||'all';
     const subjKey=subject==='all'?'all':topicKey(canonicalSubjectName(subject));
-    const topicSignature=JSON.stringify([state.activeCampaignId,subject,board,
-      (typeof orderedMissions==='function'?orderedMissions():[]).map(m=>[m.id,m.subject,m.name]),
-      (ALL_QUESTIONS||[]).map(item=>[item.subject_canonical,item.topic_canonical,item.topic,item.board,item.statement])]);
-    if(topicSelect._sourceSignature===topicSignature)return;
+    const sourceArray=ALL_QUESTIONS||[];
+    const topicSignature=JSON.stringify([window.JCQuestionsWorkspace?.scopeKey()||state.activeCampaignId,window.JCQuestionsWorkspace?.revision||0,subject,board,sourceArray.length,
+      (typeof orderedMissions==='function'?orderedMissions():[]).map(m=>[m.id,m.subject,m.name])]);
+    if(topicSelect._sourceArray===sourceArray&&topicSelect._sourceSignature===topicSignature)return;
     const bySubjBucket=new Map();
     const byTopicCount=new Map();
     const byTopicSample=new Map();
@@ -4131,20 +4226,25 @@
       const cnt=byTopicCount.get(k)||0;
       entries.push([k,`${shortLabel(label,48)} (${cnt}q)`]);
     }
+    topicSelect._sourceArray=sourceArray;
     topicSelect._sourceSignature=topicSignature;
     topicSelect.innerHTML='<option value="all">Todos os assuntos da disciplina (Ordem Cronológica)</option>'+entries.map(([key,label])=>`<option value="${escText(key)}" title="${escText(label)}">${escText(label)}</option>`).join('');
     topicSelect.value=seenKeys.has(currentTopic)?currentTopic:'all';
-    populateExamHubSelects();
+    if(!window.JCQuestionsWorkspace||window.JCQuestionsWorkspace.isActive('provas'))populateExamHubSelects();
   }
 
+  let questionFilterPoolCache=null;
   function filteredQuestionPool(){
     ensureNativeQuestionBankLoaded();
     sanitizeAllQuestionsAndErrorsSubjects();
     const subject=q('#questionSubject')?.value||'all',board=q('#questionBoardFilter')?.value||'all',topic=q('#questionTopic')?.value||'all',difficulty=q('#questionDifficulty')?.value||'all',origin=q('#questionOrigin')?.value||'all',battleMode=q('#questionBattleMode')?.value||'progressive',historyFilter=q('#questionHistoryFilter')?.value||'all';
-    const allMatchingSubject=(ALL_QUESTIONS||[]).filter(item=>isQuestionDisciplineEligible(item,subject));
-    const source=allMatchingSubject.length?allMatchingSubject:(typeof questionsForMode==='function'?questionsForMode('battle',subject).filter(item=>isQuestionDisciplineEligible(item,subject)):[]);
     const topicSel=q('#questionTopic');
     const selectedTopicLabel=topicSel&&topicSel.selectedIndex>=0?topicSel.options[topicSel.selectedIndex]?.text||'':'';
+    const followOrder=q('#followEditalOrderToggle')?q('#followEditalOrderToggle').checked:true;
+    const poolSignature=JSON.stringify([window.JCQuestionsWorkspace?.scopeKey()||state.activeCampaignId,window.JCQuestionsWorkspace?.revision||0,(ALL_QUESTIONS||[]).length,subject,board,topic,selectedTopicLabel,difficulty,origin,battleMode,historyFilter,followOrder]);
+    if(window.JCQuestionsWorkspace&&questionFilterPoolCache?.array===ALL_QUESTIONS&&questionFilterPoolCache.signature===poolSignature)return questionFilterPoolCache.pool;
+    const allMatchingSubject=(ALL_QUESTIONS||[]).filter(item=>isQuestionDisciplineEligible(item,subject));
+    const source=allMatchingSubject.length?allMatchingSubject:(typeof questionsForMode==='function'?questionsForMode('battle',subject).filter(item=>isQuestionDisciplineEligible(item,subject)):[]);
     let byTopic=source.filter(item=>questionMatchesBoardFilter(item,board)&&(topic==='all'||questionMatchesTopicFilter(item,topic,subject,selectedTopicLabel))&&(difficulty==='all'||normalizedDifficulty(item)===difficulty)&&(origin==='all'||normalizedOrigin(item)===origin));
     let filtered=byTopic.filter(item => !["sem_gabarito", "anulada"].includes(answerKeyStatus(item)));
     if(historyFilter==='answered'){
@@ -4169,7 +4269,6 @@
     // Filtro estrito quando disciplina específica está selecionada
     filtered=filtered.filter(item=>isQuestionDisciplineEligible(item,subject));
     // Ordenação pedagógica cronológica do edital (learning_order -> topic_canonical -> origem)
-    const followOrder=q('#followEditalOrderToggle')?q('#followEditalOrderToggle').checked:true;
     if(followOrder){
       filtered=[...filtered].sort((a,b)=>{
         const loA=Number(a.learning_order??computeQuestionEditalLearningOrder(a));
@@ -4181,6 +4280,7 @@
         return difficultyWeight(normalizedDifficulty(a))-difficultyWeight(normalizedDifficulty(b));
       });
     }
+    questionFilterPoolCache={array:ALL_QUESTIONS,signature:poolSignature,pool:filtered};
     return filtered;
   }
 
@@ -4200,7 +4300,7 @@
       const errCount=activeCampaignErrors().length;
       errBtn.textContent=`🔥 Reforçar meus erros (${errCount})`;
     }
-    updateSimuladoAvailability();
+    if(!window.JCQuestionsWorkspace||window.JCQuestionsWorkspace.isActive('simulados'))updateSimuladoAvailability();
   }
 
   function progressiveQuestions(pool,count=6){
@@ -4767,6 +4867,51 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   window.saveCurrentQuestionToNotes=saveCurrentQuestionToNotes;
 
   // Sobrescreve showQuestion e answerQuestion com Caixa de Pergunta Moderna (Estilo Qconcursos / TEC / boaResposta + Solo Leveling)
+  function questionAnswerNotice(item){
+    const quality=typeof window.getQuestionQualityDecision==='function'?window.getQuestionQualityDecision(item):null;
+    if(quality?.needs_source||quality?.needs_review)return `<div class="questionAnswerNotice needsReview" role="status"><b>Questão aguardando revisão da fonte</b><p>${escText(quality.reason||'O enunciado está incompleto. Confira o PDF antes de responder.')} Esta questão não registra acerto, erro ou XP.</p></div>`;
+    if(typeof isQuestionDisciplineEligible==='function'&&!isQuestionDisciplineEligible(item,'all'))return '<div class="questionAnswerNotice needsReview" role="status"><b>Classificação aguardando revisão</b><p>Confira a disciplina e o assunto desta questão antes de responder. Esta questão não registra acerto, erro ou XP.</p></div>';
+    const key=answerKeyDetails(item);
+    return !key.scored?`<div class="questionAnswerNotice pendingKey" role="status"><b>${escText(key.label)}</b><p>Você pode selecionar uma alternativa e consultar a explicação. Esta prática não registra acerto, erro ou XP até a validação do gabarito.</p></div>`:'';
+  }
+
+  function bindQuestionAnswerConfirmation(battle,item){
+    const confirmBtn=q('#confirmQuestionAnswerBtn'),status=q('#questionSelectionStatus');
+    const quality=typeof window.getQuestionQualityDecision==='function'?window.getQuestionQualityDecision(item):null;
+    const blocked=Boolean(quality?.needs_source||quality?.needs_review||(typeof isQuestionDisciplineEligible==='function'&&!isQuestionDisciplineEligible(item,'all')));
+    battle._selectedAnswerIndex=null;
+    const skipBtn=q('#skipQuestionBlankBtn');
+    if(skipBtn)skipBtn.disabled=Boolean(blocked||battle.answered||!answerKeyDetails(item).scored);
+    if(confirmBtn){confirmBtn.disabled=true;confirmBtn.hidden=Boolean(battle.answered);}
+    if(status)status.textContent=blocked?'Confira a fonte, a disciplina e o assunto na revisão do PDF antes de responder.':battle.answered?'Resposta já registrada nesta bateria.':'Selecione uma alternativa e confirme abaixo.';
+    qa('[data-question-index]').forEach(button=>{
+      button.setAttribute('aria-pressed','false');
+      if(blocked)button.disabled=true;
+      button.onclick=()=>{
+        if(activeQuestions!==battle||battle.questions[battle.current]!==item||battle.answered||blocked||button.disabled)return;
+        const chosen=Number(button.dataset.questionIndex);
+        if(!Number.isInteger(chosen)||chosen<0||chosen>=(item.options||[]).length)return;
+        battle._selectedAnswerIndex=chosen;
+        qa('[data-question-index]').forEach(option=>{
+          const selected=option===button;
+          option.classList.toggle('selectedOption',selected);
+          option.setAttribute('aria-pressed',String(selected));
+        });
+        if(confirmBtn)confirmBtn.disabled=false;
+        if(status)status.textContent=`Alternativa ${String.fromCharCode(65+chosen)} selecionada. Toque em “${answerKeyDetails(item).scored?'Responder':'Ver explicação'}” para confirmar.`;
+      };
+    });
+    if(confirmBtn)confirmBtn.onclick=()=>{
+      if(activeQuestions!==battle||battle.questions[battle.current]!==item||battle.answered||blocked||confirmBtn.disabled)return;
+      const selected=qa('[data-question-index]').find(button=>Number(button.dataset.questionIndex)===battle._selectedAnswerIndex);
+      if(!selected||selected.disabled)return;
+      confirmBtn.disabled=true;
+      window.answerQuestion(selected,item);
+      if(battle.answered){confirmBtn.hidden=true;if(status)status.textContent='Resposta confirmada. Confira a explicação abaixo.';}
+      else confirmBtn.disabled=false;
+    };
+  }
+
   window.showQuestion=function(){
     const battle=activeQuestions;
     if(!battle)return;
@@ -4799,7 +4944,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     const figHtml=figUrl
       ?`<div class="questionFigureBox" style="margin:10px 0;padding:10px;border-radius:12px;background:#071320;border:1px solid rgba(56,189,248,0.35);text-align:center;"><img src="${figUrl}" alt="Figura da questão" style="max-width:100%;max-height:280px;border-radius:8px;margin:0 auto;display:block;"><div class="small muted" style="margin-top:6px;">🖼️ Figura/Tabela extraída do documento original</div></div>`
       :(needsVisualCue?`<div class="questionFigureBox" style="margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(14,34,56,0.65);border:1px dashed rgba(56,189,248,0.4);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><span class="small muted">🖼️ Esta questão menciona uma figura, tabela ou gráfico:</span><label class="ghost small" style="width:auto;padding:4px 10px;font-size:11px;cursor:pointer;margin:0;">📎 Anexar Figura da Questão<input type="file" accept="image/*" id="attachQuestionFigureInput" hidden></label></div>`:'');
-    q('#questionText').innerHTML=formatStatementWithHighlights(item.statement,item)+figHtml;
+    q('#questionText').innerHTML=questionAnswerNotice(item)+formatStatementWithHighlights(item.statement,item)+figHtml;
     const figInput=q('#attachQuestionFigureInput');
     if(figInput){
       figInput.onchange=e=>{
@@ -4819,7 +4964,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         reader.readAsDataURL(f);
       };
     }
-    q('#questionOptions').innerHTML=(item.options||[]).map((o,i)=>`<div class="optionWithScissors"><button type="button" class="optionMainBtn" data-question-index="${i}"><span class="optLetterBadge">${String.fromCharCode(65+i)}</span><span class="optBodyText">${escText(o)}</span></button><button type="button" class="scissorBtn" data-scissor-index="${i}" title="Riscar/eliminar alternativa (estilo TEC/Qconcursos)" aria-label="Riscar alternativa ${String.fromCharCode(65+i)}">✂</button></div>`).join('')+`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px"><button type="button" class="ghost small" id="skipQuestionBlankBtn" style="width:auto;padding:6px 12px;font-size:.77rem" title="Pular sem marcar alternativa (Estratégia Líquida Cebraspe/Caveira: não perde ponto líquido)">⚪ Deixar em Branco (Modo Líquido Caveira)</button><button type="button" class="ghost small" id="toggleModalPaperModeBtn" style="width:auto;padding:6px 10px;font-size:.75rem">☀️ Modo Papel</button></div>`;
+    q('#questionOptions').innerHTML=(item.options||[]).map((o,i)=>`<div class="optionWithScissors"><button type="button" class="optionMainBtn" data-question-index="${i}"><span class="optLetterBadge">${String.fromCharCode(65+i)}</span><span class="optBodyText">${escText(o)}</span></button><button type="button" class="scissorBtn" data-scissor-index="${i}" title="Riscar/eliminar alternativa (estilo TEC/Qconcursos)" aria-label="Riscar alternativa ${String.fromCharCode(65+i)}">✂</button></div>`).join('')+`<div class="questionAnswerControls"><span id="questionSelectionStatus" class="small muted" role="status" aria-live="polite">Selecione uma alternativa e confirme abaixo.</span><button type="button" class="action" id="confirmQuestionAnswerBtn" disabled>${answerKeyDetails(item).scored?'Responder':'Ver explicação (sem pontuar)'}</button></div><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px"><button type="button" class="ghost small" id="skipQuestionBlankBtn" style="width:auto;padding:6px 12px;font-size:.77rem" title="Pular sem marcar alternativa (Estratégia Líquida Cebraspe/Caveira: não perde ponto líquido)">⚪ Deixar em Branco (Modo Líquido Caveira)</button><button type="button" class="ghost small" id="toggleModalPaperModeBtn" style="width:auto;padding:6px 10px;font-size:.75rem">☀️ Modo Papel</button></div>`;
     q('#questionFeedback').innerHTML='';
     q('#nextQuestion').hidden=true;
     battle.answered=false;
@@ -4838,8 +4983,11 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     if(typeof window.syncQuestionPrevAndRestoreState==='function'){
       window.syncQuestionPrevAndRestoreState(battle, item);
     }
-    qa('[data-question-index]').forEach(b=>b.onclick=()=>window.answerQuestion(b,item));
-    if(q('#skipQuestionBlankBtn'))q('#skipQuestionBlankBtn').onclick=()=>window.skipQuestionBlank(item);
+    bindQuestionAnswerConfirmation(battle,item);
+    if(q('#skipQuestionBlankBtn'))q('#skipQuestionBlankBtn').onclick=()=>{
+      window.skipQuestionBlank(item);
+      if(battle.answered&&q('#confirmQuestionAnswerBtn'))q('#confirmQuestionAnswerBtn').hidden=true;
+    };
     if(q('#toggleModalPaperModeBtn'))q('#toggleModalPaperModeBtn').onclick=()=>togglePaperReadingMode();
     qa('[data-scissor-index]').forEach(sBtn=>sBtn.onclick=e=>{
       e.stopPropagation();
@@ -4849,13 +4997,21 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       if(optBtn){
         optBtn.classList.toggle('eliminatedOption');
         sBtn.classList.toggle('active');
+        if(optBtn.classList.contains('eliminatedOption')&&battle._selectedAnswerIndex===Number(idx)){
+          battle._selectedAnswerIndex=null;optBtn.classList.remove('selectedOption');optBtn.setAttribute('aria-pressed','false');
+          if(q('#confirmQuestionAnswerBtn'))q('#confirmQuestionAnswerBtn').disabled=true;
+          if(q('#questionSelectionStatus'))q('#questionSelectionStatus').textContent='Alternativa riscada. Selecione outra opção antes de confirmar.';
+        }
       }
     });
   };
 
   window.answerQuestion=function(button,item){
     const battle=activeQuestions;
-    if(!battle||battle.answered)return;
+    if(!battle||battle.answered||battle.questions[battle.current]!==item)return;
+    const quality=typeof window.getQuestionQualityDecision==='function'?window.getQuestionQualityDecision(item):null;
+    if(quality?.needs_source||quality?.needs_review)return toast('Esta questão está incompleta. Revise a fonte antes de responder; nenhum resultado foi registrado.');
+    if(typeof isQuestionDisciplineEligible==='function'&&!isQuestionDisciplineEligible(item,'all'))return toast('Revise a disciplina e o assunto desta questão antes de responder; nenhum resultado foi registrado.');
     const grading=gradeAnswer(item,button?.dataset?.questionIndex);
     if(!grading.scored){
       battle.answered=true;
@@ -4877,18 +5033,22 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       battle.correct++;
       battle.streak=(battle.streak||0)+1;
       button.classList.add('correct');
-      applyXpLocal(25,'acerto_questao');
+      const accountId=cloudSession?.user?.id||state._ownerUserId||'guest',campaignId=state.activeCampaignId,dbId=typeof activeCampaign==='function'?activeCampaign()?.dbId:null,resetEpoch=Number(state._resetEpoch||0);
+      battle.progressSessionId=battle.progressSessionId||createProgressEventId('questions');
+      const attemptEvent=`${battle.progressSessionId}:q:${battle.current}`;
+      const currentContext=()=>accountId===(cloudSession?.user?.id||state._ownerUserId||'guest')&&campaignId===state.activeCampaignId&&dbId===(typeof activeCampaign==='function'?activeCampaign()?.dbId:null)&&resetEpoch===Number(state._resetEpoch||0);
+      applyXpLocal(25,'acerto_questao',attemptEvent);
       recordQuestionAttemptServer(
         item.subject||battle.subject,
         item.topic||'geral',
         true,
         battle.mode||'practice'
       ).then(serverRes=>{
-        if(serverRes?.mastery_bonus>0){
-          applyXpLocal(serverRes.mastery_bonus,'bonus_maestria');
-          toast(`🎯 Bônus de domínio +${serverRes.mastery_bonus} XP (maestria ${Math.round(serverRes.mastery||0)}% no tópico)!`);
+        if(currentContext()&&Number.isFinite(serverRes?.mastery_bonus)&&serverRes.mastery_bonus>0){
+          const paid=applyXpLocal(serverRes.mastery_bonus,'bonus_maestria',`${attemptEvent}:mastery`);
+          if(paid)toast(`🎯 Bônus de domínio +${serverRes.mastery_bonus} XP (maestria ${Math.round(serverRes.mastery||0)}% no tópico)!`);
         }
-      });
+      }).catch(()=>{if(currentContext())toast('Resposta salva; confirmação de domínio pendente.');});
     }else{
       battle.streak=0;
       button.classList.add('wrong');
@@ -4974,7 +5134,10 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
 
   window.skipQuestionBlank=function(item){
     const battle=activeQuestions;
-    if(!battle||battle.answered)return;
+    if(!battle||battle.answered||battle.questions[battle.current]!==item)return;
+    const quality=typeof window.getQuestionQualityDecision==='function'?window.getQuestionQualityDecision(item):null;
+    if(quality?.needs_source||quality?.needs_review)return toast('Esta questão está incompleta. Revise a fonte antes de registrar um resultado.');
+    if(typeof isQuestionDisciplineEligible==='function'&&!isQuestionDisciplineEligible(item,'all'))return toast('Revise a disciplina e o assunto desta questão antes de registrar um resultado.');
     if(!answerKeyDetails(item).scored)return toast('Esta questão aguarda conferência do gabarito; nenhuma alternativa foi marcada como correta.');
     battle.answered=true;
     battle.blankCount=(battle.blankCount||0)+1;
@@ -5365,6 +5528,12 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   }
 
   function switchExamHubTab(tabName){
+    if(window.JCQuestionsWorkspace&&!window.JCQuestionsWorkspace.isActive('provas')){
+      if(!q('#report')?.classList.contains('active'))openView('report');
+      window.JCQuestionsWorkspace.request('provas');
+      ensureExamBankHub();
+      window.JCQuestionsWorkspace.collect();
+    }
     activeExamHubTab=tabName;
     qa('[data-exam-tab]').forEach(btn=>btn.classList.toggle('active',btn.dataset.examTab===tabName));
     qa('[data-exam-panel]').forEach(panel=>{
@@ -5467,21 +5636,106 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   }
   window.classifyExamDocumentMeta = classifyExamDocumentMeta;
 
+  function examDocumentScopeAllows(item,shared=false){
+    if(!item)return false;
+    const sessionId=typeof cloudSession!=='undefined'?String(cloudSession?.user?.id||''):'';
+    const savedOwner=typeof state!=='undefined'?String(state?._ownerUserId||''):'';
+    const ownerId=sessionId||savedOwner;
+    const campaign=typeof activeCampaign==='function'?activeCampaign():null;
+    const campaignIds=new Set([campaign?.dbId,campaign?.id,typeof state!=='undefined'?state?.activeCampaignId:''].filter(Boolean).map(String));
+    if(shared&&item.is_community===true)return true;
+    if(sessionId&&savedOwner&&sessionId!==savedOwner)return false;
+    const itemOwner=String(item.user_id||item.owner_id||item.ownerId||item._ownerUserId||'');
+    const itemCampaign=String(item.campaign_id||item.campaignId||'');
+    if(itemOwner&&(!ownerId||itemOwner!==ownerId))return false;
+    return !itemCampaign||campaignIds.has(itemCampaign);
+  }
+  function examDocumentScopeKey(){
+    return JSON.stringify([typeof cloudSession!=='undefined'?cloudSession?.user?.id||'':'',typeof state!=='undefined'?state?._ownerUserId||'':'',typeof state!=='undefined'?state?.activeCampaignId||'':'',typeof activeCampaign==='function'?activeCampaign()?.dbId||'':'',typeof state!=='undefined'?Number(state?._resetEpoch||0):0]);
+  }
+
+  function examQuestionDocumentIds(item){
+    const ids=new Set();
+    const add=value=>{if(typeof value==='string'||typeof value==='number'){const id=String(value).trim();if(id)ids.add(id)}};
+    const read=value=>{
+      if(!value||typeof value!=='object')return;
+      ['sourceDocumentId','documentId','source_document_id','document_id','documentDbId'].forEach(key=>add(value[key]));
+      if(/^(?:document|study_document|pdf)$/i.test(String(value.type||value.kind||'')))add(value.id);
+    };
+    read(item);read(item?.provenance);read(item?.sourceDocument);read(item?.source_document);
+    for(const refs of [item?.source_refs,item?.sourceRefs,item?.rowrefs,item?.provenance?.source_refs]){
+      if(Array.isArray(refs))refs.forEach(read);
+    }
+    return [...ids];
+  }
+
+  function buildExamDocumentQuestionIndex(documents,source=ALL_QUESTIONS||[]){
+    const index=new Map(),byId=new Map(),seen=new Map();
+    for(const doc of documents||[]){
+      if(!doc?.id)continue;
+      for(const id of [doc.id,doc.documentDbId,doc.document_id].filter(Boolean).map(String)){
+        const bucket=byId.get(id)||new Set();bucket.add(doc);byId.set(id,bucket);
+      }
+      if(examDocumentScopeAllows(doc,true)){index.set(String(doc.id),[]);seen.set(String(doc.id),new Set());}
+    }
+    for(const item of source||[]){
+      // A title is descriptive metadata, never proof that a question belongs to a PDF.
+      const matches=new Set();
+      for(const id of examQuestionDocumentIds(item))for(const doc of byId.get(id)||[])matches.add(doc);
+      if(matches.size!==1)continue;
+      const doc=[...matches][0],pool=index.get(String(doc.id));
+      if(!pool||!examDocumentScopeAllows(item,doc.is_community===true))continue;
+      const known=seen.get(String(doc.id));
+      if(!known.has(item)){known.add(item);pool.push(item);}
+    }
+    return index;
+  }
+
   function examDocumentQuestionPool(doc,source=ALL_QUESTIONS||[]){
-    const id=String(doc?.id||''),title=topicKey(doc?.title||'');
-    if(!id)return[];
-    return source.filter(item=>{
-      const sourceId=String(item?.sourceDocumentId||item?.documentId||'');
-      return sourceId?sourceId===id:Boolean(title&&topicKey(item?.board||'')===title);
-    });
+    if(!doc?.id)return[];
+    const documents=typeof cloudDocuments!=='undefined'&&Array.isArray(cloudDocuments)?cloudDocuments:[];
+    return buildExamDocumentQuestionIndex(documents.some(d=>String(d.id)===String(doc.id))?documents:[...documents,doc],source).get(String(doc.id))||[];
+  }
+  function buildExamQuestionDocumentMap(documents,source){
+    const byId=new Map((documents||[]).filter(doc=>doc?.id).map(doc=>[String(doc.id),doc])),result=new WeakMap();
+    for(const [id,questions] of buildExamDocumentQuestionIndex(documents,source))for(const item of questions)result.set(item,byId.get(id));
+    return result;
+  }
+  async function readExamDocumentQuestionRows(doc,session,scopeKey){
+    const ownerId=String(session?.user?.id||''),campaignId=String(doc?.campaign_id||(typeof activeCampaign==='function'?activeCampaign()?.dbId:'')||'');
+    if(!ownerId||!campaignId||!examDocumentScopeAllows(doc)||doc.is_community===true&&String(doc.user_id||'')!==ownerId)throw new Error('Abra uma prova da sua conta e do portal atual para alterar gabaritos.');
+    const current=()=>scopeKey===examDocumentScopeKey()&&examDocumentScopeAllows(doc);
+    if(!current())return[];
+    const suffix=`user_id=eq.${encodeURIComponent(ownerId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&select=id,title,content,source_refs,source_document_id,user_id,campaign_id`;
+    const documentIds=[...new Set([doc.id,doc.documentDbId,doc.document_id].filter(Boolean).map(String))];
+    const filters=documentIds.flatMap(id=>[`source_document_id=eq.${encodeURIComponent(id)}`,`source_refs=cs.${encodeURIComponent(JSON.stringify([{document_id:id}]))}`]);
+    const responses=await Promise.all(filters.map(filter=>cloudFetch(`generated_study_content?${filter}&${suffix}`,{headers:{Authorization:`Bearer ${session.access_token}`}})));
+    if(!current())return[];
+    if(responses.some(response=>!response.ok))throw new Error('Não foi possível conferir a origem das questões. Nenhum gabarito foi alterado.');
+    const groups=await Promise.all(responses.map(response=>response.json()));
+    if(!current())return[];
+    const rows=[...new Map(groups.flat().filter(row=>row?.id&&examDocumentScopeAllows(row)).map(row=>[String(row.id),row])).values()];
+    const sources=buildExamDocumentQuestionIndex(typeof cloudDocuments!=='undefined'?cloudDocuments:[doc],rows);
+    return sources.get(String(doc.id))||[];
+  }
+  function examDocumentQuestionAvailability(doc,linked=examDocumentQuestionPool(doc)){
+    const eligible=linked.filter(item=>isQuestionDisciplineEligible(item,'all')&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item)));
+    return {linked,eligible,indexed:Math.max(0,Number(doc?.metadata?.coverage?.summary_count||0)||0)};
+  }
+  function explainUnavailableExamDocument(doc,linked=examDocumentQuestionPool(doc)){
+    if(!doc)return toast('Esta prova não está disponível neste portal. Atualize o catálogo.');
+    return toast(linked.length?`${linked.length} questões vinculadas, mas nenhuma liberada: confira disciplina, enunciado completo e gabarito na revisão do PDF.`:'Ainda não há questões vinculadas com segurança a este PDF. Use a revisão da fonte para conferir a extração sem duplicar o banco.');
   }
   window.examDocumentQuestionPool=examDocumentQuestionPool;
+  window.buildExamDocumentQuestionIndex=buildExamDocumentQuestionIndex;
 
   function renderSingleExamDocCardHtml(doc, docQuestions, meta) {
     const status = doc.processing_status || 'pending';
-    const qCount = docQuestions.length || Number(doc.metadata?.coverage?.summary_count || 0) || 0;
+    const availability=examDocumentQuestionAvailability(doc,docQuestions);
+    const qCount=availability.eligible.length;
+    const ownReview=doc.is_community!==true||Boolean(doc.user_id&&String(doc.user_id)===String(typeof cloudSession!=='undefined'?cloudSession?.user?.id||'':''));
     const statusLabel = {
-      ready: qCount ? `${qCount} questões` : 'Pronta',
+      ready: `${qCount} disponíveis · ${docQuestions.length} vinculadas${availability.indexed>docQuestions.length?` · ${availability.indexed} indexadas no processamento`:''}${!docQuestions.length&&availability.indexed?' · vínculo pendente':''}`,
       processing: '⏳ Extraindo questões...',
       pending: '⏳ Aguardando extração',
       error: '⚠️ Falha — tentar novamente'
@@ -5498,19 +5752,22 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         <span class="small muted">${escText(statusLabel)} · ${new Date(doc.created_at).toLocaleDateString('pt-BR')}</span>
       </div>
       <div class="examDocActions">
-        ${hasMissingKey ? `<button type="button" class="action small" data-add-key-doc="${doc.id}" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#040c16;font-weight:900">📋 Adicionar Gabarito</button><button type="button" class="action small" data-solve-ai-key-doc="${doc.id}" style="background:linear-gradient(135deg,#0284c7,#2563eb);color:#fff;font-weight:900" title="A IA resolve cada questão passo a passo e sugere o gabarito">🤖 Resolver com IA</button>` : ''}${status === 'ready' ? `<button type="button" class="ghost small" data-exam-doc-battle="${doc.id}">◎ Treinar</button><button type="button" class="action small" data-exam-doc-simulado="${doc.id}">▶ Simulado</button>` : `<button type="button" class="action small" data-exam-doc-process="${doc.id}">⚡ Extrair Questões</button>`}
+        ${hasMissingKey ? `<button type="button" class="action small" data-add-key-doc="${escText(doc.id)}" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#040c16;font-weight:900">📋 Adicionar Gabarito</button><button type="button" class="action small" data-solve-ai-key-doc="${escText(doc.id)}" style="background:linear-gradient(135deg,#0284c7,#2563eb);color:#fff;font-weight:900" title="A IA resolve cada questão passo a passo e sugere o gabarito">🤖 Resolver com IA</button>` : ''}${qCount ? `<button type="button" class="ghost small" data-exam-doc-battle="${escText(doc.id)}">◎ Treinar</button><button type="button" class="action small" data-exam-doc-simulado="${escText(doc.id)}">▶ Simulado</button>` : status === 'ready' ? `<button type="button" class="ghost small" data-exam-doc-link-info="${escText(doc.id)}">${docQuestions.length?'Por que não está liberada?':'Verificar vínculo'}</button><button type="button" class="action small" data-exam-doc-review="${escText(doc.id)}">${ownReview?'Reanalisar PDF':'Importar PDF para revisar'}</button>` : `<button type="button" class="action small" data-exam-doc-process="${escText(doc.id)}">⚡ Extrair Questões</button>`}
       </div>
     </div>`;
   }
 
   function renderExamBankHub(){
+    if(window.JCQuestionsWorkspace&&!window.JCQuestionsWorkspace.isActive('provas')){window.JCQuestionsWorkspace.invalidate();return}
     ensureExamBankHub();
     const catalogEl=q('#examDocumentsCatalog'),countTag=q('#examHubCountTag');
     if(!catalogEl)return;
     const officialQuestions=(ALL_QUESTIONS||[]).filter(item=>normalizedOrigin(item)==='oficial');
     if(countTag)countTag.textContent=`${officialQuestions.length} oficia${officialQuestions.length===1?'l':'is'} · ${(ALL_QUESTIONS||[]).length} total`;
 
-    const examDocs=(typeof cloudDocuments!=='undefined'?cloudDocuments:[]).filter(d=>['prova','simulado'].includes(d.document_type));
+    const examDocs=(typeof cloudDocuments!=='undefined'?cloudDocuments:[]).filter(d=>['prova','simulado'].includes(d.document_type)&&examDocumentScopeAllows(d,true));
+    const hubScope=examDocumentScopeKey();
+    const currentExamDoc=id=>hubScope===examDocumentScopeKey()?examDocs.find(d=>String(d.id)===String(id)&&examDocumentScopeAllows(d,true)):null;
     if(!examDocs.length){
       catalogEl.innerHTML=`<div class="examEmptyState">
         <b>Nenhuma prova ou simulado em PDF enviado ainda neste portal</b>
@@ -5525,27 +5782,12 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       return;
     }
 
-    // Índices por documento e título evitam repetir a varredura completa a cada documento.
-    const qsByDocId = new Map();
-    const qsByBoardKey = new Map();
-    for (const item of (ALL_QUESTIONS || [])) {
-      const dId = String(item.sourceDocumentId || item.documentId || '');
-      if (dId) {
-        let arr = qsByDocId.get(dId);
-        if (!arr) { arr = []; qsByDocId.set(dId, arr); }
-        arr.push(item);
-      }
-      const bKey = topicKey(item.board || '');
-      if (bKey) {
-        let arrB = qsByBoardKey.get(bKey);
-        if (!arrB) { arrB = []; qsByBoardKey.set(bKey, arrB); }
-        arrB.push(item);
-      }
-    }
+    // One provenance index serves the cards and actions; cached metadata is not a playable pool.
+    const qsByDocId=buildExamDocumentQuestionIndex(typeof cloudDocuments!=='undefined'?cloudDocuments:examDocs);
     const enrichedDocs = examDocs.map(doc => {
-      const docQuestions = [...new Set([...(qsByDocId.get(String(doc.id)) || []), ...(qsByBoardKey.get(topicKey(doc.title)) || []).filter(item => !item.sourceDocumentId && !item.documentId)])];
+      const docQuestions=qsByDocId.get(String(doc.id))||[];
       const meta = classifyExamDocumentMeta(doc, docQuestions);
-      const qCount = docQuestions.length || Number(doc.metadata?.coverage?.summary_count || 0) || 0;
+      const qCount=examDocumentQuestionAvailability(doc,docQuestions).eligible.length;
       return { doc, docQuestions, meta, qCount };
     });
 
@@ -5799,12 +6041,13 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       e.stopPropagation();
       const targetSubj = btn.dataset.trainExamGroupSubj;
       const targetCat = btn.dataset.trainExamGroupCat;
+      if(hubScope!==examDocumentScopeKey())return toast('O portal mudou. Abra novamente a Central de Provas.');
       const matchingDocs = enrichedDocs.filter(x =>
         (!targetSubj || subjectKey(x.meta.subject) === subjectKey(targetSubj)) &&
         (!targetCat || x.meta.catKey === targetCat)
       );
       const pool = matchingDocs.flatMap(x => x.docQuestions).filter(item=>isQuestionDisciplineEligible(item,targetSubj||'all')&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item)));
-      if (!pool.length) return toast('Extraia as questões dos arquivos desta pasta primeiro.');
+      if (!pool.length) return toast('Esta pasta ainda não tem questões liberadas. Confira os vínculos, a estrutura e os gabaritos na revisão dos PDFs.');
       activeQuestions = {
         mode: 'progressive',
         subject: `${targetSubj || 'Caderno'} (${matchingDocs.length} arq.)`,
@@ -5820,8 +6063,30 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       showQuestion();
     });
 
+    qa('[data-exam-doc-link-info]').forEach(btn=>btn.onclick=()=>{
+      const doc=currentExamDoc(btn.dataset.examDocLinkInfo);
+      explainUnavailableExamDocument(doc);
+    });
+    qa('[data-exam-doc-review]').forEach(btn=>btn.onclick=async()=>{
+      const doc=currentExamDoc(btn.dataset.examDocReview);
+      if(!doc)return explainUnavailableExamDocument(null);
+      if(doc.is_community===true&&(!doc.user_id||String(doc.user_id)!==String(typeof cloudSession!=='undefined'?cloudSession?.user?.id||'':''))){
+        switchExamHubTab('import');
+        return toast('Para conferir a extração de um PDF compartilhado, importe sua cópia do arquivo. A biblioteca compartilhada foi preservada.');
+      }
+      if(typeof window.JCQuestionReview?.reviewDocument!=='function')return toast('A revisão do PDF ainda está carregando. Aguarde e tente novamente.');
+      btn.disabled=true;
+      try{
+        await window.JCQuestionReview.reviewDocument(doc.id,{title:doc.title});
+      }catch(error){
+        toast(error?.message||'Não foi possível revisar o PDF. Seu banco foi preservado.');
+      }finally{
+        if(hubScope===examDocumentScopeKey())renderExamBankHub();
+      }
+    });
     qa('[data-exam-doc-process]').forEach(btn=>btn.onclick=async()=>{
       const id=btn.dataset.examDocProcess;
+      if(!currentExamDoc(id))return explainUnavailableExamDocument(null);
       btn.disabled=true;
       btn.textContent='⏳ Extraindo questões...';
       try{
@@ -5835,9 +6100,9 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       }
     });
     qa('[data-exam-doc-battle]').forEach(btn=>btn.onclick=()=>{
-      const doc=examDocs.find(d=>d.id===btn.dataset.examDocBattle);
+      const doc=currentExamDoc(btn.dataset.examDocBattle);
       const docPool=examDocumentQuestionPool(doc).filter(item=>isQuestionDisciplineEligible(item,'all')&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item)));
-      if(!docPool.length)return toast('Extraia as questões desta prova primeiro.');
+      if(!docPool.length)return explainUnavailableExamDocument(doc);
       activeQuestions={
         mode:'progressive',
         subject:doc?.title||'Prova Oficial',
@@ -5853,9 +6118,9 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       showQuestion();
     });
     qa('[data-exam-doc-simulado]').forEach(btn=>btn.onclick=()=>{
-      const doc=examDocs.find(d=>d.id===btn.dataset.examDocSimulado);
+      const doc=currentExamDoc(btn.dataset.examDocSimulado);
       const docPool=examDocumentQuestionPool(doc).filter(item=>isQuestionDisciplineEligible(item,'all')&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item)));
-      if(!docPool.length)return toast('Extraia as questões desta prova primeiro.');
+      if(!docPool.length)return explainUnavailableExamDocument(doc);
       startTimedSimulado(docPool);
     });
   }
@@ -6367,10 +6632,12 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   window.inferQuestionPedagogicalTopic = inferQuestionPedagogicalTopic;
 
   function extractStructuredExamQuestions(rawTextOrPages,opts={}){
+    const repairText=typeof repairKnownExamTextArtifacts==='function'?repairKnownExamTextArtifacts:value=>String(value??'');
+    const qualityOf=typeof getQuestionQualityDecision==='function'?getQuestionQualityDecision:()=>({needs_review:false});
     const defaultSubject=opts.defaultSubject||'Conteúdo Geral';
     const defaultBoard=opts.defaultBoard||'Prova Oficial';
-    const report={expected:0,extracted:0,annulled:0,skipped:0,missingKey:0,ambiguous:false,reason:'',percent:0,classificationReviewCount:0,sourceLocatedCount:0,unknownFormatCount:0};
-    const finish=list=>{report.classificationReviewCount=list.filter(item=>item.classification_needs_review===true).length;report.sourceLocatedCount=list.filter(item=>Number.isInteger(item.question_number)&&Number.isInteger(item.source_page)).length;Object.defineProperty(list,'report',{value:report,enumerable:false});return list};
+    const report={expected:0,extracted:0,annulled:0,skipped:0,missingKey:0,ambiguous:false,reason:'',percent:0,classificationReviewCount:0,sourceLocatedCount:0,unknownFormatCount:0,structureReviewCount:0};
+    const finish=list=>{report.classificationReviewCount=list.filter(item=>item.classification_needs_review===true).length;report.structureReviewCount=list.filter(item=>qualityOf(item).needs_review).length;report.sourceLocatedCount=list.filter(item=>Number.isInteger(item.question_number)&&Number.isInteger(item.source_page)).length;Object.defineProperty(list,'report',{value:report,enumerable:false});return list};
     const rawJoined=Array.isArray(rawTextOrPages)?rawTextOrPages.map(p=>String(p?.text||'')).join('\n\n'):String(rawTextOrPages||'');
     const jsonCandidate=rawJoined.trim();
     if(!jsonCandidate)return finish([]);
@@ -6383,7 +6650,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         const out=[];
         for(const x of arr){
           if(!x||typeof x!=='object'||!String(x.statement??'').trim()||!Array.isArray(x.options))continue;
-          const options=x.options.map(o=>String(o??'').trim());
+          const options=x.options.map(o=>repairText(o).trim());
           const normalizedOptions=options.map(o=>answerOptionText(o).toLocaleLowerCase('pt-BR'));
           if(options.length<2||options.length>5||normalizedOptions.some(o=>!o)||new Set(normalizedOptions).size!==options.length)continue;
           const idx=x.correct_index;
@@ -6396,7 +6663,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
             subject:canonicalSubjectName(x.subject||defaultSubject),
             topic:x.topic||'Questão Importada',
             board:x.board||defaultBoard,
-            statement:String(x.statement).trim(),
+            statement:repairText(x.statement).trim(),
             options,
             correct_index:unknown?-1:Number(idx),
             explanation:String(x.explanation||'Questão importada pelo usuário.'),
@@ -6407,14 +6674,16 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
           if(annulled)item.annulled=true;
           // Metadados explícitos impedem que exportar/importar promova uma
           // sugestão da IA a gabarito oficial ou apague uma revisão humana.
-          for(const key of ['key_source','answer_key_validation','key_reference','source','source_url','source_label','exam_title','associated_text','classification_declared_subject','classification_reason','subject_source','exam_caderno']){
+          for(const key of ['key_source','answer_key_validation','key_reference','source','source_url','source_label','exam_title','associated_text','command','classification_declared_subject','classification_reason','subject_source','exam_caderno','quality_status','quality_reason']){
             if(typeof x[key]==='string')item[key]=x[key];
           }
-          for(const flag of ['explanation_needs_review','classification_needs_review','topic_classification_needs_review'])if(typeof x[flag]==='boolean')item[flag]=x[flag];
+          for(const flag of ['explanation_needs_review','classification_needs_review','topic_classification_needs_review','needs_source','structure_needs_review'])if(typeof x[flag]==='boolean')item[flag]=x[flag];
           if(Array.isArray(x.answer_key_history))item.answer_key_history=x.answer_key_history.filter(h=>h&&typeof h==='object'&&!Array.isArray(h)).slice(-20).map(h=>({...h}));
           for(const key of ['exam_year','question_number','source_question_number','source_page','source_page_end','page_start','page_end']){
             if((typeof x[key]==='number'||typeof x[key]==='string')&&String(x[key]).trim()!==''&&Number.isInteger(Number(x[key])))item[key]=Number(x[key]);
           }
+          const quality=qualityOf(item);
+          if(quality.needs_review){item.needs_source=true;item.structure_needs_review=true;item.quality_status=quality.quality_status;item.quality_reason=quality.reason;}
           out.push(item);
         }
         report.expected=arr.length;report.extracted=out.length;report.skipped=arr.length-out.length;
@@ -6536,9 +6805,9 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       }
       let item=null;
       if(picked.length>=2&&picked.length<=5){
-        let statement=block.slice(0,picked[0].index).replace(/\s+/g,' ').trim();
+        let statement=repairText(block.slice(0,picked[0].index)).replace(/\s+/g,' ').trim();
         statement=statement.replace(/\bAlternativas\s*$/i,'').trim();
-        const options=picked.map((o,i)=>block.slice(o.index+o.len,i+1<picked.length?picked[i+1].index:block.length).replace(/\s+/g,' ').trim());
+        const options=picked.map((o,i)=>repairText(block.slice(o.index+o.len,i+1<picked.length?picked[i+1].index:block.length)).replace(/\s+/g,' ').trim());
         const correctIdx=unknownKey?-1:picked.findIndex(o=>o.letter===key);
         if(statement.length>=10&&(correctIdx>=0||unknownKey)&&options.every(Boolean)&&new Set(options.map(option=>answerOptionText(option).toLocaleLowerCase('pt-BR'))).size===options.length){
           const pTopic='';
@@ -6574,6 +6843,8 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         item.classification_needs_review=decision.needs_review||!decision.subject||decision.subject==='Conteúdo Geral';
         item.classification_reason=decision.reason;item.classification_confidence=decision.confidence||0;
         item.subject_source=declared?'cabecalho_pdf':'heuristica';
+        const quality=qualityOf(item);
+        if(quality.needs_review){item.needs_source=true;item.structure_needs_review=true;item.quality_status=quality.quality_status;item.quality_reason=quality.reason;}
         item.question_number=b.num;item.source_question_number=b.num;
         item.source_page=pageAt(b.start);item.source_page_end=pageAt(Math.max(b.start,b.end-1));
         item.page_start=item.source_page;item.page_end=item.source_page_end;
@@ -6770,6 +7041,12 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     }
     return saved;
   }
+  function timedSimuladoQualityReady(battle){
+    return Array.isArray(battle?.questions)&&battle.questions.length>0&&battle.questions.every(item=>
+      (typeof getQuestionQualityDecision!=='function'||!getQuestionQualityDecision(item).needs_review)&&
+      (typeof isQuestionDisciplineEligible!=='function'||isQuestionDisciplineEligible(item,'all'))&&
+      (typeof answerKeyStatus!=='function'||!['sem_gabarito','anulada'].includes(answerKeyStatus(item))));
+  }
   function startTimedSimuladoClock(){
     clearInterval(simuladoTimer);
     function tick(){
@@ -6791,6 +7068,11 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   }
   function showActiveTimedSimulado(){
     if(!activeSimulado)return;
+    if(!timedSimuladoQualityReady(activeSimulado)){
+      clearInterval(simuladoTimer);activeSimulado=null;
+      toast('Este caderno contém questões que precisam de revisão de fonte, disciplina ou gabarito. As respostas salvas foram preservadas. Reanalise o PDF antes de iniciar outro simulado.');return;
+    }
+    ensureSimuladoUI();
     q('#simuladoStage').hidden=false;q('#simuladoResultStage').hidden=true;q('#simuladoResultStage').innerHTML='';
     q('#simuladoMetaLabel').textContent=activeSimulado.scoringMode==='liquid'?'SIMULADO CAVEIRA / CEBRASPE (1 ERRADA ANULA 1 CERTA)':'SIMULADO CRONOMETRADO TRADICIONAL';
     q('#simuladoTitle').textContent=`Caderno com ${activeSimulado.questions.length} questões · o relógio continua ao sair`;
@@ -6841,6 +7123,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       simDialog.dataset.timedSafetyBound='1';
       simDialog.addEventListener('cancel',event=>{event.preventDefault();abortTimedSimulado()});
     }
+    window.JCQuestionsWorkspace?.collect();
   }
 
   function simuladoCandidatePool(){
@@ -6900,6 +7183,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   }
 
   function startTimedSimulado(providedPool=null){
+    ensureSimuladoUI();
     if(readSavedTimedSimulado()&&!confirm('Há um simulado salvo neste portal. Iniciar outro substituirá essa retomada. Deseja continuar?'))return offerSavedTimedSimuladoResume();
     const pool=Array.isArray(providedPool)?providedPool.filter(item=>isQuestionDisciplineEligible(item,'all')&&!['sem_gabarito','anulada'].includes(answerKeyStatus(item))):simuladoCandidatePool();
     if(!pool.length)return toast('Envie um PDF na Biblioteca ou gere questões na Central de Provas para montar o simulado.');
@@ -7015,6 +7299,10 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     if(savedScope&&(savedScope.userId!==scope.userId||savedScope.campaignId!==scope.campaignId||savedScope.resetEpoch!==scope.resetEpoch)){
       clearInterval(simuladoTimer);activeSimulado=null;q('#simuladoDialog')?.close();return;
     }
+    if(!timedSimuladoQualityReady(activeSimulado)){
+      saveActiveTimedSimulado();clearInterval(simuladoTimer);activeSimulado=null;q('#simuladoDialog')?.close();offerSavedTimedSimuladoResume();
+      toast('A correção foi suspensa: há questões pendentes de revisão. Suas respostas continuam salvas; este caderno não alterou XP nem estatísticas.');return;
+    }
     const sessionId=activeSimulado.sessionId;
     if((state.completedTimedSimuladoIds||[]).includes(sessionId)){
       activeSimulado.finished=true;
@@ -7059,6 +7347,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       const missionId=missions.find(m=>subjectKey(canonicalSubjectName(m.subject))===subjectKey(canonicalSubjectName(subj)))?.id||null;
       state.scores.push({
         id:missionId,
+        sessionId:`${sessionId}:${subjectKey(canonicalSubjectName(subj))}`,
         total:data.total,
         correct:data.correct,
         date:new Date().toISOString(),
@@ -7956,21 +8245,19 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   }
 
   function bindQuestionCenter(){
-    ensureTopicFilterSelect();
-    ensureSimuladoUI();
-    ensureTacticalDiagnosisPanel();
-    ensureExamBankHub();
     q('#questionSubject')?.addEventListener('change',()=>{populateTopicFilter();updateQuestionPool()});
     for(const selector of ['#questionDifficulty','#questionOrigin','#questionBattleMode','#questionHistoryFilter'])q(selector)?.addEventListener('change',updateQuestionPool);
     if(q('#startQuestions'))q('#startQuestions').onclick=startFilteredBattle;
-    populateTopicFilter();
-    updateQuestionPool();
-    scheduleQuestionReportExtras();
   }
 
   const baseRenderQuestionFilters=typeof renderQuestionFilters==='function'?renderQuestionFilters:null;
   if(baseRenderQuestionFilters){
     renderQuestionFilters=function(){
+      if(window.JCQuestionsWorkspace&&!window.JCQuestionsWorkspace.isRendering('resolver')){
+        window.JCQuestionsWorkspace.invalidate();
+        if(window.JCQuestionsWorkspace.isActive('resolver'))window.JCQuestionsWorkspace.request();
+        return;
+      }
       if (window.JC_MODULES?.telemetry) window.JC_MODULES.telemetry.markStart('jc_questions_tab_open');
       baseRenderQuestionFilters();
       populateTopicFilter();
@@ -8169,13 +8456,17 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   }
 
   function computeAuditedHunterXpCeiling(missionsDone=0,missionsMastered=0,questionsTotal=0,bossesDone=0,streakDays=0){
-    const mDone=Math.max(0,Number(missionsDone||0));
-    const mMast=Math.max(0,Math.min(mDone,Number(missionsMastered||0)));
-    const qTot=Math.max(0,Number(questionsTotal||0));
-    const bDone=Math.max(0,Number(bossesDone||0));
-    const sDays=Math.max(0,Number(streakDays||0));
-    // Teto auditável: 40 XP por tópico estudado + 60 XP por tópico dominado + 300 XP por Boss + até 15 XP por questão + 40 XP por dia de ofensiva + margem de trilha (800)
-    return (mDone*40)+(mMast*60)+(bDone*300)+(qTot*15)+(sDays*40)+800;
+    const count=value=>(typeof value==='number'||(typeof value==='string'&&value.trim()!==''))&&Number.isSafeInteger(Number(value))&&Number(value)>=0?Number(value):0;
+    const mDone=count(missionsDone);
+    const mMast=Math.min(mDone,count(missionsMastered));
+    const validCount=value=>(typeof value==='number'||(typeof value==='string'&&value.trim()!==''))&&Number.isSafeInteger(Number(value))&&Number(value)>=0;
+    const qTot=Array.isArray(state?.scores)?state.scores.reduce((sum,score)=>sum+(validCount(score?.total)&&validCount(score?.correct)&&Number(score.correct)<=Number(score.total)?Number(score.total):0),0):count(questionsTotal);
+    const localBosses=typeof window.validHunterBossCount==='function'?window.validHunterBossCount():Object.values(state?.bosses||{}).filter(Boolean).length;
+    const bDone=state?.bosses&&typeof state.bosses==='object'?Math.min(count(bossesDone),localBosses):count(bossesDone);
+    const sDays=typeof window.historicalEarnedStreakDays==='function'?window.historicalEarnedStreakDays():Math.max(count(state?.bestStreak),Object.entries(state?.streakDaysByHalfMission||{}).filter(([day,value])=>value&&/^\d{4}-\d{2}-\d{2}$/.test(day)&&Number.isFinite(Date.parse(day+'T12:00:00Z'))).length);
+    // This historical allowance limits recorded XP; a broken current streak never removes earned XP.
+    const earnedEvents=typeof window.verifiedLearningEventXp==='function'?window.verifiedLearningEventXp():0;
+    return (mDone*40)+(mMast*60)+(bDone*300)+(qTot*15)+(sDays*40)+800+earnedEvents;
   }
   window.computeAuditedHunterXpCeiling=computeAuditedHunterXpCeiling;
 
@@ -11042,7 +11333,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         const finishing=activeQuestions&&activeQuestions.current>=activeQuestions.questions.length-1;
         const wasMissionBattle=activeQuestions&&(activeQuestions.missionId===state?.daily||Number(activeQuestions.questions?.length||0)>=4);
         const res=baseNextQ();
-        if(finishing){
+        if(finishing&&res!==false&&!activeQuestions){
           const tracker=ensureDailyTracker();
           tracker.errorsReviewed=(Number(tracker.errorsReviewed)||0)+1;
           if(wasMissionBattle){
@@ -11391,7 +11682,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     const steps=typeof dailyStepsFor==='function'?dailyStepsFor(state.settings?.dailyMinutes||180):[];
     const doneSteps=Object.values(state.dailySteps||{}).filter(Boolean).length;
     const today=typeof localDayKey==='function'?localDayKey():new Date().toISOString().slice(0,10);
-    if(q('#notificationSync'))q('#notificationSync').textContent=!navigator.onLine?'Offline':cloudSession&&syncReady?'Sincronizado':cloudSession?'Sincronizando':'Somente local';
+    if(q('#notificationSync'))q('#notificationSync').textContent=!navigator.onLine?'Offline':cloudSession&&syncReady&&!state._dirty&&!state._studyLedgerRepairPending&&Number(state._serverRevision)>0?'Sincronizado':cloudSession?'Sincronização pendente':'Somente local';
     if(q('#notificationCampaign'))q('#notificationCampaign').textContent=activeCampaign()?.name||'Nenhuma';
     if(q('#notificationStudy'))q('#notificationStudy').textContent=`${Math.floor(Number(state.studyByDay?.[today]||0)/60)} min`;
     if(q('#notificationMission'))q('#notificationMission').textContent=`${Math.round(doneSteps/Math.max(1,steps.length)*100)}%`;
@@ -11676,24 +11967,30 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     }
     runV77ViewEnhancements(activeId,true);
   };
-  let questionReportExtrasGeneration=0;
   function scheduleQuestionReportExtras(){
-    const generation=++questionReportExtrasGeneration;
-    const campaignId=state.activeCampaignId;
-    const isCurrent=()=>generation===questionReportExtrasGeneration&&state.activeCampaignId===campaignId&&Boolean(q('#report')?.classList.contains('active'));
-    const afterPaint=callback=>{
-      if(typeof window.requestAnimationFrame==='function')window.requestAnimationFrame(()=>setTimeout(callback,0));
-      else setTimeout(callback,0);
-    };
-    // Filters and the start button are ready before either secondary panel runs.
-    afterPaint(()=>{
-      if(!isCurrent())return;
-      renderPerformanceChart();
-      afterPaint(()=>{if(isCurrent())renderExamBankHub()});
-    });
+    window.JCQuestionsWorkspace?.request();
   }
   const baseRenderReport=renderReport;
-  renderReport=function(){baseRenderReport();offerSavedTimedSimuladoResume();scheduleQuestionReportExtras()};
+  window.JCQuestionsWorkspace?.configure({
+    readScope:()=>[cloudSession?.user?.id||state?._ownerUserId||'guest',state?._ownerUserId||'',state?.activeCampaignId||'default',activeCampaign()?.dbId||'',Number(state?._resetEpoch||0)],
+    readInputs:()=>{
+      const campaign=activeCampaign(),missions=campaign?.customCampaign?.missions||state.customCampaign?.missions||[];
+      return [ALL_QUESTIONS,ALL_QUESTIONS?.length||0,cloudDocuments,cloudDocuments?.length||0,
+        state.customQuestions,state.customQuestions?.length||0,state.errors,Object.keys(state.errors||{}).join('|'),
+        state.answeredQuestionFingerprints,Object.keys(state.answeredQuestionFingerprints||{}).length,
+        state.favoriteQuestions,Object.keys(state.favoriteQuestions||{}).join('|'),
+        Number(state.questionStatsByCampaign?.[state.activeCampaignId]?.total||0),
+        JSON.stringify(missions.map(m=>[m.id,m.subject,m.name]))];
+    },
+    isVisible:()=>Boolean(q('#report')?.classList.contains('active'))&&(!state?._ownerUserId||!cloudSession?.user?.id||state._ownerUserId===cloudSession.user.id),
+    renderers:{
+      resolver:()=>{renderQuestionFilters()},
+      simulados:()=>{ensureSimuladoUI();updateSimuladoAvailability();renderGuildOfficialSimuladoBanner();enhanceSoloLevelingVisuals()},
+      provas:()=>{ensureExamBankHub();populateExamHubSelects();renderExamBankHub()},
+      desempenho:()=>{baseRenderReport();renderPerformanceChart()}
+    }
+  });
+  renderReport=function(){offerSavedTimedSimuladoResume();scheduleQuestionReportExtras()};
 
   window.renderNotifications=renderNotifications=renderInteractiveNotifications;if(q('#notificationBtn'))q('#notificationBtn').onclick=()=>{renderInteractiveNotifications();q('#notificationDialog').showModal()};enableBackdropClickToCloseDialogs();enhanceSoloLevelingVisuals();hookAutomaticDailyStepTracking();addTodayCommand();ensureReverseSchedulePanel();bindQuestionCenter();updateTodayCommand();decorateDailyStepProgressLabels();renderReverseSchedule();
   qa('[data-menu-view]').forEach(button=>button.onclick=()=>{q('#moreDialog')?.close();openView(button.dataset.menuView)});
@@ -11720,7 +12017,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
 
     // 2) Banner Masmorra Solo Leveling na Trilha de Aprendizagem (#learning)
     const learningView=q('#learning');
-    if(learningView){
+    if(learningView?.classList.contains('active')){
       let trailBanner=q('#slTrailHeroBanner');
       if(!trailBanner){
         const head=learningView.querySelector('.sectionHead');
@@ -11807,7 +12104,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
 
     // 3) Banner "Chefes das Bancas (AOCP · CEBRASPE · FGV · IDECAN)" na Central de Questões (#report)
     const reportView=q('#report');
-    if(reportView&&!q('#slBossesRaidBanner')){
+    if(reportView&&(!window.JCQuestionsWorkspace||window.JCQuestionsWorkspace.isRendering('simulados'))&&!q('#slBossesRaidBanner')){
       const anchor=q('#examBankHub')||q('#report .reportColumns')||q('#report .questionTrainer');
       if(anchor){
         const bannerHtml=`
@@ -11931,6 +12228,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
 
   function realignStudyDisciplinesWithLibrary(){
     let changed=false;
+    const questionDocuments=buildExamQuestionDocumentMap(typeof cloudDocuments!=='undefined'?cloudDocuments:[],ALL_QUESTIONS||[]);
     if(typeof window.isInvalidTrailSubject==='function'){
       const beforeSum=(ALL_SUMMARIES||[]).length;
       ALL_SUMMARIES=(ALL_SUMMARIES||[]).filter(s=>{
@@ -11945,7 +12243,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
 
       const beforeQs=(ALL_QUESTIONS||[]).length;
       ALL_QUESTIONS=(ALL_QUESTIONS||[]).filter(qItem=>{
-        const doc=qItem.documentId&&Array.isArray(cloudDocuments)?cloudDocuments.find(d=>String(d.id)===String(qItem.documentId)):null;
+        const doc=questionDocuments.get(qItem)||null;
         return !window.isInvalidTrailSubject(qItem.subject,qItem.topic,'',doc);
       });
       if(ALL_QUESTIONS.length!==beforeQs)changed=true;
@@ -11962,7 +12260,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         }
       }
       for(const qItem of (ALL_QUESTIONS||[])){
-        const doc=(qItem.documentId||qItem.sourceDocumentId)?(cloudDocuments||[]).find(d=>String(d.id)===String(qItem.documentId||qItem.sourceDocumentId)):null;
+        const doc=questionDocuments.get(qItem)||null;
         const nextCat=resolveStrictQuestionDiscipline(qItem.statement,qItem.topic,qItem.subject||doc?.detected_subject||'',qItem.options);
         if(nextCat&&!window.isInvalidTrailSubject?.(nextCat,qItem.topic,'',doc)&&nextCat!==qItem.subject){qItem.subject=nextCat;changed=true}
         if(typeof window.inferQuestionPedagogicalTopic==='function'&&(qItem.topic?.startsWith('Questão ')||qItem.topic?.startsWith('Item ')||!qItem.topic)){
@@ -12989,11 +13287,13 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   async function attachAnswerKeyToExistingDoc(docId){
     const doc=(typeof cloudDocuments!=='undefined'?cloudDocuments:[]).find(d=>String(d.id)===String(docId));
     if(!doc)return toast('Documento não localizado.');
+    const operationScope=examDocumentScopeKey(),current=()=>operationScope===examDocumentScopeKey()&&examDocumentScopeAllows(doc);
+    if(!current()||doc.is_community===true&&String(doc.user_id||'')!==String(cloudSession?.user?.id||''))return toast('Para revisar o gabarito de um PDF compartilhado, importe sua própria cópia do arquivo.');
     if(typeof window.askUserExamAnswerKeyOptions!=='function'){
-      if(typeof processEditalDocument==='function')return processEditalDocument(docId);
-      return;
+      return toast('A janela de gabaritos ainda está carregando. Aguarde e tente novamente.');
     }
     const userChoice=await window.askUserExamAnswerKeyOptions(doc,[],{reason:'Cole o gabarito oficial ou anexe o PDF do gabarito para ativar a correção destas questões nos simulados:'});
+    if(!current())return;
     if(!userChoice||userChoice.cancelled)return;
     if(userChoice.resolveWithAi&&typeof window.solveMissingAnswerKeyWithAi==='function'){
       return window.solveMissingAnswerKeyWithAi(docId);
@@ -13013,11 +13313,11 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       toast('Aplicando gabarito oficial às questões do caderno...');
       const session=await validSession();
       if(!session)return toast('Entre na sua conta para salvar o gabarito.');
-      const res=await cloudFetch(`generated_study_content?source_document_id=eq.${encodeURIComponent(doc.id)}&select=id,title,content`);
-      const rows=await res.json().catch(()=>[]);
+      if(!current())return;
+      const rows=await readExamDocumentQuestionRows(doc,session,operationScope);
+      if(!current())return;
       if(!Array.isArray(rows)||!rows.length){
-        if(typeof processEditalDocument==='function')return processEditalDocument(docId);
-        return;
+        return explainUnavailableExamDocument(doc);
       }
       let updatedCount=0,stillUnknown=0,qCounter=0;
       for(const row of rows){
@@ -13059,10 +13359,13 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
             stillUnknown++;
           }
         }
-        const saved=await cloudFetch(`generated_study_content?id=eq.${encodeURIComponent(row.id)}`,{
+        if(!current())return;
+        const saved=await cloudFetch(`generated_study_content?id=eq.${encodeURIComponent(row.id)}&user_id=eq.${encodeURIComponent(session.user.id)}&campaign_id=eq.${encodeURIComponent(row.campaign_id||doc.campaign_id||activeCampaign()?.dbId)}`,{
           method:'PATCH',
+          headers:{Authorization:`Bearer ${session.access_token}`},
           body:JSON.stringify({content:{...row.content,questions:qs}})
         });
+        if(!current())return;
         if(!saved.ok)throw new Error('Não foi possível salvar o gabarito do documento. Confira a conexão e tente novamente.');
       }
       stillUnknown=rows.flatMap(row=>Array.isArray(row.content?.questions)?row.content.questions:[]).filter(item=>answerKeyStatus(item)==='sem_gabarito').length;
@@ -13071,17 +13374,22 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         needs_review:stillUnknown>0,
         warnings:stillUnknown>0?[`${stillUnknown} questão(ões) ainda permanecem sem gabarito.`]:[]
       };
-      await cloudFetch(`study_documents?id=eq.${encodeURIComponent(doc.id)}`,{
+      if(!current())return;
+      const savedDocument=await cloudFetch(`study_documents?id=eq.${encodeURIComponent(doc.id)}&user_id=eq.${encodeURIComponent(session.user.id)}`,{
         method:'PATCH',
+        headers:{Authorization:`Bearer ${session.access_token}`},
         body:JSON.stringify({metadata:{...(doc.metadata||{}),coverage:nextCoverage}})
       });
+      if(!current())return;
+      if(!savedDocument.ok)throw new Error('O gabarito foi salvo, mas o estado do documento não foi atualizado. Recarregue para conferir.');
       doc.metadata={...(doc.metadata||{}),coverage:nextCoverage};
       await Promise.all([loadGeneratedContent(),loadCloudDocuments()]);
+      if(!current())return;
       render();
       if(typeof renderExamBankHub==='function')renderExamBankHub();
       toast(`✓ Gabarito aplicado com sucesso a ${updatedCount} questão(ões) de “${doc.title}”! Agora elas já estão ativas nos simulados.`);
     }catch(err){
-      toast(err?.message||'Não foi possível salvar o gabarito.');
+      if(current())toast(err?.message||'Não foi possível salvar o gabarito.');
     }
   }
   window.attachAnswerKeyToExistingDoc=attachAnswerKeyToExistingDoc;
@@ -14346,6 +14654,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   // Aprimoramento 4: Simulado Oficial da Guilda usando EXCLUSIVAMENTE os usuários reais cadastrados no banco (get_hunters_leaderboard)
   function renderGuildOfficialSimuladoBanner() {
     if (typeof document === 'undefined') return;
+    if(window.JCQuestionsWorkspace&&!window.JCQuestionsWorkspace.isRendering('simulados'))return;
     const reportSection = document.querySelector('#report');
     if (!reportSection) return;
     const campName = (typeof activeCampaign === 'function' && activeCampaign()?.name) ? activeCampaign().name : 'PMPE — Soldado';
@@ -15294,19 +15603,25 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   window.ensureTopicSummaryExistsForStudy = ensureTopicSummaryExistsForStudy;
 
   // ── 2) Resolução de Gabarito com IA para Provas/Simulados sem Gabarito ("🤖 Resolver com IA") ──
-  async function solveQuestionsArrayWithAi(questionsArray, doc = null) {
+  async function solveQuestionsArrayWithAi(questionsArray, doc = null, operationGuard = null) {
     if (!Array.isArray(questionsArray) || !questionsArray.length) return 0;
+    const operationScope=typeof examDocumentScopeKey==='function'?examDocumentScopeKey():null;
+    const current=()=>(typeof operationGuard!=='function'||operationGuard())&&(operationScope===null||(operationScope===examDocumentScopeKey()&&(!doc||examDocumentScopeAllows(doc))));
+    if(!current())return 0;
     const targets = [];
     questionsArray.forEach((qItem, idx) => {
       if (answerKeyStatus(qItem)==='sem_gabarito' && !isUnreviewedAiAnswer(qItem)) {
-        targets.push({ qItem, idx });
+        targets.push({ qItem, idx, signature:JSON.stringify([qItem.statement,qItem.options]) });
       }
     });
     const listToSolve = targets.filter(({qItem}) => !qItem.annulled && !qItem.anulada);
     let solvedCount = 0;
     const session = typeof validSession === 'function' ? await validSession().catch(() => null) : null;
+    if(!current())return 0;
+    const campaignId=doc?.campaign_id||(typeof activeCampaign==='function'?activeCampaign()?.dbId:'');
 
     for (let start = 0; start < listToSolve.length; start += 10) {
+      if(!current())return 0;
       const batch = listToSolve.slice(start, start + 10);
       let apiSolved = null;
       if (session?.access_token && typeof navigator !== 'undefined' && navigator.onLine) {
@@ -15316,7 +15631,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
             headers: { ...authHeaders(session.access_token) },
             body: JSON.stringify({
               action: 'solve_exam_questions_key',
-              campaign_id: doc?.campaign_id || (typeof activeCampaign === 'function' ? activeCampaign()?.dbId : ''),
+              campaign_id: campaignId,
               questions: batch.map((b, bi) => ({
                 index: bi,
                 subject: b.qItem.subject || doc?.detected_subject || 'Conteúdo Geral',
@@ -15326,15 +15641,18 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
               }))
             })
           });
+          if(!current())return 0;
           const data = await res.json().catch(() => ({}));
+          if(!current())return 0;
           if (res.ok && Array.isArray(data?.solved) && data.solved.length) {
             apiSolved = data.solved;
           }
-        } catch (_e) {}
+        } catch (_e) {if(!current())return 0;}
       }
 
       batch.forEach((b, bi) => {
         const qItem = b.qItem;
+        if(!current()||JSON.stringify([qItem.statement,qItem.options])!==b.signature||answerKeyStatus(qItem)!=='sem_gabarito'||isUnreviewedAiAnswer(qItem))return;
         const opts = Array.isArray(qItem.options) ? qItem.options : [];
         const matches = Array.isArray(apiSolved) ? apiSolved.filter(s => typeof s?.index!=='boolean' && s?.index !== null && s?.index !== undefined && String(s.index).trim() !== "" && Number(s.index) === bi) : [];
         const fromApi=matches.length===1?matches[0]:null;
@@ -15363,31 +15681,40 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       ? cloudDocuments.find(d => String(d.id) === String(docId))
       : null;
     if (!doc) return toast('Documento da prova não encontrado.');
+    const operationScope=examDocumentScopeKey(),operations=solveMissingAnswerKeyWithAi._operations||(solveMissingAnswerKeyWithAi._operations=new Map()),operationKey=`${operationScope}:${doc.id}`,operation={};
+    operations.set(operationKey,operation);
+    const current=()=>operations.get(operationKey)===operation&&operationScope===examDocumentScopeKey()&&examDocumentScopeAllows(doc);
+    if(!current()||doc.is_community===true&&String(doc.user_id||'')!==String(cloudSession?.user?.id||'')){operations.delete(operationKey);return toast('Para revisar o gabarito de um PDF compartilhado, importe sua própria cópia do arquivo.');}
 
     const btns = document.querySelectorAll(`[data-solve-ai-key-doc="${doc.id}"], [data-add-key-doc="${doc.id}"]`);
     btns.forEach(b => { b.disabled = true; if (b.dataset.solveAiKeyDoc) b.textContent = '⏳ IA resolvendo gabarito...'; });
 
     try {
       if(!navigator.onLine||!cloudSession?.access_token)throw new Error('Entre na sua conta e conecte-se à internet. Nenhum gabarito foi alterado.');
+      const session=await validSession();
+      if(!current())return;
+      if(!session?.access_token||session.user?.id!==cloudSession?.user?.id)throw new Error('Entre novamente na sua conta para salvar sugestões de gabarito.');
       toast(`🤖 Analisando e resolvendo as questões de “${doc.title}” com a IA...`);
       let totalSolved = 0;
       const inspectedQuestions=[];
 
       if (typeof cloudSession === 'object' && cloudSession?.access_token && navigator.onLine) {
-        const res = await cloudFetch(`generated_study_content?source_document_id=eq.${encodeURIComponent(doc.id)}&select=id,title,content`);
-        if(!res.ok)throw new Error('Não foi possível carregar as questões. Nenhum gabarito foi confirmado.');
-        const rows = await res.json().catch(() => []);
+        const rows=await readExamDocumentQuestionRows(doc,session,operationScope);
+        if(!current())return;
         if (Array.isArray(rows) && rows.length) {
           for (const row of rows) {
-            const qs = Array.isArray(row.content?.questions) ? row.content.questions : [];
+            const qs = Array.isArray(row.content?.questions) ? row.content.questions.map(item=>({...item,options:Array.isArray(item.options)?[...item.options]:item.options})) : [];
             if (!qs.length) continue;
             inspectedQuestions.push(...qs);
-            const cnt = await solveQuestionsArrayWithAi(qs, doc);
+            const cnt = await solveQuestionsArrayWithAi(qs, doc, current);
+            if(!current())return;
             if(!cnt)continue;
-            const saved=await cloudFetch(`generated_study_content?id=eq.${encodeURIComponent(row.id)}`, {
+            const saved=await cloudFetch(`generated_study_content?id=eq.${encodeURIComponent(row.id)}&user_id=eq.${encodeURIComponent(session.user.id)}&campaign_id=eq.${encodeURIComponent(row.campaign_id||doc.campaign_id||activeCampaign()?.dbId)}`, {
               method: 'PATCH',
+              headers:{Authorization:`Bearer ${session.access_token}`},
               body: JSON.stringify({ content: { ...row.content, questions: qs } })
             });
+            if(!current())return;
             if(!saved.ok)throw new Error('Não foi possível salvar as sugestões da IA. Confira a conexão e tente novamente.');
             totalSolved += cnt;
           }
@@ -15396,11 +15723,13 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
 
       // Atualiza também questões já em memória (ALL_QUESTIONS)
       if (typeof ALL_QUESTIONS !== 'undefined' && Array.isArray(ALL_QUESTIONS)) {
-        const memQs = ALL_QUESTIONS.filter(q => String(q.documentId || q.sourceDocumentId || '') === String(doc.id));
+        const memQs=examDocumentQuestionPool(doc,ALL_QUESTIONS);
         if (memQs.length && !inspectedQuestions.length) {
           inspectedQuestions.push(...memQs);
-          totalSolved = await solveQuestionsArrayWithAi(memQs, doc);
+          totalSolved = await solveQuestionsArrayWithAi(memQs, doc, current);
+          if(!current())return;
           if(totalSolved){if(typeof save==='function')save();await window.persistToLocalDatabase?.(state?.activeCampaignId);}
+          if(!current())return;
         }
       }
 
@@ -15422,24 +15751,29 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         missing_key_count: stillUnknown,
         warnings: cleanWarnings
       };
-      doc.metadata = { ...(doc.metadata || {}), coverage: nextCoverage };
+      const nextMetadata = { ...(doc.metadata || {}), coverage: nextCoverage };
 
       if (typeof cloudSession === 'object' && cloudSession?.access_token && navigator.onLine) {
-        const saved=await cloudFetch(`study_documents?id=eq.${encodeURIComponent(doc.id)}`, {
+        const saved=await cloudFetch(`study_documents?id=eq.${encodeURIComponent(doc.id)}&user_id=eq.${encodeURIComponent(session.user.id)}`, {
           method: 'PATCH',
-          body: JSON.stringify({ metadata: doc.metadata })
+          headers:{Authorization:`Bearer ${session.access_token}`},
+          body: JSON.stringify({ metadata: nextMetadata })
         });
+        if(!current())return;
         if(!saved.ok)throw new Error('Sugestões salvas, mas não foi possível atualizar o estado do documento. Recarregue para conferir.');
+        doc.metadata=nextMetadata;
         await Promise.all([loadGeneratedContent(), loadCloudDocuments()]).catch(() => undefined);
+        if(!current())return;
       }
 
       if (typeof render === 'function') render();
       if (typeof renderExamBankHub === 'function') renderExamBankHub();
       toast(`🤖 ${totalSolved} sugestão(ões) salvas para “${doc.title}”. Valide na fila de revisão ou adicione o gabarito do documento antes do treino pontuado.`);
     } catch (err) {
-      toast(err?.message || 'Não foi possível resolver o gabarito com a IA.');
+      if(current())toast(err?.message || 'Não foi possível resolver o gabarito com a IA.');
     } finally {
-      btns.forEach(b => { b.disabled = false; if (b.dataset.solveAiKeyDoc) b.textContent = '🤖 Resolver com IA'; });
+      if(current())btns.forEach(b => { b.disabled = false; if (b.dataset.solveAiKeyDoc) b.textContent = '🤖 Resolver com IA'; });
+      if(operations.get(operationKey)===operation)operations.delete(operationKey);
     }
   }
   window.solveMissingAnswerKeyWithAi = solveMissingAnswerKeyWithAi;
@@ -16175,6 +16509,28 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   const origNextQ = window.nextQuestion;
   if (typeof origNextQ === 'function' && !origNextQ._r161SessionHooked) {
     window.nextQuestion = nextQuestion = function() {
+      const scope=typeof currentQuestionSessionScope==='function'?currentQuestionSessionScope():null,savedScope=activeQuestions?._sessionScope;
+      if(scope&&savedScope&&(savedScope.userId!==scope.userId||savedScope.campaignId!==scope.campaignId||savedScope.resetEpoch!==scope.resetEpoch)){
+        activeQuestions=null;q('#questionDialog')?.close?.();
+        toast('O contexto deste treino mudou. Reabra a sessão na conta e no portal de origem.');
+        return false;
+      }
+      // An older saved session may already contain answered items that current
+      // source/classification checks would exclude. Keep history and the saved
+      // answers, but do not mint a new aggregate result from that notebook.
+      if(activeQuestions&&activeQuestions.current>=activeQuestions.questions.length-1&&typeof isQuestionDisciplineEligible==='function'&&activeQuestions.questions.some(item=>!isQuestionDisciplineEligible(item,'all'))){
+        saveActiveQuestionSession();
+        toast('A conclusão foi suspensa: este treino contém questões aguardando revisão. Suas respostas continuam salvas; encerre o caderno e revise a fonte antes de iniciar outro.');
+        return false;
+      }
+      if(activeQuestions&&activeQuestions.current>=activeQuestions.questions.length-1&&typeof gradeAnswer==='function'&&activeQuestions.questions.some(item=>!gradeAnswer(item,0).scored)){
+        // Pending/annulled keys are explanation-only practice. A zero in the
+        // aggregate score would turn them into false errors and could grant a
+        // completion bonus. Valid individual answers have already been saved.
+        activeQuestions=null;q('#questionDialog')?.close?.();clearSavedQuestionSession();
+        toast('Prática concluída sem placar agregado: há gabaritos pendentes ou anulados. Os registros individuais já validados foram mantidos; questões pendentes não contam como erro nem concedem XP.');
+        return false;
+      }
       const res = origNextQ();
       if (!activeQuestions) {
         clearSavedQuestionSession();
