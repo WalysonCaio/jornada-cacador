@@ -7,10 +7,12 @@ const block=(src,start,end)=>{const a=src.indexOf(start),b=src.indexOf(end,a);as
 const syncCode=block(html,'async function pushCloudState(){','async function performGateAuth(');
 const validCode=block(html,'async function validSession(){','function updateAccountUI(');
 const mergeCode=block(html,'function mergeProgressStates(','async function pushCloudState(){');
+const persistenceCode=block(html,'function persistProgressLocally(){','function createProgressEventId(')+block(html,'function progressValuesEqual(','function save(){');
+const ledgerCode=readFileSync(new URL('../dist/progress-ledger.js',import.meta.url),'utf8');
 const tick=async()=>{for(let i=0;i<8;i++)await Promise.resolve()};
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}};
 const session=id=>({user:{id},access_token:`token-${id}`,refresh_token:`refresh-${id}`,expires_at:Date.now()/1000+3600});
-const initialState=id=>({_ownerUserId:id,_resetEpoch:1,_serverRevision:2,_dirty:false,activeCampaignId:'portal-a',done:{},publicProfile:{bio:'initial'}});
+const initialState=id=>({_ownerUserId:id,_resetEpoch:1,_serverRevision:2,_dirty:false,activeCampaignId:'portal-a',done:{},publicProfile:{bio:'initial'},settings:{studyTimeZone:'America/Sao_Paulo'},learning:{xp:0,xpLedger:{version:1,legacyBase:0,events:{}}}});
 function setup(){
  const writes=[],status=[],toasts=[],applied=[];
  const ctx={state:initialState('a'),cloudSession:session('a'),syncBusy:false,syncReady:true,navigator:{onLine:true},KEY:'state',focusDeviceId:'device',
@@ -21,7 +23,8 @@ function setup(){
   applyServerState:(remote,revision,epoch)=>{applied.push(remote);ctx.state={...remote,_serverRevision:revision,_resetEpoch:epoch||remote._resetEpoch||0,_dirty:false}},
   cloudDocuments:[],cloudEssays:[],ALL_SUMMARIES:[],ALL_FLASHCARDS:[],ALL_QUESTIONS:[],LEARNING_SUBJECTS:[],
  };
- vm.createContext(ctx);vm.runInContext(mergeCode+syncCode,ctx);
+ ctx.window=ctx;
+ vm.createContext(ctx);vm.runInContext(ledgerCode+persistenceCode+mergeCode+syncCode,ctx);
  return {ctx,writes,status,toasts,applied};
 }
 const accepted=ctx=>({accepted:true,state:{...JSON.parse(JSON.stringify(ctx.state)),publicProfile:{bio:'server'}},revision:3,reset_epoch:1});

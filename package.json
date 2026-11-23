@@ -1,6 +1,6 @@
 {
   "name": "jornada-cacador",
-  "version": "1.0.185",
+  "version": "1.0.186",
   "private": true,
   "scripts": {
     "test": "node scripts/test-all.mjs",

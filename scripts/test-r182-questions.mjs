@@ -10,8 +10,8 @@ const other={...original,id:'q2',subject:'Direito Penal',sourceDocumentId:'doc-b
 const legacy={...original,id:'legacy',sourceDocumentId:null,board:'Prova A'};
 const foreign={...original,id:'q3',sourceDocumentId:null,board:'Prova B'};
 const documents={window:{},topicKey:key,ALL_QUESTIONS:[original,other,legacy,foreign]};
-vm.createContext(documents);vm.runInContext(section('  function examDocumentQuestionPool(', '  function renderSingleExamDocCardHtml('),documents);
-assert.deepEqual(Array.from(documents.examDocumentQuestionPool({id:'doc-a',title:'Prova A'}),q=>q.id),['q1','legacy']);
+vm.createContext(documents);vm.runInContext(section('  function examDocumentScopeAllows(', '  function renderSingleExamDocCardHtml('),documents);
+assert.deepEqual(Array.from(documents.examDocumentQuestionPool({id:'doc-a',title:'Prova A'}),q=>q.id),['q1'],'Uma coincidência de título não confirma a origem de uma questão legada');
 assert.equal(documents.examDocumentQuestionPool({id:'missing',title:'Prova sem questões'}).length,0,'Documento vazio não puxa todo banco oficial');
 assert.equal(documents.examDocumentQuestionPool(null).length,0,'Documento não encontrado não inicia outro caderno');
 
@@ -50,7 +50,7 @@ sprint.startCaveiraSprintSession();assert.equal(shown,1);assert.deepEqual(Array.
 
 // Starting the document's timed exam uses exactly its validated questions.
 let generalCalls=0,opened=0;
-const timed={activeSimulado:null,simuladoTimer:null,readSavedTimedSimulado:()=>null,
+const timed={activeSimulado:null,simuladoTimer:null,readSavedTimedSimulado:()=>null,ensureSimuladoUI(){},
  simuladoCandidatePool(){generalCalls++;return[other];},q:()=>null,
  isQuestionDisciplineEligible:q=>!q.needs_review,answerKeyStatus:q=>q.correct_index>=0?'oficial':'sem_gabarito',
  buildProportionalSimuladoQuestions:(pool,count)=>pool.slice(0,count),clearInterval(){},
@@ -63,12 +63,12 @@ timed.startTimedSimulado({type:'click'});assert.equal(generalCalls,1,'Evento de 
 console.log('OK r182: catálogo fechado sem montar cards, hidratação ao abrir, proveniência do documento e sprints/simulados respeitando a seleção.');
 
 // A legitimate law textbook with a manual-* id is not platform help.
-const manuals={window:{inferStrictQuestionSubject:()=> 'Direito Penal'},topicKey:key,
+const manuals={window:{inferStrictQuestionSubject:()=> 'Direito Penal'},topicKey:key,subjectKey:key,
  canonicalSubjectName:value=>String(value??''),isInvalidTrailSubject:()=>false,
  strictSubjectMatch:(subject,target)=>target==='all'||key(subject)===key(target)};
 vm.createContext(manuals);
 vm.runInContext(section('  function isPlatformManualStudyArtifact(', '  function getActiveEditalSubjectsList('),manuals);
-vm.runInContext(section('  const questionDisciplineCache=', '  function buildSubjectAppropriateDistractors('),manuals);
+vm.runInContext(section('  function repairKnownExamTextArtifacts(', '  function buildSubjectAppropriateDistractors('),manuals);
 const textbook={id:'manual-direito-penal',subject:'Direito Penal',title:'Manual de Direito Penal',subject_source:'manual',statement:'Sobre a tipicidade penal, assinale a alternativa correta.',options:['Primeira','Segunda']};
 assert.equal(manuals.isPlatformManualStudyArtifact(textbook),false);
 assert.equal(manuals.isQuestionDisciplineEligible(textbook,'Direito Penal'),true);

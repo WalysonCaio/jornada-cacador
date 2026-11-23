@@ -120,7 +120,7 @@ const v59Src = readFileSync(new URL("../dist/v59-enhancements.js", import.meta.u
 assert(!v59Src.includes("$$$("), "v59-enhancements.js não pode conter $$$ inexistente que quebrava renderSummaries()");
 
 // - Otimização O(1) em renderExamBankHub (qsByDocId Map)
-assert(v77Src.includes("const qsByDocId = new Map();"), "renderExamBankHub deve usar Map O(1) qsByDocId para não travar com 6000+ questões");
+assert(v77Src.includes("const qsByDocId=buildExamDocumentQuestionIndex("), "renderExamBankHub deve construir um único índice de proveniência para o catálogo inteiro");
 
 // - Fotos de perfil e visitante no Ranking e Chat
 assert(v77Src.includes("openPublicHunterProfileVisitorModal"), "Ranking e Chat devem permitir visitar o perfil público do caçador");

@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
 const source=readFileSync(new URL('../dist/sw.js',import.meta.url),'utf8');
+const expectedRelease='r'+JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).version.split('.').at(-1);
 const scope='https://app.test/study/';
 const absolute=value=>typeof value==='string'?new URL(value,scope).href:value.url;
 function response(body,{status=200,type='basic'}={}){
@@ -45,7 +46,7 @@ function fixture(existing){
  for(const file of ['./pdf.mjs','./pdf.worker.mjs'])assert(!f.precached.includes(file),file+' deve carregar no primeiro uso');
  for(const file of ['./login-banner.jpg','./login-banner.webp','./bancas-boss-banner.jpg','./bancas-boss-banner.webp','./og-banner-1200x630.jpg'])assert(f.precached.includes(file),file+' permanece disponível no modo offline');
  assert.equal(f.networkCalls.length,0,'Nenhuma chamada de rede do handler foi disparada no teste');
- assert.equal(f.stores.size,1);assert([...f.stores.keys()][0].endsWith('-r185'));
+ assert.equal(f.stores.size,1);assert([...f.stores.keys()][0].endsWith('-'+expectedRelease));
 }
 
 // Um PDF ainda não aberto falha como recurso, sem receber o HTML do aplicativo.
@@ -102,6 +103,6 @@ for(const options of [{status:404,type:'basic'},{status:500,type:'basic'},{statu
  const f=fixture(new Map([['unrelated-user-cache',new Map()],['jornada-cacador-old',new Map()],['jornada-cacador-v78-smart-notebook-r184',new Map()]]));
  await f.install();await f.activate();assert.equal(f.claimed,1);assert(f.stores.has('unrelated-user-cache'));
  assert(!f.stores.has('jornada-cacador-old'));assert(!f.stores.has('jornada-cacador-v78-smart-notebook-r184'));
- assert([...f.stores.keys()].some(key=>key.endsWith('-r185')));assert(!f.removed.includes('unrelated-user-cache'));
+ assert([...f.stores.keys()].some(key=>key.endsWith('-'+expectedRelease)));assert(!f.removed.includes('unrelated-user-cache'));
 }
 console.log('OK r185 SW: PDF/worker sob demanda, shell e JPGs preservados, cache válido após primeiro uso, offline honesto, allowlist, falha de quota e ativação isolada.');

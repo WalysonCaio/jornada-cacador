@@ -4,6 +4,10 @@ Plataforma pessoal de preparação para concursos públicos, com foco especial n
 
 O projeto transforma o edital enviado pelo usuário em um plano de aprendizagem: disciplinas, sequência pedagógica, missões diárias, trilha de questões, revisões programadas, caderno de erros, cronômetro de foco e acompanhamento de progresso.
 
+## Revisão r186
+
+[Aplicação, ZIP, GitHub e publicação](docs/revisao-r186/LEIA-ME.md) · [Conferência do relato do Gemini e limites](docs/revisao-r186/CONFERENCIA.md) · [Verificações](docs/revisao-r186/VALIDACAO.txt). Questões em quatro painéis sob demanda, coerência de disciplinas/estrutura, vínculos de provas, confirmação de resposta e sincronização de XP/ofensiva. A biblioteca compartilhada e os Manuais como ajuda foram preservados.
+
 ## Revisão r178
 
 [Alterações, avaliação e aplicação](docs/revisao-r178/LEIA-ME.md). Inclui correções de disciplinas/gabaritos, retomada, desempenho local e privacidade. Os Manuais do Caçador ficam na ajuda da plataforma; o compartilhamento da biblioteca foi preservado.

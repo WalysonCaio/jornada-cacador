@@ -75,33 +75,14 @@ vm.runInContext(section('  const baseRenderQuestionFilters=', '  // 11. Painel T
 filters.renderQuestionFilters();
 assert.deepEqual(calls, ['filters', 'topics', 'pool']);
 
-// Secondary work starts after paint, splits charts/catalogue, and cancels stale portal/view jobs.
-let active = true;
-const frames = [], tasks = [], renders = [];
-const deferred = {
-  window: { requestAnimationFrame: fn => frames.push(fn) },
-  setTimeout: fn => tasks.push(fn),
-  state: { activeCampaignId: 'portal-a' },
-  q: () => ({ classList: { contains: () => active } }),
-  renderPerformanceChart: () => renders.push('charts'),
-  renderExamBankHub: () => renders.push('catalogue')
-};
+// r186 delegates secondary work to the selected workspace panel. Its account,
+// portal, reset and revision cancellation are exercised in test-r186-questions-lazy.
+let requests=0;
+const deferred={window:{JCQuestionsWorkspace:{request(){requests++}}}};
 vm.createContext(deferred);
-vm.runInContext(section('  let questionReportExtrasGeneration=', '  const baseRenderReport='), deferred);
-function runFrame() { frames.splice(0).forEach(fn => fn()); tasks.splice(0).forEach(fn => fn()); }
+vm.runInContext(section('  function scheduleQuestionReportExtras(){', '  const baseRenderReport='),deferred);
 deferred.scheduleQuestionReportExtras();
-assert.deepEqual(renders, []);
-runFrame(); assert.deepEqual(renders, ['charts']);
-runFrame(); assert.deepEqual(renders, ['charts', 'catalogue']);
-renders.length = 0;
-deferred.scheduleQuestionReportExtras(); deferred.scheduleQuestionReportExtras();
-runFrame(); runFrame();
-assert.deepEqual(renders, ['charts', 'catalogue'], 'renderizações repetidas devem cancelar o trabalho anterior');
-renders.length = 0;
-deferred.scheduleQuestionReportExtras(); deferred.state.activeCampaignId = 'portal-b';
-runFrame(); runFrame(); assert.deepEqual(renders, []);
-deferred.scheduleQuestionReportExtras(); active = false;
-runFrame(); runFrame(); assert.deepEqual(renders, []);
+assert.equal(requests,1);
 
 // Reviewing an already answered item cannot score again or replace the original choice.
 let scored = 0, saved = 0;
@@ -202,6 +183,7 @@ const timedContext = {
   learningCategory: value => value,
   canonicalSubjectName: value => value,
   subjectKey: value => value.toLowerCase(),
+  topicKey: value => String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(),
   questionFingerprint: value => value.statement,
   recordQuestionResult: () => attempts++,
   missionPool: () => [{id: 'wrong-subject-mission', subject: 'Outra disciplina'}],
@@ -211,6 +193,8 @@ const timedContext = {
   Date,
 };
 vm.createContext(timedContext);
+vm.runInContext(section('  function getQuestionQualityDecision(', '  const questionDisciplineCache='),timedContext);
+vm.runInContext(section('  function timedSimuladoQualityReady(', '  function startTimedSimuladoClock('),timedContext);
 vm.runInContext(section('  function finishTimedSimulado(){', '  // 5. Simulador de Aprovação'), timedContext);
 timedContext.finishTimedSimulado();
 assert.equal(attempts, 1);
@@ -228,4 +212,15 @@ timedContext.activeSimulado = JSON.parse(JSON.stringify({...timedBattle, session
 timedContext.finishTimedSimulado();
 assert.equal(timedContext.activeSimulado, null);
 assert.equal(attempts, 1, 'simulado do portal antigo não pontua no portal novo');
+// A saved notebook from an older version cannot bypass source checks on delivery.
+let preservedIncomplete=0;
+timedContext.saveActiveTimedSimulado=()=>{preservedIncomplete++;return true;};
+timedContext.offerSavedTimedSimuladoResume=()=>{};
+timedContext.activeSimulado=JSON.parse(JSON.stringify({...timedBattle,sessionId:'old-incomplete',_sessionScope:timedScope,questions:[{...question,statement:'No excerto, identifique as afirmativas corretas.',options:['Apenas I e II.','Apenas III.']}],answers:[0]}));
+timedContext.finishTimedSimulado();
+assert.equal(preservedIncomplete,1,'respostas continuam salvas para revisão da fonte');
+assert.equal(timedContext.activeSimulado,null);
+assert.equal(attempts,1,'enunciado órfão não registra acerto ou erro');
+assert.equal(savedResults,1,'enunciado órfão não registra resultado ou XP');
+assert.equal(timedContext.state.scores.length,1);
 console.log('OK r174: simulado cronometrado preserva respostas/tesoura, relógio contínuo, namespace e finalização idempotente por sessão.');
