@@ -1,7 +1,7 @@
-> Versão atual r186: [Questões, sincronização e publicação](docs/revisao-r186/LEIA-ME.md). O conteúdo abaixo registra os recursos anteriores preservados.
-# Jornada do Caçador — Guia Unificado (r186)
+> Versão atual r187: [Questões, sincronização e publicação](docs/revisao-r187/LEIA-ME.md). O conteúdo abaixo registra os recursos anteriores preservados.
+# Jornada do Caçador — Guia Unificado (r187)
 
-Revisão de 23/11/2026. [Aplicação da versão, GitHub e Supabase](docs/revisao-r186/LEIA-ME.md) · [Conferência do relato do Gemini e limites](docs/revisao-r186/CONFERENCIA.md) · [Validação](docs/revisao-r186/VALIDACAO.txt).
+Revisão de 23/11/2026. [Aplicação da versão, GitHub e Supabase](docs/revisao-r187/LEIA-ME.md) · [Conferência do relato do Gemini e limites](docs/revisao-r187/CONFERENCIA.md) · [Validação](docs/revisao-r187/VALIDACAO.txt).
 
 Este guia substitui as instruções históricas que citavam cache r148, contagens fixas de questões e garantias sem evidência. Publicar código no GitHub e atualizar Supabase/Cloudflare são etapas distintas.
 

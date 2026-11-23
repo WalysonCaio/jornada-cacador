@@ -580,6 +580,86 @@
 
   window.extractStructuredEditalTopics = extractStructuredEditalTopics;
 
+  // A PDF text item is a positioned fragment, not necessarily a whole word.
+  // Keep its advance and explicit whitespace until adjacent fragments are joined.
+  function pdfTextItemGeometry(item, index = 0) {
+    const matrix = Array.isArray(item?.transform) ? item.transform : [];
+    const positioned = matrix.length >= 6 && matrix.slice(0, 6).every(Number.isFinite);
+    const x = positioned ? matrix[4] : 0, y = positioned ? matrix[5] : 0;
+    const scale = positioned ? Math.hypot(matrix[0], matrix[1]) : 0;
+    let ux = scale > 0 ? matrix[0] / scale : 1, uy = scale > 0 ? matrix[1] / scale : 0;
+    const vertical = item?.dir === "ttb";
+    if (vertical) { const oldX = ux; ux = uy; uy = -oldX; }
+    const extent = vertical ? item?.height : item?.width, rawWidth = Number(extent);
+    const width = extent !== null && extent !== undefined && extent !== "" && Number.isFinite(rawWidth) && rawWidth >= 0 ? rawWidth : null;
+    const height = Number(item?.height);
+    const fontSize = Math.max(scale, positioned ? Math.hypot(matrix[2], matrix[3]) : 0, Number.isFinite(height) && height > 0 && !vertical ? height : 0) || 10;
+    const raw = String(item?.str ?? "").normalize("NFC").replace(/[ﬀﬁﬂﬃﬄﬅﬆ]/g, char => ({ﬀ:"ff",ﬁ:"fi",ﬂ:"fl",ﬃ:"ffi",ﬄ:"ffl",ﬅ:"st",ﬆ:"st"})[char]);
+    return {x, y, str:raw.trim(), raw, width, fontSize, along:x * ux + y * uy, cross:-x * uy + y * ux,
+      orientation:Math.round(Math.atan2(uy, ux) / (Math.PI / 36)), rtl:item?.dir === "rtl", hasEOL:item?.hasEOL === true,
+      positioned:positioned && scale > 0, index};
+  }
+
+  function groupPdfTextItemsIntoRows(items) {
+    const buckets = new Map();
+    for (const [index, item] of (Array.isArray(items) ? items : []).entries()) {
+      if (!item || typeof item.str !== "string" || (!item.str.length && !item.hasEOL)) continue;
+      const part = pdfTextItemGeometry(item, index), key = `${part.orientation}:${part.rtl}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(part);
+    }
+    const rows = [];
+    for (const bucket of buckets.values()) {
+      bucket.sort((a, b) => b.cross - a.cross || a.along - b.along || a.index - b.index);
+      const groups = [];
+      for (const part of bucket) {
+        let row = groups[groups.length - 1];
+        const tolerance = Math.max(.75, Math.min(3.5, Math.max(part.fontSize, row?.fontSize || 0) * .28));
+        if (!row || Math.abs(part.cross - row.cross) > tolerance) {
+          row = {cross:part.cross, fontSize:part.fontSize, items:[]}; groups.push(row);
+        }
+        row.items.push(part); row.fontSize = Math.max(row.fontSize, part.fontSize);
+      }
+      for (const row of groups) {
+        row.items.sort((a, b) => (a.rtl ? b.along - a.along : a.along - b.along) || a.index - b.index);
+        rows.push(row.items);
+      }
+    }
+    return rows;
+  }
+
+  function joinPdfTextRow(parts) {
+    const row = Array.isArray(parts) ? parts : [];
+    const knownSpaces = row.filter(part => part.positioned && part.width > 0 && /^\s+$/.test(part.raw)).map(part => part.width / part.raw.length);
+    const knownSpace = knownSpaces.length ? Math.min(...knownSpaces) : null;
+    let text = "", previous = null, explicitSpace = false;
+    for (const part of row) {
+      if (!part.str) { explicitSpace = explicitSpace || /\s/.test(part.raw); if (part.hasEOL && text && !text.endsWith("\n")) text += "\n"; continue; }
+      let separator = "";
+      if (previous) {
+        const font = Math.min(previous.fontSize, part.fontSize);
+        const advance = [previous, part].filter(value => value.width > 0 && value.str.length > 0).map(value => value.width / value.str.length);
+        // A narrow font's real word space may be smaller than 0.18 em.
+        const threshold = Math.min(font * .18, advance.length ? Math.max(font * .3, Math.min(...advance)) * .4 : font * .18, knownSpace === null ? Infinity : knownSpace * .55);
+        const gap = previous.rtl ? previous.along - part.along - (part.width || 0) : part.along - previous.along - (previous.width || 0);
+        const reliable = previous.positioned && part.positioned && previous.width !== null && part.width !== null && previous.orientation === part.orientation && previous.rtl === part.rtl;
+        const whitespace = explicitSpace || /\s$/.test(previous.raw) || /^\s/.test(part.raw);
+        const label = /^(?:[A-Ea-e][).:]|\([A-Ea-e]\)|\d{1,3}[).:])$/.test(previous.str);
+        if (previous.hasEOL || (reliable && gap > Math.max(28, font * 3.2) && !label)) separator = "\n";
+        else if (whitespace || !reliable || gap > threshold || gap < -font * .35) separator = " ";
+      }
+      if (!text.endsWith("\n")) text += separator;
+      text += part.str; previous = part; explicitSpace = false;
+    }
+    const normalized = text.replace(/[\t\u00a0 ]+/g, " ").trim();
+    return typeof window.JCQuestionText?.normalizeTypography === "function" ? window.JCQuestionText.normalizeTypography(normalized) : normalized;
+  }
+
+  function reconstructPdfTextContent(content) {
+    return groupPdfTextItemsIntoRows(content?.items || []).map(joinPdfTextRow).filter(Boolean).join("\n");
+  }
+  window.JCPdfTextGeometry = Object.freeze({groupItemsIntoRows:groupPdfTextItemsIntoRows, joinTextRow:joinPdfTextRow, reconstruct:reconstructPdfTextContent});
+
   function withTimeout(promise, ms, label) {
     let timer;
     const timeout = new Promise((_, reject) => {
@@ -799,7 +879,7 @@
         if(!currentScope()){try{page.cleanup();await pdf.destroy();}catch{}return false;}
         const content = await withTimeout(page.getTextContent(),6500,"PAGE_TEXT_TIMEOUT");
         if(!currentScope()){try{page.cleanup();await pdf.destroy();}catch{}return false;}
-        const rawItems = (content.items || []).filter((it) => it && typeof it.str === "string" && it.str.trim());
+        const rawItems = (content.items || []).filter((it) => it && typeof it.str === "string" && (it.str.length || it.hasEOL));
         const watermarkZones = [];
         for (const it of rawItems) {
           const s = it.str.trim();
@@ -826,51 +906,28 @@
         const vp = typeof page.getViewport === "function" ? page.getViewport({ scale: 1 }) : { width: 595, height: 842 };
         const midX = (Number(vp?.width) || 595) * 0.5;
         const leftColCount = filteredItems.filter((it) => {
+          if (!it.str.trim()) return false;
           const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
           const w = Number(it.width) || (it.str.length * 4.5);
           return x >= 18 && x < midX - 24 && (x + w) < midX + 12;
         }).length;
         const rightColCount = filteredItems.filter((it) => {
+          if (!it.str.trim()) return false;
           const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
           return x >= midX - 6 && x <= midX + 90;
         }).length;
         const isTwoColumnPage = ["prova", "simulado"].includes(String(doc.document_type || "")) && leftColCount >= 10 && rightColCount >= 10;
-        const groupItemsIntoRows = (itemsSubset) => {
-          itemsSubset.sort((a, b) => {
-            const ay = Array.isArray(a.transform) && Number.isFinite(a.transform[5]) ? a.transform[5] : 0;
-            const by = Array.isArray(b.transform) && Number.isFinite(b.transform[5]) ? b.transform[5] : 0;
-            if (Math.abs(by - ay) > 3.5) return by - ay;
-            const ax = Array.isArray(a.transform) && Number.isFinite(a.transform[4]) ? a.transform[4] : 0;
-            const bx = Array.isArray(b.transform) && Number.isFinite(b.transform[4]) ? b.transform[4] : 0;
-            return ax - bx;
-          });
-          const groups = [];
-          let cRow = [], cY = null;
-          for (const it of itemsSubset) {
-            const y = Array.isArray(it.transform) && Number.isFinite(it.transform[5]) ? it.transform[5] : 0;
-            const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
-            const str = it.str.trim();
-            if (cY !== null && Math.abs(y - cY) > 3.5) {
-              groups.push(cRow);
-              cRow = [];
-            }
-            cRow.push({ x, y, str });
-            cY = y;
-          }
-          if (cRow.length) groups.push(cRow);
-          return groups;
-        };
         const rowGroups = isTwoColumnPage
           ? [
-              ...groupItemsIntoRows(filteredItems.filter((it) => (Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0) < midX - 6)),
-              ...groupItemsIntoRows(filteredItems.filter((it) => (Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0) >= midX - 6)),
+              ...groupPdfTextItemsIntoRows(filteredItems.filter((it) => (Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0) < midX - 6)),
+              ...groupPdfTextItemsIntoRows(filteredItems.filter((it) => (Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0) >= midX - 6)),
             ]
-          : groupItemsIntoRows(filteredItems);
+          : groupPdfTextItemsIntoRows(filteredItems);
         const pageLines = [];
         const stripChrome = (l) => l.replace(/\b(?:COMENT[AÁ]RIO|DIREITO\s+(?:PENAL|CONSTITUCIONAL)|WWW\.CTCONCURSOS(?:\s+ONLINE\.COM\.BR)?|PROF\.ABIBREBIUCAS|PROJETO\s+105\s+QUEST\s*Õ?ES(?:\s+PMCE)?)\b/gi, "").trim();
         for (const r of rowGroups) {
           const minX = Math.min(...r.map((i) => i.x));
-          let rowTxt = r.map((i) => i.str).join(" ").replace(/\s+/g, " ").trim();
+          let rowTxt = joinPdfTextRow(r);
           if (!rowTxt) continue;
           rowTxt = rowTxt.replace(/(?:^|\n|\s)(\d)\s+(\d)\s*\)/g, " $1$2)").replace(/(?:^|\n|\s)(\d)\s+(\d)\s+(\d)\s*\)/g, " $1$2$3)");
           if(!preserveSourceText)rowTxt = stripChrome(rowTxt);
@@ -1520,7 +1577,7 @@
           for (let pNum = 1; pNum <= samplePages; pNum++) {
             const page = await pdf.getPage(pNum);
             const content = await page.getTextContent();
-            const pageTxt = (content.items || []).map((it) => it.str || "").join(" ");
+            const pageTxt = reconstructPdfTextContent(content);
             sampledChars += pageTxt.replace(/\s/g, "").length;
             fullSampleText += " " + pageTxt;
             page.cleanup();
@@ -1872,7 +1929,7 @@ Gere EXCLUSIVAMENTE um objeto JSON puro (sem markdown) no formato:
           for (let p = 1; p <= pdf.numPages; p++) {
             const page = await pdf.getPage(p);
             const content = await page.getTextContent();
-            fullAk += " " + (content.items || []).map((it) => it.str || "").join(" ");
+            fullAk += "\n" + reconstructPdfTextContent(content);
             page.cleanup();
           }
           try { await pdf.destroy(); } catch {}

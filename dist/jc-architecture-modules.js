@@ -2599,7 +2599,7 @@
   }
 
   function ensureCollapsibleDesktopSidebar() {
-    if (document.getElementById('jcCollapsibleSidebar')) return;
+    if (document.getElementById('jcCollapsibleSidebar')) { ensureSidebarActiveStateSync(); return; }
     const isCollapsed = focusPreference('jc_sidebar_collapsed_v1') === '1';
     document.body.classList.add('jcHasSidebar');
     document.body.classList.toggle('jcSidebarCollapsed', isCollapsed);
@@ -2646,7 +2646,7 @@
             return `<div class="jcSideSectionTitle">${item.section}</div>`;
           }
           return `
-            <button type="button" class="jcSideNavBtn ${item.view === 'today' ? 'active' : ''}" data-jc-side-view="${item.view}" title="${item.label}">
+            <button type="button" class="jcSideNavBtn" data-jc-side-view="${item.view}" title="${item.label}">
               <i class="jcSideNavIcon">${item.icon}</i>
               <span class="jcSideNavLabel">${item.label}</span>
               ${item.badge ? `<span class="jcSideNavBadge">${item.badge}</span>` : ''}
@@ -2720,14 +2720,51 @@
       const nextClean = !document.body.classList.contains('jcCleanDashboard');
       applyCaveiraCleanDashboardMode(nextClean);
     };
+    ensureSidebarActiveStateSync();
   }
 
   function syncSidebarActiveState(viewId) {
     const rail = document.getElementById('jcCollapsibleSidebar');
     if (!rail) return;
+    // A requested navigation can be refused (for example, while a duel is in
+    // progress). The rendered view, rather than the argument of a late hook,
+    // remains the source of truth, including restoration before this sidebar.
+    const actualView = document.querySelector('.view.active')?.id || '';
+    let target = actualView;
+    if (actualView === 'study' && document.querySelector('#study .studyPanel.active')?.id === 'laws') target = 'study:laws';
+    if (actualView === 'profile' && (viewId === 'profile:tactical' || (!viewId && rail.dataset.jcActiveTarget === 'profile:tactical'))) target = 'profile:tactical';
+    rail.dataset.jcActiveTarget = target;
     rail.querySelectorAll('[data-jc-side-view]').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.jcSideView === viewId);
+      const selected = btn.dataset.jcSideView === target;
+      btn.classList.toggle('active', selected);
+      if (selected) btn.setAttribute('aria-current', 'page');
+      else btn.removeAttribute('aria-current');
     });
+  }
+
+  let sidebarActiveStateObserver = null;
+  function ensureSidebarActiveStateSync() {
+    syncSidebarActiveState();
+    if (sidebarActiveStateObserver || typeof MutationObserver !== 'function') return;
+    const main = document.querySelector('main.app') || document.querySelector('main');
+    if (!main) return;
+    const observeTargets = () => {
+      sidebarActiveStateObserver.disconnect();
+      // Watch only navigation classes and the containers in which views/subtabs
+      // are added. Question cards, timers and ordinary rendering are not watched.
+      sidebarActiveStateObserver.observe(main, {childList: true});
+      document.querySelectorAll('.view').forEach(view => sidebarActiveStateObserver.observe(view, {attributes: true, attributeFilter: ['class']}));
+      const study = document.getElementById('study');
+      if (study) {
+        sidebarActiveStateObserver.observe(study, {childList: true, attributes: true, attributeFilter: ['class']});
+        study.querySelectorAll('.studyPanel').forEach(panel => sidebarActiveStateObserver.observe(panel, {attributes: true, attributeFilter: ['class']}));
+      }
+    };
+    sidebarActiveStateObserver = new MutationObserver(records => {
+      if (records.some(record => record.type === 'childList')) observeTargets();
+      syncSidebarActiveState();
+    });
+    observeTargets();
   }
 
   // Agrupa cartões secundários da aba Hoje (Plano Diário, Histórico Diário, Missão Semanal) em uma gaveta retrátil limpa
@@ -2816,12 +2853,13 @@
     if (typeof window.openView === 'function' && !window.openView._jcSidebarHooked) {
       const prevOpen = window.openView;
       window.openView = function (id) {
-        prevOpen.apply(this, arguments);
-        syncSidebarActiveState(id);
+        const result = prevOpen.apply(this, arguments);
+        syncSidebarActiveState();
         updateAllFocusTimerDisplays();
         if (window.JC_MODULES && window.JC_MODULES.caveiraFullSuiteR179) {
-          try { window.JC_MODULES.caveiraFullSuiteR179.init(); } catch (_e) {}
+          try { window.JC_MODULES.caveiraFullSuiteR179.initView?.(document.querySelector('.view.active')?.id); } catch (_e) {}
         }
+        return result;
       };
       window.openView._jcSidebarHooked = true;
     }
@@ -2832,7 +2870,8 @@
     closeFullscreenTimer: closeFullscreenFocusTimer,
     formatHHMMSS,
     applyCleanMode: applyCaveiraCleanDashboardMode,
-    updateDisplays: updateAllFocusTimerDisplays
+    updateDisplays: updateAllFocusTimerDisplays,
+    syncSidebar: syncSidebarActiveState
   };
 
   if (typeof document !== 'undefined' && document.readyState === 'loading') {
@@ -4907,6 +4946,15 @@
     window.getQuestionBankPedagogicalAuditReport = () => auditAndEnrichAllQuestionsPedagogy();
   }
 
+  function initR179View(id) {
+    // Navigation only mounts the visible feature. The full boot audit must not
+    // run again when the user opens Questions, a portal or an unrelated screen.
+    if (id === 'learning') tickTrailHearts20MinRegen();
+    else if (id === 'essay') mountCaveiraEssayHub();
+    else if (id === 'profile') mountPainelTaticoInProfile();
+    else if (id === 'study') { mountCaveiraFlashcardsHub(); mountCaveiraSmartLawsHub(); }
+    else if (id === 'report') mountCaveiraQuestionBankEnhancements();
+  }
   function initAllR179() {
     injectR180HunterStyles();
     tickTrailHearts20MinRegen();
@@ -4923,6 +4971,7 @@
     window.JC_MODULES = window.JC_MODULES || {};
     window.JC_MODULES.caveiraFullSuiteR179 = {
       init: initAllR179,
+      initView: initR179View,
       tickTrailHearts20MinRegen,
       mountCaveiraEssayHub,
       mountPainelTaticoInProfile,

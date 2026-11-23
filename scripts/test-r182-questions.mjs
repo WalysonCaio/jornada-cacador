@@ -45,7 +45,7 @@ let shown=0;
 const sprint={window:{},ALL_QUESTIONS:[original,other,foreign],filteredQuestionPool:()=>[original],ensureNativeQuestionBankLoaded(){},
  activeCampaignErrors:()=>[],normalizedOrigin:q=>q.origin,normalizedDifficulty:()=> 'medio',questionFingerprint:q=>q.id,
  prepareQuestion:q=>({...q}),q:s=>fields[s],showQuestion(){shown++;},toast(){throw new Error('Sprint válido não deveria falhar');},activeQuestions:null};
-vm.createContext(sprint);vm.runInContext(section('  function startCaveiraSprintSession(){','  window.startCaveiraSprintSession='),sprint);
+vm.createContext(sprint);vm.runInContext(section('  function questionSessionFilterContext(', '  function startFilteredBattle('),sprint);vm.runInContext(section('  function startCaveiraSprintSession(){','  window.startCaveiraSprintSession='),sprint);
 sprint.startCaveiraSprintSession();assert.equal(shown,1);assert.deepEqual(Array.from(sprint.activeQuestions.questions,q=>q.id),['q1']);
 
 // Starting the document's timed exam uses exactly its validated questions.
