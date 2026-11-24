@@ -51,3 +51,8 @@ Para o editor Supabase, use os arquivos autocontidos de `supabase/dashboard/`. N
 Publique `dist` completa pelo fluxo Cloudflare existente (`wrangler.jsonc` aponta para essa pasta). Não é necessário migrar para Hostinger. O cache da aplicação é r183; fechar e reabrir os clientes permite receber a nova versão. Alterações de fonte preservam as chaves de dados pessoais de r182.
 
 A integração contínua executa testes Node e SQL e condiciona os builds Android/Windows a eles. Para impedir integração sem aprovação, configure a regra de proteção do branch no GitHub. Testes de navegador e homologação no dispositivo real continuam separados da verificação de código; detalhes e limites estão no relatório da versão.
+
+
+## Revisão r188
+- Reanálise em lote de PDFs com opção 1-clique (**Reanalisar e corrigir tudo**), proposta parcial segura (preservando questões não relidas) e ocultação do campo Caderno quando não houver ambiguidade.
+- Novo **Modo Aula Interativa do Invocador** (`dist/invocador-classroom.js` + `dist/ui-r188.css`): 4–6 slides, quadro tático, dúvidas da turma clicáveis, mini-quiz formativo e exportação offline em `.html` escapado contra XSS.
