@@ -92,7 +92,7 @@ for(const item of [...personallyReviewed,...cloudQuestions,..._customCampQs,..._
   if(!item||!Array.isArray(item.options)||item.options.length<2||item.options.length>5||item.options.some(option=>!String(option??'').trim())||(typeof isInvalidTrailSubject==='function'&&isInvalidTrailSubject(item.subject,item.topic))||(typeof window.isValidPedagogicalQuestion==='function'&&!window.isValidPedagogicalQuestion(item,{allowSourceReview:true}))||(typeof window.isHunterManualArtifact==='function'&&window.isHunterManualArtifact(item)))continue;
   const key=questionFingerprint(item);if(_seenQKeys.has(key))continue;_seenQKeys.add(key);_mergedQs.push(item);
 }
-ALL_QUESTIONS=_mergedQs;
+const _eqRows=typeof window.JCExamQuestions?.fetchPortalExamQuestions==='function'?await window.JCExamQuestions.fetchPortalExamQuestions(portalDbId,userId).catch(()=>[]):[];if(!currentScope())return false;ALL_QUESTIONS=typeof window.JCExamQuestions?.mergeExamQuestionsIntoPool==='function'?window.JCExamQuestions.mergeExamQuestionsIntoPool(_mergedQs,_eqRows):_mergedQs;
 if(typeof window.ensureNativeQuestionBankLoaded==='function')window.ensureNativeQuestionBankLoaded();
 if(typeof window.auditAndEnrichAllQuestionsPedagogy==='function')window.auditAndEnrichAllQuestionsPedagogy(ALL_QUESTIONS);
     // A private portal refresh retains content already merged from the community.

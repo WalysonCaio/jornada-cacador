@@ -4303,7 +4303,7 @@ for(const item of [...personallyReviewed,..._genRowQs,..._customCampQs,..._prevP
   if(!item||!Array.isArray(item.options)||item.options.length<2||item.options.length>5||item.options.some(option=>!String(option??'').trim())||isInvalidTrailSubject(item.subject,item.topic)||!isValidPedagogicalQuestion(item,{allowSourceReview:true})||(typeof window.isHunterManualArtifact==='function'&&window.isHunterManualArtifact(item)))continue;
   const key=questionFingerprint(item);if(_seenQKeys.has(key))continue;_seenQKeys.add(key);_mergedQs.push(item);
 }
-ALL_QUESTIONS=_mergedQs;
+const _eqRows=typeof window.JCExamQuestions?.fetchPortalExamQuestions==='function'?await window.JCExamQuestions.fetchPortalExamQuestions(portalDbId,userId).catch(()=>[]):[];if(!currentScope())return false;ALL_QUESTIONS=typeof window.JCExamQuestions?.mergeExamQuestionsIntoPool==='function'?window.JCExamQuestions.mergeExamQuestionsIntoPool(_mergedQs,_eqRows):_mergedQs;
 if(typeof window.ensureNativeQuestionBankLoaded==='function')window.ensureNativeQuestionBankLoaded();
 if(typeof window.auditAndEnrichAllQuestionsPedagogy==='function')window.auditAndEnrichAllQuestionsPedagogy(ALL_QUESTIONS);
 if(typeof window.ensureNativePedagogicalCouplingLoaded==='function')window.ensureNativePedagogicalCouplingLoaded();
@@ -4487,7 +4487,8 @@ setTimeout(()=>window.dismissAppBootSplash?.(),950);
 await hydrateFromLocalDatabase(state.activeCampaignId);
 setTimeout(()=>window.dismissAppBootSplash?.(),420);if(cloudSession&&!recovering){(async()=>{try{await pullCloudState();await reconcileCloudCampaigns();await Promise.all([loadCloudDocuments(),loadGeneratedContent(),loadCampaignTopics(),loadEssays()]);await persistToLocalDatabase(state.activeCampaignId);const activeId=document.querySelector('.view.active')?.id||'today';renderViewById(activeId,true);if(activeId==='assistant')renderAssistant()}catch(e){console.warn('Cloud init err',e)}setTimeout(runNextProcessingJob,3500)})();}})();
 </script>
-<script src="v59-enhancements.js"></script>
+<script src="exam-questions-client.js"></script>
+  <script src="v59-enhancements.js"></script>
 <script src="pdf-text-client.js"></script>
 <script src="question-session-store.js"></script>
 <script src="questions-workspace.js"></script>

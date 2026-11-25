@@ -5042,8 +5042,14 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     const quality=typeof window.getQuestionQualityDecision==='function'?window.getQuestionQualityDecision(item):null;
     if(quality?.needs_source||quality?.needs_review)return `<div class="questionAnswerNotice needsReview" role="status"><b>Questão aguardando revisão da fonte</b><p>${escText(quality.reason||'O enunciado está incompleto. Confira o PDF antes de responder.')} Esta questão não registra acerto, erro ou XP.</p></div>`;
     if(typeof isQuestionDisciplineEligible==='function'&&!isQuestionDisciplineEligible(item,'all'))return '<div class="questionAnswerNotice needsReview" role="status"><b>Classificação aguardando revisão</b><p>Confira a disciplina e o assunto desta questão antes de responder. Esta questão não registra acerto, erro ou XP.</p></div>';
+    const valBadge=typeof window.JCExamQuestions?.validationBadgeInfo==='function'?window.JCExamQuestions.validationBadgeInfo(item):null;
     const key=answerKeyDetails(item);
-    return !key.scored?`<div class="questionAnswerNotice pendingKey" role="status"><b>${escText(key.label)}</b><p>Você pode selecionar uma alternativa e consultar a explicação. Esta prática não registra acerto, erro ou XP até a validação do gabarito.</p></div>`:'';
+    if(!key.scored)return `<div class="questionAnswerNotice pendingKey" role="status"><b>${escText(key.label)}</b><p>Você pode selecionar uma alternativa e consultar a explicação. Esta prática não registra acerto, erro ou XP até a validação do gabarito.</p></div>`;
+    if(valBadge?.cls==='divergente'){
+      const altLetter=Number.isInteger(item.resposta_ia)&&item.resposta_ia>=0&&item.resposta_ia<5?String.fromCharCode(65+item.resposta_ia):'';
+      return `<div class="questionAnswerNotice pendingKey" role="status"><b>⚠ Gabarito em revisão${altLetter?` (IA sugeriu ${altLetter})`:''}</b><p>${escText(valBadge.detail)}</p></div>`;
+    }
+    return '';
   }
 
   function bindQuestionAnswerConfirmation(battle,item){
@@ -5101,6 +5107,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         <span class="qMetaPill">${subjectIconForName(subjName)} ${escText(subjName)}</span>
         <span class="qMetaPill">📌 ${escText(topicName)}</span>
         <span class="qMetaPill ${diff}">${diffLabel}</span>
+        ${(()=>{const b=typeof window.JCExamQuestions?.validationBadgeInfo==='function'?window.JCExamQuestions.validationBadgeInfo(item):null;return b?`<span class="qMetaPill jcValPill ${b.cls}" title="${escText(b.detail)}">${b.icon} ${escText(b.label)}</span>`:'';})()}
       `;
     }
     q('#questionCounter').textContent=`Questão ${battle.current+1} de ${battle.questions.length}`;

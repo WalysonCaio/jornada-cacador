@@ -348,3 +348,28 @@ body.lightAppTheme .jcClassroomNotice {
   border-color: #f59e0b !important;
   color: #78350f !important;
 }
+
+/* r190: Selos de validação de public.exam_questions */
+.qMetaPill.jcValPill.verificada-oficial {
+  background: rgba(69, 218, 163, 0.16);
+  border: 1px solid rgba(69, 218, 163, 0.45);
+  color: #45daa3;
+  font-weight: 700;
+}
+.qMetaPill.jcValPill.verificada-ia {
+  background: rgba(82, 217, 247, 0.14);
+  border: 1px solid rgba(82, 217, 247, 0.4);
+  color: #7dd3fc;
+  font-weight: 600;
+}
+.qMetaPill.jcValPill.divergente {
+  background: rgba(244, 189, 87, 0.16);
+  border: 1px solid rgba(244, 189, 87, 0.5);
+  color: #fbbf24;
+  font-weight: 700;
+}
+.qMetaPill.jcValPill.pendente {
+  background: rgba(148, 163, 184, 0.14);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #cbd5e1;
+}
