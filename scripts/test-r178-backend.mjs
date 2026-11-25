@@ -9,13 +9,14 @@ import {validateEssayResult} from '../supabase/functions/_shared/essay-result.mj
 
 const userId = '11111111-1111-4111-8111-111111111111';
 const essayId = '22222222-2222-4222-8222-222222222222';
+const dashboardBundles = process.env.JC_TEST_DASHBOARD_BUNDLES === '1';
 const json = (value, status = 200) => new Response(JSON.stringify(value), {status, headers: {'Content-Type':'application/json'}});
 function endpoint(name, fetchImpl) {
   let handler;
   const calls = [];
   const context = {
     Request, Response, Uint8Array, TextEncoder, setTimeout,
-    validatedSuggestedKeys, normalizeSharedQuestion, validateEssayResult,
+    ...(dashboardBundles ? {} : {validatedSuggestedKeys, normalizeSharedQuestion, validateEssayResult}),
     console: {warn() {}, error() {}},
     Deno: {
       env: {get: key => ({SUPABASE_URL:'https://supabase.test', SUPABASE_SERVICE_ROLE_KEY:'fixture-service', GEMINI_API_KEY:'fixture-gemini'})[key]},
@@ -31,7 +32,16 @@ function endpoint(name, fetchImpl) {
       return fetchImpl(call);
     },
   };
-  const source = fs.readFileSync(new URL(`../supabase/functions/${name}/index.ts`, import.meta.url),'utf8').replace(/^import .*;\s*$/gm,'');
+  const file = new URL(`../supabase/${dashboardBundles ? 'dashboard' : 'functions'}/${name}/index.ts`, import.meta.url);
+  const originalSource = fs.readFileSync(file, 'utf8');
+  if (dashboardBundles) {
+    assert(!/^\s*import\s/m.test(originalSource), `${name}: o arquivo do painel precisa conter suas próprias dependências`);
+    assert(!/\bimport\s*\(/.test(originalSource), `${name}: o arquivo do painel não pode importar dependências dinamicamente`);
+    for (const helper of ['validatedSuggestedKeys', 'normalizeSharedQuestion', 'validateEssayResult']) {
+      assert(!Object.hasOwn(context, helper), `${name}: helper ${helper} não pode ser injetado no teste do arquivo do painel`);
+    }
+  }
+  const source = dashboardBundles ? originalSource : originalSource.replace(/^import .*;\s*$/gm,'');
   vm.runInNewContext(stripTypeScriptTypes(source), context);
   return {
     context, calls,

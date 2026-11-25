@@ -94,6 +94,8 @@ async function diagnoseUi(data) {
     $: selector => selector === '#diagnosticsList' ? root : button,
     localStorage: {getItem: () => null}, KEY: 'fixture',
     navigator: {onLine: true}, state: {_serverRevision: 0, _dirty: false},
+    window: {}, localDayKey:()=> '2026-11-23', studyTimeZone:()=> 'America/Sao_Paulo', xp:()=>0,
+    ALL_QUESTIONS:[], cloudDocuments:[], activeCampaign:()=>({name:'PMPE'}),
     cloudSession: {}, validSession: async () => ({access_token: 'fixture'}),
     SUPABASE_URL: 'https://supabase.test', authHeaders: () => ({}),
     AbortController, setTimeout: () => 1, clearTimeout() {},

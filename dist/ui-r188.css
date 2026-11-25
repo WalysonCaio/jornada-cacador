@@ -1,0 +1,213 @@
+/* r188: Modo Aula Interativa do Invocador (inspirado no OpenMAIC, leve para Cloudflare + Supabase) */
+.jcClassroomLauncher {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: linear-gradient(155deg, rgba(10, 24, 42, 0.96), rgba(6, 15, 28, 0.98));
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  box-shadow: 0 10px 26px rgba(2, 8, 20, 0.35);
+}
+.jcClassroomHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.jcClassroomForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 10px;
+}
+@media (max-width: 640px) {
+  .jcClassroomForm {
+    grid-template-columns: 1fr;
+  }
+}
+.jcClassroomStage {
+  margin-top: 14px;
+  padding: 18px;
+  border-radius: 16px;
+  background: rgba(7, 17, 31, 0.96);
+  border: 1.5px solid rgba(101, 231, 255, 0.36);
+}
+.jcClassroomProgressTrack {
+  width: 100%;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.16);
+  overflow: hidden;
+  margin: 10px 0 14px;
+}
+.jcClassroomProgressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #34aee9, #65e7ff);
+  transition: width 0.22s ease;
+}
+.jcClassroomWhiteboard {
+  margin: 12px 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(12, 32, 54, 0.86);
+  border-left: 4px solid #65e7ff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.jcClassroomCallouts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+@media (max-width: 680px) {
+  .jcClassroomCallouts {
+    grid-template-columns: 1fr;
+  }
+}
+.jcClassroomCallout {
+  padding: 12px 14px;
+  border-radius: 11px;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  background: rgba(15, 34, 58, 0.72);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+}
+.jcClassroomCallout.trap {
+  background: rgba(127, 29, 29, 0.22);
+  border-color: rgba(248, 113, 113, 0.38);
+}
+.jcPeerChipsWrap {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(56, 189, 248, 0.18);
+}
+.jcPeerChipsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.jcPeerChipBtn {
+  background: rgba(14, 38, 66, 0.9);
+  border: 1px solid rgba(101, 231, 255, 0.35);
+  color: #e0f2fe;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+  white-space: normal;
+}
+.jcPeerChipBtn.active,
+.jcPeerChipBtn:hover {
+  background: linear-gradient(135deg, #65e7ff, #34aee9);
+  color: #06131f;
+  border-color: #65e7ff;
+}
+.jcPeerAnswerBox {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+.jcClassroomNavBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(56, 189, 248, 0.18);
+}
+.jcClassroomQuizCard {
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(12, 28, 48, 0.78);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  margin-bottom: 12px;
+}
+.jcClassroomQuizOpt {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  margin-top: 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: rgba(7, 17, 31, 0.9);
+  color: #f8fafc;
+  cursor: pointer;
+  font-size: 0.86rem;
+}
+.jcClassroomQuizOpt.correct {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: #10b981;
+}
+.jcClassroomQuizOpt.wrong {
+  background: rgba(244, 63, 94, 0.2);
+  border-color: #f43f5e;
+}
+.jcClassroomNotice {
+  font-size: 0.76rem;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fde68a;
+  margin-bottom: 12px;
+}
+
+/* Suporte ao Tema Claro */
+body.lightAppTheme .jcClassroomLauncher,
+body.lightAppTheme .jcClassroomStage,
+body.lightAppTheme .jcClassroomQuizCard {
+  background: #ffffff !important;
+  border: 1.5px solid #94a3b8 !important;
+  color: #090d16 !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08) !important;
+}
+body.lightAppTheme .jcClassroomWhiteboard {
+  background: #f1f5f9 !important;
+  border-left-color: #0284c7 !important;
+  color: #090d16 !important;
+}
+body.lightAppTheme .jcClassroomCallout,
+body.lightAppTheme .jcPeerAnswerBox {
+  background: #f8fafc !important;
+  border-color: #94a3b8 !important;
+  color: #090d16 !important;
+}
+body.lightAppTheme .jcClassroomCallout.trap {
+  background: #fff1f2 !important;
+  border-color: #f43f5e !important;
+  color: #881337 !important;
+}
+body.lightAppTheme .jcPeerChipBtn {
+  background: #e0f2fe !important;
+  border-color: #0284c7 !important;
+  color: #0369a1 !important;
+}
+body.lightAppTheme .jcPeerChipBtn.active,
+body.lightAppTheme .jcPeerChipBtn:hover {
+  background: #0284c7 !important;
+  color: #ffffff !important;
+}
+body.lightAppTheme .jcClassroomQuizOpt {
+  background: #ffffff !important;
+  border-color: #94a3b8 !important;
+  color: #090d16 !important;
+}
+body.lightAppTheme .jcClassroomNotice {
+  background: #fffbeb !important;
+  border-color: #f59e0b !important;
+  color: #78350f !important;
+}

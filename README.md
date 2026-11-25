@@ -4,9 +4,33 @@ Plataforma pessoal de preparação para concursos públicos, com foco especial n
 
 O projeto transforma o edital enviado pelo usuário em um plano de aprendizagem: disciplinas, sequência pedagógica, missões diárias, trilha de questões, revisões programadas, caderno de erros, cronômetro de foco e acompanhamento de progresso.
 
+## Revisão r187
+
+[Aplicação, ZIP, GitHub e publicação](docs/revisao-r187/LEIA-ME.md) · [Conferência e limites](docs/revisao-r187/CONFERENCIA.md) · [Verificações](docs/revisao-r187/VALIDACAO.txt). Corrige atualização destrutiva dos painéis, destaque da sidebar, fontes repetidas, contagens por motivo, fragmentação de texto, alternativas contaminadas e classificação de assunto/banca. Preserva a biblioteca compartilhada e mantém os Manuais como ajuda.
+
+## Revisão r186
+
+[Aplicação, ZIP, GitHub e publicação](docs/revisao-r186/LEIA-ME.md) · [Conferência do relato do Gemini e limites](docs/revisao-r186/CONFERENCIA.md) · [Verificações](docs/revisao-r186/VALIDACAO.txt). Questões em quatro painéis sob demanda, coerência de disciplinas/estrutura, vínculos de provas, confirmação de resposta e sincronização de XP/ofensiva. A biblioteca compartilhada e os Manuais como ajuda foram preservados.
+
 ## Revisão r178
 
 [Alterações, avaliação e aplicação](docs/revisao-r178/LEIA-ME.md). Inclui correções de disciplinas/gabaritos, retomada, desempenho local e privacidade. Os Manuais do Caçador ficam na ajuda da plataforma; o compartilhamento da biblioteca foi preservado.
+
+## Revisão r182
+
+[Correções e aplicação](docs/revisao-r182/LEIA-ME.md) · [Alterações](docs/revisao-r182/ALTERACOES.md) · [Verificações](docs/revisao-r182/VALIDACAO.txt). Preserva a biblioteca compartilhada e mantém os Manuais do Caçador na ajuda.
+
+## Revisão r183 — conferência do Gemini
+
+[Aplicação e GitHub](docs/revisao-r183/LEIA-ME.md) · [Conferência das promessas e avaliação](docs/revisao-r183/CONFERENCIA-GEMINI.md) · [Verificações](docs/revisao-r183/VALIDACAO.txt). Inclui a revisão r182, corrige fluxos incompletos e acrescenta importação autenticada de documentos legais oficiais. A biblioteca compartilhada foi preservada; os Manuais continuam na ajuda.
+
+## Revisão r184 — PDFs e disciplinas
+
+[Aplicação e GitHub](docs/revisao-r184/LEIA-ME.md) · [Correções e limites](docs/revisao-r184/REVISAO.md) · [Validação](docs/revisao-r184/VALIDACAO.txt). Releitura dos PDFs originais em lote, propostas de revisão e aplicação atômica, classificação conservadora e ajustes responsivos. Inclui r182/r183.
+
+## Revisão r185 — Caderno IA
+
+[Aplicação e GitHub](docs/revisao-r185/LEIA-ME.md) · [Correções e validação](docs/revisao-r185/VALIDACAO.txt). Isola cache e operações do Caderno IA por conta, portal e reset; preserva fontes, reduz o precache do PDF e remove saídas acidentais do Git. Inclui r182/r183/r184.
 
 ## Principais recursos
 

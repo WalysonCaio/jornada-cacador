@@ -81,7 +81,9 @@ requireAll("pdf-text-client", pdfClient, [
   "compactPagesForInlinePayload",
   "withTimeout",
   "backupTopics",
-  "wasSampled",
+  "failed_pages",
+  "forceFresh",
+  "JCQuestionReview",
   "realLastPage",
   "useSystemFonts",
 ]);
@@ -89,7 +91,7 @@ requireAll("account-security", security, [
   '"delete_document"', '"delete_campaign"', '"delete_essay"',
   "user_id=eq.${user.id}", "selectOwned", ".text.json",
   "delete_user_study_document", "databaseResult?.deleted !== true",
-  "fallback_used", "deleteOwnedRow(\"study_documents\", documentId)",
+  "DOCUMENT_DELETE_MIGRATION_REQUIRED", "Nenhum arquivo ou tópico foi removido.",
 ]);
 requireAll("edital-gemini", edital, [
   "parseGeminiJsonText",
@@ -103,7 +105,7 @@ requireAll("edital-gemini", edital, [
   "runChunked",
   "mergeChunkResults",
   "PARTIAL_RESULT",
-  "restoreBackup",
+  "replace_campaign_topics_atomic",
   "fetchWithTimeout",
   "ensurePdfBytes",
 ]);
@@ -115,7 +117,9 @@ requireAll("material-gemini", material, [
   "extractSecretString",
   "personalGeminiKey",
   "releaseStaleLocks",
-  "shared_question_bank",
+  "rpc/create_generated_document_content",
+  "DOCUMENT_REVIEW_REQUIRED",
+  "EXAM_DETERMINISTIC_REVIEW_REQUIRED",
   "validateExtractedPagesList",
   "repairTruncatedSummariesJson",
   "preExtractedPages",

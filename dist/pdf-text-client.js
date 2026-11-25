@@ -12,6 +12,7 @@
 
   const MAX_EXTRACT_PAGES = 600;
   const extractionJobs = new Map();
+  const extractionGenerations = new Map();
   const isEditalType = (doc) => ["edital", "edital_concurso"].includes(String(doc?.document_type || ""));
   window._recentUploadedPdfBytes = window._recentUploadedPdfBytes || new Map();
   window._extractedPagesByDocId = window._extractedPagesByDocId || new Map();
@@ -579,6 +580,86 @@
 
   window.extractStructuredEditalTopics = extractStructuredEditalTopics;
 
+  // A PDF text item is a positioned fragment, not necessarily a whole word.
+  // Keep its advance and explicit whitespace until adjacent fragments are joined.
+  function pdfTextItemGeometry(item, index = 0) {
+    const matrix = Array.isArray(item?.transform) ? item.transform : [];
+    const positioned = matrix.length >= 6 && matrix.slice(0, 6).every(Number.isFinite);
+    const x = positioned ? matrix[4] : 0, y = positioned ? matrix[5] : 0;
+    const scale = positioned ? Math.hypot(matrix[0], matrix[1]) : 0;
+    let ux = scale > 0 ? matrix[0] / scale : 1, uy = scale > 0 ? matrix[1] / scale : 0;
+    const vertical = item?.dir === "ttb";
+    if (vertical) { const oldX = ux; ux = uy; uy = -oldX; }
+    const extent = vertical ? item?.height : item?.width, rawWidth = Number(extent);
+    const width = extent !== null && extent !== undefined && extent !== "" && Number.isFinite(rawWidth) && rawWidth >= 0 ? rawWidth : null;
+    const height = Number(item?.height);
+    const fontSize = Math.max(scale, positioned ? Math.hypot(matrix[2], matrix[3]) : 0, Number.isFinite(height) && height > 0 && !vertical ? height : 0) || 10;
+    const raw = String(item?.str ?? "").normalize("NFC").replace(/[ﬀﬁﬂﬃﬄﬅﬆ]/g, char => ({ﬀ:"ff",ﬁ:"fi",ﬂ:"fl",ﬃ:"ffi",ﬄ:"ffl",ﬅ:"st",ﬆ:"st"})[char]);
+    return {x, y, str:raw.trim(), raw, width, fontSize, along:x * ux + y * uy, cross:-x * uy + y * ux,
+      orientation:Math.round(Math.atan2(uy, ux) / (Math.PI / 36)), rtl:item?.dir === "rtl", hasEOL:item?.hasEOL === true,
+      positioned:positioned && scale > 0, index};
+  }
+
+  function groupPdfTextItemsIntoRows(items) {
+    const buckets = new Map();
+    for (const [index, item] of (Array.isArray(items) ? items : []).entries()) {
+      if (!item || typeof item.str !== "string" || (!item.str.length && !item.hasEOL)) continue;
+      const part = pdfTextItemGeometry(item, index), key = `${part.orientation}:${part.rtl}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(part);
+    }
+    const rows = [];
+    for (const bucket of buckets.values()) {
+      bucket.sort((a, b) => b.cross - a.cross || a.along - b.along || a.index - b.index);
+      const groups = [];
+      for (const part of bucket) {
+        let row = groups[groups.length - 1];
+        const tolerance = Math.max(.75, Math.min(3.5, Math.max(part.fontSize, row?.fontSize || 0) * .28));
+        if (!row || Math.abs(part.cross - row.cross) > tolerance) {
+          row = {cross:part.cross, fontSize:part.fontSize, items:[]}; groups.push(row);
+        }
+        row.items.push(part); row.fontSize = Math.max(row.fontSize, part.fontSize);
+      }
+      for (const row of groups) {
+        row.items.sort((a, b) => (a.rtl ? b.along - a.along : a.along - b.along) || a.index - b.index);
+        rows.push(row.items);
+      }
+    }
+    return rows;
+  }
+
+  function joinPdfTextRow(parts) {
+    const row = Array.isArray(parts) ? parts : [];
+    const knownSpaces = row.filter(part => part.positioned && part.width > 0 && /^\s+$/.test(part.raw)).map(part => part.width / part.raw.length);
+    const knownSpace = knownSpaces.length ? Math.min(...knownSpaces) : null;
+    let text = "", previous = null, explicitSpace = false;
+    for (const part of row) {
+      if (!part.str) { explicitSpace = explicitSpace || /\s/.test(part.raw); if (part.hasEOL && text && !text.endsWith("\n")) text += "\n"; continue; }
+      let separator = "";
+      if (previous) {
+        const font = Math.min(previous.fontSize, part.fontSize);
+        const advance = [previous, part].filter(value => value.width > 0 && value.str.length > 0).map(value => value.width / value.str.length);
+        // A narrow font's real word space may be smaller than 0.18 em.
+        const threshold = Math.min(font * .18, advance.length ? Math.max(font * .3, Math.min(...advance)) * .4 : font * .18, knownSpace === null ? Infinity : knownSpace * .55);
+        const gap = previous.rtl ? previous.along - part.along - (part.width || 0) : part.along - previous.along - (previous.width || 0);
+        const reliable = previous.positioned && part.positioned && previous.width !== null && part.width !== null && previous.orientation === part.orientation && previous.rtl === part.rtl;
+        const whitespace = explicitSpace || /\s$/.test(previous.raw) || /^\s/.test(part.raw);
+        const label = /^(?:[A-Ea-e][).:]|\([A-Ea-e]\)|\d{1,3}[).:])$/.test(previous.str);
+        if (previous.hasEOL || (reliable && gap > Math.max(28, font * 3.2) && !label)) separator = "\n";
+        else if (whitespace || !reliable || gap > threshold || gap < -font * .35) separator = " ";
+      }
+      if (!text.endsWith("\n")) text += separator;
+      text += part.str; previous = part; explicitSpace = false;
+    }
+    const normalized = text.replace(/[\t\u00a0 ]+/g, " ").trim();
+    return typeof window.JCQuestionText?.normalizeTypography === "function" ? window.JCQuestionText.normalizeTypography(normalized) : normalized;
+  }
+
+  function reconstructPdfTextContent(content) {
+    return groupPdfTextItemsIntoRows(content?.items || []).map(joinPdfTextRow).filter(Boolean).join("\n");
+  }
+  window.JCPdfTextGeometry = Object.freeze({groupItemsIntoRows:groupPdfTextItemsIntoRows, joinTextRow:joinPdfTextRow, reconstruct:reconstructPdfTextContent});
+
   function withTimeout(promise, ms, label) {
     let timer;
     const timeout = new Promise((_, reject) => {
@@ -608,6 +689,10 @@
             pages: payload.pages,
             pdfTotalPages: Number(payload.pdf_total_pages || payload.total_pages || payload.pages.length),
             truncatedPages: Boolean(payload.truncated_pages),
+            pagesRead:Number(payload.pages_read||payload.pages.length),
+            failed_pages:Array.isArray(payload.failed_pages)?payload.failed_pages:[],
+            skipped_pages:Array.isArray(payload.skipped_pages)?payload.skipped_pages:[],
+            empty_pages:Array.isArray(payload.empty_pages)?payload.empty_pages:[],
           };
         }
       }
@@ -722,46 +807,79 @@
     }
   }
 
-  async function extractAndUploadText(doc, session) {
-    if (!doc?.storage_path) return false;
-    if (window._extractedPagesByDocId.has(doc.id)) return true;
+  function pdfExtractionScope(doc, session) {
+    const userId=String(session?.user?.id||''), initialState=typeof state==='object'&&state?state:{}, resetEpoch=Number(initialState._resetEpoch||0), portalId=String(initialState.activeCampaignId||'');
+    if(!userId||!doc?.id||!String(doc.storage_path||'').startsWith(`${userId}/`)||(doc.user_id&&String(doc.user_id)!==userId))return null;
+    const current=()=>{
+      const live=typeof state==='object'&&state?state:{};
+      const active=typeof cloudSession!=='undefined'?cloudSession:null;
+      return active?.user?.id===userId&&(!live._ownerUserId||live._ownerUserId===userId)&&Number(live._resetEpoch||0)===resetEpoch&&String(live.activeCampaignId||'')===portalId;
+    };
+    return current()?{userId,resetEpoch,portalId,current}:null;
+  }
 
-    const existingSidecar = await sidecarAlreadyExists(doc.storage_path, session);
+  async function extractAndUploadText(doc, session, options={}) {
+    const scope=pdfExtractionScope(doc,session);
+    if (!scope) return false;
+    const currentScope=()=>scope.current()&&(!options.generation||extractionGenerations.get(doc.id)===options.generation);
+    const forceFresh=options.forceFresh===true, preserveSourceText=forceFresh||['prova','simulado'].includes(String(doc.document_type||''));
+    const cachedMeta=window._extractedPdfMetaByDocId.get(doc.id);
+    if (!forceFresh&&window._extractedPagesByDocId.has(doc.id)&&cachedMeta?.ownerId===scope.userId&&cachedMeta?.resetEpoch===scope.resetEpoch) return true;
+
+    const existingSidecar = forceFresh?null:await sidecarAlreadyExists(doc.storage_path, session);
+    if(!currentScope())return false;
     if (existingSidecar) {
       window._extractedPagesByDocId.set(doc.id, existingSidecar.pages);
       window._extractedPdfMetaByDocId.set(doc.id, {
         pdfTotalPages: existingSidecar.pdfTotalPages,
         truncatedPages: existingSidecar.truncatedPages,
+        truncated: existingSidecar.truncatedPages,
+        totalPages: existingSidecar.pdfTotalPages,
+        pagesRead: existingSidecar.pagesRead,
+        pagesWithText: existingSidecar.pages.length,
+        failed_pages: existingSidecar.failed_pages,
+        skipped_pages: existingSidecar.skipped_pages,
+        empty_pages: existingSidecar.empty_pages,
+        incomplete: existingSidecar.truncatedPages||existingSidecar.failed_pages.length>0,
+        freshSource: false, ownerId:scope.userId,resetEpoch:scope.resetEpoch,
       });
       return true;
     }
 
     toast(`Extraindo texto de “${doc.title}” no navegador...`);
     let bytes;
-    const cachedBlob = window._recentUploadedPdfBytes?.get(doc.id);
+    const cachedBlob = forceFresh?null:window._recentUploadedPdfBytes?.get(doc.id);
     if (cachedBlob) {
       bytes = new Uint8Array(await cachedBlob.arrayBuffer());
+      if(!currentScope())return false;
       window._recentUploadedPdfBytes.delete(doc.id);
     } else {
       const pdfResponse = await storageFetch(doc.storage_path, session);
+      if(!currentScope())return false;
       if (!pdfResponse.ok) throw new Error("Não foi possível abrir o PDF para preparar o texto.");
       bytes = new Uint8Array(await pdfResponse.arrayBuffer());
+      if(!currentScope())return false;
     }
 
     const pdfjs = await import("./pdf.mjs");
+    if(!currentScope())return false;
     const pdf = await openPdfDocumentWithFallback(pdfjs, bytes);
+    if(!currentScope()){try{await pdf.destroy();}catch{}return false;}
 
     const pdfTotalPages = Number(pdf.numPages) || 0;
     const maxPages = Math.min(pdfTotalPages, MAX_EXTRACT_PAGES);
     const truncatedPages = pdfTotalPages > maxPages;
-    const pages = [];
-    let meaningfulCharacters = 0;
+    const pages = [], failed_pages=[], empty_pages=[], skipped_pages=Array.from({length:Math.max(0,pdfTotalPages-maxPages)},(_,i)=>maxPages+i+1);
+    let meaningfulCharacters = 0,pagesRead=0;
 
     for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
       try {
+        if(!currentScope()){try{await pdf.destroy();}catch{}return false;}
         const page = await withTimeout(pdf.getPage(pageNumber), 4500, "PAGE_TIMEOUT");
-        const content = await page.getTextContent();
-        const rawItems = (content.items || []).filter((it) => it && typeof it.str === "string" && it.str.trim());
+        if(!currentScope()){try{page.cleanup();await pdf.destroy();}catch{}return false;}
+        const content = await withTimeout(page.getTextContent(),6500,"PAGE_TEXT_TIMEOUT");
+        if(!currentScope()){try{page.cleanup();await pdf.destroy();}catch{}return false;}
+        const rawItems = (content.items || []).filter((it) => it && typeof it.str === "string" && (it.str.length || it.hasEOL));
         const watermarkZones = [];
         for (const it of rawItems) {
           const s = it.str.trim();
@@ -774,6 +892,7 @@
         }
         const isWatermarkItem = (s) => /@|\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|Leonardo\s+Thom[eé]/i.test(s);
         const filteredItems = rawItems.filter((it) => {
+          if(preserveSourceText)return true;
           const s = it.str.trim();
           const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
           const y = Array.isArray(it.transform) && Number.isFinite(it.transform[5]) ? it.transform[5] : 0;
@@ -787,55 +906,32 @@
         const vp = typeof page.getViewport === "function" ? page.getViewport({ scale: 1 }) : { width: 595, height: 842 };
         const midX = (Number(vp?.width) || 595) * 0.5;
         const leftColCount = filteredItems.filter((it) => {
+          if (!it.str.trim()) return false;
           const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
           const w = Number(it.width) || (it.str.length * 4.5);
           return x >= 18 && x < midX - 24 && (x + w) < midX + 12;
         }).length;
         const rightColCount = filteredItems.filter((it) => {
+          if (!it.str.trim()) return false;
           const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
           return x >= midX - 6 && x <= midX + 90;
         }).length;
         const isTwoColumnPage = ["prova", "simulado"].includes(String(doc.document_type || "")) && leftColCount >= 10 && rightColCount >= 10;
-        const groupItemsIntoRows = (itemsSubset) => {
-          itemsSubset.sort((a, b) => {
-            const ay = Array.isArray(a.transform) && Number.isFinite(a.transform[5]) ? a.transform[5] : 0;
-            const by = Array.isArray(b.transform) && Number.isFinite(b.transform[5]) ? b.transform[5] : 0;
-            if (Math.abs(by - ay) > 3.5) return by - ay;
-            const ax = Array.isArray(a.transform) && Number.isFinite(a.transform[4]) ? a.transform[4] : 0;
-            const bx = Array.isArray(b.transform) && Number.isFinite(b.transform[4]) ? b.transform[4] : 0;
-            return ax - bx;
-          });
-          const groups = [];
-          let cRow = [], cY = null;
-          for (const it of itemsSubset) {
-            const y = Array.isArray(it.transform) && Number.isFinite(it.transform[5]) ? it.transform[5] : 0;
-            const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
-            const str = it.str.trim();
-            if (cY !== null && Math.abs(y - cY) > 3.5) {
-              groups.push(cRow);
-              cRow = [];
-            }
-            cRow.push({ x, y, str });
-            cY = y;
-          }
-          if (cRow.length) groups.push(cRow);
-          return groups;
-        };
         const rowGroups = isTwoColumnPage
           ? [
-              ...groupItemsIntoRows(filteredItems.filter((it) => (Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0) < midX - 6)),
-              ...groupItemsIntoRows(filteredItems.filter((it) => (Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0) >= midX - 6)),
+              ...groupPdfTextItemsIntoRows(filteredItems.filter((it) => (Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0) < midX - 6)),
+              ...groupPdfTextItemsIntoRows(filteredItems.filter((it) => (Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0) >= midX - 6)),
             ]
-          : groupItemsIntoRows(filteredItems);
+          : groupPdfTextItemsIntoRows(filteredItems);
         const pageLines = [];
         const stripChrome = (l) => l.replace(/\b(?:COMENT[AÁ]RIO|DIREITO\s+(?:PENAL|CONSTITUCIONAL)|WWW\.CTCONCURSOS(?:\s+ONLINE\.COM\.BR)?|PROF\.ABIBREBIUCAS|PROJETO\s+105\s+QUEST\s*Õ?ES(?:\s+PMCE)?)\b/gi, "").trim();
         for (const r of rowGroups) {
           const minX = Math.min(...r.map((i) => i.x));
-          let rowTxt = r.map((i) => i.str).join(" ").replace(/\s+/g, " ").trim();
+          let rowTxt = joinPdfTextRow(r);
           if (!rowTxt) continue;
           rowTxt = rowTxt.replace(/(?:^|\n|\s)(\d)\s+(\d)\s*\)/g, " $1$2)").replace(/(?:^|\n|\s)(\d)\s+(\d)\s+(\d)\s*\)/g, " $1$2$3)");
-          rowTxt = stripChrome(rowTxt);
-          if (!rowTxt || /^\d{1,3}$/.test(rowTxt) || isWatermarkItem(rowTxt)) continue;
+          if(!preserveSourceText)rowTxt = stripChrome(rowTxt);
+          if (!rowTxt || (!preserveSourceText&&(/^\d{1,3}$/.test(rowTxt)||isWatermarkItem(rowTxt)))) continue;
           const prevLine = pageLines.length ? pageLines[pageLines.length - 1] : "";
           if (minX >= 47 && minX <= 59 && /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]/.test(rowTxt) && /[.:;]$/.test(prevLine)) {
             pageLines.push(`• ${rowTxt}`);
@@ -845,14 +941,18 @@
         }
         const text = pageLines.join("\n").trim();
         meaningfulCharacters += text.replace(/\s/g, "").length;
-        if (text.length > 0) pages.push({ page: pageNumber, text });
+        pagesRead++;
+        if (text.length > 0) pages.push({ page: pageNumber, text });else empty_pages.push(pageNumber);
         page.cleanup();
       } catch (pageErr) {
-        console.warn("Página ignorada na extração local", pageNumber, pageErr);
+        if(!currentScope()){try{await pdf.destroy();}catch{}return false;}
+        failed_pages.push(pageNumber);
+        console.warn("Página com falha na extração local; revisão obrigatória", pageNumber, pageErr);
       }
       if (pageNumber % 4 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
     }
     try { await pdf.destroy(); } catch {}
+    if(!currentScope())return false;
 
     if (truncatedPages) {
       toast(`Aviso: o PDF possui ${pdfTotalPages} páginas; foram extraídas as primeiras ${maxPages} páginas.`);
@@ -861,15 +961,10 @@
     const avgCharsPerPage = pdfTotalPages > 0 ? Math.round(meaningfulCharacters / pdfTotalPages) : 0;
     const isScannedPdf = !pages.length || meaningfulCharacters < 120 || (pdfTotalPages >= 2 && avgCharsPerPage < 35);
 
+    const extractionMeta={pdfTotalPages,totalPages:pdfTotalPages,pagesRead,pagesWithText:pages.length,failed_pages,skipped_pages,empty_pages,truncatedPages,truncated:truncatedPages,incomplete:truncatedPages||failed_pages.length>0,isScannedPdf,meaningfulCharacters,avgCharsPerPage,freshSource:true,ownerId:scope.userId,resetEpoch:scope.resetEpoch,extracted_at:new Date().toISOString()};
     if (isScannedPdf) {
-      window._extractedPdfMetaByDocId.set(doc.id, {
-        pdfTotalPages,
-        truncatedPages,
-        isScannedPdf: true,
-        meaningfulCharacters,
-        avgCharsPerPage,
-        rawBytes: bytes,
-      });
+      window._extractedPagesByDocId.delete(doc.id);
+      window._extractedPdfMetaByDocId.set(doc.id, {...extractionMeta,rawBytes:bytes});
       doc.metadata = { ...(doc.metadata || {}), pdf_kind: "scanned_image", selectable_chars: meaningfulCharacters };
       console.info("PDF escaneado detectado pelo filtro local.", { pages: pages.length, pdfTotalPages, meaningfulCharacters, avgCharsPerPage });
       return false;
@@ -877,24 +972,29 @@
 
     doc.metadata = { ...(doc.metadata || {}), pdf_kind: "native_text", selectable_chars: meaningfulCharacters };
     window._extractedPagesByDocId.set(doc.id, pages);
-    window._extractedPdfMetaByDocId.set(doc.id, { pdfTotalPages, truncatedPages, isScannedPdf: false, meaningfulCharacters, avgCharsPerPage });
+    window._extractedPdfMetaByDocId.set(doc.id, extractionMeta);
 
     const payload = JSON.stringify({
-      version: 2,
+      version: 3,
       generated_at: new Date().toISOString(),
       total_pages: pages.length,
       pdf_total_pages: pdfTotalPages,
       truncated_pages: truncatedPages,
       meaningful_characters: meaningfulCharacters,
+      pages_read:pagesRead,failed_pages,skipped_pages,empty_pages,
       pages,
     });
+    // Uma extração incompleta não substitui o sidecar usado pelo fluxo normal.
+    if(extractionMeta.incomplete)return true;
     try {
+      if(!currentScope())return false;
       // Tenta application/pdf primeiro (sempre aceito no bucket study-documents), depois text/plain
       let sidecarRes = await storageFetch(`${doc.storage_path}.text.json`, session, {
         method: "POST",
         headers: { "Content-Type": "application/pdf", "x-upsert": "true" },
         body: payload,
       });
+      if(!currentScope())return false;
       if (!sidecarRes.ok) {
         sidecarRes = await storageFetch(`${doc.storage_path}.text.json`, session, {
           method: "POST",
@@ -905,16 +1005,20 @@
     } catch (sidecarErr) {
       console.warn("Sidecar opcional não salvo no Storage; usando envio inline.", sidecarErr);
     }
+    if(!currentScope())return false;
     console.info("Texto do PDF preparado no navegador", { pages: pages.length, pdfTotalPages, meaningfulCharacters });
     return true;
   }
 
-  async function prepareDocumentText(doc, session) {
-    if (!doc?.storage_path) return false;
-    if (!extractionJobs.has(doc.id)) {
-      extractionJobs.set(doc.id, extractAndUploadText(doc, session).finally(() => extractionJobs.delete(doc.id)));
-    }
-    return extractionJobs.get(doc.id);
+  async function prepareDocumentText(doc, session, options={}) {
+    const scope=pdfExtractionScope(doc,session);if(!scope)return false;
+    const key=JSON.stringify([scope.userId,scope.resetEpoch,scope.portalId,doc.id,options.forceFresh===true]);
+    if(extractionJobs.has(key))return extractionJobs.get(key);
+    const generation=Number(extractionGenerations.get(doc.id)||0)+1;
+    extractionGenerations.set(doc.id,generation);
+    const job=extractAndUploadText(doc,session,{...options,generation});
+    extractionJobs.set(key,job);
+    try{return await job;}finally{if(extractionJobs.get(key)===job)extractionJobs.delete(key);}
   }
 
   function compactPagesForInlinePayload(pages, maxTotalChars = 115000) {
@@ -961,19 +1065,26 @@
       if (lastEnd > openB) {
         try {
           const arr = JSON.parse(`[${cleaned.slice(openB + 1, lastEnd + 1)}]`);
-          return { [key]: arr };
+          return { [key]: arr, _partial: true };
         } catch {}
       }
     }
     throw new Error("INVALID_RECOVERY_JSON");
   }
 
-  async function saveTopicsToCampaignAndSync(doc, rawTopics, session, pagesCount = 1) {
+  async function saveTopicsToCampaignAndSync(doc, rawTopics, session, pagesCount = 1, recoveryInfo = {}) {
     if (!isEditalType(doc)) {
       console.warn("Bloqueado: documento não é edital, não pode criar missões.", doc?.title, doc?.document_type);
       return false;
     }
-    const campaignName = typeof activeCampaign === "function" ? activeCampaign()?.name || "" : "";
+    const targetCampaign = (state.campaigns || []).find((campaign) => campaign.dbId === doc.campaign_id);
+    if (!targetCampaign || !session?.user?.id || (doc.user_id && doc.user_id !== session.user.id)) return false;
+    const targetCampaignId = targetCampaign.id;
+    const ownerId=session.user.id, resetEpoch=Number(state._resetEpoch||0);
+    const currentScope=()=>cloudSession?.user?.id===ownerId&&(!state._ownerUserId||state._ownerUserId===ownerId)&&state.activeCampaignId===targetCampaign.id&&Number(state._resetEpoch||0)===resetEpoch&&(state.campaigns||[]).some(c=>c.id===targetCampaign.id&&c.dbId===doc.campaign_id);
+    if(!currentScope())return false;
+    const ownerHeaders={...(typeof authHeaders==='function'?authHeaders(session.access_token):{})};
+    const campaignName = targetCampaign.name || "";
     const topics = typeof window.unpackEditalTopicsList === "function"
       ? window.unpackEditalTopicsList(rawTopics, campaignName, doc.title)
       : rawTopics.filter((t) => t?.subject && t?.topic).slice(0, 1800);
@@ -982,9 +1093,17 @@
     const topicsFilter = `campaign_id=eq.${doc.campaign_id}&user_id=eq.${session.user.id}`;
     let backupTopics = [];
     try {
-      const backupRes = await cloudFetch(`campaign_topics?${topicsFilter}&select=campaign_id,user_id,subject,unit_name,topic,edital_order,subject_order,learning_order,difficulty,prerequisite_topic,pedagogical_reason`);
-      if (backupRes.ok) backupTopics = await backupRes.json().catch(() => []);
-    } catch {}
+      const backupRes = await cloudFetch(`campaign_topics?${topicsFilter}&select=campaign_id,user_id,subject,unit_name,topic,edital_order,subject_order,learning_order,difficulty,prerequisite_topic,pedagogical_reason`,{headers:ownerHeaders});
+      if(!currentScope())return false;
+      if (!backupRes.ok) throw new Error("MAP_READ_FAILED");
+      backupTopics = await backupRes.json();
+      if(!currentScope())return false;
+      if (!Array.isArray(backupTopics)) throw new Error("MAP_READ_FAILED");
+    } catch {
+      if(!currentScope())return false;
+      toast("Não foi possível conferir o mapa atual. Ele foi preservado; tente novamente quando a conexão voltar.");
+      return false;
+    }
 
     const newSubjects = new Set(topics.map((t) => normalizeSearch(t.subject)).filter(Boolean));
     const oldSubjects = new Set((backupTopics || []).map((t) => normalizeSearch(t.subject)).filter(Boolean));
@@ -1030,105 +1149,89 @@
 
     if (!rows.length) return false;
 
-    // Atualiza o estado local imediatamente para que os portais e disciplinas nunca fiquem vazios
+    const pdfMeta = window._extractedPdfMetaByDocId.get(doc.id) || {};
+    const totalPages = Math.max(Number(pdfMeta.pdfTotalPages) || 0, Number(pagesCount) || 1);
+    const processedPages = Math.min(Number(recoveryInfo.pagesProcessed) || Number(pagesCount) || 1, totalPages);
+    const coverage = {
+      percent: Math.min(100, Math.round(processedPages / totalPages * 100)),
+      summary_count: rows.length,
+      estimated_pages: totalPages,
+      incomplete: Boolean(pdfMeta.truncatedPages) || processedPages < totalPages || Boolean(recoveryInfo.incomplete),
+      needs_review: true,
+      warnings: ["Mapa extraído pelo modo de recuperação. A porcentagem refere-se às páginas processadas neste modo; confira disciplinas e tópicos com o edital original."],
+    };
+    // Sem migração v107 não existe fallback destrutivo: só atualiza o estado local
+    // depois de confirmar a transação de tópicos + status no servidor.
+    if(!currentScope())return false;
+    const persisted = await cloudFetch("rpc/replace_campaign_topics_atomic", {
+      method: "POST",
+      headers: { "Content-Type": "application/json",...ownerHeaders },
+      body: JSON.stringify({
+        p_user_id: session.user.id,
+        p_campaign_id: doc.campaign_id,
+        p_document_id: doc.id,
+        p_topics: rows,
+        p_coverage: coverage,
+      }),
+    }).catch(() => null);
+    const persistedData = persisted ? await persisted.json().catch(() => null) : null;
+    const confirmedRows = persistedData?.topics;
+    if (!persisted?.ok || !Array.isArray(confirmedRows) || persistedData?.saved !== rows.length || confirmedRows.length !== rows.length || !confirmedRows.every((item) => item && typeof item.id === "string" && item.subject && item.topic)) {
+      const missingMigration = persisted?.status === 404 || persistedData?.code === "PGRST202";
+      const partial = String(persistedData?.message || "").includes("PARTIAL_RESULT");
+      if(!currentScope())return false;
+      toast(missingMigration
+        ? "Aplique a migração v107 no Supabase para salvar o edital com segurança. O mapa atual foi preservado."
+        : partial
+          ? "A análise parcial não substituiu o mapa anterior. Tente reprocessar o edital completo."
+          : "Não foi possível confirmar a gravação do mapa. Recarregue o portal antes de tentar novamente.");
+      return false;
+    }
+
+    // A transação do portal de origem pode ter concluído; nenhuma resposta antiga altera a tela atual.
+    if(!currentScope())return true;
+    doc.processing_status = "ready";
+    doc.metadata = { ...(doc.metadata || {}), coverage };
     const previous = [...(state.customCampaign?.missions || [])];
-    const prefix = state.activeCampaignId.replace(/[^a-z0-9]/gi, "").slice(-10);
-    const missions = rows.map((item, i) => ({
-      id: `${prefix}-ai-${i}`,
+    const missions = confirmedRows.map((item, i) => ({
+      id: `edital-${item.id}`,
+      dbId: item.id,
       si: null,
       ti: i,
       name: item.topic,
-      subject: item.subject || "Edital",
+      subject: item.subject,
       editalOrder: item.edital_order,
       subjectOrder: item.subject_order,
       learningOrder: item.learning_order,
       difficulty: item.difficulty,
+      prerequisite: item.prerequisite_topic || "",
+      pedagogicalReason: item.pedagogical_reason || "",
     }));
     if (typeof reconcileMissionProgress === "function") reconcileMissionProgress(previous, missions);
-    state.customCampaign = { name: activeCampaign()?.name || "Campanha", missions };
-    if (activeCampaign()) activeCampaign().customCampaign = state.customCampaign;
+    state.customCampaign = { name: campaignName, missions };
+    state.campaigns.find((campaign) => campaign.id === targetCampaignId).customCampaign = state.customCampaign;
     save();
-
-    const delRes = await cloudFetch(`campaign_topics?${topicsFilter}`, { method: "DELETE" }).catch(() => null);
-    if (delRes && delRes.ok) {
-      let insRes = await cloudFetch("campaign_topics?on_conflict=campaign_id,subject,topic", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Prefer: "return=representation,resolution=ignore-duplicates",
-        },
-        body: JSON.stringify(rows),
-      }).catch(() => null);
-
-      // Fallback caso alguma coluna estendida (v48) ainda não exista no banco do usuário
-      if (!insRes || !insRes.ok) {
-        const minimalRows = rows.map((r) => ({
-          campaign_id: r.campaign_id,
-          user_id: r.user_id,
-          subject: r.subject,
-          unit_name: r.unit_name,
-          topic: r.topic,
-          edital_order: r.edital_order,
-        }));
-        insRes = await cloudFetch("campaign_topics?on_conflict=campaign_id,subject,topic", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Prefer: "return=representation,resolution=ignore-duplicates",
-          },
-          body: JSON.stringify(minimalRows),
-        }).catch(() => null);
-      }
-
-      if (!insRes || !insRes.ok) {
-        if (Array.isArray(backupTopics) && backupTopics.length) {
-          await cloudFetch("campaign_topics?on_conflict=campaign_id,subject,topic", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Prefer: "resolution=ignore-duplicates",
-            },
-            body: JSON.stringify(backupTopics),
-          }).catch(() => undefined);
-        }
-      }
-    }
-
-    await cloudFetch(`study_documents?id=eq.${doc.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        document_type: "edital",
-        processing_status: "ready",
-        metadata: {
-          ...(doc.metadata || {}),
-          coverage: {
-            percent: 100,
-            summary_count: rows.length,
-            estimated_pages: pagesCount,
-            needs_review: false,
-            warnings: [],
-          },
-        },
-      }),
-    }).catch(() => undefined);
-
-    doc.document_type = "edital";
-    doc.processing_status = "ready";
-    await loadCampaignTopics().catch(() => undefined);
     await loadCloudDocuments().catch(() => undefined);
+    if(!currentScope())return true;
     if (cloudSession && navigator.onLine && typeof pushCloudState === "function") {
       pushCloudState().catch(() => undefined);
     }
     render();
-    toast(`Edital analisado: ${subjOrderMap.size} disciplina(s) e ${rows.length} missões criadas no portal!`);
+    toast(`Edital salvo: ${subjOrderMap.size} disciplina(s) e ${confirmedRows.length} missões. Confira o mapa com o PDF original.`);
     return true;
   }
 
   async function recoverPdfViaAssistant(doc, pages, session) {
     if (!Array.isArray(pages) || !pages.length) return false;
+    const ownerId=session?.user?.id,portalId=state.activeCampaignId,resetEpoch=Number(state._resetEpoch||0);
+    const currentScope=()=>!!ownerId&&cloudSession?.user?.id===ownerId&&(!state._ownerUserId||state._ownerUserId===ownerId)&&state.activeCampaignId===portalId&&Number(state._resetEpoch||0)===resetEpoch&&(!doc.user_id||doc.user_id===ownerId)&&(state.campaigns||[]).some(c=>c.id===portalId&&c.dbId===doc.campaign_id);
+    if(!currentScope())return false;
+    if(!isEditalType(doc)){
+      toast('O conteúdo anterior foi preservado. Provas e questões usam a conferência de PDFs; materiais devem ser analisados pelo serviço de materiais atualizado.');
+      return false;
+    }
+    const scopedCloudFetch=(path,options={})=>{if(!currentScope())return Promise.reject(new Error('DOCUMENT_SCOPE_CANCELLED'));return cloudFetch(path,{...options,headers:{...(options.headers||{}),...authHeaders(session.access_token)}})};
     const pdfMeta = window._extractedPdfMetaByDocId.get(doc.id) || {};
-    const compactPages = compactPagesForInlinePayload(pages, 45000);
-    const fullText = compactPages.map((p) => `[PÁGINA ${p.page}]\n${p.text}`).join("\n\n").slice(0, 45000);
     const realLastPage = Number(pages[pages.length - 1]?.page || pdfMeta.pdfTotalPages || pages.length);
 
     if (isEditalType(doc)) {
@@ -1160,6 +1263,8 @@
         return false;
       }
       const rawTopics = [];
+      let completedChunks = 0;
+      let partialResponse = false;
       for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
         const prompt = `Extraia TODAS as disciplinas e tópicos do conteúdo programático presentes neste trecho (${cIdx + 1}/${chunks.length}) do edital "${doc.title}". IMPORTANTE: o campo "subject" DEVE ser o nome individual de cada disciplina (ex.: "Língua Portuguesa", "Raciocínio Lógico", "Informática", "Direito Constitucional", "Direito Administrativo", "Direito Penal", "Direito Processual Penal", "Legislação Especial", "Direitos Humanos", etc.) — NUNCA use "Conhecimentos Gerais", "Conteúdo Programático", "Edital Verticalizado", o nome do cargo ou do concurso como subject. Ignore regras administrativas. Responda EXCLUSIVAMENTE um JSON válido no formato {"topics":[{"subject":"Nome da Disciplina","unit":"","topic":"Tópico de estudo"}]}.`;
         const res = await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`, {
@@ -1172,112 +1277,35 @@
             campaign_id: doc.campaign_id,
           }),
         }).catch(() => null);
+      if(!currentScope())return false;
         const data = res ? await res.json().catch(() => ({})) : {};
+      if(!currentScope())return false;
         if (res?.ok && data?.answer) {
           try {
             const parsed = parseJsonBlock(data.answer);
-            if (Array.isArray(parsed?.topics)) rawTopics.push(...parsed.topics);
-          } catch {}
+            if (Array.isArray(parsed?.topics) && parsed.topics.length) {
+              rawTopics.push(...parsed.topics);
+              completedChunks++;
+              partialResponse ||= Boolean(parsed._partial);
+            }
+          } catch {
+      if(!currentScope())return false;}
         }
+      }
+      if (completedChunks !== chunks.length) {
+        toast("Um ou mais trechos do edital não puderam ser analisados. O mapa anterior foi preservado; tente novamente.");
+        return false;
       }
       const mergedTopics = rawTopics.length >= structured.topics.length ? rawTopics : structured.topics;
       if (!mergedTopics.length) return false;
-      return await saveTopicsToCampaignAndSync(doc, mergedTopics, session, pages.length);
+      return await saveTopicsToCampaignAndSync(doc, mergedTopics, session, pages.length, {
+        pagesProcessed: targetPages.length,
+        incomplete: partialResponse || targetPages.some((page) => String(page.text || "").length > 9000),
+      });
     }
 
-    toast(`Concluindo análise de “${doc.title}” pelo modo de recuperação inteligente...`);
-    const isExam = ["prova", "simulado"].includes(String(doc.document_type || ""));
-    const prompt = `Com base no PDF "${doc.title}" (${doc.document_type}), gere um pacote de estudo estruturado. Responda EXCLUSIVAMENTE com um objeto JSON puro (sem blocos markdown) no formato:
-{"summaries":[{"subject":"Disciplina","title":"Título específico do assunto","page_start":1,"page_end":${realLastPage},"explanation":"Aula escrita detalhada e clara para iniciantes explicando todo o conteúdo e regras","points":["Ponto 1","Ponto 2","Ponto 3","Ponto 4","Ponto 5"],"example":"Exemplo prático aplicado explicado passo a passo","bizu":"Dica rápida de memorização para prova","mnemonic":"Mnemônico ou associação","trap":"Pegadinha frequente de banca sobre este tema","flashcards":[{"question":"Pergunta 1?","answer":"Resposta 1"},{"question":"Pergunta 2?","answer":"Resposta 2"},{"question":"Pergunta 3?","answer":"Resposta 3"}],"questions":[{"statement":"Enunciado da questão 1","options":["Opção A","Opção B","Opção C","Opção D"],"correct_index":0,"explanation":"Conceito-chave: ... | ✅ Correta: ... | ❌ Demais alternativas: ... | ⚠️ Pegadinha: ...","difficulty":"facil","topic":"Assunto","origin":"${isExam ? "adaptada_do_pdf" : "autoral"}"}]}]}
-Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 questões de 4 alternativas em cada assunto.`;
-
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/assistente-pmpe`, {
-      method: "POST",
-      headers: { ...authHeaders(session.access_token) },
-      body: JSON.stringify({
-        question: prompt,
-        context: fullText,
-        mode: "aula completa",
-        campaign_id: doc.campaign_id,
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data?.answer) return false;
-    const parsed = parseJsonBlock(data.answer);
-    const summaries = Array.isArray(parsed?.summaries) ? parsed.summaries.filter((s) => s?.title && s?.explanation) : [];
-    if (!summaries.length) return false;
-
-    const allowFlashcards = ["material", "anotacao", "lei"].includes(String(doc.document_type || "material").toLowerCase());
-    const dbRows = summaries.map((content) => ({
-      campaign_id: doc.campaign_id,
-      user_id: session.user.id,
-      source_document_id: doc.id,
-      content_type: isExam ? "question_pack" : "summary",
-      title: String(content.title || doc.title).slice(0, 200),
-      content: {
-        ...content,
-        is_question_pack: isExam,
-        flashcards: allowFlashcards && Array.isArray(content.flashcards)
-          ? content.flashcards.filter((c) => typeof window.isValidFlashcardItem === "function" ? window.isValidFlashcardItem(c?.question, c?.answer) : Boolean(c?.question && c?.answer))
-          : [],
-        subject: typeof canonicalSubjectName === "function" ? canonicalSubjectName(content.subject || "Conteúdo Geral") : (content.subject || "Conteúdo Geral"),
-        source: doc.title,
-      },
-      source_refs: [{ document_id: doc.id, title: doc.title }],
-    }));
-
-    const saveRes = await cloudFetch("generated_study_content", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Prefer: "return=representation" },
-      body: JSON.stringify(dbRows),
-    });
-    if (!saveRes.ok) return false;
-
-    const primarySubject = dbRows[0]?.content?.subject || "Conteúdo Geral";
-    const sentPages = compactPages.length;
-    const totalPages = Math.max(pages.length, Number(pdfMeta.pdfTotalPages) || pages.length);
-    const coveragePercent = Math.max(1, Math.min(100, Math.round((sentPages / Math.max(1, totalPages)) * 100)));
-    const wasSampled = sentPages < pages.length || Boolean(pdfMeta.truncatedPages);
-    const warnings = [];
-    if (pdfMeta.truncatedPages) warnings.push(`O PDF possui ${pdfMeta.pdfTotalPages} páginas; foram lidas as primeiras ${MAX_EXTRACT_PAGES} páginas.`);
-    if (sentPages < pages.length) warnings.push("Conteúdo gerado a partir de uma amostra do PDF; reprocesse para cobertura completa.");
-
-    const coverage = {
-      estimated_pages: totalPages,
-      sections_detected: summaries.map((s) => s.title),
-      sections_covered: summaries.map((s) => s.title),
-      omissions: wasSampled ? [`Modo de recuperação leu ${sentPages} de ${totalPages} páginas.`] : [],
-      confidence: wasSampled ? 0.6 : 0.88,
-      percent: coveragePercent,
-      summary_count: summaries.length,
-      shallow_summaries: 0,
-      warnings,
-      needs_review: wasSampled,
-    };
-
-    await cloudFetch(`study_documents?id=eq.${doc.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        processing_status: "ready",
-        detected_subject: primarySubject,
-        metadata: {
-          ...(doc.metadata || {}),
-          primary_subject: primarySubject,
-          analyzed_at: new Date().toISOString(),
-          analysis_progress: { stage: "completed", percent: 100, completed_sections: summaries.length, total_sections: summaries.length, updated_at: new Date().toISOString() },
-          coverage,
-        },
-      }),
-    });
-
-    doc.processing_status = "ready";
-    await Promise.all([loadGeneratedContent(), loadCloudDocuments()]);
-    render();
-    toast("Conteúdo, resumos, flashcards e questões gerados com sucesso!");
-    return true;
   }
 
-  // Intercepta chamadas fetch para edital-gemini e material-gemini.
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async function (input, init) {
     const url = typeof input === "string" ? input : input?.url || "";
@@ -1321,17 +1349,43 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
   processEditalDocument = async function (id) {
     const doc = cloudDocuments.find((item) => item.id === id);
     if (!doc) return;
+    const ownerId=cloudSession?.user?.id,portalId=state.activeCampaignId,resetEpoch=Number(state._resetEpoch||0);
+    const dbId=typeof activeCampaign==='function'?activeCampaign()?.dbId:(state.campaigns||[]).find(c=>c.id===portalId)?.dbId;
+    if(!ownerId||(state._ownerUserId&&state._ownerUserId!==ownerId)||(doc.user_id&&doc.user_id!==ownerId)||(dbId&&doc.campaign_id!==dbId))return false;
+    const operations=window._pdfDocumentProcessingOperations||(window._pdfDocumentProcessingOperations=new Map()),operation={};
+    operations.set(id,operation);
+    const currentScope=()=>operations.get(id)===operation&&cloudSession?.user?.id===ownerId&&(!state._ownerUserId||state._ownerUserId===ownerId)&&state.activeCampaignId===portalId&&Number(state._resetEpoch||0)===resetEpoch&&(!dbId||(typeof activeCampaign==='function'?activeCampaign()?.dbId:(state.campaigns||[]).find(c=>c.id===portalId)?.dbId)===dbId);
+    let session;
+    const scopedCloudFetch=(path,options={})=>{if(!currentScope())return Promise.reject(new Error('DOCUMENT_SCOPE_CANCELLED'));return cloudFetch(path,{...options,headers:{...(options.headers||{}),...authHeaders(session?.access_token)}})};
     window._activeProcessingDocs.add(id);
-    const session = await validSession();
+    try {
+    session = await validSession();
+      if(!currentScope())return false;
+    if(!session||session.user?.id!==ownerId){
+      if(currentScope()){
+        doc.processing_status='pending';renderUserDocuments();
+        const gate=document.getElementById?.('loginGate');if(gate)gate.hidden=false;
+        toast('Sua sessão expirou. Entre novamente para analisar o PDF.');
+      }
+      return false;
+    }
+    const isExamCaderno = ["prova", "simulado"].includes(String(doc.document_type || "").toLowerCase()) ||
+      /\b(?:\d+\s*quest[õo]es|caderno\s+de\s+quest[õo]es|banco\s+de\s+quest[õo]es|bateria\s+de\s+quest[õo]es|simulado|prova\s+oficial)\b/i.test(`${doc.title || ""} ${doc.source_name || ""}`);
+    if(isExamCaderno){
+      if(typeof window.JCQuestionReview?.reviewDocument==='function')return await window.JCQuestionReview.reviewDocument(id);
+      toast('Abra a revisão de PDFs na Biblioteca para extrair e conferir este documento. O conteúdo anterior foi preservado.');
+      return false;
+    }
     if (session) {
       try {
         await prepareDocumentText(doc, session);
+      if(!currentScope())return false;
       } catch (error) {
+      if(!currentScope())return false;
         console.warn("Preparação de texto no navegador falhou", error);
         toast("Não foi possível extrair o texto no navegador. Tentaremos a leitura visual do PDF.");
       }
     }
-    try {
       const pages = window._extractedPagesByDocId.get(id);
       if (Array.isArray(pages) && pages.length && session) {
         const campaignName = typeof activeCampaign === "function" ? activeCampaign()?.name || "" : "";
@@ -1342,229 +1396,10 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
         // Provas, simulados, materiais, leis e anotações NUNCA viram edital nem geram missões.
         if (isEditalType(doc) && structured.subjectCount >= 2 && structured.topics.length >= 6) {
           const savedOk = await saveTopicsToCampaignAndSync(doc, structured.topics, session, pages.length);
+      if(!currentScope())return false;
           if (savedOk) return;
         }
 
-        // Fast-path determinístico para Provas Oficiais e Simulados em PDF que já possuem questões numeradas + gabarito no documento
-        const isExamCaderno = ["prova", "simulado"].includes(String(doc.document_type || "").toLowerCase()) ||
-          /\b(?:\d+\s*quest[õo]es|caderno\s+de\s+quest[õo]es|banco\s+de\s+quest[õo]es|bateria\s+de\s+quest[õo]es|simulado|prova\s+oficial)\b/i.test(`${doc.title || ""} ${doc.source_name || ""}`);
-        if (isExamCaderno && typeof window.extractStructuredExamQuestions === "function") {
-          // Se o usuário anexou um PDF de Gabarito Separado (#documentAnswerKeyFile), junta o texto do gabarito ao final das páginas da prova
-          const ansKeyFile = document.querySelector("#documentAnswerKeyFile")?.files?.[0];
-          if (ansKeyFile) {
-            try {
-              toast(`Extraindo gabarito oficial de “${ansKeyFile.name}” no navegador...`);
-              const akBytes = new Uint8Array(await ansKeyFile.arrayBuffer());
-              const pdfjs = await import("./pdf.mjs");
-              const akPdf = await openPdfDocumentWithFallback(pdfjs, akBytes);
-              let akText = "";
-              for (let akP = 1; akP <= akPdf.numPages; akP++) {
-                const akPage = await akPdf.getPage(akP);
-                const akContent = await akPage.getTextContent();
-                akText += "\n" + (akContent.items || []).map((it) => it.str || "").join(" ");
-                akPage.cleanup();
-              }
-              try { await akPdf.destroy(); } catch {}
-              if (akText.trim()) {
-                pages.push({ page: pages.length + 1, text: `\nGABARITO OFICIAL DEFINITIVO\n${akText}` });
-                toast("✓ Gabarito oficial anexado e cruzado com sucesso com as questões da prova!");
-              }
-            } catch (akErr) {
-              console.warn("Falha ao ler PDF de gabarito anexado", akErr);
-            }
-          }
-          const activeCampBoard = (typeof activeCampaign === "function" ? activeCampaign()?.board : "") || "Instituto AOCP";
-          const detectedBoard = /\b(?:cebraspe|cespe)\b/i.test(`${doc.title} ${doc.source_name}`) ? "Cebraspe"
-            : /\b(?:fgv)\b/i.test(`${doc.title} ${doc.source_name}`) ? "FGV Conhecimento"
-            : /\b(?:upenet|iaupe)\b/i.test(`${doc.title} ${doc.source_name}`) ? "UPENET/IAUPE"
-            : /\b(?:idecan)\b/i.test(`${doc.title} ${doc.source_name}`) ? "IDECAN"
-            : /\b(?:ibfc)\b/i.test(`${doc.title} ${doc.source_name}`) ? "IBFC"
-            : /\b(?:aocp)\b/i.test(`${doc.title} ${doc.source_name}`) ? "Instituto AOCP"
-            : activeCampBoard;
-          const inferredFromTitle = typeof canonicalSubjectName === "function"
-            ? canonicalSubjectName(doc.title || "", doc.title || "")
-            : "";
-          const fallbackSubj = (inferredFromTitle && inferredFromTitle !== "Conteúdo Geral")
-            ? inferredFromTitle
-            : (doc.detected_subject || doc.metadata?.primary_subject || "Direito Constitucional");
-          let extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard });
-          let examReport = extractedQs?.report || {};
-          if (examReport.ambiguous && Array.isArray(examReport.cadernos) && examReport.cadernos.length >= 2) {
-            const pickedCad = window._isBatchExamImportActive
-              ? examReport.cadernos[0]
-              : typeof window.askUserExamCadernoChoice === "function"
-              ? await window.askUserExamCadernoChoice(doc, examReport.cadernos)
-              : (typeof prompt === "function" ? prompt(`Foram identificados múltiplos gabaritos/cadernos neste PDF (${examReport.cadernos.join(", ")}). Digite qual caderno deseja importar:`, examReport.cadernos[0]) : examReport.cadernos[0]);
-            if (pickedCad && pickedCad.trim()) {
-              extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard, preferredCaderno: pickedCad.trim() });
-              examReport = extractedQs?.report || {};
-              examReport.pickedCaderno = pickedCad.trim();
-            }
-          }
-          if (examReport.ambiguous && !window._isBatchExamImportActive) toast(`${examReport.reason} O gabarito oficial não foi importado automaticamente.`);
-
-          // Se o PDF tem questões mas o gabarito oficial não foi encontrado ou está incompleto,
-          // oferece opções claras ao usuário em vez de falhar silenciosamente no backend!
-          let userChoice = null;
-          if ((!Array.isArray(extractedQs) || extractedQs.length === 0 || (extractedQs.length >= 1 && Number(examReport.percent) < 60 && !examReport.noKey) || examReport.ambiguous) && typeof window.askUserExamAnswerKeyOptions === "function") {
-            userChoice = window._isBatchExamImportActive
-              ? { allowWithoutKey: true, resolveWithAi: Boolean(window._batchResolveMissingKeyWithAi) }
-              : await window.askUserExamAnswerKeyOptions(doc, pages, examReport);
-            if (userChoice?.cancelled) {
-              doc.processing_status = "pending";
-              renderUserDocuments();
-              if (typeof renderExamBankHub === "function") renderExamBankHub();
-              return;
-            }
-            if (userChoice?.appendedText) {
-              pages.push({ page: pages.length + 1, text: `\nGABARITO OFICIAL DEFINITIVO\n${userChoice.appendedText}` });
-              extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard, preferredCaderno: userChoice.preferredCaderno || "" });
-              examReport = extractedQs?.report || {};
-            } else if (userChoice?.allowWithoutKey) {
-              extractedQs = window.extractStructuredExamQuestions(pages, { defaultSubject: fallbackSubj, defaultBoard: detectedBoard, allowWithoutKey: true });
-              examReport = extractedQs?.report || {};
-              if (userChoice?.resolveWithAi && Array.isArray(extractedQs) && extractedQs.length > 0 && typeof window.solveQuestionsArrayWithAi === "function") {
-                toast("🤖 Resolvendo gabarito e comentários das questões com a IA...");
-                await window.solveQuestionsArrayWithAi(extractedQs, doc);
-                examReport.answerUnknown = extractedQs.filter(q => q.answer_unknown || !Number.isInteger(Number(q.correct_index)) || Number(q.correct_index) < 0).length;
-                examReport.aiKeyed = extractedQs.filter(q => q.key_source === "ia_sugerido").length;
-              }
-            }
-          }
-
-          if (Array.isArray(extractedQs) && extractedQs.length >= 1 && (!examReport.ambiguous || userChoice?.allowWithoutKey) && (Number(examReport.percent) >= 50 || examReport.noKey || userChoice?.allowWithoutKey)) {
-            // Aprimoramento 3: Recorte automático de figuras/gráficos/tabelas via canvas (pdf.js) para questões que mencionam elementos visuais
-            try {
-              const visualRe = /\b(?:(?:observe|analise|veja|conforme|segundo|na|no|da|do)\s+(?:a\s+|o\s+)?(?:figura|imagem|gr[áa]fico|tabela|planilha|charge|tirinha)|(?:figura|gr[áa]fico|tabela|quadro)\s+\d+|charge\s+a\s+seguir|tirinha\s+a\s+seguir)\b/i;
-              const visualQs = extractedQs.filter(q => visualRe.test(String(q.statement || "")) && !q.figure_data_url);
-              if (visualQs.length > 0 && pdfBytes && typeof document !== "undefined") {
-                const pdfjs = await import("./pdf.mjs");
-                const figPdf = await openPdfDocumentWithFallback(pdfjs, pdfBytes);
-                const pageSnapCache = new Map();
-                for (const vq of visualQs.slice(0, 12)) {
-                  const snippet = String(vq.statement || "").replace(/\s+/g, " ").trim().slice(0, 45).toLowerCase();
-                  const matchedPageObj = pages.find(p => String(p.text || "").replace(/\s+/g, " ").toLowerCase().includes(snippet));
-                  const pageNum = matchedPageObj?.page || 1;
-                  if (pageNum >= 1 && pageNum <= figPdf.numPages) {
-                    if (!pageSnapCache.has(pageNum)) {
-                      const pg = await figPdf.getPage(pageNum);
-                      const vp = pg.getViewport({ scale: 1.15 });
-                      const cnv = document.createElement("canvas");
-                      cnv.width = Math.floor(vp.width);
-                      cnv.height = Math.floor(vp.height);
-                      const ctx2d = cnv.getContext("2d");
-                      await pg.render({ canvasContext: ctx2d, viewport: vp }).promise;
-                      pg.cleanup();
-                      pageSnapCache.set(pageNum, cnv.toDataURL("image/jpeg", 0.68));
-                    }
-                    vq.figure_data_url = pageSnapCache.get(pageNum);
-                    vq.figure_page = pageNum;
-                  }
-                }
-                try { await figPdf.destroy(); } catch {}
-              }
-            } catch (figErr) {
-              console.warn("Aviso ao recortar figura de questão do PDF:", figErr);
-            }
-            const bySubj = {};
-            for (const qItem of extractedQs) {
-              const s = qItem.subject || fallbackSubj;
-              (bySubj[s] = bySubj[s] || []).push(qItem);
-            }
-            const dbRows = Object.entries(bySubj).map(([subj, qs]) => ({
-              campaign_id: doc.campaign_id,
-              user_id: session.user.id,
-              source_document_id: doc.id,
-              content_type: "summary",
-              title: `Questões Extraídas (${subj}) — ${doc.title}`.slice(0, 190),
-              content: {
-                is_question_pack: true,
-                subject: subj,
-                source: doc.title,
-                page_start: 1,
-                page_end: pages.length,
-                explanation: `Pacote de ${qs.length} questão(ões) extraída(s) de ${doc.title} com o gabarito do próprio documento.`,
-                points: [],
-                flashcards: [],
-                questions: qs
-              },
-              source_refs: [{ document_id: doc.id, title: doc.title }]
-            }));
-            // Grava primeiro e só apaga o conteúdo antigo depois (evita ficar sem nada se a gravação falhar).
-            let oldIds = [];
-            try {
-              const oldRes = await cloudFetch(`generated_study_content?source_document_id=eq.${encodeURIComponent(doc.id)}&select=id`);
-              if (oldRes.ok) oldIds = (await oldRes.json().catch(() => [])).map((row) => row.id).filter(Boolean);
-            } catch { /* sem backup de ids */ }
-            const saveRes = await cloudFetch("generated_study_content", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Prefer: "return=representation" },
-              body: JSON.stringify(dbRows)
-            });
-            if (saveRes.ok && oldIds.length) {
-              await cloudFetch(`generated_study_content?id=in.(${oldIds.map(encodeURIComponent).join(",")})`, { method: "DELETE" }).catch(() => undefined);
-            }
-            if (saveRes.ok) {
-              const primarySubject = Object.keys(bySubj)[0] || fallbackSubj;
-              const subjectsList = Object.keys(bySubj);
-              const validTotal = Math.max(0, (examReport.expected || extractedQs.length) - (examReport.annulled || 0));
-              const examPercent = Math.max(1, Math.min(100, Number(examReport.percent) || 100));
-              const omissions = [];
-              if (examReport.missingKey) omissions.push(`${examReport.missingKey} questão(ões) sem gabarito no documento.`);
-              if (examReport.skipped) omissions.push(`${examReport.skipped} questão(ões) em formato não reconhecido.`);
-              if (examReport.annulled) omissions.push(`${examReport.annulled} questão(ões) anulada(s) não foram importadas.`);
-              const coverage = {
-                estimated_pages: pages.length,
-                sections_detected: subjectsList,
-                sections_covered: subjectsList,
-                omissions,
-                confidence: examPercent >= 95 ? 0.95 : 0.75,
-                percent: examPercent,
-                summary_count: extractedQs.length,
-                shallow_summaries: 0,
-                warnings: [
-                  ...(examReport.pickedCaderno ? [`Gabarito importado do caderno "${examReport.pickedCaderno}". Confira se é o seu.`] : []),
-                  ...(examReport.answerUnknown ? [`${examReport.answerUnknown} questão(ões) foram importadas SEM gabarito e ficam fora de simulados e do desempenho até você adicionar o gabarito oficial.`] : []),
-                  ...(examPercent < 100 ? [`Foram importadas ${extractedQs.length} de ${validTotal} questões válidas da prova.`] : []),
-                ],
-                needs_review: examPercent < 95 || Boolean(examReport.answerUnknown)
-              };
-              await cloudFetch(`study_documents?id=eq.${doc.id}`, {
-                method: "PATCH",
-                body: JSON.stringify({
-                  processing_status: "ready",
-                  detected_subject: primarySubject,
-                  metadata: {
-                    ...(doc.metadata || {}),
-                    primary_subject: primarySubject,
-                    analyzed_at: new Date().toISOString(),
-                    analysis_progress: { stage: "completed", percent: 100, completed_sections: subjectsList.length, total_sections: subjectsList.length, updated_at: new Date().toISOString() },
-                    coverage
-                  }
-                })
-              });
-              doc.processing_status = "ready";
-              doc.metadata = { ...(doc.metadata || {}), coverage };
-              await Promise.all([loadGeneratedContent(), loadCloudDocuments()]);
-              render();
-              toast(`🎯 ${extractedQs.length} questões oficiais extraídas com gabarito de “${doc.title}” (${subjectsList.length} disciplina(s))!`);
-              return;
-            }
-          }
-          if (window._isBatchExamImportActive && (!Array.isArray(extractedQs) || extractedQs.length === 0)) {
-            try {
-              await cloudFetch(`study_documents?id=eq.${doc.id}`, {
-                method: "PATCH",
-                body: JSON.stringify({
-                  processing_status: "ready",
-                  metadata: { ...(doc.metadata || {}), note: "Material verificado no lote" }
-                })
-              });
-              doc.processing_status = "ready";
-              return;
-            } catch (_err) {}
-          }
-        }
       }
 
       const pdfMetaCheck = window._extractedPdfMetaByDocId.get(id);
@@ -1572,24 +1407,28 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
         const userChoice = window._isBatchExamImportActive
           ? "compact_ocr"
           : await window.askUserScannedPdfPermission(doc, pdfMetaCheck);
+      if(!currentScope())return false;
         if (userChoice === "cancel") {
           doc.processing_status = "pending";
-          await cloudFetch(`study_documents?id=eq.${id}`, {
+          await scopedCloudFetch(`study_documents?id=eq.${id}`, {
             method: "PATCH",
             body: JSON.stringify({
               processing_status: "pending",
               metadata: { ...(doc.metadata || {}), pdf_kind: "scanned_image", selectable_chars: pdfMetaCheck.meaningfulCharacters || 0 },
             }),
           }).catch(() => undefined);
+      if(!currentScope())return false;
           renderUserDocuments();
           toast("Análise do PDF escaneado cancelada. Nenhum token da IA foi consumido.");
           return;
         }
         if (userChoice === "compact_ocr") {
           await convertScannedPdfViaBrowserCanvasOcr(doc, pdfMetaCheck, session);
+      if(!currentScope())return false;
         }
       }
       await originalProcessDocument(id);
+      if(!currentScope())return false;
       const updatedDoc = cloudDocuments.find((item) => item.id === id);
       const afterPages = window._extractedPagesByDocId.get(id);
       if (updatedDoc && Array.isArray(afterPages) && afterPages.length && session) {
@@ -1609,23 +1448,30 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
             try {
               if (structured.subjectCount >= 2 && structured.topics.length >= 5) {
                 await saveTopicsToCampaignAndSync(updatedDoc, structured.topics, session, afterPages.length);
+      if(!currentScope())return false;
               } else if (updatedDoc.processing_status !== "ready" || currentSubjCount <= 1) {
                 await recoverPdfViaAssistant(updatedDoc, afterPages, session);
+      if(!currentScope())return false;
               }
             } catch (recErr) {
+      if(!currentScope())return false;
               console.warn("Reparo estruturado/complementar do edital falhou", recErr);
             }
           }
         } else if (updatedDoc.processing_status !== "ready") {
           try {
             await recoverPdfViaAssistant(updatedDoc, afterPages, session);
+      if(!currentScope())return false;
           } catch (recErr) {
+      if(!currentScope())return false;
             console.warn("Modo de recuperação complementar falhou", recErr);
           }
         }
       }
     } finally {
-      window._activeProcessingDocs.delete(id);
+      if(currentScope()) {
+
+
       const btn = document.querySelector(`[data-process-doc="${id}"]`);
       if (btn) btn.disabled = false;
       const btnExam = document.querySelector(`[data-exam-doc-process="${id}"]`);
@@ -1636,14 +1482,18 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
       const finalDoc = cloudDocuments.find((item) => item.id === id);
       if (finalDoc && finalDoc.processing_status === "processing") {
         finalDoc.processing_status = "pending";
-        cloudFetch(`study_documents?id=eq.${id}`, {
+        scopedCloudFetch(`study_documents?id=eq.${id}`, {
           method: "PATCH",
           body: JSON.stringify({ processing_status: "pending" }),
         }).catch(() => undefined);
         renderUserDocuments();
         if (typeof renderExamBankHub === "function") renderExamBankHub();
       }
+
+      }
+      if(operations.get(id)===operation){window._activeProcessingDocs.delete(id);operations.delete(id)}
     }
+
   };
 
   const originalDeleteDocument = deleteCloudDocument;
@@ -1727,7 +1577,7 @@ Crie de 2 a 4 assuntos principais cobrindo o texto fornecido, com pelo menos 4 q
           for (let pNum = 1; pNum <= samplePages; pNum++) {
             const page = await pdf.getPage(pNum);
             const content = await page.getTextContent();
-            const pageTxt = (content.items || []).map((it) => it.str || "").join(" ");
+            const pageTxt = reconstructPdfTextContent(content);
             sampledChars += pageTxt.replace(/\s/g, "").length;
             fullSampleText += " " + pageTxt;
             page.cleanup();
@@ -2079,7 +1929,7 @@ Gere EXCLUSIVAMENTE um objeto JSON puro (sem markdown) no formato:
           for (let p = 1; p <= pdf.numPages; p++) {
             const page = await pdf.getPage(p);
             const content = await page.getTextContent();
-            fullAk += " " + (content.items || []).map((it) => it.str || "").join(" ");
+            fullAk += "\n" + reconstructPdfTextContent(content);
             page.cleanup();
           }
           try { await pdf.destroy(); } catch {}

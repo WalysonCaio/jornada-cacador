@@ -54,7 +54,7 @@ function scenario(rpc, backup = response([])) {
   };
   vm.createContext(ctx);
   vm.runInContext(source.slice(source.indexOf('  function parseJsonBlock('), start) + functionSource, ctx);
-  vm.runInContext(source.slice(end, source.indexOf('  // Intercepta chamadas fetch', end)), ctx);
+  vm.runInContext(source.slice(end, source.indexOf('  const nativeFetch', end)), ctx);
   return {ctx, calls, notices, doc: structuredClone(document), run: d => ctx.saveTopicsToCampaignAndSync(d || structuredClone(document), topics, {user: {id: uid}}, 5)};
 }
 

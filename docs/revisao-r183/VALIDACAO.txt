@@ -1,0 +1,91 @@
+JORNADA DO CAÇADOR — VALIDAÇÃO r183
+Data: 20/11/2026 (horário do usuário: America/Sao_Paulo)
+Base main examinada: 52b236036f5207117918aeb84ddd1df89eacdd1d
+Inclui revisão r182: a5037d05901cc8dddb00b73deb4f115a50701ace
+Ambiente: Linux, Node v24.22.1; serviços externos simulados nos testes de regressão.
+
+RESULTADO LOCAL
+- npm ci --ignore-scripts: aprovado.
+- npm test: 57/57 scripts aprovados (inclui validate-project).
+- npm run test:sql: 3 integrações PostgreSQL/PGlite aprovadas.
+- git diff --check: aprovado.
+- Cópias do painel Supabase: 7 funções reproduzíveis, autocontidas e inicializadas
+  sem importar arquivos locais. Nova função: leis-oficiais.
+- Banco nativo: 125 registros estruturalmente válidos, zero erros, zero avisos,
+  zero duplicatas exatas, uma quase duplicata identificada pelo comparador.
+  Similaridade aproximada, sozinha, não autoriza apagar um item.
+
+NOVAS REGRESSÕES FUNCIONAIS
+1. test-r183-clean-focus.mjs
+   Executa o controlador de interface em VM com DOM simulado: preferências e
+   delegação do Visual Limpo, avisos preservados, gavetas, modo do cronômetro,
+   teclado, foco/inert/aria, comandos duplicados, Wake Lock tardio, fullscreen
+   próprio e saída nativa. CSS responsivo conferido estruturalmente.
+2. test-r183-study-flows.mjs
+   Regeneração gradual de vidas, tempo acumulado, ausência de restauração grátis,
+   pontuação e XP sem duplicação, gabarito pendente sem perda de vida/pontuação,
+   escopo da lição, respostas do Invocador em sessão/HTTP/JSON, troca de conta,
+   portal/reset/logout/dbId, concorrência, botão destravado e abas sincronizadas.
+3. test-r183-hub-actions.mjs
+   Executa ações da questão: teoria recebe disciplina/assunto, Invocador,
+   cadernos, notas e histórico; preservação do treino antes de navegar; bloqueio
+   de contexto antigo; normalização de aspas externas da bio.
+4. test-r183-law-service.mjs
+   Handler real com fetch simulado: autenticação, catálogo 13, seleção por ID,
+   bloqueio de URLs e redirecionamentos externos, limites de tamanho e prazo,
+   fim do documento após mais de 180 blocos, HTML incompleto/bloqueado,
+   conteúdo riscado, charset, SHA-256, extração do WordSection1 da Alepe.
+5. test-r183-law-import.mjs
+   Importação real do frontend com serviço e armazenamento simulados: hash
+   recalculado, 1.250 blocos preservados, metadados/avisos de fonte na nuvem,
+   recuperação em outro dispositivo, IndexedDB com quota localStorage/offline,
+   paginação 60 blocos, grifos com índice absoluto, troca de escopo, falhas,
+   escape de HTML e bindings do catálogo.
+
+REGRESSÕES MANTIDAS DA r182
+Gabaritos/explicações/origem/pontuação; filtros de disciplina/assunto e modos;
+cache e invalidação; recuperação do treino/simulado sem reiniciar relógio;
+persistência de questões geradas e sugestões; sincronização e PDFs protegidos
+por escopo; upload sem apagar edital anterior; privacidade de perfil/ranking;
+notas reais/zero e períodos; flashcards; leis por conta e hidratação; manuais
+como ajuda fora de estudo; scripts de builds condicionados às verificações.
+
+SQL LOCAL (SEM ALTERAÇÃO DO BANCO REMOTO)
+- v107 edital: atomicidade/rollback, propriedade, sessão, service_role,
+  deduplicação e preservação de status/maestria/conteúdo/metadados.
+- v108 privacidade: flags no servidor, campos derivados, defaults/própria conta,
+  ordem/XP e revogação da função bruta, reexecução.
+- v109 leis: mesmo ID em duas contas, RLS de leitura/escrita, fonte/versão,
+  registros legados, compartilhamento existente e reexecução.
+
+AMOSTRAS OFICIAIS
+A extração também foi conferida em quatro respostas HTML oficiais obtidas nesta
+revisão: CF (3.639 parágrafos), CP (2.378), CPP (2.407) e Estatuto PMPE (957).
+Isso testa amostras do parser, não comprova vigência nem disponibilidade futura.
+O CPP tem conteúdo em imagem; esses elementos não viram texto por OCR.
+O serviço informa a limitação. Outras fontes do catálogo podem bloquear acesso.
+Nenhuma importação foi executada na conta real do usuário nesta revisão.
+
+LIMITES
+- Não houve acesso à base privada da conta. O número 2.554 do relato não foi
+  confirmado. Aprovação estrutural de 125 itens não é revisão factual de todas
+  as respostas, explicações ou fontes.
+- Não foi medido o tempo de abertura da aba em celular com a base de produção.
+  Não se confirmou 1.800 ms -> 2 ms, O(1) para todo o processo ou 60 FPS.
+- Não se certificou WCAG AAA, ausência de sobreposição em todas as telas,
+  retenção de memória, exclusividade visual ou proteção jurídica integral.
+- Os nomes antigos e mensagens de algumas regressões históricas não substituem
+  o escopo de validação descrito acima.
+- NÃO foram executados navegador/Playwright nem inspeção visual nesta sessão.
+  A habilidade Sites determina: "If cua_repl.js is unavailable, skip browser QA:
+  do not start a preview server, install a browser, or improvise another
+  browser-control path." Esse recurso não estava disponível no ambiente.
+  Fonte exata:
+  skill://plugin_connector_1p_689987207de08191979cf68eca2941c6/sites/SKILL.md
+  Há regressões de navegador e workflow manual para homologar fora desta sessão.
+- NÃO foram executados SQL remoto, deploy Supabase/Cloudflare, APK/EXE ou merge
+  no main. A entrega fornece a branch, o pacote e os passos de aplicação.
+
+A biblioteca compartilhada foi preservada. Os Manuais permanecem como ajuda.
+O ZIP contém código alterado desde a base indicada, não um backup de usuário.
+Integridade dos arquivos: MANIFESTO.json. Integridade do ZIP: entregas/r183/SHA256SUMS.txt.

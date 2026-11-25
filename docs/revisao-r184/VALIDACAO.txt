@@ -1,0 +1,85 @@
+JORNADA DO CAÇADOR — VALIDAÇÃO r184
+20/11/2026 — America/Sao_Paulo
+Base de desenvolvimento: 5fdb99bab539700f6201e4faaf54076838e758cb (r183).
+Base do pacote de alterações: 52b236036f5207117918aeb84ddd1df89eacdd1d (main r181).
+Node: v24.22.1. Ambiente Linux. APIs e armazenamento simulados nas regressões JS.
+
+APROVADO
+- npm ci --ignore-scripts.
+- npm test: 62/62 scripts, incluindo validação do projeto.
+- npm run test:sql: quatro integrações PostgreSQL/PGlite locais.
+- git diff --check.
+- Sete cópias Supabase autocontidas reproduzíveis; material-gemini atualizada.
+- Banco nativo: 125 registros estruturalmente válidos; zero erros/avisos;
+  zero duplicatas exatas e uma quase duplicata identificada pelo comparador.
+
+NOVAS REGRESSÕES
+1. test-r184-classification.mjs
+   Disciplina antes do assunto; CPP não induzido por contexto Constitucional;
+   ausência de alternativas não vira C/E; cabeçalhos e evidência conflitante;
+   empate heurístico; tipos MC/C-E; número/página/caderno e metadados preservados;
+   não localizada fora do treino; gabaritos acima250 e seleção exata de caderno.
+2. test-r184-material-safety.mjs
+   Handler real: propriedade antes de processar, provas recusadas sem gerarIA,
+   conteúdo existente preservado antes de consumo, cache entre docs removido,
+   chaves autorais pendentes, índice sugerido separado, sem corte no sexto item,
+   gravação via RPC atômico sem fallback RESTDELETE; especialidades não se fundem.
+3. test-r184-pdf-review.mjs
+   Releitura original forceFresh, caches ignorados, texto/headings preservados,
+   falhas/páginas vazias/omitidas/truncamento/OCR, troca de escopo e geração da
+   extração, encaminhamento para proposta; recuperação não contorna o servidor.
+4. test-r184-question-review.mjs
+   Comparação sem mutar originais, identidade por texto/opções, gabaritos e
+   classificação pessoais, overrides por alternativa, quarentena, imagens,
+   cobertura completa e contagem de páginas, confirmação de páginas vazias,
+   snapshot e proposta sem aplicação automática, confirmação independente de
+   aplicação, conta/portal/reset durante sessão/HTTP/preparação, pausa do lote,
+   cliques duplicados, cache antigo após preparação falhar, confirmação real do
+   servidor e falha de atualização da tela após aplicação já concluída.
+5. test-r184-responsive.mjs
+   Estrutura do leitor real: hash único, avisos sem duplicação, confiança visível,
+   ações e metadados organizados, página/grifos, CSS para larguras pequenas,
+   conteúdo extenso, navegação e controles. Não equivale a teste visual real.
+
+SQL REAL EM BANCO ISOLADO
+- v107: atomicidade/rollback, propriedade e preservação do mapa de edital.
+- v108: privacidade do ranking, campos derivados e reexecução.
+- v109: leis com mesmoID por conta, RLS e metadados, compartilhamento/reexecução.
+- v110: propriedade/RLS, leitura da fonte, snapshots, stage sem substituir,
+  versões anteriores guardadas, gabaritos/classificação manuais, IDs preservados,
+  aplicação atômica, rollback após escrita parcial, proposta fechada/cancelada,
+  snapshot obsoleto, conteúdo novo pendente, tickets internos de proveniência,
+  bloqueio de gravação direta como server_verified, criação inicial só servidor,
+  limites de estruturas e manutenção da visibilidade existente; reexecução.
+
+A v110 não executou no Supabase remoto. A integração usa PGlite/PostgreSQL e
+fixtures; não substitui homologação da migração no histórico real do projeto.
+
+ABRANGÊNCIA E LIMITES
+- Não houve login/acesso à conta do usuário nem download dos seus PDFs privados.
+  O lote REAL ainda deve ser executado dentro do app após aplicar esta versão.
+- Não houve certificação factual/jurídica de todas as questões, explicações ou
+  chaves, nem revisão editorial integral do banco nativo125. Validação estrutural
+  e heurística não comprovam verdade factual.
+- A heurística sinalizou13 classificações nativas para conferência, não13 erros
+  comprovados. Referências comuns a várias disciplinas não devem ser forçadas.
+- OCR de imagens/anexos não foi executado. Questão visual sem suporte permanece
+  pendente. Leitura parcial de PDF não gera proposta aplicável pelo fluxo daUI.
+- Limites explícitos: extraçãoaté600páginas; propostasaté10.000questões, 5.000rows,
+  8MB de conteúdo e 8MB de relatório noSQL. Excesso gera falha sem truncamento
+  silencioso do conteúdo ativo. PDFs grandes podem exigir divisão/OCR apropriado.
+- Relatórios pendentes recuperam as100propostas mais recentes. A lista de PDFs
+  usa paginação e pode cobrir todos os portais próprios; não acessa PDFs de outros.
+- Respostas/XP existentes não são apagados nem recalculados retroativamente.
+  Após reclassificar, as estatísticas históricas continuam refletindo o registro
+  original. Gabarito separado pode ser adicionado pelo fluxo tardio existente.
+- Sem execução Playwright/navegador, screenshots de comparação em dispositivos,
+  certificação WCAG ou medição de desempenho em celular com a base real.
+  Ferramenta cua_repl.js indisponível. A habilidade Sites estabelece:
+  "If cua_repl.js is unavailable, skip browser QA: do not start a preview server,
+  install a browser, or improvise another browser-control path."
+  Fonte: skill://plugin_connector_1p_689987207de08191979cf68eca2941c6/sites/SKILL.md
+- Sem SQL remoto, deploy Supabase/Cloudflare, novo APK/EXE ou merge no main.
+  Passos de aplicação em LEIA-ME.md; integridade dos arquivos em MANIFESTO.json.
+
+Biblioteca compartilhada e Manuais como ajuda preservados.

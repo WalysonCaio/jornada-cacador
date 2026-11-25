@@ -1,0 +1,274 @@
+{
+  "release": "r182",
+  "base_commit": "52b236036f5207117918aeb84ddd1df89eacdd1d",
+  "files": [
+    {
+      "path": ".github/workflows/build-android.yml",
+      "sha256": "c9c2f22e9482aedd118e6b6feb32f3ddc60386465a53b994e16cce14b1b45a9a"
+    },
+    {
+      "path": ".github/workflows/build-windows.yml",
+      "sha256": "d78c0c71df81fbbdedc71142d6e5f767455c8383b5183fbb8e4fc63e0ba51d5a"
+    },
+    {
+      "path": ".github/workflows/quality-checks.yml",
+      "sha256": "010c0034da56eb5a75bd2b9717348ae82120b4df34320394ac62d188ef95e109"
+    },
+    {
+      "path": ".github/workflows/validate.yml",
+      "sha256": "c11e14a48668342be50cdc8e700bfd79aaf14ad86688d76427e33749fa531d2a"
+    },
+    {
+      "path": ".github/workflows/windows-installer.yml",
+      "sha256": "d69445d77378830e16856076dd4c917587357a429dc5ff35be46ae44b2baccca"
+    },
+    {
+      "path": "GUIA-UNIFICADO.md",
+      "sha256": "cdfb0b077c5eed2f36fbd98291a677bdaab497405d0529cab5075a1e806e714a"
+    },
+    {
+      "path": "README.md",
+      "sha256": "3a9994050d0a2ed44291e09294ec54adba90e337cd9563e6f3d6d8e4a33d7a99"
+    },
+    {
+      "path": "dist/content-summaries.js",
+      "sha256": "f397e76641f76071ccbdfc1a7846bfc95bcc16eee4afaddfcf1596c7a99ce47c"
+    },
+    {
+      "path": "dist/index.html",
+      "sha256": "56ab1de4a1dc5a522a1f1ce9035d7dae29e1ae4c712f98dec69a350672ae3452"
+    },
+    {
+      "path": "dist/jc-architecture-modules.js",
+      "sha256": "27ac14cb831f1dd6fc507bc6f2aa97ea36c50a3d7c897d3bc3ef45ed58384868"
+    },
+    {
+      "path": "dist/native-laws-database.json",
+      "sha256": "66ff9564b12b67d3449104e9c436e83f2f88141db9c0b7fdd97f6f03c2a5d524"
+    },
+    {
+      "path": "dist/native-question-bank.json",
+      "sha256": "32771bf6acf70d1c5d769300e991bde4efd827c659812f3d7a18ccba7bbe8f23"
+    },
+    {
+      "path": "dist/pdf-text-client.js",
+      "sha256": "01761ecc9093fb435be17596c943b06601fd260a317fcae43ebe3e45e5d241eb"
+    },
+    {
+      "path": "dist/privacidade.html",
+      "sha256": "55e27a1302cc039fc04576c83d408056aa158979d326b12bb9186cb230ce2d1f"
+    },
+    {
+      "path": "dist/sw.js",
+      "sha256": "c1d016b5499b05c1a72109c450ca4b8d16d284eae2012e3030fe745ba4925929"
+    },
+    {
+      "path": "dist/v59-enhancements.js",
+      "sha256": "6c751a65ce96efb668680c11a7460e1c99e3d862c16287c31e3b1458f144a50b"
+    },
+    {
+      "path": "dist/v77-experience.js",
+      "sha256": "4ceb0468b1638afc614c3ef4804176fbbfa911413dac51399c3fd7053f491aa7"
+    },
+    {
+      "path": "dist/v78-smart-notebook.js",
+      "sha256": "52f3e08f336fbdca938cbc98c6b46516c91ad604744aadfe3d6bbaee053df65f"
+    },
+    {
+      "path": "docs/revisao-r182/ALTERACOES.md",
+      "sha256": "1a746bddb3feb3ab46ba097636df590018726c39896c42d68272b0b598cb8a14"
+    },
+    {
+      "path": "docs/revisao-r182/ARQUIVOS-ALTERADOS.md",
+      "sha256": "1b5abaf70ff70c4aa8cdfcd2cea1f19a03ca35d5ed98e5929c113c667aba633b"
+    },
+    {
+      "path": "docs/revisao-r182/LEIA-ME.md",
+      "sha256": "6b1ea347da2fe607ec5bc27080af1ca846a6add501ac1256d49266162f289324"
+    },
+    {
+      "path": "docs/revisao-r182/VALIDACAO.txt",
+      "sha256": "b2c2da9e1c4d46343d49393aa85cae87a70e3732033464f4d2c20eb5405c2d78"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "8403ce745e08a95eaf564986eab2d27062ae00f3101998a96f19d6d4747770f0"
+    },
+    {
+      "path": "package.json",
+      "sha256": "6b4dcc7b97baae81a04a8f134a3130b4289a7897d632be7ff661724de2b27c83"
+    },
+    {
+      "path": "scripts/browser-smoke.mjs",
+      "sha256": "2e216ce0e6eeab388606e6bf4ab2c1b2b54d1e96b40c270d0c2450df222dd9ef"
+    },
+    {
+      "path": "scripts/build-supabase-dashboard.mjs",
+      "sha256": "51cd3d371eaf8be3606d6bbaeb72cee87ef7d56d90b723bd7ef89912eae01dac"
+    },
+    {
+      "path": "scripts/integration-laws-sql.mjs",
+      "sha256": "3498bbdfbc71901fb7b2821d4f4cda5c3c5afbfa5548cede26ff6d16a062fad2"
+    },
+    {
+      "path": "scripts/test-attach-answer-key.mjs",
+      "sha256": "96065e1ea74a1045c46301f7039710ca9e7fdd87726d1c28a900c8bcc2df8b55"
+    },
+    {
+      "path": "scripts/test-crud-contracts.mjs",
+      "sha256": "dddf69d4cd7288d38ba61e533da899995170420627a862d4a7cc763325407539"
+    },
+    {
+      "path": "scripts/test-exam-extractor.mjs",
+      "sha256": "94b2e255f2913a2815d1904d62fa80ea7b992edf711b12dfcb7189e13f4574f6"
+    },
+    {
+      "path": "scripts/test-front-study.mjs",
+      "sha256": "dd7e5453a0971bf8cc9b364e7d61c6c1196e0dfc2aacafb922614190b07b75cb"
+    },
+    {
+      "path": "scripts/test-question-bank.mjs",
+      "sha256": "2d55a47cd79836a9aa73679c8b3fea7316a9e2c90d14ac9e20f0fc00e7609fc3"
+    },
+    {
+      "path": "scripts/test-r171-grok.mjs",
+      "sha256": "13d086ba661953109747955a489ca36e62b24a80dec2b37b2a2d4121e337e949"
+    },
+    {
+      "path": "scripts/test-r176-full-audit.mjs",
+      "sha256": "cbe66b2738a5564d6081a64d5aa8bf501e5b6208b29d2e78b0c97bc1b9bfadd4"
+    },
+    {
+      "path": "scripts/test-r178-backend.mjs",
+      "sha256": "82b63786105787ebaff3afa46d50b36dc84418fb68c0182987ddde7c8aed6556"
+    },
+    {
+      "path": "scripts/test-r178-caveira-clean-ui.mjs",
+      "sha256": "689629a24efa514a1b024bea4ed68e4da86e16814e80f0344e07bc391172551f"
+    },
+    {
+      "path": "scripts/test-r179-caveira-suite.mjs",
+      "sha256": "5c43bfa27ebe2c3be0b530e2d3873319c398fd15089d81cba343837ec4b08110"
+    },
+    {
+      "path": "scripts/test-r180-speed-laws-palette.mjs",
+      "sha256": "3873001a93bf0ccebb61371b11fedeb485d01ff2975d6b706df04535ea6495a4"
+    },
+    {
+      "path": "scripts/test-r181-mobile-laws-db-pedagogy.mjs",
+      "sha256": "562a96f4c35ef05e718091f4134b4b9df04b6391609b07ac120d632a892689ed"
+    },
+    {
+      "path": "scripts/test-r182-ai-study-actions.mjs",
+      "sha256": "58e9add7812b5ad47c6cd177f43e8c1ac91aa11c9b3b795aee969c8fae62c60c"
+    },
+    {
+      "path": "scripts/test-r182-document-scope.mjs",
+      "sha256": "da7bd6120f64346645d0f87dc5688092a04a4d3a4135181ccd39fb68871d6528"
+    },
+    {
+      "path": "scripts/test-r182-flashcard-scope.mjs",
+      "sha256": "9840aa32649bf86199a2c3b4849fa168f9e830ef20ab7d822c230faafe2a4494"
+    },
+    {
+      "path": "scripts/test-r182-generated-content.mjs",
+      "sha256": "41f32a005adb8629abf89dbeca6eb34cb7fb5009d4d0605c44c0ba121ca9175b"
+    },
+    {
+      "path": "scripts/test-r182-laws.mjs",
+      "sha256": "fc86e6aa3ffe961b7e5171dead2aed29b5197ea048fdfecc50841e445efa9e28"
+    },
+    {
+      "path": "scripts/test-r182-metrics.mjs",
+      "sha256": "9d6045b5c5baca67d02fabafae23941a6a1f6d783388ea8e45a36a9ca5701926"
+    },
+    {
+      "path": "scripts/test-r182-pedagogy.mjs",
+      "sha256": "912a3bb782ad1067b5b4a9cf6f3ab84ef6eb6d48fd232be664e3ad4ceec0f139"
+    },
+    {
+      "path": "scripts/test-r182-question-cache.mjs",
+      "sha256": "581f8b738156764708b21936734fe1eaddabbf784b22cab3c86c5ff44c8fbcca"
+    },
+    {
+      "path": "scripts/test-r182-questions.mjs",
+      "sha256": "5e507a1543bbf74ba8f09a9860852d7b2606a51f7554937364c9d051c4524316"
+    },
+    {
+      "path": "scripts/test-r182-upload-safety.mjs",
+      "sha256": "62f6f58ec9bd701caba5fe572dbabbf4c0d278a8c19731b3f3efa9546f584893"
+    },
+    {
+      "path": "scripts/test-security-contracts.mjs",
+      "sha256": "d9e3ea7ff52b7c1261940b1e6a8f01b3d54d2099616e2b5a5ee4663e74ffaa24"
+    },
+    {
+      "path": "scripts/test-supabase-dashboard.mjs",
+      "sha256": "7a6a96cc7fbc0119d65c88e8b0320951c41651107b39f13b10d634e207867733"
+    },
+    {
+      "path": "scripts/validate-project.mjs",
+      "sha256": "86983f63b7630345c2f9804e5f935742ab8cb2e469e0e28be05890c555bc0e02"
+    },
+    {
+      "path": "supabase/dashboard/MANIFESTO.json",
+      "sha256": "1d8c9f9fd2c75d11aa968217d739c655cdbae92fc84819369abfc50a79ed0e8c"
+    },
+    {
+      "path": "supabase/dashboard/README.md",
+      "sha256": "05d40b8382f0a4d721cc1c0252cb52ce3168aaf683c50b0f7f7dd1d29f87f6a6"
+    },
+    {
+      "path": "supabase/dashboard/account-security/index.ts",
+      "sha256": "964ea64cdd2570ac527fc56b436354f072ad9310d8942d41fbb99e5aa9b1d030"
+    },
+    {
+      "path": "supabase/dashboard/assistente-pmpe/index.ts",
+      "sha256": "2f454e199fec352ea8ba2e6f9ea882a24fed058f91f22d2dfdceeb5faf1e2c12"
+    },
+    {
+      "path": "supabase/dashboard/edital-gemini/index.ts",
+      "sha256": "bd22ccdb68ac8f6cee4f50832f8c53f2d926ff71ad0425b0a42e578cc0732a2a"
+    },
+    {
+      "path": "supabase/dashboard/material-gemini/index.ts",
+      "sha256": "d1cc4aae888b7f47f5b6344b90154f0d7eaaeded882d54e54a7b2755e27cd6fd"
+    },
+    {
+      "path": "supabase/dashboard/redacao-gemini/index.ts",
+      "sha256": "b4d64ae8caa8818617d9a1ed09157c4a84f889cea565c75fa7f1008cb7bc0e07"
+    },
+    {
+      "path": "supabase/dashboard/system-diagnostics/index.ts",
+      "sha256": "15695e7181b80581aaa846e657d132344484ebcf9bf7d2f099f669a57f6bc196"
+    },
+    {
+      "path": "supabase/functions/account-security/index.ts",
+      "sha256": "89ca17d176e949530f98f109f899dfeea9bc2b1d415e51ecf9f25dc3008c99b3"
+    },
+    {
+      "path": "supabase/functions/assistente-pmpe/index.ts",
+      "sha256": "4095f397c30d2fcd51957c070c944bc1104c8fe6a0eeae4938b3bc7470eccc8f"
+    },
+    {
+      "path": "supabase/functions/edital-gemini/index.ts",
+      "sha256": "dd9e6d3a458208194e5c2d1ca28911f9fbc4522769d462e3d0b30c417dfcfbd8"
+    },
+    {
+      "path": "supabase/functions/material-gemini/index.ts",
+      "sha256": "30a5a1d88842098ade331a31186cfb15e1707cfe74b0f43c17754eb4df2379d4"
+    },
+    {
+      "path": "supabase/functions/redacao-gemini/index.ts",
+      "sha256": "ceb8bf3a72169ede8b27c98c4b03a1b8a190aa24fd42c765704244989e34ebb1"
+    },
+    {
+      "path": "supabase/functions/system-diagnostics/index.ts",
+      "sha256": "2b9c927e34b77a094f35136efe37503c226771e90696464c091df420215eb70a"
+    },
+    {
+      "path": "supabase/migrations/20261118010000_v109_owned_laws_library.sql",
+      "sha256": "1ab953209385e4537d8161ea7c57da19bf474738792bd03aded52c43e848bfda"
+    }
+  ]
+}

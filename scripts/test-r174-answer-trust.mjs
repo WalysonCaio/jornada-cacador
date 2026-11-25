@@ -142,22 +142,23 @@ assert.equal(missing[1].correct_index,-1);
 
 async function solveDocumentScenario(mode){
   const messages=[],writes=[];
-  const doc={id:'doc-1',title:'Simulado sem chave',metadata:{coverage:{warnings:['2 questões SEM gabarito.']}}};
+  const doc={id:'doc-1',title:'Simulado sem chave',user_id:'user-a',campaign_id:'db-a',metadata:{coverage:{warnings:['2 questões SEM gabarito.']}}};
   const originalMetadata=JSON.stringify(doc.metadata);
   const questions=[{...q,correct_index:-1,answer_unknown:true},{...q,statement:q.statement+' Segunda.',correct_index:-1,answer_unknown:true}];
   const button={dataset:{solveAiKeyDoc:'doc-1'},disabled:false,textContent:'Resolver'};
   const documentCtx=context({
-    cloudDocuments:[doc],cloudSession:{access_token:'fixture'},navigator:{onLine:mode!=='offline'},
-    validSession:async()=>({access_token:'fixture'}),SUPABASE_URL:'https://fixture.test',authHeaders:()=>({}),
+    state:{_ownerUserId:'user-a',activeCampaignId:'p',_resetEpoch:0},activeCampaign:()=>({id:'p',dbId:'db-a'}),
+    cloudDocuments:[doc],cloudSession:{user:{id:'user-a'},access_token:'fixture'},navigator:{onLine:mode!=='offline'},
+    validSession:async()=>({user:{id:'user-a'},access_token:'fixture'}),SUPABASE_URL:'https://fixture.test',authHeaders:()=>({}),
     document:{querySelectorAll:()=>[button]},toast:message=>messages.push(message),
     ALL_QUESTIONS:[],save:noOp,render:noOp,renderExamBankHub:noOp,loadGeneratedContent:async()=>{},loadCloudDocuments:async()=>{},
     cloudFetch:async(path,options={})=>{
       if(options.method==='PATCH'){writes.push({path,body:JSON.parse(options.body)});return{ok:mode!=='save-fails'};}
-      return{ok:true,json:async()=>[{id:'row-1',content:{questions}}]};
+      return{ok:true,json:async()=>[{id:'row-1',source_document_id:'doc-1',user_id:'user-a',campaign_id:'db-a',content:{questions}}]};
     },
     fetch:async()=>({ok:true,json:async()=>({solved:mode==='zero'?[]:[{index:0,correct_index:1,explanation:'Sugestão provisória de resolução.'}]})}),
   });
-  vm.runInContext(section(source,'  async function solveQuestionsArrayWithAi(','  // ── 3) Integração Completa com Goodnotes'),documentCtx);
+  vm.runInContext(section(source,'  function examDocumentScopeAllows(','  function renderExamBankHub(){')+section(source,'  async function solveQuestionsArrayWithAi(','  // ── 3) Integração Completa com Goodnotes'),documentCtx);
   await documentCtx.solveMissingAnswerKeyWithAi('doc-1');
   assert.equal(button.disabled,false,'Botão sempre deve ser liberado');
   if(mode==='offline'||mode==='zero'){
