@@ -450,3 +450,33 @@ body.lightAppTheme .sidebarCollapseBtn {
 .focusClock {
   padding-right: 6px;
 }
+
+/* r193: Acabamento final — contraste Hero Tema Claro, folga modal de questão, PDF e TAF nowrap */
+body.lightAppTheme .hero .small.muted,
+body.lightAppTheme .hero .heroMeta,
+body.lightAppTheme .hero #nextRank,
+body.lightAppTheme .hero #overall,
+body.lightAppTheme .hero .metric span {
+  color: #cbd5e1 !important;
+}
+body.lightAppTheme .hero .rank,
+body.lightAppTheme .hero .xp strong,
+body.lightAppTheme .hero .metric b {
+  color: #f8fafc !important;
+}
+#questionDialog .questionStage,
+#questionDialog .questionModalBody,
+#questionDialog .questionTrainer,
+#questionDialog .qModalScroll,
+#questionDialog .questionBody {
+  padding-bottom: 84px !important;
+}
+.tafStatusPill,
+.docTop > span,
+.docCard span.tag,
+.docCard .tag {
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  min-width: max-content !important;
+  flex-shrink: 0 !important;
+}

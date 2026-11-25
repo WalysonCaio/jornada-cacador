@@ -1,4 +1,4 @@
-const CACHE='jornada-cacador-v78-smart-notebook-r192';
+const CACHE='jornada-cacador-v78-smart-notebook-r193';
 const ASSETS=['./','./index.html','./ui-v75.css','./ui-v77.css','./ui-v78.css','./ui-r184.css','./ui-r188.css','./questions-workspace.css','./questions-workspace.js','./progress-ledger.js','./question-text-quality.js','./question-availability.js','./exam-questions-client.js','./question-review.js','./invocador-classroom.js','./v59-enhancements.js','./question-session-store.js','./v77-experience.js','./v78-smart-notebook.js','./jc-architecture-modules.js','./pdf-text-client.js','./hunter-manuals.js','./hunter-manuals.css','./content-summaries.js','./native-question-bank.json','./native-laws-database.json','./material-deep-dives.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./login-banner.jpg',
   './login-banner.webp',
   './bancas-boss-banner.webp','./bancas-boss-banner.jpg','./og-banner-1200x630.jpg','./privacidade.html','./termos.html','./cookies.html','./404.html'];

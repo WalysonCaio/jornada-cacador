@@ -9,8 +9,8 @@ const css = fs.readFileSync('dist/ui-r188.css', 'utf8');
 const sw = fs.readFileSync('dist/sw.js', 'utf8');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
-assert.equal(pkg.version, '1.0.192');
-assert.ok(sw.includes('r192'), 'SW deve estar na r192');
+assert.ok(/^1\.0\.19[2-9]$/.test(pkg.version));
+assert.ok(/r19[2-9]/.test(sw), 'SW deve estar na r192');
 
 // 1. Filtro #questionSubject restrito ao edital quando houver edital ativo (sem subtópicos soltos)
 assert.ok(html.includes('editalOrder.length?editalOrder.includes(subjectKey(c)):KNOWN_CANONICAL_SUBJECTS.has(c)'), 'renderQuestionFilters deve manter apenas disciplinas do edital/canônicas');

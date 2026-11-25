@@ -111,6 +111,13 @@
     let st = {};
     try { st = typeof state === 'object' && state ? state : (w.state || {}); } catch (_e) {}
     const cid = String(st.activeCampaignId || 'default');
+    const normKey = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const pickBetterLabel = (a, b) => {
+      if (!a) return b;
+      if (!b) return a;
+      const score = (s) => (/[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/.test(s) ? 2 : 0) + (/[áéíóúâêôãõçÁÉÍÓÚÂÊÔÃÕÇ]/.test(s) ? 2 : 0);
+      return score(b) > score(a) ? b : a;
+    };
     const counts = new Map();
     const errs = st.errors && typeof st.errors === 'object' ? Object.values(st.errors) : [];
     for (const err of errs) {
@@ -118,8 +125,10 @@
       const topic = String(err.topic || '').trim();
       const subject = String(err.subject || '').trim();
       if (!topic || topic.length < 3 || /^quest[aã]o\s+\d+/i.test(topic)) continue;
-      const key = `${subject.toLowerCase()}::${topic.toLowerCase()}`;
+      const key = normKey(topic);
       const cur = counts.get(key) || { topic, subject, errors: 0 };
+      cur.topic = pickBetterLabel(cur.topic, topic);
+      cur.subject = pickBetterLabel(cur.subject, subject);
       cur.errors += Math.max(1, Number(err.count || err.wrongCount || 1));
       counts.set(key, cur);
     }
@@ -133,8 +142,10 @@
       const topic = String(m.topic || m.topicKey || '').trim();
       const subject = String(m.subject || m.subjectKey || '').trim();
       if (!topic || topic.length < 3) continue;
-      const key = `${subject.toLowerCase()}::${topic.toLowerCase()}`;
+      const key = normKey(topic);
       const cur = counts.get(key) || { topic, subject, errors: 0 };
+      cur.topic = pickBetterLabel(cur.topic, topic);
+      cur.subject = pickBetterLabel(cur.subject, subject);
       cur.errors = Math.max(cur.errors, wrong);
       counts.set(key, cur);
     }
