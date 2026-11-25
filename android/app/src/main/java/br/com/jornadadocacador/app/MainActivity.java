@@ -6,11 +6,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.widget.Button;
-import android.widget.TextView;
-import android.widget.LinearLayout;
-import android.webkit.WebResourceError;
-import android.webkit.WebResourceRequest;
 import android.os.Environment;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
@@ -19,6 +14,8 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceError;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
@@ -47,7 +44,6 @@ public class MainActivity extends AppCompatActivity {
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
         settings.setAllowFileAccess(false);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setAllowContentAccess(true);
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
@@ -62,27 +58,28 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (request == null || request.getUrl() == null) return false;
                 Uri uri = request.getUrl();
                 String scheme = uri.getScheme();
-                if ("https".equalsIgnoreCase(scheme) && Uri.parse(APP_URL).getHost().equalsIgnoreCase(uri.getHost())) return false;
-                if (request.isForMainFrame() && ("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme) || "mailto".equalsIgnoreCase(scheme))) {
-                    try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); } catch (Exception ignored) { }
+                if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) return false;
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                } catch (Exception ignored) {
+                    Toast.makeText(MainActivity.this, "Não há app para abrir este link.", Toast.LENGTH_SHORT).show();
                 }
                 return true;
             }
+
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if (!request.isForMainFrame()) return;
-                LinearLayout panel = new LinearLayout(MainActivity.this);
-                panel.setOrientation(LinearLayout.VERTICAL);
-                panel.setPadding(32, 64, 32, 32);
-                TextView message = new TextView(MainActivity.this);
-                message.setText("Sem conexão ou página indisponível. Verifique sua internet e tente novamente.");
-                Button retry = new Button(MainActivity.this);
-                retry.setText("Tentar novamente");
-                retry.setOnClickListener(v -> { setContentView(webView); webView.loadUrl(APP_URL); });
-                panel.addView(message); panel.addView(retry);
-                setContentView(panel);
+                if (request == null || !request.isForMainFrame()) return;
+                view.loadData(
+                    "<html><body style='background:#050914;color:#e8eefc;font-family:sans-serif;padding:24px;text-align:center;'>"
+                        + "<h1 style='margin-top:40px;color:#38bdf8;'>Sem conexão</h1>"
+                        + "<p style='color:#94a3b8;margin-top:12px;'>Não foi possível abrir a Jornada do Caçador. Verifique a rede e tente de novo.</p>"
+                        + "</body></html>",
+                    "text/html", "utf-8");
+                view.postDelayed(() -> view.loadUrl(APP_URL), 4000);
             }
         });
 

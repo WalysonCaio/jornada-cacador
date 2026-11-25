@@ -1,0 +1,2211 @@
+diff --git a/GUIA-UNIFICADO.md b/GUIA-UNIFICADO.md
+index c0feb54..f2ec874 100644
+--- a/GUIA-UNIFICADO.md
++++ b/GUIA-UNIFICADO.md
+@@ -1,5 +1,5 @@
+-> Versão atual r186: [Questões, sincronização e publicação](docs/revisao-r186/LEIA-ME.md). O conteúdo abaixo registra os recursos anteriores preservados.
+-# Jornada do Caçador — Guia Unificado (r186)
++> Versão atual r189 (evolução sobre r188/r186): [Questões, sincronização e publicação](docs/revisao-r186/LEIA-ME.md). O conteúdo abaixo registra os recursos anteriores preservados.
++# Jornada do Caçador — Guia Unificado (r189)
+ 
+ Revisão de 23/11/2026. [Aplicação da versão, GitHub e Supabase](docs/revisao-r186/LEIA-ME.md) · [Conferência do relato do Gemini e limites](docs/revisao-r186/CONFERENCIA.md) · [Validação](docs/revisao-r186/VALIDACAO.txt).
+ 
+diff --git a/dist/index.html b/dist/index.html
+index 84e1965..70cfa0c 100644
+--- a/dist/index.html
++++ b/dist/index.html
+@@ -2651,6 +2651,9 @@ function renderExamCountdown(){
+ function openReader(doc,sectionIndex,pageOverride){const section=doc.sections[sectionIndex],key=`${doc.id}-${sectionIndex}`,page=pageOverride||state.reading?.[key]?.page||section[1];currentReading={doc,sectionIndex,key};$('#readerDoc').textContent=doc.title;$('#readerTitle').textContent=`${section[0]} · páginas ${section[1]}-${section[2]}`;$('#readerPage').min=section[1];$('#readerPage').max=section[2];$('#readerPage').value=page;$('#readerFavorite').checked=!!state.favorites?.[key];$('#readerNotes').value=state.notes?.[key]||'';$('#pdfFrame').src=`${doc.file}#page=${page}&view=FitH`;$('#readerDialog').showModal()}
+ function saveReading(){if(!currentReading)return;const{doc,key}=currentReading,page=+$('#readerPage').value;state.reading[key]={page,date:new Date().toISOString()};state.reading[doc.id]={page,date:new Date().toISOString()};state.notes[key]=$('#readerNotes').value.trim();state.favorites[key]=$('#readerFavorite').checked;save();$('#pdfFrame').src=`${doc.file}#page=${page}&view=FitH`;toast('Leitura e anotações salvas');renderLibrary($('#materialSearch').value);renderStreak()}
+ function esc(v){const s=typeof v==='string'&&v.length>1?normalizeLegalText(v):String(v??'');return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
++function jcSafeUrl(raw,{allowImageData=false}={}){const v=String(raw??'').trim();if(!v||/[\u0000-\u001F"'<>]/.test(v))return'';if(allowImageData&&/^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(v))return v;if(/^\/(?!\/)|^\.\.?\//.test(v))return v;try{const u=new URL(v,location.origin);if(u.protocol==='https:'||u.protocol==='http:')return u.href;}catch{}return'';}
++function jcSafeImageSrc(raw){return jcSafeUrl(raw,{allowImageData:true})}
++window.jcSafeUrl=jcSafeUrl;window.jcSafeImageSrc=jcSafeImageSrc;
+ function aiInline(value){return esc(value).replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*([^*]+)\*/g,'<em>$1</em>')}
+ function formatAIAnswer(value){const lines=String(value||'').replace(/\r/g,'').split('\n'),html=[];let list='';const closeList=()=>{if(list){html.push(`</${list}>`);list=''}};for(const raw of lines){const line=raw.trim();if(!line){closeList();continue}if(/^---+$/.test(line)){closeList();html.push('<div class="answerDivider"></div>');continue}const heading=line.match(/^#{1,4}\s+(.+)/);if(heading){closeList();html.push(`<h3>${aiInline(heading[1])}</h3>`);continue}const quote=line.match(/^>\s*(.+)/);if(quote){closeList();html.push(`<blockquote>${aiInline(quote[1])}</blockquote>`);continue}const bullet=line.match(/^[-•]\s+(.+)/),numbered=line.match(/^\d+[.)]\s+(.+)/);if(bullet||numbered){const wanted=numbered?'ol':'ul';if(list!==wanted){closeList();list=wanted;html.push(`<${list}>`)}html.push(`<li>${aiInline((bullet||numbered)[1])}</li>`);continue}closeList();html.push(`<p>${aiInline(line)}</p>`)}closeList();return html.join('')}
+ function assistantLibraryContext(queryOverride=""){
+@@ -2699,7 +2702,7 @@ function filteredCards(){if(!flashcardScopeReady())return [];const f=$('#cardFil
+ function renderCard(){const cards=filteredCards();if(!cards.length){$('#cardQuestion').textContent=document.getElementById('flashDueOnlyToggle')?.checked?'Nenhum cartão pendente agora. Volte mais tarde ou desmarque o filtro.':'Envie um PDF e gere o conteúdo para criar seus flashcards.';$('#cardAnswer').textContent='Os cartões desta campanha aparecerão aqui.';$('#cardCounter').textContent='0/0';$('#flashcard').dataset.card='';return}currentCard=((currentCard%cards.length)+cards.length)%cards.length;const item=cards[currentCard];$('#flashcard').classList.remove('flipped');$('#cardQuestion').textContent=item.c[1];$('#cardAnswer').textContent=item.c[2];$('#cardCounter').textContent=`${currentCard+1}/${cards.length} · ${item.c[0]} · ${!item.p?'novo':item.due?'revisar agora':'em dia'}`;$('#flashcard').dataset.card=item.key;$('#flashcard').dataset.legacy=item.i;$('#flashcard').dataset.campaignId=String(state.activeCampaignId||'');$('#flashcard').dataset.userId=String((typeof cloudSession!=='undefined'&&cloudSession?.user?.id)||state._ownerUserId||'guest');$('#flashcard').dataset.resetEpoch=String(Number(state._resetEpoch||0))}
+ function gradeCard(level){const card=$('#flashcard'),id=card?.dataset.card;if(!id||!['hard','medium','easy'].includes(level))return;const userId=typeof cloudSession!=='undefined'&&cloudSession?.user?.id||state._ownerUserId||'guest';if(!flashcardScopeReady())return;if((state._ownerUserId&&state._ownerUserId!==userId)||(card.dataset.userId&&card.dataset.userId!==userId)||(card.dataset.campaignId&&card.dataset.campaignId!==String(state.activeCampaignId||''))||(card.dataset.resetEpoch&&Number(card.dataset.resetEpoch)!==Number(state._resetEpoch||0)))return;const fp=state.flashProgress||(state.flashProgress={}),prev=fcProgress({key:id,i:card.dataset.legacy})||{},now=Date.now();let streak=Number(prev.streak||0),lapses=Number(prev.lapses||0),days;if(level==='hard'){streak=0;lapses++;days=10/1440}else if(level==='medium'){days=2}else{streak++;days=[3,7,14,30][Math.min(streak,4)-1]}const date=new Date(now).toISOString();fp[id]={level,date,answered_at:date,lastAnsweredAt:date,campaignId:state.activeCampaignId,userId,reviews:(prev.reviews||0)+1,streak,lapses,interval:days,nextDue:new Date(now+days*86400000).toISOString()};save();renderCard();renderStreak();document.dispatchEvent(new Event('flashcards:graded'))}
+ function belongsToActiveCampaign(item){return item.campaignId?item.campaignId===state.activeCampaignId:state.campaigns.length===1}
+-function renderNotes(){const list=(state.userNotes||[]).filter(belongsToActiveCampaign);$('#userNotes').innerHTML=list.length?[...list].reverse().map(n=>`<article class="noteCard"><div class="eyebrow">${esc(n.subject)}${n.source==='Goodnotes'?' · <span class="tag" style="padding:1px 7px;font-size:.68rem;color:#38bdf8">📓 Goodnotes</span>':''}</div><h3>${esc(n.title)}</h3><div class="small muted">${new Date(n.updated).toLocaleDateString('pt-BR')}${n.fileName?` · 📎 ${esc(n.fileName)}`:''}</div>${n.attachmentDataUrl?`<div style="margin:8px 0"><img src="${n.attachmentDataUrl}" alt="Anotação Goodnotes" style="max-width:100%;max-height:280px;border-radius:10px;border:1px solid var(--line);object-fit:contain"></div>`:''}<p>${esc(n.content).replace(/\n/g,'<br>')}</p><div class="noteActions"><button class="ghost" data-edit-note="${n.id}">Editar</button><button class="ghost danger" data-delete-note="${n.id}">Excluir</button></div></article>`).join(''):'<div class="empty">Você ainda não criou anotações neste portal.</div>';$$('[data-edit-note]').forEach(b=>b.onclick=()=>{const n=state.userNotes.find(x=>x.id===b.dataset.editNote);if(!n)return;editingNote=n.id;$('#noteTitle').value=n.title;$('#noteSubject').value=n.subject;$('#noteContent').value=n.content;$('#saveNote').textContent='Atualizar anotação';scrollTo({top:$('#notebook').offsetTop,behavior:'smooth'})});$$('[data-delete-note]').forEach(b=>b.onclick=()=>{if(confirm('Excluir esta anotação?')){state.userNotes=state.userNotes.filter(n=>n.id!==b.dataset.deleteNote);save();renderNotes()}})}
++function renderNotes(){const list=(state.userNotes||[]).filter(belongsToActiveCampaign);$('#userNotes').innerHTML=list.length?[...list].reverse().map(n=>`<article class="noteCard"><div class="eyebrow">${esc(n.subject)}${n.source==='Goodnotes'?' · <span class="tag" style="padding:1px 7px;font-size:.68rem;color:#38bdf8">📓 Goodnotes</span>':''}</div><h3>${esc(n.title)}</h3><div class="small muted">${new Date(n.updated).toLocaleDateString('pt-BR')}${n.fileName?` · 📎 ${esc(n.fileName)}`:''}</div>${jcSafeImageSrc(n.attachmentDataUrl)?`<div style="margin:8px 0"><img src="${esc(jcSafeImageSrc(n.attachmentDataUrl))}" alt="Anotação Goodnotes" style="max-width:100%;max-height:280px;border-radius:10px;border:1px solid var(--line);object-fit:contain"></div>`:''}<p>${esc(n.content).replace(/\n/g,'<br>')}</p><div class="noteActions"><button class="ghost" data-edit-note="${n.id}">Editar</button><button class="ghost danger" data-delete-note="${n.id}">Excluir</button></div></article>`).join(''):'<div class="empty">Você ainda não criou anotações neste portal.</div>';$$('[data-edit-note]').forEach(b=>b.onclick=()=>{const n=state.userNotes.find(x=>x.id===b.dataset.editNote);if(!n)return;editingNote=n.id;$('#noteTitle').value=n.title;$('#noteSubject').value=n.subject;$('#noteContent').value=n.content;$('#saveNote').textContent='Atualizar anotação';scrollTo({top:$('#notebook').offsetTop,behavior:'smooth'})});$$('[data-delete-note]').forEach(b=>b.onclick=()=>{if(confirm('Excluir esta anotação?')){state.userNotes=state.userNotes.filter(n=>n.id!==b.dataset.deleteNote);save();renderNotes()}})}
+ function saveUserNote(){const title=$('#noteTitle').value.trim(),content=$('#noteContent').value.trim(),subject=$('#noteSubject').value;if(!title||!content)return toast('Preencha o título e a anotação');if(editingNote){const n=state.userNotes.find(x=>x.id===editingNote);if(n)Object.assign(n,{title,content,subject,campaignId:state.activeCampaignId,updated:new Date().toISOString()})}else state.userNotes.push({id:String(Date.now()),title,content,subject,campaignId:state.activeCampaignId,updated:new Date().toISOString()});editingNote=null;$('#noteTitle').value='';$('#noteContent').value='';$('#saveNote').textContent='Salvar anotação';if(typeof extractFlashcardsFromUserNotes==='function'){const noteCards=extractFlashcardsFromUserNotes(),existingKeys=new Set((ALL_FLASHCARDS||[]).map(c=>`${c[0]}|${c[1]}`));for(const nc of noteCards){if(!existingKeys.has(`${nc[0]}|${nc[1]}`))ALL_FLASHCARDS.push(nc)}}save();renderNotes();renderCard();toast('Anotação salva e integrada aos seus Flashcards de estudo!')}
+ function printNotes(){if(!state.userNotes?.length)return toast('Crie uma anotação primeiro');const body=state.userNotes.map(n=>`<section><small>${esc(n.subject)}</small><h2>${esc(n.title)}</h2><p>${esc(n.content).replace(/\n/g,'<br>')}</p></section>`).join(''),w=window.open('','_blank');if(!w)return toast('Permita a abertura da folha');w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Anotações — Jornada do Caçador</title><style>body{font:16px Arial;max-width:800px;margin:40px auto;color:#172033}h1{border-bottom:3px solid #278dcc;padding-bottom:12px}section{page-break-inside:avoid;border-bottom:1px solid #ccd5df;padding:15px 0}small{color:#247aa8;text-transform:uppercase;font-weight:bold}p{line-height:1.6}@media print{body{margin:16mm}}</style></head><body><h1>Jornada do Caçador — Minhas anotações</h1>${body}
+   <!-- Modal 📝 Criar Estudo por Texto / Assunto / Lei Seca (Sem PDF) -->
+@@ -3324,7 +3327,7 @@ const dlg=$('#scoreDialog');$('#openScore').onclick=()=>{const missions=missionP
+ $('#timerReset').onclick=async()=>{if(timerRun){clearInterval(timerRun);timerRun=null}await closeCloudFocusSession('abandoned');timerLastTick=null;timerLeft=focusBlockSeconds();persistFocusTimer(false);$('#timerToggle').textContent='Iniciar foco';save();tickClock()};
+ $('#aboutDialog .tag').textContent='Versão 75 · interface moderna e responsiva';$('#diagnosticsDialog .small.muted').textContent='Versão 75 · interface, IA, PDFs, segurança e sincronização';
+ sendStudyReminder();document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){if(timerRun)applyFocusElapsed();persistFocusTimer(!!timerRun);save()}else{restoreFocusTimerState();tickClock();refreshStreak();renderStreak();renderHero();renderNotifications();sendStudyReminder()}});window.addEventListener('beforeunload',()=>{if(timerRun)applyFocusElapsed();persistFocusTimer(!!timerRun);localStorage.setItem(KEY,JSON.stringify(state))});
+-let installPrompt;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('#installBtn').hidden=false});$('#installBtn').onclick=async()=>{if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('#installBtn').hidden=true}else toast('No iPhone: Compartilhar → Adicionar à Tela de Início')};window.addEventListener('appinstalled',()=>toast('Aplicativo instalado!'));if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').then(r=>r.update().catch(()=>{})).catch(()=>{}));
++let installPrompt;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('#installBtn').hidden=false});$('#installBtn').onclick=async()=>{if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('#installBtn').hidden=true}else toast('No iPhone: Compartilhar → Adicionar à Tela de Início')};window.addEventListener('appinstalled',()=>toast('Aplicativo instalado!'));if('serviceWorker'in navigator)window.addEventListener('load',()=>{let hadCtrl=Boolean(navigator.serviceWorker.controller),updateNoticeShown=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!hadCtrl||updateNoticeShown)return;updateNoticeShown=true;const existing=document.getElementById('jcSwUpdateBanner');if(existing)return;const bar=document.createElement('div');bar.id='jcSwUpdateBanner';bar.className='jcSwUpdateBanner';bar.innerHTML='<span>Nova versão da Jornada pronta.</span><button type="button" class="action small" style="width:auto" id="jcSwReloadBtn">Atualizar agora</button>';document.body.appendChild(bar);bar.querySelector('#jcSwReloadBtn')?.addEventListener('click',()=>location.reload());});navigator.serviceWorker.register('sw.js').then(r=>r.update().catch(()=>{})).catch(()=>{});});(()=>{const syncOfflineBanner=()=>{let bar=document.getElementById('jcOfflineBanner');if(navigator.onLine){if(bar)bar.remove();return;}if(!bar){bar=document.createElement('div');bar.id='jcOfflineBanner';bar.className='jcOfflineBanner';bar.setAttribute('role','status');bar.textContent='Modo offline — usando banco local e cache sincronizado.';document.body.appendChild(bar);}};window.addEventListener('online',syncOfflineBanner);window.addEventListener('offline',syncOfflineBanner);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',syncOfflineBanner,{once:true});else syncOfflineBanner();})();
+ $('#summaryFilter').onchange=()=>renderSummaries($('#summarySearch').value);$('#lessonNext').onclick=nextLesson;$('#closeLesson').onclick=()=>{activeLesson=null;$('#lessonDialog').close();restoreLessonStage()};
+ const SUPABASE_URL='https://jybislbbblyjsrcdegjt.supabase.co';
+ const SUPABASE_KEY='sb_publishable_IcHLyErTCzshPU3JHRccVg_jLKY_yxw';
+@@ -3838,7 +3841,7 @@ if(server.daily&&local.daily&&server.daily===local.daily&&server.dailyDate===loc
+       errorsReviewed:Math.max(Number(st.errorsReviewed||0),Number(lt.errorsReviewed||0))
+     };
+   }
+-}merged.reviews={...(server.reviews||{}),...(local.reviews||{})};merged.bosses={...(server.bosses||{}),...(local.bosses||{})};merged.errors={...(server.errors||{}),...(local.errors||{})};merged.studyByDay={};for(const day of new Set([...Object.keys(server.studyByDay||{}),...Object.keys(local.studyByDay||{})]))merged.studyByDay[day]=Math.max(Number(server.studyByDay?.[day]||0),Number(local.studyByDay?.[day]||0));merged.manualStudyEntries=unionById(server.manualStudyEntries,local.manualStudyEntries);merged.dailyHistory=unionById(server.dailyHistory,local.dailyHistory);merged.scores=window.JCProgress.mergeScores(server.scores,local.scores);merged.userNotes=unionById(server.userNotes,local.userNotes);merged.activityDays={};for(const day of new Set([...Object.keys(server.activityDays||{}),...Object.keys(local.activityDays||{})]))merged.activityDays[day]=[...new Set([...(server.activityDays?.[day]||[]),...(local.activityDays?.[day]||[])])];merged.learning=window.JCProgress.mergeLearning(server.learning,local.learning);merged.topicMastery=window.JCProgress.mergeTopicMastery(server.topicMastery,local.topicMastery);merged.bestStreak=Math.max(Number(server.bestStreak||0),Number(local.bestStreak||0));merged.settings={...(server.settings||{}),...(local.settings||{})};merged.settings.studyTimeZone=server.settings?.studyTimeZone||local.settings?.studyTimeZone||'America/Sao_Paulo';merged.taf={...(server.taf||{}),...(local.taf||{}),tests:{...(server.taf?.tests||{}),...(local.taf?.tests||{})},history:unionById(server.taf?.history,local.taf?.history)};merged.publicProfile={...(server.publicProfile||{}),...(local.publicProfile||{})};merged.notifState={dismissed:{...(server.notifState?.dismissed||{}),...(local.notifState?.dismissed||{})},snoozed:{...(server.notifState?.snoozed||{}),...(local.notifState?.snoozed||{})}};merged.hunterStats={...(server.hunterStats||{}),...(local.hunterStats||{})};merged._resetEpoch=Math.max(Number(server._resetEpoch||0),Number(local._resetEpoch||0));merged._dirty=true;return merged}
++}merged.reviews={...(server.reviews||{}),...(local.reviews||{})};merged.bosses={...(server.bosses||{}),...(local.bosses||{})};merged.errors={...(server.errors||{}),...(local.errors||{})};merged.studyByDay={};for(const day of new Set([...Object.keys(server.studyByDay||{}),...Object.keys(local.studyByDay||{})]))merged.studyByDay[day]=Math.max(Number(server.studyByDay?.[day]||0),Number(local.studyByDay?.[day]||0));merged.manualStudyEntries=unionById(server.manualStudyEntries,local.manualStudyEntries);merged.dailyHistory=unionById(server.dailyHistory,local.dailyHistory);merged.scores=window.JCProgress.mergeScores(server.scores,local.scores);merged.userNotes=unionById(server.userNotes,local.userNotes);merged.activityDays={};for(const day of new Set([...Object.keys(server.activityDays||{}),...Object.keys(local.activityDays||{})]))merged.activityDays[day]=[...new Set([...(server.activityDays?.[day]||[]),...(local.activityDays?.[day]||[])])];merged.learning=window.JCProgress.mergeLearning(server.learning,local.learning);merged.topicMastery=window.JCProgress.mergeTopicMastery(server.topicMastery,local.topicMastery);merged.bestStreak=Math.max(Number(server.bestStreak||0),Number(local.bestStreak||0));merged.settings={...(server.settings||{}),...(local.settings||{})};merged.settings.studyTimeZone=server.settings?.studyTimeZone||local.settings?.studyTimeZone||'America/Sao_Paulo';merged.taf={...(server.taf||{}),...(local.taf||{}),tests:{...(server.taf?.tests||{}),...(local.taf?.tests||{})},history:unionById(server.taf?.history,local.taf?.history)};merged.publicProfile={...(server.publicProfile||{}),...(local.publicProfile||{})};merged.notifState={dismissed:{...(server.notifState?.dismissed||{}),...(local.notifState?.dismissed||{})},snoozed:{...(server.notifState?.snoozed||{}),...(local.notifState?.snoozed||{})}};merged.questionAnswerOverrides={...(server.questionAnswerOverrides||{}),...(local.questionAnswerOverrides||{})};for(const [k,sv] of Object.entries(server.questionAnswerOverrides||{})){const lv=local.questionAnswerOverrides?.[k];if(lv&&sv){const st=Date.parse(sv.updatedAt||sv.reviewedAt||0)||0,lt=Date.parse(lv.updatedAt||lv.reviewedAt||0)||0;merged.questionAnswerOverrides[k]=st>lt?sv:lv;}}merged.answeredQuestionFingerprints={...(server.answeredQuestionFingerprints||{}),...(local.answeredQuestionFingerprints||{})};merged.favoriteQuestions={...(server.favoriteQuestions||{}),...(local.favoriteQuestions||{})};merged.questionFigures={...(server.questionFigures||{}),...(local.questionFigures||{})};merged.questionStatsByCampaign={};for(const cid of new Set([...Object.keys(server.questionStatsByCampaign||{}),...Object.keys(local.questionStatsByCampaign||{})])){const ss=server.questionStatsByCampaign?.[cid]||{},ls=local.questionStatsByCampaign?.[cid]||{};merged.questionStatsByCampaign[cid]={...ss,...ls,total:Math.max(Number(ss.total||0),Number(ls.total||0)),correct:Math.max(Number(ss.correct||0),Number(ls.correct||0))};}merged.questionBoardStatsByCampaign={};for(const cid of new Set([...Object.keys(server.questionBoardStatsByCampaign||{}),...Object.keys(local.questionBoardStatsByCampaign||{})])){const sb=server.questionBoardStatsByCampaign?.[cid]||{},lb=local.questionBoardStatsByCampaign?.[cid]||{};const out={};for(const b of new Set([...Object.keys(sb),...Object.keys(lb)])){const sbi=sb[b]||{},lbi=lb[b]||{};out[b]={...sbi,...lbi,total:Math.max(Number(sbi.total||0),Number(lbi.total||0)),correct:Math.max(Number(sbi.correct||0),Number(lbi.correct||0))};}merged.questionBoardStatsByCampaign[cid]=out;}const mergeCampArr=(sa={},la={},keyFn)=>{const out={};for(const cid of new Set([...Object.keys(sa||{}),...Object.keys(la||{})])){const m=new Map();for(const item of [...(sa?.[cid]||[]),...(la?.[cid]||[])]){const k=keyFn(item);if(k)m.set(k,item);}out[cid]=[...m.values()];}return out;};merged.customQuestionsByCampaign=mergeCampArr(server.customQuestionsByCampaign,local.customQuestionsByCampaign,q=>q?.id||JSON.stringify([q?.statement,q?.options]));merged.customFlashcardsByCampaign=mergeCampArr(server.customFlashcardsByCampaign,local.customFlashcardsByCampaign,c=>Array.isArray(c)?JSON.stringify(c.slice(0,3)):JSON.stringify(c));const sLast=String(server.lastStudy||''),lLast=String(local.lastStudy||'');if(sLast>lLast){merged.lastStudy=server.lastStudy;merged.streak=Math.max(Number(server.streak||0),Number(local.streak||0));}else if(lLast>sLast){merged.lastStudy=local.lastStudy;merged.streak=Math.max(Number(server.streak||0),Number(local.streak||0));}else{merged.lastStudy=lLast||sLast||null;merged.streak=Math.max(Number(server.streak||0),Number(local.streak||0));}merged.hunterStats={...(server.hunterStats||{}),...(local.hunterStats||{})};merged._resetEpoch=Math.max(Number(server._resetEpoch||0),Number(local._resetEpoch||0));merged._dirty=true;return merged}
+ async function pushCloudState(){
+   prepareProgressForSync();
+   const userId=cloudSession?.user?.id,resetEpoch=Number(state?._resetEpoch||0);
+@@ -3996,8 +3999,8 @@ let profileNameAuthorizedUntil=0;
+ async function beginProfileNameEdit(){const password=await requestPasswordConfirmation({title:'Alterar seu nome?',text:'Confirme sua senha atual para liberar a edição do nome exibido.',button:'Liberar edição'});if(!password)return;profileNameAuthorizedUntil=Date.now()+120000;$('#profileNameEditor').hidden=false;$('#profileName').value=cloudSession?.user?.user_metadata?.full_name||cloudSession?.user?.user_metadata?.name||'';setTimeout(()=>$('#profileName').focus(),50)}
+ function cancelProfileNameEdit(){$('#profileNameEditor').hidden=true;profileNameAuthorizedUntil=0}
+ async function updateProfileName(){if(Date.now()>profileNameAuthorizedUntil){cancelProfileNameEdit();return toast('Confirme novamente sua senha para alterar o nome')}const name=$('#profileName').value.trim();if(name.length<2)return toast('Informe um nome válido');try{const session=await validSession(),response=await fetch(`${SUPABASE_URL}/auth/v1/user`,{method:'PUT',headers:authHeaders(session.access_token),body:JSON.stringify({data:{full_name:name}})}),user=await response.json();if(!response.ok)throw new Error(user.message||'Não foi possível atualizar o nome');cloudSession.user=user;localStorage.setItem(SESSION_KEY,JSON.stringify(cloudSession));cancelProfileNameEdit();updateAccountUI();toast('Nome atualizado com segurança')}catch(error){toast(error.message)}}
+-async function resetActiveCampaignProgress(){const campaign=activeCampaign(),missions=missionPool(),missionIds=new Set(missions.map(m=>m.id)),campaignId=state.activeCampaignId;if(!campaign)return;const password=await requestPasswordConfirmation({title:'Redefinir este portal?',text:`O progresso do portal “${campaign.name}” será zerado em todos os aparelhos, incluindo o Histórico diário. O edital, os PDFs e o próprio portal serão mantidos.`,button:'Redefinir progresso'});if(!password)return;for(const id of missionIds){delete state.done[id];delete state.errors[id]}state.scores=(state.scores||[]).filter(s=>s.campaignId!==campaignId);state.aiHistory=(state.aiHistory||[]).filter(x=>x.campaignId!==campaignId);state.userNotes=(state.userNotes||[]).filter(x=>x.campaignId!==campaignId);state.dailyHistory=(state.dailyHistory||[]).filter(x=>x.campaignId&&x.campaignId!==campaignId);state.currentDailyHistoryId=null;state.dailyDate=null;state.learning.completed=Object.fromEntries(Object.entries(state.learning.completed||{}).filter(([key])=>!key.startsWith(`${campaignId}-`)));state.learning.xp=0;delete state.learning.xpLedger;delete state.learning.xpLog;delete state.learning.missionReceipts;state.reviews={};state.daily=null;state.dailySteps={};state.flashProgress={};state.streak=0;state.bestStreak=0;state.lastStudy=null;state.activityDays={};state.studyByDay={};state.manualStudyEntries=[];state._resetEpoch=Date.now();save();await pushCloudState();$('#editCampaignDialog').close();toast('Portal redefinido e sincronizado em todos os aparelhos.');render()}
+-async function clearLocalProfileData(){window.clearAllSavedQuestionSessions?.();if(timerRun){clearInterval(timerRun);timerRun=null}if(drawDB){drawDB.close();drawDB=null}if(_localCacheDBPromise){try{const db=await _localCacheDBPromise;db?.close()}catch{}_localCacheDBPromise=null}localStorage.removeItem(KEY);localStorage.removeItem(LIBRARY_UI_KEY);localStorage.removeItem(FOCUS_TIMER_KEY);localStorage.removeItem('jornada-smart-notebook-v78');sessionStorage.removeItem('jornada-last-view-v77');for(const key of Object.keys(localStorage)){if(key.startsWith('jornada-portal-subject-')||key.startsWith('jornada-job-retry-')||key.startsWith('jornada-local-meta-'))localStorage.removeItem(key)}await Promise.all([new Promise(resolve=>{const request=indexedDB.deleteDatabase('missao-pmpe-caderno');request.onsuccess=request.onerror=request.onblocked=()=>resolve()}),new Promise(resolve=>{const request=indexedDB.deleteDatabase('jornada-local-cache-v1');request.onsuccess=request.onerror=request.onblocked=()=>resolve()})])}
++async function resetActiveCampaignProgress(){const campaign=activeCampaign(),missions=missionPool(),missionIds=new Set(missions.map(m=>m.id)),campaignId=state.activeCampaignId;if(!campaign)return;const password=await requestPasswordConfirmation({title:'Redefinir este portal?',text:`O progresso do portal “${campaign.name}” será zerado em todos os aparelhos, incluindo o Histórico diário. O edital, os PDFs e o próprio portal serão mantidos.`,button:'Redefinir progresso'});if(!password)return;for(const id of missionIds){delete state.done[id];delete state.errors[id]}state.scores=(state.scores||[]).filter(s=>s.campaignId!==campaignId);state.aiHistory=(state.aiHistory||[]).filter(x=>x.campaignId!==campaignId);state.userNotes=(state.userNotes||[]).filter(x=>x.campaignId!==campaignId);state.dailyHistory=(state.dailyHistory||[]).filter(x=>x.campaignId&&x.campaignId!==campaignId);state.currentDailyHistoryId=null;state.dailyDate=null;state.learning.completed=Object.fromEntries(Object.entries(state.learning.completed||{}).filter(([key])=>!key.startsWith(`${campaignId}-`)));const otherCampaigns=(state.campaigns||[]).filter(c=>c.id!==campaignId);if(!otherCampaigns.length){state.learning.xp=0;delete state.learning.xpLedger;delete state.learning.xpLog;delete state.learning.missionReceipts;state.streak=0;state.bestStreak=0;state.lastStudy=null;state.activityDays={};state.studyByDay={};state.streakDaysByHalfMission={};state.manualStudyEntries=[];}else{if(state.learning?.missionReceipts){for(const id of missionIds)delete state.learning.missionReceipts[id];}}if(state.questionStatsByCampaign)delete state.questionStatsByCampaign[campaignId];if(state.questionBoardStatsByCampaign)delete state.questionBoardStatsByCampaign[campaignId];if(state.topicMastery){state.topicMastery=Object.fromEntries(Object.entries(state.topicMastery).filter(([k,v])=>!k.startsWith(`${campaignId}::`)&&v?.campaignId!==campaignId));}state.reviews={};state.daily=null;state.dailySteps={};state.flashProgress={};state._resetEpoch=Date.now();window.JCInvocadorClassroom?.syncScope?.();save();await pushCloudState();$('#editCampaignDialog').close();toast('Portal redefinido e sincronizado em todos os aparelhos.');render()}
++async function clearLocalProfileData(){window.clearAllSavedQuestionSessions?.();if(timerRun){clearInterval(timerRun);timerRun=null}if(drawDB){drawDB.close();drawDB=null}if(_localCacheDBPromise){try{const db=await _localCacheDBPromise;db?.close()}catch{}_localCacheDBPromise=null}localStorage.removeItem(KEY);localStorage.removeItem(LIBRARY_UI_KEY);localStorage.removeItem(FOCUS_TIMER_KEY);localStorage.removeItem('jornada-smart-notebook-v78');localStorage.removeItem('jornada-invocador-classroom-v188');window.JCInvocadorClassroom?.syncScope?.();sessionStorage.removeItem('jornada-last-view-v77');for(const key of Object.keys(localStorage)){if(key.startsWith('jornada-portal-subject-')||key.startsWith('jornada-job-retry-')||key.startsWith('jornada-local-meta-'))localStorage.removeItem(key)}await Promise.all([new Promise(resolve=>{const request=indexedDB.deleteDatabase('missao-pmpe-caderno');request.onsuccess=request.onerror=request.onblocked=()=>resolve()}),new Promise(resolve=>{const request=indexedDB.deleteDatabase('jornada-local-cache-v1');request.onsuccess=request.onerror=request.onblocked=()=>resolve()})])}
+ async function resetAllProgress(){const password=cloudSession?await requestPasswordConfirmation({title:'Redefinir perfil e apagar tudo?',text:'Todos os portais, editais, PDFs, resumos, flashcards, trilhas, redações, anotações, progresso, histórico e cronômetro serão excluídos do banco e de todos os aparelhos. Sua conta e sua chave Gemini pessoal serão mantidas.',button:'Apagar tudo e redefinir'}):confirm('Apagar todos os dados deste aparelho?');if(!password)return;try{if(cloudSession){const session=await validSession(),response=await fetch(`${SUPABASE_URL}/functions/v1/account-security`,{method:'POST',headers:authHeaders(session.access_token),body:JSON.stringify({action:'reset_profile',password})}),data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'Não foi possível redefinir o perfil.');if(!data.reset||!data.verified||Number(data.remaining?.total)!==0)throw new Error('O servidor não confirmou a exclusão completa. Nada será apresentado como concluído.')}await clearLocalProfileData();toast('Redefinição confirmada: conteúdos e progresso foram apagados. A chave Gemini foi mantida.');setTimeout(()=>location.reload(),1200)}catch(error){toast(error.message)}}
+ function openChangePassword(){$('#accountDialog').close();$('#currentAccountPassword').value='';$('#newAccountPassword').value='';$('#confirmAccountPassword').value='';$('#changePasswordMessage').textContent='';$('#changePasswordDialog').showModal();setTimeout(()=>$('#currentAccountPassword').focus(),80)}
+ async function changeAccountPassword(){const current=$('#currentAccountPassword').value,password=$('#newAccountPassword').value,confirmation=$('#confirmAccountPassword').value,message=$('#changePasswordMessage'),submit=$('#changePasswordForm button[type="submit"]');message.textContent='';if(current.length<6){message.textContent='Digite sua senha atual.';return}if(password.length<8){message.textContent='A nova senha deve ter pelo menos 8 caracteres.';return}if(password===current){message.textContent='A nova senha deve ser diferente da senha atual.';return}if(password!==confirmation){message.textContent='As novas senhas não são iguais.';return}submit.disabled=true;message.textContent='Confirmando e atualizando sua senha...';try{await verifyCurrentPassword(current);const session=await validSession(),response=await fetch(`${SUPABASE_URL}/auth/v1/user`,{method:'PUT',headers:authHeaders(session.access_token),body:JSON.stringify({password})}),user=await response.json();if(!response.ok)throw new Error(user.message||'Não foi possível alterar a senha.');cloudSession.user=user;localStorage.setItem(SESSION_KEY,JSON.stringify(cloudSession));$('#changePasswordDialog').close();updateAccountUI();toast('Senha alterada com sucesso')}catch(error){message.textContent=error.message==='Invalid login credentials'?'A senha atual está incorreta.':error.message}finally{submit.disabled=false}}
+@@ -4311,7 +4314,7 @@ if(typeof window.ensureNativePedagogicalCouplingLoaded==='function')window.ensur
+     for(const item of previousContent[1])if(item?.[3]?.is_community){const key=contentSignature(item.slice(0,3));if(!cardKeys.has(key)){ALL_FLASHCARDS.push(item);cardKeys.add(key)}}
+ LEARNING_SUBJECTS=computeValidLearningSubjects();if(!finishContent(rows))return false;const rememberedTrail=libraryUI.trailSubject[state.activeCampaignId],wanted=canonicalSubjectName(rememberedTrail||selectedLearningSubject);selectedLearningSubject=LEARNING_SUBJECTS.find(subject=>subjectKey(subject)===subjectKey(wanted))||LEARNING_SUBJECTS[0]||'Conteúdo';libraryUI.trailSubject[state.activeCampaignId]=selectedLearningSubject;const savedSummary=libraryUI.summaryFilter[state.activeCampaignId]||'all',savedCard=libraryUI.cardFilter[state.activeCampaignId]||'all',summaryValue=savedSummary==='all'?'all':canonicalSubjectName(savedSummary),cardValue=savedCard==='all'?'all':canonicalSubjectName(savedCard),sf=$('#summaryFilter'),cf=$('#cardFilter'),ns=$('#noteSubject');sf.innerHTML='<option value="all">Todas as disciplinas</option>'+LEARNING_SUBJECTS.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');sf.value=LEARNING_SUBJECTS.includes(summaryValue)?summaryValue:'all';cf.innerHTML='<option value="all">Todos os assuntos</option>'+LEARNING_SUBJECTS.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');cf.value=LEARNING_SUBJECTS.includes(cardValue)?cardValue:'all';ns.innerHTML='<option value="Geral">Geral</option>'+ALL_SUMMARIES.map(x=>`<option value="${esc(x.title)}" title="${esc(x.title)}">${esc(shortOptionLabel(x.title,54))}</option>`).join('');saveLibraryUI();renderStudy();renderLearning();renderQuestionFilters()}catch(error){if(!currentScope())return false;console.warn(error);toast('Não foi possível carregar o conteúdo gerado')}}
+ function renderSummaries(query=''){const q=query.trim().toLocaleLowerCase('pt-BR'),filter=$('#summaryFilter')?.value||libraryUI.summaryFilter[state.activeCampaignId]||'all',items=ALL_SUMMARIES.filter(s=>{if(typeof isHunterManualArtifact==='function'&&isHunterManualArtifact(s))return false;const hay=[s.title,s.category,s.explanation,s.example,s.bizu,s.mnemonic,s.trap,...(s.points||[])].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR');return(filter==='all'||subjectKey(s.category)===subjectKey(filter))&&(!q||hay.includes(q))}),groups=items.reduce((out,item)=>{(out[item.category]||=[]).push(item);return out},{}),card=s=>`<article class="summaryCard"><button class="summaryHead" data-summary="${s.id}"><span class="summaryTitle"><span class="summaryMeta">${esc(s.source||'PDF enviado')}</span><span>${esc(typeof window.formatDidacticSummaryTitle==='function'?window.formatDidacticSummaryTitle(s):s.title)}</span></span><span>＋</span></button><div class="summaryBody">${s.explanation?`<p class="lessonIntro">${esc(s.explanation)}</p>`:''}<div class="lessonBox"><b>Pontos essenciais</b><ul>${(s.points||[]).map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>${s.example?`<div class="lessonBox"><b>Exemplo explicado</b>${esc(s.example)}</div>`:''}${s.bizu?`<div class="lessonBox bizu"><b>✓ Bizu de prova</b>${esc(s.bizu)}</div>`:''}${s.mnemonic?`<div class="lessonBox mnemonic"><b>◆ Mnemônico</b>${esc(s.mnemonic)}</div>`:''}${s.trap?`<div class="lessonBox trap"><b>⚠ Pegadinha frequente</b>${esc(s.trap)}</div>`:''}<p class="small muted">Conteúdo gerado a partir dos PDFs desta campanha. Confira o documento original quando necessário.</p></div></article>`;$('#summaryList').innerHTML=items.length?`<div class="libraryFolders">${Object.entries(groups).sort(([a],[b])=>{const eo=(typeof orderedMissions==='function'?orderedMissions():[]).map(m=>subjectKey(canonicalSubjectName(m?.subject||'')));const ia=eo.indexOf(subjectKey(a)),ib=eo.indexOf(subjectKey(b));if(ia!==-1&&ib!==-1)return ia-ib;if(ia!==-1)return -1;if(ib!==-1)return 1;return a.localeCompare(b,'pt-BR')}).map(([subject,subjectItems])=>{const key=`study:${state.activeCampaignId}:${subjectKey(subject)}`,open=Boolean(libraryUI.studyFolders[key]===true||q.length>0);const byDoc=subjectItems.reduce((acc,it)=>{const docName=it.source||'Material da Biblioteca';(acc[docName]||=[]).push(it);return acc},{});const docBlocks=Object.entries(byDoc).map(([docName,docItems])=>{const dKey=`studydoc:${state.activeCampaignId}:${subjectKey(subject)}:${subjectKey(docName)}`,dOpen=libraryUI.subjects[dKey]!==false;return`<details class="folderSubject" data-subject="${esc(dKey)}" ${dOpen?'open':''} style="margin-bottom:8px"><summary>${esc(docName)} · ${docItems.length} tópico${docItems.length===1?'':'s'}</summary><div style="padding-top:8px">${(typeof window.sortSummariesDidactically==='function'?window.sortSummariesDidactically(docItems):docItems).map(card).join('')}</div></details>`}).join('');return`<section class="libraryFolder ${open?'open':''}" data-study-folder="${esc(key)}"><button class="folderHead" data-study-folder-toggle="${esc(key)}"><span><i>▤</i>${esc(subject)}</span><span class="tag">${Object.keys(byDoc).length} arquivo${Object.keys(byDoc).length===1?'':'s'} · ${subjectItems.length} resumo${subjectItems.length===1?'':'s'}</span></button><div class="folderBody">${docBlocks}</div></section>`}).join('')}</div>`:'<div class="empty">Nenhum resumo corresponde aos filtros. Envie um PDF na Biblioteca e gere o conteúdo.</div>';$$('[data-study-folder-toggle]').forEach(button=>button.onclick=()=>{const folder=button.closest('.libraryFolder'),open=!folder.classList.contains('open');folder.classList.toggle('open',open);libraryUI.studyFolders[button.dataset.studyFolderToggle]=open;saveLibraryUI()});$$('[data-summary]').forEach(b=>b.onclick=()=>{const summary=b.closest('.summaryCard');summary.classList.toggle('open');b.lastElementChild.textContent=summary.classList.contains('open')?'−':'＋'})}
+-function renderLearning(){LEARNING_SUBJECTS=typeof computeValidLearningSubjects==='function'?computeValidLearningSubjects():(LEARNING_SUBJECTS||[]).filter(s=>!isInvalidTrailSubject(s));if(!selectedLearningSubject||isInvalidTrailSubject(selectedLearningSubject)||!LEARNING_SUBJECTS.some(s=>subjectKey(s)===subjectKey(selectedLearningSubject))){selectedLearningSubject=LEARNING_SUBJECTS[0]||'Disciplina do Portal';if(libraryUI?.trailSubject)libraryUI.trailSubject[state.activeCampaignId]=selectedLearningSubject}else{const exact=LEARNING_SUBJECTS.find(s=>subjectKey(s)===subjectKey(selectedLearningSubject));if(exact)selectedLearningSubject=exact}const allUnits=LEARNING_SUBJECTS.flatMap(learningUnits),allUnitKeys=new Set(allUnits.map(u=>u.key)),done=[...allUnitKeys].filter(k=>state.learning.completed?.[k]).length;$('#learningXP').textContent=state.learning.xp||0;$('#learningDone').textContent=done;$('#learningRate').textContent=(allUnits.length?Math.round(done/allUnits.length*100):0)+'%';$('#disciplineRail').innerHTML=LEARNING_SUBJECTS.map(s=>`<button class="disciplineBtn ${s===selectedLearningSubject?'active':''}" data-learning-subject="${esc(s)}">${esc(s)}</button>`).join('');$$('[data-learning-subject]').forEach(b=>b.onclick=()=>{selectedLearningSubject=b.dataset.learningSubject;libraryUI.trailSubject[state.activeCampaignId]=selectedLearningSubject;saveLibraryUI();renderLearning()});const units=learningUnits(selectedLearningSubject),subjectDone=units.filter(u=>state.learning.completed[u.key]).length,portalRanks=['PORTAL RANK E','PORTAL RANK D','PORTAL RANK C','PORTAL RANK B','PORTAL RANK A','PORTAL RANK S'];$('#learningSubject').textContent=selectedLearningSubject;$('#learningTitle').textContent=subjectDone===units.length&&units.length?'Masmorra da disciplina dominada!':'Continue sua jornada';$('#learningSubjectProgress').textContent=`${subjectDone}/${units.length} fases`;$('#learningMap').innerHTML=units.map((u,i)=>{const done=!!state.learning.completed[u.key],locked=i>0&&!state.learning.completed[units[i-1].key],best=state.learning.completed[u.key]?.score,rankBadge=portalRanks[Math.min(i,portalRanks.length-1)];return `<article class="lessonNode ${done?'done':''} ${locked?'locked':''}"><button class="lessonOrb" data-lesson="${i}" ${locked?'disabled':''} aria-label="${locked?'Fase bloqueada':`Iniciar ${u.title}`}">${done?'✓':locked?'×':i+1}</button><div class="lessonInfo"><div class="slPhaseMeta"><span class="slGateTag ${done?'cleared':locked?'locked':'open'}">${rankBadge}</span></div><h3>${esc(u.title)}</h3><p>${locked?'Conclua o portal anterior para abrir esta fase':done?`Portal dominado (melhor: ${best}%) · toque para treinar novamente`:`${u.cards.length} exercícios (materiais, IA e simulados) · até ${u.cards.length*20+100} XP`}</p></div></article>`}).join('')||'<div class="empty">Insira materiais de estudo na Biblioteca, gere questões com a IA ou importe simulados para liberar as fases desta disciplina.</div>';$$('[data-lesson]').forEach(b=>b.onclick=()=>startLesson(+b.dataset.lesson))}
++function renderLearning(){LEARNING_SUBJECTS=typeof computeValidLearningSubjects==='function'?computeValidLearningSubjects():(LEARNING_SUBJECTS||[]).filter(s=>!isInvalidTrailSubject(s));if(!selectedLearningSubject||isInvalidTrailSubject(selectedLearningSubject)||!LEARNING_SUBJECTS.some(s=>subjectKey(s)===subjectKey(selectedLearningSubject))){selectedLearningSubject=LEARNING_SUBJECTS[0]||'Disciplina do Portal';if(libraryUI?.trailSubject)libraryUI.trailSubject[state.activeCampaignId]=selectedLearningSubject}else{const exact=LEARNING_SUBJECTS.find(s=>subjectKey(s)===subjectKey(selectedLearningSubject));if(exact)selectedLearningSubject=exact}const allUnits=LEARNING_SUBJECTS.flatMap(learningUnits),allUnitKeys=new Set(allUnits.map(u=>u.key)),done=[...allUnitKeys].filter(k=>state.learning.completed?.[k]).length;$('#learningXP').textContent=state.learning.xp||0;$('#learningDone').textContent=done;$('#learningRate').textContent=(allUnits.length?Math.round(done/allUnits.length*100):0)+'%';$('#disciplineRail').innerHTML=LEARNING_SUBJECTS.map(s=>`<button class="disciplineBtn ${s===selectedLearningSubject?'active':''}" data-learning-subject="${esc(s)}">${esc(s)}</button>`).join('');$$('[data-learning-subject]').forEach(b=>b.onclick=()=>{selectedLearningSubject=b.dataset.learningSubject;libraryUI.trailSubject[state.activeCampaignId]=selectedLearningSubject;saveLibraryUI();renderLearning()});const units=learningUnits(selectedLearningSubject),subjectDone=units.filter(u=>state.learning.completed[u.key]).length,portalRanks=['PORTAL RANK E','PORTAL RANK D','PORTAL RANK C','PORTAL RANK B','PORTAL RANK A','PORTAL RANK S'];$('#learningSubject').textContent=selectedLearningSubject;$('#learningTitle').textContent=subjectDone===units.length&&units.length?'Masmorra da disciplina dominada!':'Continue sua jornada';$('#learningSubjectProgress').textContent=`${subjectDone}/${units.length} fases`;$('#learningMap').innerHTML=units.map((u,i)=>{const done=!!state.learning.completed[u.key],locked=i>0&&!state.learning.completed[units[i-1].key],best=state.learning.completed[u.key]?.score,rankBadge=portalRanks[Math.min(i,portalRanks.length-1)];return `<article class="lessonNode ${done?'done':''} ${locked?'locked':''}"><button class="lessonOrb" data-lesson="${i}" ${locked?'disabled':''} aria-label="${locked?'Fase bloqueada':`Iniciar ${esc(u.title)}`}">${done?'✓':locked?'×':i+1}</button><div class="lessonInfo"><div class="slPhaseMeta"><span class="slGateTag ${done?'cleared':locked?'locked':'open'}">${rankBadge}</span></div><h3>${esc(u.title)}</h3><p>${locked?'Conclua o portal anterior para abrir esta fase':done?`Portal dominado (melhor: ${best}%) · toque para treinar novamente`:`${u.cards.length} exercícios (materiais, IA e simulados) · até ${u.cards.length*20+100} XP`}</p></div></article>`}).join('')||'<div class="empty">Insira materiais de estudo na Biblioteca, gere questões com a IA ou importe simulados para liberar as fases desta disciplina.</div>';$$('[data-lesson]').forEach(b=>b.onclick=()=>startLesson(+b.dataset.lesson))}
+ $('#summaryFilter').onchange=()=>{libraryUI.summaryFilter[state.activeCampaignId]=$('#summaryFilter').value;saveLibraryUI();renderSummaries($('#summarySearch').value)};$('#cardFilter').onchange=()=>{libraryUI.cardFilter[state.activeCampaignId]=$('#cardFilter').value;saveLibraryUI();currentCard=0;renderCard()};
+ let lastRemoteRefresh=0;
+ async function refreshFromServer(force=false){
+@@ -4423,7 +4426,7 @@ async function hydrateFromLocalDatabase(campaignId=state?.activeCampaignId){
+     ALL_FLASHCARDS=mergeCachedStudyItems(ALL_FLASHCARDS,cached.flashcards,
+       item=>JSON.stringify(item),item=>Array.isArray(item)&&isValidFlashcardItem(item[1],item[2])&&(typeof isHunterManualArtifact!=='function'||!isHunterManualArtifact(item)));
+     ALL_QUESTIONS=mergeCachedStudyItems(ALL_QUESTIONS,cached.questions,
+-      item=>questionFingerprint(item),item=>isValidPedagogicalQuestion(item)&&(typeof isHunterManualArtifact!=='function'||!isHunterManualArtifact(item)));
++      item=>questionFingerprint(item),item=>isValidPedagogicalQuestion(item,{allowSourceReview:true})&&(typeof isHunterManualArtifact!=='function'||!isHunterManualArtifact(item)));
+     if(typeof window.sanitizeAllQuestionsAndErrorsSubjects==='function')window.sanitizeAllQuestionsAndErrorsSubjects();
+     if(Array.isArray(cached.missions)&&cached.missions.length&&!(state?.customCampaign?.missions||[]).length){
+       state.customCampaign={name:activeCampaign()?.name||state.customCampaign?.name||'',missions:normalizeAndOrderEditalMissions(cached.missions)};
+diff --git a/dist/invocador-classroom.js b/dist/invocador-classroom.js
+index 216bddf..443b149 100644
+--- a/dist/invocador-classroom.js
++++ b/dist/invocador-classroom.js
+@@ -1,17 +1,23 @@
+-// r188: Modo Aula Interativa do Invocador (inspirado no THU-MAIC/OpenMAIC, leve para Cloudflare + Supabase)
+-// - 1 única chamada de IA gera 4-6 slides + quadro tático + dúvidas da turma + mini-quiz formativo (3 questões)
+-// - Isolado por conta, portal e reset; descarta respostas tardias; exporta HTML offline 100% escapado contra XSS.
++// r189 (Onda 1): Modo Aula Interativa do Invocador — Blindagem de Parser, Escopo e Cancelamento
++// - Parser balanceado de JSON; nunca inventa gabarito (A) nem cacheia fallback/JSON quebrado.
++// - Isolado por conta (validando _ownerUserId), portal/campanha (incluindo dbId) e reset com AbortController + timeout.
+ (() => {
+   'use strict';
+   const w = window;
+   const STORE_KEY = 'jornada-invocador-classroom-v188';
++  const REQUEST_TIMEOUT_MS = 45000;
+   let activeLesson = null;
+   let activeSlideIndex = 0;
+   let activePeerIdx = -1;
+   let quizAnswers = {};
++  let slideMarks = {};
++  let draftTopic = '';
+   let busy = false;
+   let activeRequestToken = 0;
++  let activeAbortController = null;
++  let activeTimeoutId = null;
+   let statusMessage = '';
++  let lastScopeKey = '';
+ 
+   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+ 
+@@ -26,20 +32,31 @@
+   }
+ 
+   function currentScope() {
+-    let st = {}, sess = null;
++    let st = {}, sess = null, camp = null;
+     try {
+       st = typeof state === 'object' && state ? state : (w.state || {});
+       sess = typeof cloudSession === 'object' && cloudSession ? cloudSession : (w.cloudSession || null);
++      camp = typeof activeCampaign === 'function' ? activeCampaign() : (typeof w.activeCampaign === 'function' ? w.activeCampaign() : null);
+     } catch (_e) {}
+-    const userId = String(sess?.user?.id || st._ownerUserId || 'guest');
++    const sessionUid = String(sess?.user?.id || '');
++    const ownerUid = String(st._ownerUserId || '');
++    const mismatch = Boolean(sessionUid && ownerUid && sessionUid !== ownerUid);
++    const userId = mismatch ? 'transition' : (sessionUid || ownerUid || 'guest');
+     const campaignId = String(st.activeCampaignId || 'default');
++    const campaignDbId = String(camp?.dbId || '');
+     const resetEpoch = Number(st._resetEpoch || 0);
+-    return { userId, campaignId, resetEpoch, key: `${userId}::${campaignId}::${resetEpoch}` };
++    return { userId, campaignId, campaignDbId, resetEpoch, mismatch, key: `${userId}::${campaignId}::${campaignDbId}::${resetEpoch}` };
+   }
+ 
+   function sameScope(snap) {
+     const now = currentScope();
+-    return Boolean(snap && now.userId === snap.userId && now.campaignId === snap.campaignId && now.resetEpoch === snap.resetEpoch);
++    return Boolean(
++      snap && !snap.mismatch && !now.mismatch &&
++      now.userId === snap.userId &&
++      now.campaignId === snap.campaignId &&
++      now.campaignDbId === snap.campaignDbId &&
++      now.resetEpoch === snap.resetEpoch
++    );
+   }
+ 
+   function loadStore() {
+@@ -57,6 +74,73 @@
+     } catch (_e) {}
+   }
+ 
++  function clearCache() {
++    try { localStorage.removeItem(STORE_KEY); } catch (_e) {}
++  }
++
++  function abortInFlight(reason = '') {
++    activeRequestToken++;
++    if (activeTimeoutId) {
++      try { clearTimeout(activeTimeoutId); } catch (_e) {}
++      activeTimeoutId = null;
++    }
++    if (activeAbortController) {
++      try { activeAbortController.abort(); } catch (_e) {}
++      activeAbortController = null;
++    }
++    busy = false;
++    if (reason) statusMessage = reason;
++  }
++
++  function syncScope() {
++    const snap = currentScope();
++    if (lastScopeKey && lastScopeKey !== snap.key) {
++      abortInFlight('');
++      activeLesson = null;
++      activeSlideIndex = 0;
++      activePeerIdx = -1;
++      quizAnswers = {};
++      slideMarks = {};
++      statusMessage = '';
++    }
++    lastScopeKey = snap.key;
++    renderClassroom();
++  }
++
++  function getWeakTopicSuggestions(limit = 4) {
++    let st = {};
++    try { st = typeof state === 'object' && state ? state : (w.state || {}); } catch (_e) {}
++    const cid = String(st.activeCampaignId || 'default');
++    const counts = new Map();
++    const errs = st.errors && typeof st.errors === 'object' ? Object.values(st.errors) : [];
++    for (const err of errs) {
++      if (!err || (err.campaignId && err.campaignId !== cid)) continue;
++      const topic = String(err.topic || '').trim();
++      const subject = String(err.subject || '').trim();
++      if (!topic || topic.length < 3 || /^quest[aã]o\s+\d+/i.test(topic)) continue;
++      const key = `${subject.toLowerCase()}::${topic.toLowerCase()}`;
++      const cur = counts.get(key) || { topic, subject, errors: 0 };
++      cur.errors += Math.max(1, Number(err.count || err.wrongCount || 1));
++      counts.set(key, cur);
++    }
++    const mastery = st.topicMastery && typeof st.topicMastery === 'object' ? Object.entries(st.topicMastery) : [];
++    for (const [k, m] of mastery) {
++      if (!m || (m.campaignId && m.campaignId !== cid && !k.startsWith(`${cid}::`))) continue;
++      const attempts = Number(m.attempts || 0), correct = Number(m.correct || 0);
++      if (attempts < 2) continue;
++      const wrong = Math.max(0, attempts - correct);
++      if (wrong < 1) continue;
++      const topic = String(m.topic || m.topicKey || '').trim();
++      const subject = String(m.subject || m.subjectKey || '').trim();
++      if (!topic || topic.length < 3) continue;
++      const key = `${subject.toLowerCase()}::${topic.toLowerCase()}`;
++      const cur = counts.get(key) || { topic, subject, errors: 0 };
++      cur.errors = Math.max(cur.errors, wrong);
++      counts.set(key, cur);
++    }
++    return [...counts.values()].sort((a, b) => b.errors - a.errors).slice(0, limit);
++  }
++
+   function gatherTopicContext(topicStr) {
+     let summaries = [];
+     try {
+@@ -107,22 +191,50 @@
+     ].join('\n');
+   }
+ 
+-  function parseClassroomResponse(rawAnswer, fallbackTopic, fallbackSubject) {
+-    const raw = String(rawAnswer || '').trim();
+-    let parsed = null;
+-    if (raw) {
+-      const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+-      const candidate = fenceMatch ? fenceMatch[1].trim() : raw;
+-      const start = candidate.indexOf('{');
+-      const end = candidate.lastIndexOf('}');
+-      if (start !== -1 && end > start) {
+-        try {
+-          parsed = JSON.parse(candidate.slice(start, end + 1));
+-        } catch (_e) {
+-          parsed = null;
++  function extractBalancedJsonObject(rawText) {
++    const src = String(rawText || '').trim();
++    if (!src) return null;
++    const unwrapped = src.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
++    const candidates = unwrapped !== src ? [unwrapped, src] : [src];
++    for (const text of candidates) {
++      let start = text.indexOf('{');
++      while (start !== -1) {
++        let depth = 0, inStr = false, escaped = false;
++        for (let i = start; i < text.length; i++) {
++          const ch = text[i];
++          if (inStr) {
++            if (escaped) escaped = false;
++            else if (ch === '\\') escaped = true;
++            else if (ch === '"') inStr = false;
++          } else {
++            if (ch === '"') inStr = true;
++            else if (ch === '{') depth++;
++            else if (ch === '}') {
++              depth--;
++              if (depth === 0) {
++                try {
++                  return JSON.parse(text.slice(start, i + 1));
++                } catch (_e) {
++                  break;
++                }
++              }
++            }
++          }
+         }
++        start = text.indexOf('{', start + 1);
+       }
+     }
++    return null;
++  }
++
++  function looksLikeBrokenJson(raw) {
++    const t = String(raw || '').trim();
++    return /^(```json\s*)?\{/i.test(t) && /"slides"\s*:|"title"\s*:|"quiz"\s*:/i.test(t);
++  }
++
++  function parseClassroomResponse(rawAnswer, fallbackTopic, fallbackSubject) {
++    const raw = String(rawAnswer || '').trim();
++    const parsed = extractBalancedJsonObject(raw);
+ 
+     if (parsed && Array.isArray(parsed.slides) && parsed.slides.length > 0) {
+       const slides = parsed.slides.slice(0, 6).map((sl, idx) => ({
+@@ -137,16 +249,21 @@
+       })).filter(sl => sl.body || sl.board_box);
+ 
+       const quiz = Array.isArray(parsed.quiz)
+-        ? parsed.quiz.slice(0, 5).filter(q => q && q.statement && Array.isArray(q.options) && q.options.length >= 2).map(q => {
++        ? parsed.quiz.slice(0, 5).map(q => {
++            if (!q || !String(q.statement || '').trim() || !Array.isArray(q.options)) return null;
+             const opts = q.options.slice(0, 5).map(o => String(o || '').trim()).filter(Boolean);
+-            const idx = Number.isInteger(Number(q.correct_index)) && Number(q.correct_index) >= 0 && Number(q.correct_index) < opts.length ? Number(q.correct_index) : 0;
++            if (opts.length < 2) return null;
++            const rawIdx = q.correct_index;
++            if (rawIdx === null || rawIdx === undefined || String(rawIdx).trim() === '') return null;
++            const idx = Number(rawIdx);
++            if (!Number.isInteger(idx) || idx < 0 || idx >= opts.length) return null;
+             return {
+               statement: String(q.statement).trim(),
+               options: opts,
+               correct_index: idx,
+               explanation: String(q.explanation || '').trim()
+             };
+-          })
++          }).filter(Boolean)
+         : [];
+ 
+       if (slides.length > 0) {
+@@ -157,17 +274,30 @@
+           slides,
+           quiz,
+           createdAt: new Date().toISOString(),
++          _isFallback: false,
+           aiFormativeNotice: 'Prática formativa gerada por IA — não altera ranking, XP oficial nem substitui gabarito de banca.'
+         };
+       }
+     }
+ 
+-    // Fallback seguro caso o modelo devolva texto livre em vez de JSON
++    if (looksLikeBrokenJson(raw)) {
++      return {
++        title: String(fallbackTopic || 'Aula do Invocador').trim(),
++        subject: String(fallbackSubject || 'Estudo Direcionado').trim(),
++        overview: '',
++        slides: [],
++        quiz: [],
++        createdAt: new Date().toISOString(),
++        _isFallback: true,
++        _parseError: 'A resposta estruturada veio incompleta. Tente gerar novamente (não foi salva em cache).'
++      };
++    }
++
+     const chunks = raw.split(/\n{2,}/).map(s => s.trim()).filter(Boolean).slice(0, 4);
+     return {
+       title: String(fallbackTopic || 'Aula do Invocador').trim(),
+       subject: String(fallbackSubject || 'Estudo Direcionado').trim(),
+-      overview: 'Aula estruturada a partir da explicação do Invocador.',
++      overview: 'Aula estruturada a partir da explicação textual do Invocador (não armazenada em cache).',
+       slides: (chunks.length ? chunks : ['Conteúdo recebido sem divisão em slides.']).map((txt, idx) => ({
+         title: `Bloco ${idx + 1}`,
+         body: txt,
+@@ -178,34 +308,46 @@
+       })),
+       quiz: [],
+       createdAt: new Date().toISOString(),
++      _isFallback: true,
+       aiFormativeNotice: 'Prática formativa gerada por IA — não altera ranking, XP oficial nem substitui gabarito de banca.'
+     };
+   }
+ 
+-  function buildOfflineLessonHtml(lesson) {
++  function buildOfflineLessonHtml(lesson, marks = {}) {
+     if (!lesson) return '';
+-    const slidesHtml = (lesson.slides || []).map((sl, i) => `
++    const slidesHtml = (lesson.slides || []).map((sl, i) => {
++      const mark = marks[i] === 'understood' ? 'Dominado' : (marks[i] === 'review' ? 'Revisar depois' : '');
++      return `
+       <section class="slide">
+-        <h2>Slide ${i + 1}: ${esc(sl.title)}</h2>
++        <h2>Slide ${i + 1}: ${esc(sl.title)}${mark ? ` <span class="meta">· ${esc(mark)}</span>` : ''}</h2>
+         <p>${esc(sl.body)}</p>
+         ${sl.board_box ? `<pre class="board">${esc(sl.board_box)}</pre>` : ''}
+         ${sl.example ? `<div class="box"><strong>Exemplo:</strong> ${esc(sl.example)}</div>` : ''}
+         ${sl.trap ? `<div class="box trap"><strong>Pegadinha de prova:</strong> ${esc(sl.trap)}</div>` : ''}
+         ${(sl.classmate_questions || []).length ? `<div class="peers"><strong>Dúvidas da turma:</strong><ul>${sl.classmate_questions.map(c => `<li><b>${esc(c.q)}</b> — ${esc(c.a)}</li>`).join('')}</ul></div>` : ''}
+       </section>
+-    `).join('');
++    `;
++    }).join('');
+ 
+-    const quizHtml = (lesson.quiz || []).length ? `
++    const validQuiz = (lesson.quiz || []).filter(q =>
++      q && Array.isArray(q.options) && q.options.length >= 2 &&
++      Number.isInteger(Number(q.correct_index)) && Number(q.correct_index) >= 0 && Number(q.correct_index) < q.options.length
++    );
++
++    const quizHtml = validQuiz.length ? `
+       <section class="slide">
+         <h2>Mini-Quiz de Verificação (Prática Formativa)</h2>
+         <p class="notice">${esc(lesson.aiFormativeNotice || 'Prática formativa gerada por IA.')}</p>
+-        ${lesson.quiz.map((q, qi) => `
++        ${validQuiz.map((q, qi) => {
++          const safeIdx = Math.max(0, Math.min(q.options.length - 1, Number(q.correct_index)));
++          return `
+           <div class="quiz">
+             <p><b>${qi + 1}. ${esc(q.statement)}</b></p>
+             <ol type="A">${q.options.map(o => `<li>${esc(o)}</li>`).join('')}</ol>
+-            <details><summary>Ver resposta comentada</summary><p><b>Gabarito sugerido: ${String.fromCharCode(65 + Number(q.correct_index || 0))}</b> — ${esc(q.explanation)}</p></details>
++            <details><summary>Ver resposta comentada</summary><p><b>Gabarito sugerido: ${String.fromCharCode(65 + safeIdx)}</b> — ${esc(q.explanation)}</p></details>
+           </div>
+-        `).join('')}
++        `;
++        }).join('')}
+       </section>
+     ` : '';
+ 
+@@ -221,7 +363,7 @@
+   header,.slide{background:#0b182a;border:1px solid #1e3a5f;border-radius:14px;padding:18px 20px;margin-bottom:16px}
+   h1,h2{color:#65e7ff;margin-top:0}
+   .meta{color:#94a3b8;font-size:.86rem}
+-  .board{background:#071422;border-left:4px solid #65e7ff;padding:12px 14px;border-radius:8px;white-space:pre-wrap;font-family:ui-monospace,monospace}
++  .board{background:#071422;border:1px solid #24466b;padding:12px 14px;border-radius:8px;white-space:pre-wrap;font-family:ui-monospace,monospace}
+   .box{background:#0f223a;border:1px solid #24466b;border-radius:10px;padding:10px 12px;margin-top:10px}
+   .box.trap{background:#2d1219;border-color:#9f1239}
+   .peers{margin-top:12px;padding-top:10px;border-top:1px solid #1e3a5f}
+@@ -246,7 +388,7 @@
+ 
+   function exportOfflineHtml(lesson) {
+     if (!lesson || typeof document === 'undefined') return false;
+-    const html = buildOfflineLessonHtml(lesson);
++    const html = buildOfflineLessonHtml(lesson, slideMarks);
+     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+     const url = URL.createObjectURL(blob);
+     const a = document.createElement('a');
+@@ -260,27 +402,46 @@
+     return true;
+   }
+ 
++  function cancelGeneration() {
++    if (!busy) return;
++    abortInFlight('Geração da aula cancelada.');
++    renderClassroom();
++  }
++
+   async function generateLesson(topicInput, subjectInput = '') {
+     const topic = String(topicInput || '').trim();
++    draftTopic = topic;
+     if (topic.length < 3) {
+       statusMessage = 'Informe um assunto ou tópico (mínimo 3 caracteres) para montar a aula.';
+       renderClassroom();
+       return null;
+     }
+     const snap = currentScope();
++    if (snap.mismatch) {
++      statusMessage = 'Aguarde a troca de conta finalizar para montar a aula.';
++      renderClassroom();
++      return null;
++    }
++    lastScopeKey = snap.key;
+     const cacheId = `${snap.key}::${hashKey(topic.toLowerCase())}`;
+     const store = loadStore();
+-    if (store[cacheId] && store[cacheId].slides?.length) {
++    if (store[cacheId] && store[cacheId].slides?.length && !store[cacheId]._isFallback) {
+       activeLesson = { ...store[cacheId], _scopeKey: snap.key };
+       activeSlideIndex = 0;
+       activePeerIdx = -1;
+       quizAnswers = {};
++      slideMarks = {};
+       statusMessage = 'Aula carregada do cache desta conta/portal sem consumir nova chamada de IA.';
+       renderClassroom();
+       return activeLesson;
+     }
+ 
++    abortInFlight('');
+     const reqToken = ++activeRequestToken;
++    const controller = typeof AbortController === 'function' ? new AbortController() : null;
++    activeAbortController = controller;
++    const timeoutId = controller ? setTimeout(() => { try { controller.abort(); } catch (_e) {} }, REQUEST_TIMEOUT_MS) : null;
++    activeTimeoutId = timeoutId;
+     busy = true;
+     statusMessage = 'Montando slides, quadro tático, dúvidas da turma e mini-quiz (1 chamada de IA)...';
+     renderClassroom();
+@@ -299,6 +460,7 @@
+       const response = await fetch(`${base}/functions/v1/assistente-pmpe`, {
+         method: 'POST',
+         headers,
++        signal: controller?.signal,
+         body: JSON.stringify({
+           question: buildClassroomPrompt(topic, subjectInput),
+           context,
+@@ -314,26 +476,39 @@
+       }
+ 
+       const lesson = parseClassroomResponse(result?.answer || '', topic, subjectInput);
++      if (lesson._parseError || !lesson.slides.length) {
++        throw new Error(lesson._parseError || 'Não foi possível estruturar os slides desta aula. Tente novamente.');
++      }
+       lesson._scopeKey = snap.key;
+-      const nextStore = loadStore();
+-      nextStore[cacheId] = lesson;
+-      saveStore(nextStore);
++      if (!lesson._isFallback) {
++        const nextStore = loadStore();
++        nextStore[cacheId] = lesson;
++        saveStore(nextStore);
++      }
+ 
+       activeLesson = lesson;
+       activeSlideIndex = 0;
+       activePeerIdx = -1;
+       quizAnswers = {};
+-      statusMessage = 'Aula pronta! Navegue pelos slides e teste seu domínio no mini-quiz ao final.';
++      slideMarks = {};
++      statusMessage = lesson._isFallback
++        ? 'Aula exibida em modo simplificado (sem cache). Você pode regerar para tentar o formato completo.'
++        : 'Aula pronta! Navegue pelos slides e teste seu domínio no mini-quiz ao final.';
+       return lesson;
+     } catch (error) {
+       if (!sameScope(snap) || reqToken !== activeRequestToken) return null;
+-      statusMessage = String(error?.message || error);
++      statusMessage = error?.name === 'AbortError'
++        ? 'Geração cancelada ou tempo esgotado. Tente novamente quando quiser.'
++        : String(error?.message || error);
+       if (typeof w.toast === 'function') w.toast(statusMessage);
+       return null;
+     } finally {
++      if (timeoutId) clearTimeout(timeoutId);
++      if (activeTimeoutId === timeoutId) activeTimeoutId = null;
++      if (activeAbortController === controller) activeAbortController = null;
+       if (reqToken === activeRequestToken) {
+         busy = false;
+-        if (sameScope(snap)) renderClassroom();
++        renderClassroom();
+       }
+     }
+   }
+@@ -349,9 +524,12 @@
+       activeSlideIndex = 0;
+       activePeerIdx = -1;
+       quizAnswers = {};
++      slideMarks = {};
+       statusMessage = '';
+     }
++    lastScopeKey = snap.key;
+ 
++    const weakTopics = getWeakTopicSuggestions(4);
+     const totalSteps = activeLesson ? activeLesson.slides.length + (activeLesson.quiz?.length ? 1 : 0) : 0;
+     const isQuizStep = Boolean(activeLesson && activeLesson.quiz?.length && activeSlideIndex >= activeLesson.slides.length);
+     const curSlide = activeLesson && !isQuizStep ? activeLesson.slides[activeSlideIndex] : null;
+@@ -362,39 +540,51 @@
+       if (curSlide) {
+         const peers = curSlide.classmate_questions || [];
+         const activePeer = activePeerIdx >= 0 && peers[activePeerIdx] ? peers[activePeerIdx] : null;
++        const isLastSlide = activeSlideIndex >= activeLesson.slides.length - 1;
++        const hasQuiz = Boolean(activeLesson.quiz?.length);
++        const curMark = slideMarks[activeSlideIndex] || '';
++        const okCnt = Object.values(slideMarks).filter(v => v === 'understood').length;
++        const revCnt = Object.values(slideMarks).filter(v => v === 'review').length;
+         stageHtml = `
+           <div class="jcClassroomStage">
+             <div class="jcClassroomHead">
+               <div>
+-                <span class="tag">${esc(activeLesson.subject)}</span>
+-                <h3 style="margin:6px 0 0">${esc(activeLesson.title)}</h3>
++                <div class="jcClassroomMeta">${esc(activeLesson.subject)} · Slide ${activeSlideIndex + 1} de ${activeLesson.slides.length}${okCnt || revCnt ? ` · ${okCnt} dominado(s) · ${revCnt} p/ revisar` : ''}</div>
++                <h3 style="margin:4px 0 0">${esc(activeLesson.title)}</h3>
++              </div>
++              <div class="jcSlideMarkGroup" role="group" aria-label="Domínio deste slide">
++                <button type="button" class="jcSlideMarkBtn ${curMark === 'understood' ? 'active-ok' : ''}" data-jc-mark="understood">✓ Entendi</button>
++                <button type="button" class="jcSlideMarkBtn ${curMark === 'review' ? 'active-review' : ''}" data-jc-mark="review">⚑ Revisar depois</button>
+               </div>
+-              <span class="tag">Slide ${activeSlideIndex + 1} de ${activeLesson.slides.length}</span>
+             </div>
+             <div class="jcClassroomProgressTrack"><div class="jcClassroomProgressFill" style="width:${pct}%"></div></div>
+-            <h4 style="margin:0 0 8px;color:#65e7ff">${esc(curSlide.title)}</h4>
+-            <p style="margin:0;line-height:1.6">${esc(curSlide.body)}</p>
++            <h4 style="margin:0 0 8px;color:#52d9f7">${esc(curSlide.title)}</h4>
++            <p style="margin:0;line-height:1.65">${esc(curSlide.body)}</p>
+             ${curSlide.board_box ? `<div class="jcClassroomWhiteboard">${esc(curSlide.board_box)}</div>` : ''}
+             ${(curSlide.example || curSlide.trap) ? `
+               <div class="jcClassroomCallouts">
+-                ${curSlide.example ? `<div class="jcClassroomCallout"><b>📌 Exemplo prático</b><br>${esc(curSlide.example)}</div>` : ''}
+-                ${curSlide.trap ? `<div class="jcClassroomCallout trap"><b>⚠️ Pegadinha da banca</b><br>${esc(curSlide.trap)}</div>` : ''}
++                ${curSlide.example ? `<div class="jcClassroomCallout"><b>Exemplo prático</b><br>${esc(curSlide.example)}</div>` : ''}
++                ${curSlide.trap ? `<div class="jcClassroomCallout trap"><b>Pegadinha da banca</b><br>${esc(curSlide.trap)}</div>` : ''}
+               </div>
+             ` : ''}
+             ${peers.length ? `
+               <div class="jcPeerChipsWrap">
+-                <div class="small muted"><b>💬 Dúvidas da turma neste slide (clique para ver a resposta):</b></div>
++                <div class="small muted"><b>Dúvidas frequentes neste slide:</b></div>
+                 <div class="jcPeerChipsRow">
+-                  ${peers.map((p, idx) => `<button type="button" class="jcPeerChipBtn ${idx === activePeerIdx ? 'active' : ''}" data-jc-peer="${idx}">🙋 ${esc(p.q)}</button>`).join('')}
++                  ${peers.map((p, idx) => `<button type="button" class="jcPeerChipBtn ${idx === activePeerIdx ? 'active' : ''}" data-jc-peer="${idx}">${esc(p.q)}</button>`).join('')}
+                 </div>
+-                ${activePeer ? `<div class="jcPeerAnswerBox"><b>🧙‍♂️ Invocador responde:</b> ${esc(activePeer.a)}</div>` : ''}
++                ${activePeer ? `<div class="jcPeerAnswerBox"><b>Invocador responde:</b> ${esc(activePeer.a)}</div>` : ''}
+               </div>
+             ` : ''}
+             <div class="jcClassroomNavBar">
+               <button type="button" class="ghost small" id="jcClassPrevBtn" ${activeSlideIndex === 0 ? 'disabled' : ''}>← Anterior</button>
+               <div style="display:flex;gap:8px;flex-wrap:wrap">
+-                <button type="button" class="ghost small" id="jcClassExportBtn">⬇️ Baixar aula offline (.html)</button>
+-                <button type="button" class="action small" id="jcClassNextBtn" style="width:auto">${activeSlideIndex < activeLesson.slides.length - 1 ? 'Próximo slide →' : (activeLesson.quiz?.length ? 'Ir para Mini-Quiz →' : 'Concluir aula')}</button>
++                <button type="button" class="ghost small" id="jcClassExportBtn">Baixar aula offline (.html)</button>
++                ${!isLastSlide
++                  ? '<button type="button" class="action small" id="jcClassNextBtn" style="width:auto">Próximo slide →</button>'
++                  : (hasQuiz
++                    ? '<button type="button" class="action small" id="jcClassNextBtn" style="width:auto">Ir para Mini-Quiz →</button>'
++                    : '<button type="button" class="ghost small" id="jcClassRestartBtn" style="width:auto">Rever do início</button>')}
+               </div>
+             </div>
+           </div>
+@@ -407,13 +597,12 @@
+           <div class="jcClassroomStage">
+             <div class="jcClassroomHead">
+               <div>
+-                <span class="tag">VERIFICAÇÃO DE APRENDIZAGEM</span>
+-                <h3 style="margin:6px 0 0">Mini-Quiz: ${esc(activeLesson.title)}</h3>
++                <div class="jcClassroomMeta">Verificação formativa · ${answeredCount}/${quiz.length} respondidas · ${correctCount} acerto(s)</div>
++                <h3 style="margin:4px 0 0">Mini-Quiz: ${esc(activeLesson.title)}</h3>
+               </div>
+-              <span class="tag">${answeredCount}/${quiz.length} respondidas · ${correctCount} acerto(s)</span>
+             </div>
+             <div class="jcClassroomProgressTrack"><div class="jcClassroomProgressFill" style="width:100%"></div></div>
+-            <div class="jcClassroomNotice">ℹ️ ${esc(activeLesson.aiFormativeNotice)}</div>
++            <div class="jcClassroomNotice">${esc(activeLesson.aiFormativeNotice)}</div>
+             ${quiz.map((q, qi) => {
+               const chosen = quizAnswers[qi];
+               const hasAns = chosen !== undefined;
+@@ -432,26 +621,39 @@
+             }).join('')}
+             <div class="jcClassroomNavBar">
+               <button type="button" class="ghost small" id="jcClassPrevBtn">← Voltar aos slides</button>
+-              <button type="button" class="ghost small" id="jcClassExportBtn">⬇️ Baixar aula offline (.html)</button>
++              <button type="button" class="ghost small" id="jcClassExportBtn">Baixar aula offline (.html)</button>
+             </div>
+           </div>
+         `;
+       }
+     }
+ 
++    const existingInput = root.querySelector('#jcClassroomTopicInput');
++    if (existingInput && existingInput.value) draftTopic = existingInput.value;
++
+     root.innerHTML = `
+       <div class="jcClassroomLauncher">
+         <div class="jcClassroomHead">
+           <div>
+-            <div class="eyebrow" style="color:#65e7ff">SALA INTERATIVA · 1 CHAMADA DE IA</div>
+-            <h3 style="margin:2px 0 0">🎓 Modo Aula Interativa do Invocador</h3>
++            <div class="jcClassroomMeta">Sala Interativa do Invocador · 1 chamada de IA · Prática formativa</div>
++            <h3 style="margin:4px 0 0">Aula Interativa do Invocador</h3>
+           </div>
+-          <span class="tag">Slides + Dúvidas + Quiz + Offline HTML</span>
+         </div>
+-        <p class="small muted" style="margin:0">Digite qualquer tema do edital para gerar uma micro-aula em slides com quadro-esquema, dúvidas típicas de prova e mini-quiz formativo.</p>
++        <p class="small muted" style="margin:0">Gere uma micro-aula em slides com quadro-esquema, dúvidas típicas de prova e mini-quiz formativo (sem alterar XP ou ranking oficial).</p>
++        ${weakTopics.length ? `
++          <div class="jcWeakTopicsBar">
++            <span class="small muted">Revisar tópicos com mais erros:</span>
++            <div class="jcWeakTopicsRow">
++              ${weakTopics.map(t => `<button type="button" class="jcWeakTopicBtn" data-jc-weak-topic="${esc(t.topic)}" data-jc-weak-subj="${esc(t.subject)}" ${busy ? 'disabled' : ''}>${esc(t.topic)} (${t.errors})</button>`).join('')}
++            </div>
++          </div>
++        ` : ''}
+         <div class="jcClassroomForm">
+-          <input type="text" id="jcClassroomTopicInput" placeholder="Ex.: Art. 144 CF/88, Crase obrigatória, Negação de Condicional..." ${busy ? 'disabled' : ''}>
+-          <button type="button" class="action" id="jcClassroomStartBtn" style="width:auto" ${busy ? 'disabled' : ''}>${busy ? '⏳ Montando aula...' : '🎓 Gerar Aula'}</button>
++          <input type="text" id="jcClassroomTopicInput" value="${esc(draftTopic)}" placeholder="Ex.: Art. 144 CF/88, Crase obrigatória, Negação de Condicional..." ${busy ? 'disabled' : ''}>
++          <div style="display:flex;gap:8px">
++            <button type="button" class="action" id="jcClassroomStartBtn" style="width:auto" ${busy ? 'disabled' : ''}>${busy ? 'Montando aula...' : 'Gerar Aula'}</button>
++            ${busy ? '<button type="button" class="ghost" id="jcClassroomCancelBtn" style="width:auto">Cancelar</button>' : ''}
++          </div>
+         </div>
+         ${statusMessage ? `<p class="small muted" style="margin:8px 0 0">${esc(statusMessage)}</p>` : ''}
+         ${stageHtml}
+@@ -459,9 +661,10 @@
+     `;
+ 
+     const startBtn = root.querySelector('#jcClassroomStartBtn');
++    const cancelBtn = root.querySelector('#jcClassroomCancelBtn');
+     const topicInp = root.querySelector('#jcClassroomTopicInput');
+-    if (startBtn && topicInp) {
+-      startBtn.onclick = () => generateLesson(topicInp.value);
++    if (topicInp) {
++      topicInp.oninput = () => { draftTopic = topicInp.value; };
+       topicInp.onkeydown = e => {
+         if (e.key === 'Enter') {
+           e.preventDefault();
+@@ -469,6 +672,20 @@
+         }
+       };
+     }
++    if (startBtn && topicInp) startBtn.onclick = () => generateLesson(topicInp.value);
++    if (cancelBtn) cancelBtn.onclick = () => cancelGeneration();
++
++    root.querySelectorAll('[data-jc-weak-topic]').forEach(btn => {
++      btn.onclick = () => generateLesson(btn.dataset.jcWeakTopic, btn.dataset.jcWeakSubj || '');
++    });
++
++    root.querySelectorAll('[data-jc-mark]').forEach(btn => {
++      btn.onclick = () => {
++        const val = btn.dataset.jcMark;
++        slideMarks[activeSlideIndex] = slideMarks[activeSlideIndex] === val ? '' : val;
++        renderClassroom();
++      };
++    });
+ 
+     root.querySelectorAll('[data-jc-peer]').forEach(btn => {
+       btn.onclick = () => {
+@@ -494,6 +711,12 @@
+       }
+     });
+ 
++    root.querySelector('#jcClassRestartBtn')?.addEventListener('click', () => {
++      activeSlideIndex = 0;
++      activePeerIdx = -1;
++      renderClassroom();
++    });
++
+     root.querySelector('#jcClassExportBtn')?.addEventListener('click', () => exportOfflineHtml(activeLesson));
+ 
+     root.querySelectorAll('[data-jc-quiz-q]').forEach(btn => {
+@@ -524,12 +747,22 @@
+     mount,
+     renderClassroom,
+     generateLesson,
++    cancelGeneration,
+     parseClassroomResponse,
+     buildOfflineLessonHtml,
+     exportOfflineHtml,
+-    currentScope
++    currentScope,
++    syncScope,
++    clearCache,
++    getWeakTopicSuggestions
+   };
+ 
++  if (typeof w.addEventListener === 'function') {
++    for (const ev of ['jc:scope-changed', 'jc:account-changed', 'jc:campaign-changed', 'jc:progress-reset']) {
++      w.addEventListener(ev, syncScope);
++    }
++  }
++
+   if (typeof document !== 'undefined') {
+     const boot = () => mount();
+     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
+diff --git a/dist/manifest.webmanifest b/dist/manifest.webmanifest
+index 311e5e5..031f4e0 100644
+--- a/dist/manifest.webmanifest
++++ b/dist/manifest.webmanifest
+@@ -1,4 +1,5 @@
+ {
++  "id": "./",
+   "name": "Jornada do Caçador",
+   "short_name": "Jornada",
+   "description": "Missões gamificadas para dominar diferentes editais de concursos.",
+@@ -13,13 +14,19 @@
+       "src": "icon-192.png",
+       "sizes": "192x192",
+       "type": "image/png",
+-      "purpose": "any maskable"
++      "purpose": "any"
+     },
+     {
+       "src": "icon-512.png",
+       "sizes": "512x512",
+       "type": "image/png",
+-      "purpose": "any maskable"
++      "purpose": "any"
++    },
++    {
++      "src": "icon-512.png",
++      "sizes": "512x512",
++      "type": "image/png",
++      "purpose": "maskable"
+     }
+   ],
+   "screenshots": [
+@@ -38,4 +45,4 @@
+       "label": "Jornada do Caçador — Desktop Horizontal"
+     }
+   ]
+-}
+\ No newline at end of file
++}
+diff --git a/dist/pdf-text-client.js b/dist/pdf-text-client.js
+index 7b2bd8a..e74bea5 100644
+--- a/dist/pdf-text-client.js
++++ b/dist/pdf-text-client.js
+@@ -751,7 +751,7 @@
+       const chars = Number(meta?.meaningfulCharacters || 0);
+       if (diagBox) {
+         diagBox.innerHTML = `
+-          <div><b>Arquivo:</b> ${String(doc?.title || "PDF").replace(/</g, "&lt;")}</div>
++          <div><b>Arquivo:</b> ${String(doc?.title || "PDF").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]))}</div>
+           <div style="margin-top:4px"><b>Diagnóstico do filtro:</b> Detectamos que este arquivo possui <b>${totalP} página(s)</b>, mas apenas <b>${chars} caracteres</b> de texto selecionável (arquivo escaneado como imagem/foto).</div>
+           <div style="margin-top:6px;color:#fff">⚠️ <b>Atenção ao uso de tokens:</b> Para transformar páginas escaneadas em questões, flashcards ou missões, é necessário usar o conversor de leitura óptica (OCR) da IA, que consome tokens da sua cota. Deseja prosseguir?</div>
+         `;
+@@ -916,7 +916,8 @@
+           const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
+           return x >= midX - 6 && x <= midX + 90;
+         }).length;
+-        const isTwoColumnPage = ["prova", "simulado"].includes(String(doc.document_type || "")) && leftColCount >= 10 && rightColCount >= 10;
++        const isQuestionDoc = ["prova", "simulado"].includes(String(doc.document_type || "")) || (["material", "anotacao"].includes(String(doc.document_type || "")) && /\b(provas?|simulados?|quest[oõ]es?)\b/i.test(String(doc.title || "")));
++        const isTwoColumnPage = isQuestionDoc && leftColCount >= 10 && rightColCount >= 10;
+         const rowGroups = isTwoColumnPage
+           ? [
+               ...groupPdfTextItemsIntoRows(filteredItems.filter((it) => (Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0) < midX - 6)),
+@@ -933,7 +934,7 @@
+           if(!preserveSourceText)rowTxt = stripChrome(rowTxt);
+           if (!rowTxt || (!preserveSourceText&&(/^\d{1,3}$/.test(rowTxt)||isWatermarkItem(rowTxt)))) continue;
+           const prevLine = pageLines.length ? pageLines[pageLines.length - 1] : "";
+-          if (minX >= 47 && minX <= 59 && /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]/.test(rowTxt) && /[.:;]$/.test(prevLine)) {
++          if (!preserveSourceText && minX >= 47 && minX <= 59 && /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]/.test(rowTxt) && /[.:;]$/.test(prevLine)) {
+             pageLines.push(`• ${rowTxt}`);
+           } else {
+             pageLines.push(rowTxt);
+diff --git a/dist/question-review.js b/dist/question-review.js
+index 0ba8af2..49b9508 100644
+--- a/dist/question-review.js
++++ b/dist/question-review.js
+@@ -4,11 +4,13 @@
+   const w=window, escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+   const copy=value=>JSON.parse(JSON.stringify(value)), text=value=>String(value??'').normalize('NFC').replace(/\s+/g,' ').trim();
+   const identity=q=>JSON.stringify([text(q?.statement),Array.isArray(q?.options)?q.options.map(text):[]]);
++  const normText=value=>text(typeof w.JCQuestionText?.normalizeTypography==='function'?w.JCQuestionText.normalizeTypography(value):value);
++  const normalizedIdentity=q=>JSON.stringify([normText(q?.statement),Array.isArray(q?.options)?q.options.map(normText):[]]);
+   const manualKey=q=>q?.key_source==='manual_revisado'&&q?.answer_key_validation==='revisado';
+   const manualClassification=q=>[q?.subject_source,q?.classification_source].some(value=>['manual','manual_revisado','humano','humana','revisado'].includes(String(value||'').toLowerCase()));
+   const validQuestion=q=>q&&typeof q.statement==='string'&&text(q.statement).length>=12&&Array.isArray(q.options)&&q.options.length>=2&&q.options.length<=5&&q.options.every(o=>typeof o==='string'&&text(o))&&new Set(q.options.map(text)).size===q.options.length;
+   const keyValid=q=>(typeof q.correct_index==='number'||typeof q.correct_index==='string')&&String(q.correct_index).trim()!==''&&Number.isInteger(Number(q.correct_index))&&Number(q.correct_index)>=0&&Number(q.correct_index)<q.options.length;
+-  const examDocument=doc=>['prova','simulado'].includes(doc?.document_type)||(['material','anotacao'].includes(doc?.document_type)&&/\b(prova|simulado|quest[oõ]es)\b/i.test(String(doc?.title||'')));
++  const examDocument=doc=>['prova','simulado'].includes(doc?.document_type)||(['material','anotacao'].includes(doc?.document_type)&&/\b(provas?|simulados?|quest[oõ]es?)\b/i.test(String(doc?.title||'')));
+   const records=new Map();let running=false,stopRequested=false,selectedScope=null,batchOperation=null;
+   function scope(){let s={},session=null;try{s=typeof state==='object'?state:w.state||{};session=typeof cloudSession==='object'?cloudSession:w.cloudSession;}catch{}return{userId:session?.user?.id||'',owner:s._ownerUserId||'',reset:Number(s._resetEpoch||0),portal:s.activeCampaignId||''};}
+   const sameScope=s=>{const n=scope();return s.userId&&n.userId===s.userId&&n.owner===s.userId&&n.reset===s.reset&&n.portal===s.portal;};
+@@ -54,8 +56,25 @@
+     if(!Array.isArray(rows)||!Array.isArray(extracted)||!extracted.length)throw new Error('Nenhuma questão reconhecida; o conteúdo anterior foi preservado.');
+     if(extracted.some(q=>!validQuestion(q)))throw new Error('Há questões com enunciado ou alternativas inválidos. Nada foi substituído.');
+     const report={kind:'structural_pdf_comparison',factual_review_verified:false,document_id:doc.id,title:doc.title,existing:0,extracted:extracted.length,matched:0,added:0,not_matched:0,classification_changes:0,classification_pending:0,structure_pending:0,board_pending:0,text_integrity_pending:0,keys_preserved:0,key_conflicts:0,duplicates:0,visual_pending:0,source_pages:Number(meta.pdfTotalPages||meta.totalPages||0),pages_read:Number(meta.pagesRead||0),details:[],items:[]};
+-    const lookup=new Map();for(const q of extracted){const id=identity(q);const arr=lookup.get(id)||[];arr.push(copy(q));lookup.set(id,arr);}
++    const pool=extracted.map((q,idx)=>({q:copy(q),used:false,id:identity(q),normId:normalizedIdentity(q),idx}));
++    const lookup=new Map(),normLookup=new Map();
++    for(const entry of pool){
++      const arr=lookup.get(entry.id)||[];arr.push(entry);lookup.set(entry.id,arr);
++      // Only allow typography-tolerant matching when no alternative leak cut occurred (preserves manual-key quarantine on leaks).
++      if(!entry.q?.text_integrity_review?.pending){const nArr=normLookup.get(entry.normId)||[];nArr.push(entry);normLookup.set(entry.normId,nArr);}
++    }
++    const takeMatch=old=>{
++      const exact=lookup.get(identity(old));
++      if(exact){const hit=exact.find(e=>!e.used);if(hit){hit.used=true;return hit.q;}}
++      if(!old?.text_integrity_review?.pending){
++        const norm=normLookup.get(normalizedIdentity(old));
++        if(norm){const hit=norm.find(e=>!e.used);if(hit){hit.used=true;return hit.q;}}
++      }
++      return null;
++    };
+     const seen=new Set();for(const q of extracted){const id=identity(q);if(seen.has(id))report.duplicates++;seen.add(id);}
++    const partialActive=Boolean(meta?.partialInfo?.partial);
++    const skippedNums=new Set((Array.isArray(meta?.partialInfo?.skippedNumbers)?meta.partialInfo.skippedNumbers:[]).map(Number).filter(Number.isFinite));
+     const candidates=copy(rows), protectedKeys=['correct_index','answer_unknown','annulled','anulada','key_source','answer_key_validation','key_reference','answer_key_history','suggested_correct_index'];
+     function prepare(q,old){
+       if(old){
+@@ -89,13 +108,19 @@
+     }
+     for(const row of candidates){
+       const qs=row.content?.questions;if(!Array.isArray(qs))continue;
+-      row.content.questions=qs.map(old=>{report.existing++;const bucket=lookup.get(identity(old));
+-        if(bucket?.length){report.matched++;return prepare(bucket.shift(),{...old,subject:old.subject||row.content.subject});}
++      row.content.questions=qs.map(old=>{report.existing++;const matchedQ=takeMatch(old);
++        if(matchedQ){report.matched++;return prepare(matchedQ,{...old,subject:old.subject||row.content.subject});}
++        const oldNum=Number(old?.question_number);
++        const oldHasTrustedKey=manualKey(old)||(!old.answer_unknown&&keyValid(old)&&['oficial_definitivo','oficial_preliminar','documento_informado','gabarito_documento'].includes(old.key_source));
++        if(partialActive&&((Number.isFinite(oldNum)&&skippedNums.has(oldNum))||oldHasTrustedKey)){
++          report.preserved_partial=(report.preserved_partial||0)+1;
++          return{...old,review_status:old.review_status==='source_not_matched'?'source_not_matched':'preserved_partial_skip'};
++        }
+         report.not_matched++;return{...old,classification_needs_review:true,review_status:'source_not_matched',classification_reason:'Não localizada na nova leitura do PDF. Preservada para conferência, fora dos treinos.'};
+       });
+       row.approved=false;row.content.review_kind=report.kind;row.content.factual_review_verified=false;
+     }
+-    const additions=[];for(const bucket of lookup.values())for(const q of bucket){report.added++;additions.push(prepare(q));}
++    const additions=[];for(const entry of pool){if(!entry.used){report.added++;additions.push(prepare(entry.q));}}
+     if(additions.length)candidates.push({content_type:'summary',title:`Questões do PDF — ${doc.title}`.slice(0,190),content:{is_question_pack:true,subject:'Prova com disciplinas identificadas por questão',source:doc.title,page_start:1,page_end:report.source_pages,explanation:'Questões extraídas novamente do PDF original. Classificações e gabaritos pendentes permanecem identificados.',points:[],flashcards:[],questions:additions,review_kind:report.kind,factual_review_verified:false},source_refs:[{document_id:doc.id,title:doc.title}],approved:false});
+     report.manual_review_required=report.not_matched+report.classification_pending+report.structure_pending+report.board_pending+report.key_conflicts+report.duplicates>0;
+     return{candidates,report};
+@@ -146,7 +171,7 @@
+       const allowPartial=options.allowPartial!==false;
+       const coverageInfo=freshCoverage(meta,pages,qs.report,{...options,allowPartial});
+       record.partialInfo=coverageInfo;
+-      const proposal=reconcile(overlayPersonalReviews(source.rows||[],doc.id),qs,doc,meta);
++      const proposal=reconcile(overlayPersonalReviews(source.rows||[],doc.id),qs,doc,{...meta,partialInfo:coverageInfo});
+       proposal.report.partial_extraction=Boolean(coverageInfo?.partial);
+       proposal.report.partial_summary=coverageInfo||{};
+       proposal.report.local_review_signature=personalSignature(doc.id);
+@@ -160,7 +185,7 @@
+         ? `Revisão parcial segura (${coverageInfo.extracted}/${coverageInfo.expected||coverageInfo.extracted} lidas · ${coverageInfo.skipped} puladas). As questões não lidas foram preservadas.`
+         : 'Proposta pronta. O conteúdo ativo ainda não foi substituído.';
+       if(options.autoApply===true){
+-        return await applyReview(record,{batchConfirmed:true,silent:true});
++        return await applyReview(record,{batchConfirmed:true,silent:true,skipReload:Boolean(options.skipReload)});
+       }
+       return true;
+     }catch(error){if(!sameScope(s))return false;record.status='blocked';record.message=error.name==='AbortError'?'A consulta excedeu o prazo. Tente novamente.':String(error.message||error);return false;
+@@ -176,7 +201,7 @@
+     try{record.status='applying';render();const session=await sessionFor(s);const confirmed=await request('rpc/apply_document_question_review',{p_review_id:record.reviewId},s,session);
+       if(confirmed?.status!=='applied'||confirmed.document_id!==record.id||!Number.isInteger(confirmed.saved)||confirmed.saved<1)throw new Error('A aplicação desta proposta não foi confirmada pelo servidor.');applied=true;
+       record.status='applied';record.message='Revisão aplicada em uma transação. Respostas e histórico não foram apagados.';
+-      if(typeof loadGeneratedContent==='function')await loadGeneratedContent();if(!sameScope(s))return false;
++      if(!options.skipReload&&typeof loadGeneratedContent==='function')await loadGeneratedContent();if(!sameScope(s))return false;
+       if(typeof w.invalidateQuestionPoolCache==='function')w.invalidateQuestionPoolCache();if(typeof w.markViewsDirty==='function')w.markViewsDirty();if(!options.silent)notify(record.message);return true;
+     }catch(error){if(sameScope(s)){record.status=applied?'applied':'pending';record.message=applied?'A revisão foi aplicada; a atualização da tela falhou. Reabra a Biblioteca para carregar o conteúdo.':String(error.message||error);}return applied&&sameScope(s);}finally{if(sameScope(s))render();}
+   }
+@@ -186,7 +211,7 @@
+       const page=await request(path,undefined,s,session);if(!Array.isArray(page))throw new Error('Não foi possível listar seus PDFs.');docs.push(...page.filter(examDocument));if(page.length<200)break;
+     }return docs;
+   }
+-  let lastBatchSummary=null;
++  let lastBatchSummary=null, recordFilter='all';
+   async function startBatch(allPortals=false,options={}){
+     if(running)return;currentRecords();const s=scope();if(!sameScope(s))return notify('Entre e aguarde sua conta carregar.');
+     const autoApply=Boolean(options?.autoApply);
+@@ -197,12 +222,13 @@
+       if(!docs.length)notify('Nenhuma prova ou simulado encontrado nesse recorte.');
+       for(const doc of docs){
+         if(operation.cancelled||stopRequested||!sameScope(s))break;
+-        await reviewDocument(doc.id,{title:doc.title,autoApply,allowPartial:true});
++        await reviewDocument(doc.id,{title:doc.title,autoApply,allowPartial:true,skipReload:true});
+         const rec=records.get(doc.id);
+         if(rec?.status==='applied'){appliedDocs++;updatedQuestions+=Number(rec.report?.extracted||0);}
+         else if(rec?.status==='pending')pendingDocs++;
+         else if(rec?.status==='blocked')blockedDocs++;
+       }
++      if(sameScope(s)&&appliedDocs>0&&typeof loadGeneratedContent==='function'){await loadGeneratedContent();}
+       if(sameScope(s)&&docs.length){
+         lastBatchSummary={total:docs.length,appliedDocs,updatedQuestions,pendingDocs,blockedDocs,autoApply};
+         if(autoApply){
+@@ -220,9 +246,10 @@
+     try{
+       for(const rec of pending){
+         if(stopRequested||!sameScope(s))break;
+-        const ok=await applyReview(rec,{batchConfirmed:true,silent:true});
++        const ok=await applyReview(rec,{batchConfirmed:true,silent:true,skipReload:true});
+         if(ok)applied++;
+       }
++      if(sameScope(s)&&applied>0&&typeof loadGeneratedContent==='function')await loadGeneratedContent();
+       if(sameScope(s))notify(`✅ ${applied} de ${pending.length} proposta(s) aplicada(s) com segurança!`);
+     }finally{running=false;if(sameScope(s))render();}
+     return applied;
+@@ -233,11 +260,17 @@
+     }catch(error){if(sameScope(s))notify(String(error.message||error));}
+   }
+   function render(){
+-    const root=document.getElementById('jcQuestionReviewPanel');if(!root)return;const list=currentRecords();
++    const root=document.getElementById('jcQuestionReviewPanel');if(!root)return;const allList=currentRecords();
++    const list=allList.filter(r=>{
++      if(recordFilter==='pending')return r.status==='pending'||r.status==='blocked'||Boolean(r.report?.manual_review_required);
++      if(recordFilter==='leaks')return Number(r.report?.text_integrity_pending||0)>0||Number(r.report?.structure_pending||0)>0;
++      return true;
++    });
+     const labels={reading:'Lendo original',pending:'Aguardando conferência',applied:'Aplicada',blocked:'Bloqueada',applying:'Aplicando'};
+-    root.innerHTML=`<h3>Conferir questões dos PDFs originais</h3><p>Releia provas e simulados sem apagar a versão atual. A comparação confere extração, disciplina, assunto e gabaritos disponíveis; não certifica a resposta de todas as questões. Este fluxo não usa IA para reescrever a prova.</p><div class="qrActions"><button type="button" class="action" id="qrAutoFixPortal" ${running?'disabled':''} style="width:auto">⚡ Reanalisar e corrigir tudo (este portal)</button><button type="button" class="ghost" id="qrCurrent" ${running?'disabled':''}>Só comparar (este portal)</button><button type="button" class="ghost" id="qrAll" ${running?'disabled':''}>Reanalisar todos os meus portais</button><button type="button" class="ghost" id="qrRestore" ${running?'disabled':''}>Recuperar pendentes</button>${list.some(r=>r.status==='pending')&&!running?'<button type="button" class="action" id="qrApplyAll" style="width:auto">✓ Aplicar todas as propostas prontas</button>':''}${running?'<button type="button" class="ghost" id="qrStop">Pausar após este PDF</button>':''}</div>${lastBatchSummary?`<p class="small" style="margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.3)"><b>Resumo do lote:</b> ${lastBatchSummary.appliedDocs} PDF(s) corrigido(s) · ${lastBatchSummary.updatedQuestions} questões atualizadas · ${lastBatchSummary.pendingDocs} aguardando conferência · ${lastBatchSummary.blockedDocs} bloqueado(s) (escaneados/ambíguos).</p>`:''}<p class="small muted">Gabaritos revisados e histórico são preservados. PDF sem texto, páginas incompletas ou caderno ambíguo exigem conferência. O lote inclui provas, simulados e materiais cujo título identifica questões. Para um arquivo com categoria/título incorretos, confira sua identificação na Biblioteca.</p><div aria-live="polite">${list.map(r=>{const report=r.report;return `<article class="qrRecord"><b>${escape(r.title)}</b><span class="tag">${labels[r.status]||escape(r.status)}</span><p>${escape(r.message||'Preparando extração...')}</p>${report?`<p>${report.extracted} extraídas · ${report.matched} correspondências · ${report.added} novas · ${report.not_matched} antigas não localizadas (preservadas fora do treino) · ${report.classification_pending} classificações pendentes · ${report.structure_pending||0} estruturas pendentes · ${report.text_integrity_pending||0} alternativas com possível vazamento · ${report.board_pending||0} bancas pendentes · ${report.key_conflicts} divergências de gabarito</p><details><summary>Ver comparação e limites</summary><p>Até 50 alterações exibidas aqui; baixe o relatório para conferir todas as questões e alternativas.</p><p>Revisão factual integral: não comprovada. Gabaritos sem fonte continuam pendentes. Respostas, XP e estatísticas históricas não são recalculados retroativamente.</p>${(report.details||[]).slice(0,50).map(d=>`<p>Questão ${escape(d.number||'?')} · página ${escape(d.page||'?')}: ${escape(d.from)} / ${escape(d.topic_from)} → ${escape(d.to)} / ${escape(d.topic_to)}</p>`).join('')}${(report.items||[]).filter(item=>item.structure_pending).slice(0,50).map(item=>`<p>Questão ${escape(item.number||'?')} · página ${escape(item.page||'?')}: ${escape(item.quality_reason)}</p>`).join('')}<p>${(report.items||[]).length} questões no relatório completo.</p></details>`:''}${report?`<button type="button" class="ghost" data-qr-download="${escape(r.id)}">Baixar relatório completo</button>`:''}${r.status==='pending'?`<label class="qrConfirm"><input type="checkbox" data-qr-confirm="${escape(r.reviewId)}"> Conferi a comparação com o PDF e aceito aplicar esta proposta; pendências continuarão bloqueadas.</label><button type="button" class="ghost" data-qr-apply="${escape(r.id)}">Aplicar esta proposta</button>`:''}${r.status==='blocked'?`${r.emptyPages?.length?`<label class="qrConfirm"><input type="checkbox" data-qr-empty="${escape(r.id)}"> Conferi as páginas ${escape(r.emptyPages.join(', '))}: estão em branco e não contêm questões ou imagens necessárias.</label>`:''}${r.ambiguous?`<label>Este PDF tem vários gabaritos — escolha o caderno (${escape((r.cadernos||[]).join(', '))}): <input data-qr-caderno="${escape(r.id)}" placeholder="Ex.: Azul ou Tipo 1"></label>`:''}<button type="button" class="ghost" data-qr-retry="${escape(r.id)}">Reanalisar este PDF</button>`:''}</article>`;}).join('')||'<p class="small muted">Nenhuma revisão iniciada neste contexto. As propostas salvas podem ser recuperadas da conta.</p>'}</div>`;
++    root.innerHTML=`<h3>Conferir questões dos PDFs originais</h3><p>Releia provas e simulados sem apagar a versão atual. A comparação confere extração, disciplina, assunto e gabaritos disponíveis; não certifica a resposta de todas as questões. Este fluxo não usa IA para reescrever a prova.</p><div class="qrActions"><button type="button" class="action" id="qrAutoFixPortal" ${running?'disabled':''} style="width:auto">⚡ Reanalisar e corrigir tudo (este portal)</button><button type="button" class="ghost" id="qrCurrent" ${running?'disabled':''}>Só comparar (este portal)</button><button type="button" class="ghost" id="qrAll" ${running?'disabled':''}>Reanalisar todos os meus portais</button><button type="button" class="ghost" id="qrRestore" ${running?'disabled':''}>Recuperar pendentes</button>${list.some(r=>r.status==='pending')&&!running?'<button type="button" class="action" id="qrApplyAll" style="width:auto">✓ Aplicar todas as propostas prontas</button>':''}${running?'<button type="button" class="ghost" id="qrStop">Pausar após este PDF</button>':''}</div>${lastBatchSummary?`<p class="small" style="margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.3)"><b>Resumo do lote:</b> ${lastBatchSummary.appliedDocs} PDF(s) corrigido(s) · ${lastBatchSummary.updatedQuestions} questões atualizadas · ${lastBatchSummary.pendingDocs} aguardando conferência · ${lastBatchSummary.blockedDocs} bloqueado(s) (escaneados/ambíguos).</p>`:''}${allList.length?`<div class="qrFilterBar" role="group" aria-label="Filtrar fila de revisão"><button type="button" class="ghost small ${recordFilter==='all'?'qrFilterActive':''}" data-qr-filter="all">Todos (${allList.length})</button><button type="button" class="ghost small ${recordFilter==='pending'?'qrFilterActive':''}" data-qr-filter="pending">Com pendências (${allList.filter(r=>r.status==='pending'||r.status==='blocked'||r.report?.manual_review_required).length})</button><button type="button" class="ghost small ${recordFilter==='leaks'?'qrFilterActive':''}" data-qr-filter="leaks">Vazamento alt. E / estrutura (${allList.filter(r=>Number(r.report?.text_integrity_pending||0)>0||Number(r.report?.structure_pending||0)>0).length})</button></div>`:''}<p class="small muted">Gabaritos revisados e histórico são preservados. PDF sem texto, páginas incompletas ou caderno ambíguo exigem conferência. O lote inclui provas, simulados e materiais cujo título identifica questões. Para um arquivo com categoria/título incorretos, confira sua identificação na Biblioteca.</p><div aria-live="polite">${list.map(r=>{const report=r.report;return `<article class="qrRecord"><b>${escape(r.title)}</b><span class="tag">${labels[r.status]||escape(r.status)}</span><p>${escape(r.message||'Preparando extração...')}</p>${report?`<p>${report.extracted} extraídas · ${report.matched} correspondências · ${report.added} novas · ${report.not_matched} antigas não localizadas (preservadas fora do treino) · ${report.classification_pending} classificações pendentes · ${report.structure_pending||0} estruturas pendentes · ${report.text_integrity_pending||0} alternativas com possível vazamento · ${report.board_pending||0} bancas pendentes · ${report.key_conflicts} divergências de gabarito</p><details><summary>Ver comparação e limites</summary><p>Até 50 alterações exibidas aqui; baixe o relatório para conferir todas as questões e alternativas.</p><p>Revisão factual integral: não comprovada. Gabaritos sem fonte continuam pendentes. Respostas, XP e estatísticas históricas não são recalculados retroativamente.</p>${(report.details||[]).slice(0,50).map(d=>`<p>Questão ${escape(d.number||'?')} · página ${escape(d.page||'?')}: ${escape(d.from)} / ${escape(d.topic_from)} → ${escape(d.to)} / ${escape(d.topic_to)}</p>`).join('')}${(report.items||[]).filter(item=>item.structure_pending||item.text_integrity_review?.pending).slice(0,50).map(item=>{const leak=item.text_integrity_review?.leaks?.[0];return`<div class="qrDiffRow"><p><b>Questão ${escape(item.number||'?')} · página ${escape(item.page||'?')}:</b> ${escape(item.quality_reason||'Verificação de integridade textual')}</p>${leak?`<div class="qrDiffGrid"><div><span>Antes (cru no PDF)</span><p>${escape(String(leak.raw||'').slice(0,220))}</p></div><div><span>Depois (trecho retido)</span><p>${escape(String(leak.retained_text||'').slice(0,220))}</p></div></div>`:''}</div>`;}).join('')}<p>${(report.items||[]).length} questões no relatório completo.</p></details>`:''}${report?`<button type="button" class="ghost" data-qr-download="${escape(r.id)}">Baixar relatório completo</button>`:''}${r.status==='pending'?`<label class="qrConfirm"><input type="checkbox" data-qr-confirm="${escape(r.reviewId)}"> Conferi a comparação com o PDF e aceito aplicar esta proposta; pendências continuarão bloqueadas.</label><button type="button" class="ghost" data-qr-apply="${escape(r.id)}">Aplicar esta proposta</button>`:''}${r.status==='blocked'?`${r.emptyPages?.length?`<label class="qrConfirm"><input type="checkbox" data-qr-empty="${escape(r.id)}"> Conferi as páginas ${escape(r.emptyPages.join(', '))}: estão em branco e não contêm questões ou imagens necessárias.</label>`:''}${r.ambiguous&&Array.isArray(r.cadernos)&&r.cadernos.length>1?`<label>Este PDF tem vários gabaritos — escolha o caderno (${escape(r.cadernos.join(', '))}): <input data-qr-caderno="${escape(r.id)}" placeholder="Ex.: Azul ou Tipo 1"></label>`:(r.ambiguous?'<p class="small warnText">Ambiguidade de numeração detectada no gabarito deste PDF (sem cadernos distintos nomeados). Confira o arquivo original na Biblioteca.</p>':'')}<button type="button" class="ghost" data-qr-retry="${escape(r.id)}">Reanalisar este PDF</button>`:''}</article>`;}).join('')||'<p class="small muted">Nenhuma revisão iniciada neste contexto. As propostas salvas podem ser recuperadas da conta.</p>'}</div>`;
+     root.querySelector('#qrAutoFixPortal')?.addEventListener('click',()=>startBatch(false,{autoApply:true,allowPartial:true}));root.querySelector('#qrCurrent').onclick=()=>startBatch(false);root.querySelector('#qrAll').onclick=()=>startBatch(true,{autoApply:true,allowPartial:true});root.querySelector('#qrRestore').onclick=restorePending;root.querySelector('#qrApplyAll')?.addEventListener('click',()=>applyAllPending());
+     root.querySelector('#qrStop')?.addEventListener('click',()=>{stopRequested=true;notify('O lote será pausado após o PDF atual. Propostas salvas permanecem na conta.');});
++    root.querySelectorAll('[data-qr-filter]').forEach(b=>b.onclick=()=>{recordFilter=b.dataset.qrFilter||'all';render();});
+     root.querySelectorAll('[data-qr-download]').forEach(b=>b.onclick=()=>downloadReport(records.get(b.dataset.qrDownload)));
+     root.querySelectorAll('[data-qr-apply]').forEach(b=>b.onclick=()=>applyReview(records.get(b.dataset.qrApply)));
+     root.querySelectorAll('[data-qr-retry]').forEach(b=>b.onclick=()=>reviewDocument(b.dataset.qrRetry,{title:records.get(b.dataset.qrRetry)?.title,preferredCaderno:[...root.querySelectorAll('[data-qr-caderno]')].find(i=>i.dataset.qrCaderno===b.dataset.qrRetry)?.value||'',confirmEmptyPages:!![...root.querySelectorAll('[data-qr-empty]')].find(i=>i.dataset.qrEmpty===b.dataset.qrRetry)?.checked}));
+diff --git a/dist/question-text-quality.js b/dist/question-text-quality.js
+index 2b2d062..2002864 100644
+--- a/dist/question-text-quality.js
++++ b/dist/question-text-quality.js
+@@ -60,7 +60,7 @@
+     for(const match of raw.matchAll(/(?:^|\n)[ \t]*(BLOCO[ \t]+\d+(?:[ \t]+\d+\.)?)[ \t]*(?=\r?\n|$)/g))add(match.index+match[0].indexOf(match[1]),'block_header');
+     const command=/\b(?:Assinale[ \t\r\n]+(?:a|o)[ \t\r\n]+(?:alternativa|opção|item)\b|Julgue[ \t\r\n]+(?:os?[ \t\r\n]+)?itens?\b|Marque[ \t\r\n]+(?:a|o)[ \t\r\n]+(?:opção|alternativa|item)\b)/gi;
+     for(const match of raw.matchAll(command))add(match.index,'following_question',Boolean(optionSequence(labels.filter(label=>label.index>match.index))));
+-    for(const match of raw.matchAll(/\((?:FUNCAB|AOCP|CESPE|CEBRASPE|FGV|FCC|VUNESP|IBFC)\)[ \t\r\n]+/gi))add(match.index,'following_board_question',Boolean(optionSequence(labels.filter(label=>label.index>match.index))));
++    for(const match of raw.matchAll(/\((?:FUNCAB|INSTITUTO[ \t]+AOCP|AOCP|CESPE|CEBRASPE|FGV|FCC|VUNESP|IBFC|IDECAN|UPENET|IAUPE|UPENET\/IAUPE|QUADRIX|CONSULPLAN|IADES|FAPEC|FUNDATEC|OBJETIVA|NUCEPE|SELECON)\)[ \t\r\n]+/gi))add(match.index,'following_board_question',Boolean(optionSequence(labels.filter(label=>label.index>match.index))));
+     const sequence=optionSequence(labels);
+     if(sequence){
+       const prefix=raw.slice(0,sequence.index);
+diff --git a/dist/questions-workspace.js b/dist/questions-workspace.js
+index d69f1e4..2ab2f43 100644
+--- a/dist/questions-workspace.js
++++ b/dist/questions-workspace.js
+@@ -7,15 +7,24 @@
+   // option order, and optionally compare a collection independently of row order.
+   function signature(value,unordered=false){
+     const imul=Math.imul;
+-    const encode=item=>{
+-      if(Array.isArray(item))return '['+item.map(encode).join(',')+']';
+-      if(item&&typeof item==='object')return '{'+Object.keys(item).filter(key=>!key.startsWith('_')&&!['communitySourceSignature','communitySourceScopeKey'].includes(key)).sort().map(key=>JSON.stringify(key)+':'+encode(item[key])).join(',')+'}';
+-      return JSON.stringify(item)??'null';
++    const hashStr=(str,st)=>{for(let i=0;i<str.length;i++){const c=str.charCodeAt(i);st.a=imul(st.a^c,16777619);st.b=imul(st.b,33)^c;st.len++;}};
++    const feed=(item,st)=>{
++      if(Array.isArray(item)){hashStr('[',st);for(let i=0;i<item.length;i++){if(i)hashStr(',',st);feed(item[i],st);}hashStr(']',st);return;}
++      if(item&&typeof item==='object'){
++        hashStr('{',st);
++        const keys=Object.keys(item).filter(key=>!key.startsWith('_')&&key!=='communitySourceSignature'&&key!=='communitySourceScopeKey').sort();
++        for(let i=0;i<keys.length;i++){if(i)hashStr(',',st);hashStr(JSON.stringify(keys[i])+':',st);feed(item[keys[i]],st);}
++        hashStr('}',st);return;
++      }
++      hashStr(JSON.stringify(item)??'null',st);
+     };
+-    const text=unordered&&Array.isArray(value)?'['+value.map(encode).sort().join(',')+']':encode(value);
+-    let a=2166136261,b=5381;
+-    for(let i=0;i<text.length;i++){const c=text.charCodeAt(i);a=imul(a^c,16777619);b=imul(b,33)^c}
+-    return `${text.length}:${a>>>0}:${b>>>0}`;
++    if(unordered&&Array.isArray(value)){
++      const itemHashes=value.map(item=>{const s={a:2166136261,b:5381,len:0};feed(item,s);return `${s.len}:${s.a>>>0}:${s.b>>>0}`;}).sort();
++      const st={a:2166136261,b:5381,len:0};hashStr('[',st);for(let i=0;i<itemHashes.length;i++){if(i)hashStr(',',st);hashStr(itemHashes[i],st);}hashStr(']',st);
++      return `${value.length}:${st.a>>>0}:${st.b>>>0}`;
++    }
++    const st={a:2166136261,b:5381,len:0};feed(value,st);
++    return `${st.len}:${st.a>>>0}:${st.b>>>0}`;
+   }
+ 
+   // The scheduler is independent from the DOM so that context changes can be
+@@ -27,10 +36,14 @@
+     const readInputs=()=>options.readInputs?.()||null;
+     function changedInputs(next){return next&&(!inputSnapshot||next.length!==inputSnapshot.length||next.some((value,index)=>!Object.is(value,inputSnapshot[index])))}
+     function invalidate(){revision++;generation++;pending=null;rendered.clear();inputSnapshot=readInputs()}
+-    function synchronize(){
++    function synchronizeScope(){
+       const next=key();
+-      if(next!==scopeKey){scopeKey=next;active='resolver';generation++;pending=null;rendered.clear();mounted.clear();inputSnapshot=readInputs();options.onScopeChange?.()}
+-      else{const inputs=readInputs();if(changedInputs(inputs))invalidate()}
++      if(next!==scopeKey){scopeKey=next;active='resolver';generation++;pending=null;rendered.clear();mounted.clear();inputSnapshot=null;options.onScopeChange?.();return true;}
++      return false;
++    }
++    function synchronize(){
++      if(synchronizeScope()){inputSnapshot=readInputs();return;}
++      const inputs=readInputs();if(changedInputs(inputs))invalidate();
+     }
+     function request(panel){
+       synchronize();
+@@ -73,11 +86,11 @@
+         if(active==='desempenho'){generation++;pending=null}
+       },
+       get revision(){return revision},
+-      get active(){synchronize();return active},
++      get active(){synchronizeScope();return active},
+       isMounted(panel){return mounted.has(panel)},
+       isRendering(panel){return rendering===panel},
+-      isActive(panel){synchronize();return active===panel&&options.isVisible()},
+-      scopeKey(){synchronize();return scopeKey}
++      isActive(panel){synchronizeScope();return active===panel&&options.isVisible()},
++      scopeKey(){synchronizeScope();return scopeKey}
+     };
+   }
+ 
+diff --git a/dist/sw.js b/dist/sw.js
+index 3199a72..1e5feb5 100644
+--- a/dist/sw.js
++++ b/dist/sw.js
+@@ -1,4 +1,4 @@
+-const CACHE='jornada-cacador-v78-smart-notebook-r188';
++const CACHE='jornada-cacador-v78-smart-notebook-r189';
+ const ASSETS=['./','./index.html','./ui-v75.css','./ui-v77.css','./ui-v78.css','./ui-r184.css','./ui-r188.css','./questions-workspace.css','./questions-workspace.js','./progress-ledger.js','./question-text-quality.js','./question-availability.js','./question-review.js','./invocador-classroom.js','./v59-enhancements.js','./question-session-store.js','./v77-experience.js','./v78-smart-notebook.js','./jc-architecture-modules.js','./pdf-text-client.js','./hunter-manuals.js','./hunter-manuals.css','./content-summaries.js','./native-question-bank.json','./native-laws-database.json','./material-deep-dives.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./login-banner.jpg',
+   './login-banner.webp',
+   './bancas-boss-banner.webp','./bancas-boss-banner.jpg','./og-banner-1200x630.jpg','./privacidade.html','./termos.html','./cookies.html','./404.html'];
+@@ -7,7 +7,22 @@ const ASSETS=['./','./index.html','./ui-v75.css','./ui-v77.css','./ui-v78.css','
+ // A instalação do aplicativo não precisa baixar o motor de PDF antecipadamente.
+ const LAZY_ASSETS = ['./pdf.mjs', './pdf.worker.mjs'];
+ const CACHE_PREFIX = 'jornada-cacador-';
++const NETWORK_TIMEOUT_MS = 3500;
+ const STATIC_PATHS = new Set([...ASSETS, ...LAZY_ASSETS].map(path => new URL(path, self.registration.scope).pathname));
++
++async function fetchWithTimeout(request) {
++  if (typeof AbortController === 'function' && typeof setTimeout === 'function' && typeof clearTimeout === 'function') {
++    const controller = new AbortController();
++    const timer = setTimeout(() => { try { controller.abort(); } catch {} }, NETWORK_TIMEOUT_MS);
++    try {
++      return await fetch(request, { cache: 'no-cache', signal: controller.signal });
++    } finally {
++      clearTimeout(timer);
++    }
++  }
++  return await fetch(request, { cache: 'no-cache' });
++}
++
+ self.addEventListener('install', event => {
+   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
+ });
+@@ -16,6 +31,9 @@ self.addEventListener('activate', event => {
+     keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE).map(key => caches.delete(key))
+   )).then(() => self.clients.claim()));
+ });
++self.addEventListener('message', event => {
++  if (event?.data?.type === 'SKIP_WAITING') self.skipWaiting();
++});
+ self.addEventListener('fetch', e => {
+   if (e.request.method !== 'GET') return;
+   const url = new URL(e.request.url);
+@@ -30,7 +48,7 @@ self.addEventListener('fetch', e => {
+       if (cached) return cached;
+     }
+     try {
+-      const r = await fetch(e.request, { cache: 'no-cache' });
++      const r = await fetchWithTimeout(e.request);
+       if (r.status === 200 && r.type==='basic') {
+         await cache.put(e.request, r.clone()).catch(() => undefined);
+       }
+diff --git a/dist/ui-r188.css b/dist/ui-r188.css
+index c964356..251ff32 100644
+--- a/dist/ui-r188.css
++++ b/dist/ui-r188.css
+@@ -1,25 +1,60 @@
+-/* r188: Modo Aula Interativa do Invocador (inspirado no OpenMAIC, leve para Cloudflare + Supabase) */
++/* r189: Aula Interativa 2.0, Revisão Guiada Antes/Depois e Banners PWA (Tático-Editorial Dark) */
+ .jcClassroomLauncher {
+   margin-top: 14px;
+-  padding: 16px 18px;
++  padding: 18px 20px;
+   border-radius: 16px;
+-  background: linear-gradient(155deg, rgba(10, 24, 42, 0.96), rgba(6, 15, 28, 0.98));
+-  border: 1px solid rgba(56, 189, 248, 0.3);
+-  box-shadow: 0 10px 26px rgba(2, 8, 20, 0.35);
++  background: linear-gradient(160deg, rgba(13, 25, 41, 0.98), rgba(8, 17, 31, 0.98));
++  border: 1px solid #263c54;
++  box-shadow: 0 12px 28px rgba(2, 8, 20, 0.3);
+ }
+ .jcClassroomHead {
+   display: flex;
+   flex-wrap: wrap;
+-  align-items: center;
++  align-items: flex-start;
+   justify-content: space-between;
+   gap: 10px;
+   margin-bottom: 10px;
+ }
++.jcClassroomMeta {
++  font-size: 0.76rem;
++  font-weight: 600;
++  color: #9db0c4;
++  font-variant-numeric: tabular-nums;
++  letter-spacing: 0.01em;
++}
++.jcWeakTopicsBar {
++  margin-top: 10px;
++  padding-top: 10px;
++  border-top: 1px solid rgba(38, 60, 84, 0.65);
++  display: grid;
++  gap: 6px;
++}
++.jcWeakTopicsRow {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 6px;
++}
++.jcWeakTopicBtn {
++  min-height: 40px;
++  padding: 6px 12px;
++  border-radius: 10px;
++  background: rgba(17, 34, 56, 0.92);
++  border: 1px solid rgba(244, 189, 87, 0.35);
++  color: #f4f8fc;
++  font-size: 0.78rem;
++  font-weight: 600;
++  cursor: pointer;
++  transition: transform 0.16s ease, border-color 0.16s ease;
++}
++.jcWeakTopicBtn:hover {
++  border-color: #f4bd57;
++  transform: translateY(-1px);
++}
+ .jcClassroomForm {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr) auto;
+   gap: 8px;
+-  margin-top: 10px;
++  margin-top: 12px;
+ }
+ @media (max-width: 640px) {
+   .jcClassroomForm {
+@@ -27,31 +62,58 @@
+   }
+ }
+ .jcClassroomStage {
+-  margin-top: 14px;
++  margin-top: 16px;
+   padding: 18px;
+   border-radius: 16px;
+-  background: rgba(7, 17, 31, 0.96);
+-  border: 1.5px solid rgba(101, 231, 255, 0.36);
++  background: #08111f;
++  border: 1px solid #345675;
++}
++.jcSlideMarkGroup {
++  display: flex;
++  gap: 6px;
++  flex-wrap: wrap;
++}
++.jcSlideMarkBtn {
++  min-height: 40px;
++  padding: 6px 11px;
++  border-radius: 10px;
++  border: 1px solid #263c54;
++  background: #0d1929;
++  color: #cbd5e1;
++  font-size: 0.76rem;
++  font-weight: 600;
++  cursor: pointer;
++  white-space: nowrap;
++}
++.jcSlideMarkBtn.active-ok {
++  border-color: #45daa3;
++  background: rgba(69, 218, 163, 0.14);
++  color: #45daa3;
++}
++.jcSlideMarkBtn.active-review {
++  border-color: #f4bd57;
++  background: rgba(244, 189, 87, 0.14);
++  color: #f4bd57;
+ }
+ .jcClassroomProgressTrack {
+   width: 100%;
+-  height: 7px;
++  height: 6px;
+   border-radius: 999px;
+-  background: rgba(56, 189, 248, 0.16);
++  background: rgba(82, 217, 247, 0.14);
+   overflow: hidden;
+   margin: 10px 0 14px;
+ }
+ .jcClassroomProgressFill {
+   height: 100%;
+-  background: linear-gradient(90deg, #34aee9, #65e7ff);
+-  transition: width 0.22s ease;
++  background: linear-gradient(90deg, #2f8cff, #52d9f7);
++  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+ }
+ .jcClassroomWhiteboard {
+   margin: 12px 0;
+   padding: 14px 16px;
+   border-radius: 12px;
+-  background: rgba(12, 32, 54, 0.86);
+-  border-left: 4px solid #65e7ff;
++  background: #0d1929;
++  border: 1px solid #345675;
+   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+   font-size: 0.88rem;
+   line-height: 1.55;
+@@ -71,20 +133,20 @@
+ }
+ .jcClassroomCallout {
+   padding: 12px 14px;
+-  border-radius: 11px;
++  border-radius: 12px;
+   font-size: 0.86rem;
+-  line-height: 1.5;
+-  background: rgba(15, 34, 58, 0.72);
+-  border: 1px solid rgba(56, 189, 248, 0.2);
++  line-height: 1.55;
++  background: #0d1929;
++  border: 1px solid #263c54;
+ }
+ .jcClassroomCallout.trap {
+-  background: rgba(127, 29, 29, 0.22);
+-  border-color: rgba(248, 113, 113, 0.38);
++  background: rgba(255, 115, 133, 0.08);
++  border-color: rgba(255, 115, 133, 0.36);
+ }
+ .jcPeerChipsWrap {
+   margin-top: 14px;
+   padding-top: 12px;
+-  border-top: 1px solid rgba(56, 189, 248, 0.18);
++  border-top: 1px solid #263c54;
+ }
+ .jcPeerChipsRow {
+   display: flex;
+@@ -93,31 +155,32 @@
+   margin-top: 8px;
+ }
+ .jcPeerChipBtn {
+-  background: rgba(14, 38, 66, 0.9);
+-  border: 1px solid rgba(101, 231, 255, 0.35);
++  min-height: 44px;
++  background: #0d1929;
++  border: 1px solid #345675;
+   color: #e0f2fe;
+-  padding: 7px 12px;
+-  border-radius: 999px;
+-  font-size: 0.78rem;
+-  font-weight: 700;
++  padding: 8px 12px;
++  border-radius: 10px;
++  font-size: 0.8rem;
++  font-weight: 600;
+   cursor: pointer;
+   text-align: left;
+   white-space: normal;
+ }
+ .jcPeerChipBtn.active,
+ .jcPeerChipBtn:hover {
+-  background: linear-gradient(135deg, #65e7ff, #34aee9);
+-  color: #06131f;
+-  border-color: #65e7ff;
++  background: #52d9f7;
++  color: #050914;
++  border-color: #52d9f7;
+ }
+ .jcPeerAnswerBox {
+   margin-top: 10px;
+   padding: 12px 14px;
+-  border-radius: 11px;
+-  background: rgba(56, 189, 248, 0.1);
+-  border: 1px solid rgba(56, 189, 248, 0.28);
++  border-radius: 12px;
++  background: rgba(82, 217, 247, 0.08);
++  border: 1px solid rgba(82, 217, 247, 0.28);
+   font-size: 0.86rem;
+-  line-height: 1.5;
++  line-height: 1.55;
+ }
+ .jcClassroomNavBar {
+   display: flex;
+@@ -127,63 +190,137 @@
+   gap: 8px;
+   margin-top: 16px;
+   padding-top: 12px;
+-  border-top: 1px solid rgba(56, 189, 248, 0.18);
++  border-top: 1px solid #263c54;
+ }
+ .jcClassroomQuizCard {
+   padding: 14px;
+   border-radius: 12px;
+-  background: rgba(12, 28, 48, 0.78);
+-  border: 1px solid rgba(56, 189, 248, 0.22);
++  background: #0d1929;
++  border: 1px solid #263c54;
+   margin-bottom: 12px;
+ }
+ .jcClassroomQuizOpt {
+   width: 100%;
++  min-height: 44px;
+   text-align: left;
+   padding: 10px 12px;
+   margin-top: 6px;
+   border-radius: 10px;
+-  border: 1px solid rgba(148, 163, 184, 0.26);
+-  background: rgba(7, 17, 31, 0.9);
+-  color: #f8fafc;
++  border: 1px solid #263c54;
++  background: #08111f;
++  color: #f4f8fc;
+   cursor: pointer;
+   font-size: 0.86rem;
+ }
+ .jcClassroomQuizOpt.correct {
+-  background: rgba(16, 185, 129, 0.2);
+-  border-color: #10b981;
++  background: rgba(69, 218, 163, 0.16);
++  border-color: #45daa3;
+ }
+ .jcClassroomQuizOpt.wrong {
+-  background: rgba(244, 63, 94, 0.2);
+-  border-color: #f43f5e;
++  background: rgba(255, 115, 133, 0.16);
++  border-color: #ff7385;
+ }
+ .jcClassroomNotice {
+-  font-size: 0.76rem;
+-  padding: 8px 12px;
++  font-size: 0.78rem;
++  padding: 9px 12px;
+   border-radius: 10px;
+-  background: rgba(245, 158, 11, 0.14);
+-  border: 1px solid rgba(245, 158, 11, 0.35);
++  background: rgba(244, 189, 87, 0.1);
++  border: 1px solid rgba(244, 189, 87, 0.34);
+   color: #fde68a;
+   margin-bottom: 12px;
+ }
++.qrFilterBar {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 6px;
++  margin: 10px 0;
++}
++.qrFilterBar button.qrFilterActive {
++  border-color: #52d9f7;
++  color: #52d9f7;
++  background: rgba(82, 217, 247, 0.12);
++}
++.qrDiffRow {
++  margin: 8px 0;
++  padding: 10px 12px;
++  border-radius: 10px;
++  background: #08111f;
++  border: 1px solid #263c54;
++}
++.qrDiffGrid {
++  display: grid;
++  grid-template-columns: repeat(2, minmax(0, 1fr));
++  gap: 8px;
++  margin-top: 6px;
++}
++@media (max-width: 640px) {
++  .qrDiffGrid {
++    grid-template-columns: 1fr;
++  }
++}
++.qrDiffGrid > div {
++  padding: 8px 10px;
++  border-radius: 8px;
++  background: #0d1929;
++  border: 1px solid #263c54;
++  font-size: 0.78rem;
++}
++.qrDiffGrid > div > span {
++  display: block;
++  font-weight: 700;
++  color: #9db0c4;
++  margin-bottom: 4px;
++}
++.jcOfflineBanner,
++.jcSwUpdateBanner {
++  position: fixed;
++  left: 12px;
++  right: 12px;
++  bottom: max(12px, env(safe-area-inset-bottom));
++  z-index: 95;
++  max-width: 520px;
++  margin: 0 auto;
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 10px;
++  padding: 10px 14px;
++  border-radius: 12px;
++  background: #0d1929;
++  border: 1px solid #345675;
++  color: #f4f8fc;
++  font-size: 0.82rem;
++  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
++}
++.jcOfflineBanner {
++  border-color: #f4bd57;
++  color: #fde68a;
++}
+ 
+ /* Suporte ao Tema Claro */
+ body.lightAppTheme .jcClassroomLauncher,
+ body.lightAppTheme .jcClassroomStage,
+-body.lightAppTheme .jcClassroomQuizCard {
++body.lightAppTheme .jcClassroomQuizCard,
++body.lightAppTheme .qrDiffRow,
++body.lightAppTheme .qrDiffGrid > div,
++body.lightAppTheme .jcOfflineBanner,
++body.lightAppTheme .jcSwUpdateBanner {
+   background: #ffffff !important;
+-  border: 1.5px solid #94a3b8 !important;
++  border: 1px solid #cbd5e1 !important;
+   color: #090d16 !important;
+   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08) !important;
+ }
+-body.lightAppTheme .jcClassroomWhiteboard {
+-  background: #f1f5f9 !important;
+-  border-left-color: #0284c7 !important;
+-  color: #090d16 !important;
++body.lightAppTheme .jcClassroomMeta,
++body.lightAppTheme .qrDiffGrid > div > span {
++  color: #475569 !important;
+ }
++body.lightAppTheme .jcClassroomWhiteboard,
+ body.lightAppTheme .jcClassroomCallout,
+-body.lightAppTheme .jcPeerAnswerBox {
++body.lightAppTheme .jcPeerAnswerBox,
++body.lightAppTheme .jcSlideMarkBtn,
++body.lightAppTheme .jcWeakTopicBtn {
+   background: #f8fafc !important;
+-  border-color: #94a3b8 !important;
++  border-color: #cbd5e1 !important;
+   color: #090d16 !important;
+ }
+ body.lightAppTheme .jcClassroomCallout.trap {
+diff --git a/dist/v59-enhancements.js b/dist/v59-enhancements.js
+index 977a0db..9693c81 100644
+--- a/dist/v59-enhancements.js
++++ b/dist/v59-enhancements.js
+@@ -79,7 +79,7 @@
+       classification_declared_subject:declaredSubject,classification_needs_review:q.classification_needs_review===true||decision.needs_review===true||decision.ambiguous===true,
+       classification_reason:decision.reason||q.classification_reason||'Classificação automática; sujeita a conferência.',classification_confidence:decision.confidence,
+       subject:cSubj,topic:cTopic,statement:normalizeLegalTitle(q.statement),associated_text:q.associated_text||'',options:q.options.map(normalizeLegalTitle),correct_index:q.correct_index,
+-      explanation:normalizeLegalTitle(q.explanation||''),difficulty:q.difficulty||'medio',origin:q.origin||'autoral',board:q.board||row.content?.source||'',
++      explanation:normalizeLegalTitle(q.explanation||''),difficulty:q.difficulty||'medio',origin:q.origin||'autoral',board:q.board||'',
+       documentId:row.source_document_id||q.documentId,sourceDocumentId:row.source_document_id||q.sourceDocumentId,source_document_id:row.source_document_id||q.source_document_id,
+       documentDbId:q.documentDbId,source_refs:[...(Array.isArray(row.source_refs)?row.source_refs:[]),...(Array.isArray(q.source_refs)?q.source_refs:[])],
+       generatedContentId:row.id,sourceContentId:row.id,user_id:userId,campaign_id:portalDbId};
+@@ -93,8 +93,8 @@ for(const item of [...personallyReviewed,...cloudQuestions,..._customCampQs,..._
+   const key=questionFingerprint(item);if(_seenQKeys.has(key))continue;_seenQKeys.add(key);_mergedQs.push(item);
+ }
+ ALL_QUESTIONS=_mergedQs;
+-if(typeof window.auditAndEnrichAllQuestionsPedagogy==='function')window.auditAndEnrichAllQuestionsPedagogy(ALL_QUESTIONS);
+ if(typeof window.ensureNativeQuestionBankLoaded==='function')window.ensureNativeQuestionBankLoaded();
++if(typeof window.auditAndEnrichAllQuestionsPedagogy==='function')window.auditAndEnrichAllQuestionsPedagogy(ALL_QUESTIONS);
+     // A private portal refresh retains content already merged from the community.
+     const summaryIds=new Set(ALL_SUMMARIES.map(item=>String(item.id)));
+     for(const item of previousContent[0])if(item?.is_community&&!summaryIds.has(String(item.id))){ALL_SUMMARIES.push(item);summaryIds.add(String(item.id))}
+diff --git a/dist/v77-experience.js b/dist/v77-experience.js
+index 0230f6e..9ad2cbd 100644
+--- a/dist/v77-experience.js
++++ b/dist/v77-experience.js
+@@ -4254,11 +4254,11 @@
+     }
+     if(!q('#questionBattleMode')){
+       filters.insertAdjacentHTML('beforeend',`<label class="field">Modo de aprendizado<select id="questionBattleMode"><option value="progressive">Desafio progressivo (Fácil → Difícil)</option><option value="balanced">Equilibrado (Mistura níveis)</option><option value="errors">Reforço automático (Meus erros)</option></select></label>`);
+-      q('#questionBattleMode')?.addEventListener('change',updateQuestionPool);
++      const bm=q('#questionBattleMode');if(bm&&!bm.dataset.jcBound){bm.dataset.jcBound='1';bm.addEventListener('change',updateQuestionPool);}
+     }
+     if(!q('#questionHistoryFilter')){
+       filters.insertAdjacentHTML('beforeend',`<label class="field">Filtro TEC / Caderno<select id="questionHistoryFilter"><option value="all">Todas do banco</option><option value="answered">✓ Resolvidas</option><option value="unanswered">✨ Apenas inéditas (não resolvidas)</option><option value="wrong">❌ Questões que errei</option><option value="correct">✅ Questões que acertei</option><option value="favorites">⭐ Minhas favoritas</option></select></label>`);
+-      q('#questionHistoryFilter')?.addEventListener('change',updateQuestionPool);
++      const hf=q('#questionHistoryFilter');if(hf&&!hf.dataset.jcBound){hf.dataset.jcBound='1';hf.addEventListener('change',updateQuestionPool);}
+     }
+     const trainer=q('.questionTrainer');
+     if(trainer&&!q('#trainerQuickActions')){
+@@ -5110,10 +5110,11 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
+       const verified=Boolean(item.verified_by&&item.verified_at);
+       normaMetaEl.textContent=`⚖️ Referência sugerida: ${nb} · ${verified?`Conferência informada: ${item.verified_at}`:'Conferência documental pendente'}`;
+     }
+-    const figUrl=item.figure_data_url||item.image_url||(state?.questionFigures?.[typeof questionFingerprint==='function'?questionFingerprint(item):'']||'');
++    const rawFigUrl=item.figure_data_url||item.image_url||(state?.questionFigures?.[typeof questionFingerprint==='function'?questionFingerprint(item):'']||'');
++    const figUrl=typeof window.jcSafeImageSrc==='function'?window.jcSafeImageSrc(rawFigUrl):(/^https?:\/\//i.test(String(rawFigUrl||''))||/^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(String(rawFigUrl||''))?String(rawFigUrl):'');
+     const stmtForVis=String(item.statement||'').replace(/\b(?:quadro[\s-]negro|quadro\s+de\s+\w+|quadro\s+cl[íi]nico|quadro\s+funcional|tabela[\s-]verdade|diagramas?\s+l[óo]gicos?|mapa\s+do\s+edital|mapa\s+mental)\b/gi,' ');const needsVisualCue=/\b(?:(?:observe|analise|veja|conforme|segundo|de\s+acordo\s+com|na|no|da|do|pela|pelo)\s+(?:a\s+|o\s+)?(?:figura|imagem|gr[áa]fico|tabela|planilha|charge|tirinha)|(?:figura|imagem|gr[áa]fico|tabela|quadro|diagrama)\s+(?:abaixo|a\s+seguir|\d+)|charge\s+(?:abaixo|a\s+seguir)|tirinha\s+(?:abaixo|a\s+seguir))\b/i.test(stmtForVis);
+     const figHtml=figUrl
+-      ?`<div class="questionFigureBox" style="margin:10px 0;padding:10px;border-radius:12px;background:#071320;border:1px solid rgba(56,189,248,0.35);text-align:center;"><img src="${figUrl}" alt="Figura da questão" style="max-width:100%;max-height:280px;border-radius:8px;margin:0 auto;display:block;"><div class="small muted" style="margin-top:6px;">🖼️ Figura/Tabela extraída do documento original</div></div>`
++      ?`<div class="questionFigureBox" style="margin:10px 0;padding:10px;border-radius:12px;background:#071320;border:1px solid rgba(56,189,248,0.35);text-align:center;"><img src="${escText(figUrl)}" alt="Figura da questão" style="max-width:100%;max-height:280px;border-radius:8px;margin:0 auto;display:block;"><div class="small muted" style="margin-top:6px;">🖼️ Figura/Tabela extraída do documento original</div></div>`
+       :(needsVisualCue?`<div class="questionFigureBox" style="margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(14,34,56,0.65);border:1px dashed rgba(56,189,248,0.4);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><span class="small muted">🖼️ Esta questão menciona uma figura, tabela ou gráfico:</span><label class="ghost small" style="width:auto;padding:4px 10px;font-size:11px;cursor:pointer;margin:0;">📎 Anexar Figura da Questão<input type="file" accept="image/*" id="attachQuestionFigureInput" hidden></label></div>`:'');
+     q('#questionText').innerHTML=questionAnswerNotice(item)+formatStatementWithHighlights(item.statement,item)+figHtml;
+     const figInput=q('#attachQuestionFigureInput');
+@@ -6798,6 +6799,51 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
+       return "Língua Portuguesa";
+     }
+ 
++    if (/administrativo/.test(sub)) {
++      if (/\b(?:limpe|legalidade|impessoalidade|moralidade|publicidade|eficiencia|principios? da administracao)\b/i.test(s)) return "Princípios da Administração Pública (LIMPE)";
++      if (/\b(?:ato administrativo|atos administrativos|atributos|presuncao de legitimidade|autoexecutoriedade|imperatividade|revogacao|anulacao|convalidacao)\b/i.test(s)) return "Atos Administrativos";
++      if (/\b(?:poder de policia|poder disciplinar|poder hierarquico|poder regulamentar|poder vinculado|poder discricionario|abuso de poder)\b/i.test(s)) return "Poderes Administrativos";
++      if (/\b(?:licitac(?:ao|oes)|pregao|dispensa|inexigibilidade|14\.?133|8\.?666|contrato administrativo)\b/i.test(s)) return "Licitações e Contratos (Lei 14.133/2021)";
++      if (/\b(?:improbidade|8\.?429|enriquecimento ilicito|lesao ao erario)\b/i.test(s)) return "Improbidade Administrativa";
++      if (/\b(?:autarquia|fundacao publica|empresa publica|sociedade de economia mista|administracao indireta|descentralizacao|desconcentracao)\b/i.test(s)) return "Organização da Administração Pública";
++      if (/\b(?:responsabilidade civil do estado|teoria do risco administrativo|acao regressiva|art\.?\s*37\s*§\s*6)\b/i.test(s)) return "Responsabilidade Civil do Estado";
++      if (/\b(?:servidor publico|agentes? publicos?|cargo publico|estabilidade|estagio probatorio|pad|sindicancia)\b/i.test(s)) return "Agentes Públicos e Regime Disciplinar";
++      return "Direito Administrativo Geral";
++    }
++
++    if (/informatica|tecnologia/.test(sub)) {
++      if (/\b(?:phishing|ransomware|malware|trojan|firewall|criptografia|assinatura digital|certificado digital|seguranca da informacao|backup|engenharia social)\b/i.test(s)) return "Segurança da Informação";
++      if (/\b(?:tcp\/ip|http|https|dns|dhcp|smtp|imap|pop3|ftp|vpn|roteador|intranet|extranet|protocolo|rede)\b/i.test(s)) return "Redes de Computadores e Internet";
++      if (/\b(?:excel|calc|planilha|procv|procx|somase|celula|formula|grafico)\b/i.test(s)) return "Planilhas Eletrônicas (Excel / Calc)";
++      if (/\b(?:word|writer|editor de texto|mala direta|atalho|ctrl\+)\b/i.test(s)) return "Editores de Texto e Produtividade";
++      if (/\b(?:windows|linux|sistema operacional|diretorio|arquivo|terminal|permissao|kernel)\b/i.test(s)) return "Sistemas Operacionais (Windows e Linux)";
++      if (/\b(?:nuvem|cloud|saas|paas|iaas|banco de dados|sql|navegador|browser|cookie)\b/i.test(s)) return "Computação em Nuvem e Navegadores";
++      return "Informática para Concursos";
++    }
++
++    if (/extravagante|legislacao/.test(sub)) {
++      if (/\b(?:maria da penha|11\.?340|violencia domestica|medida protetiva)\b/i.test(s)) return "Lei Maria da Penha (Lei 11.340/2006)";
++      if (/\b(?:drogas|11\.?343|trafico|entorpecente)\b/i.test(s)) return "Lei de Drogas (Lei 11.343/2006)";
++      if (/\b(?:desarmamento|10\.?826|porte ilegal|posse irregular|arma de fogo)\b/i.test(s)) return "Estatuto do Desarmamento (Lei 10.826/2003)";
++      if (/\b(?:abuso de autoridade|13\.?869)\b/i.test(s)) return "Lei de Abuso de Autoridade (Lei 13.869/2019)";
++      if (/\b(?:hediond|8\.?072|tortura|9\.?455)\b/i.test(s)) return "Crimes Hediondos e Lei de Tortura";
++      if (/\b(?:eca|8\.?069|crianca e do adolescente|ato infracional)\b/i.test(s)) return "Estatuto da Criança e do Adolescente (ECA)";
++      if (/\b(?:transito|ctb|9\.?503|embriaguez ao volante|cnh)\b/i.test(s)) return "Código de Trânsito Brasileiro (CTB)";
++      return "Legislação Extravagante";
++    }
++
++    if (/direitos humanos/.test(sub)) {
++      if (/\b(?:declaracao universal|dudh|1948|onu)\b/i.test(s)) return "Declaração Universal dos Direitos Humanos";
++      if (/\b(?:san jose|pacto de san jose|convencao americana|corte interamericana)\b/i.test(s)) return "Pacto de San José da Costa Rica";
++      if (/\b(?:regras de mandela|preso|tratamento de reclusos|uso da forca)\b/i.test(s)) return "Regras de Mandela e Uso da Força";
++      return "Direitos Humanos";
++    }
++
++    if (/militar|etica/.test(sub)) {
++      if (/\b(?:hierarquia|disciplina|transgressao disciplinar|estatuto dos militares|cpm|crime militar|desercao|insubordinacao)\b/i.test(s)) return "Direito Militar, Hierarquia e Disciplina";
++      if (/\b(?:etica|1\.?171|comissao de etica|decoro|deontologia)\b/i.test(s)) return "Ética no Serviço Público";
++    }
++
+     return num ? `Questão ${num} · ${subject || 'Geral'}` : (subject || 'Geral');
+   }
+   window.inferQuestionPedagogicalTopic = inferQuestionPedagogicalTopic;
+@@ -6903,8 +6949,11 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
+     for(let i=0;i<cands.length;i++){
+       const c=cands[i],end=i+1<cands.length?cands[i+1].index:body.length;
+       const last=blocks[blocks.length-1];
+-      // Numeração de afirmativas dentro do enunciado ("1. ... 2. ...") não abre questão nova.
+-      if(last&&(c.num<=last.num||(!explicitMode&&!isCE&&countOptions(last.text)<2))){last.text+='\n'+body.slice(c.index,end).trim();last.end=end;continue}
++      // Numeração de afirmativas dentro do enunciado ("1. ... 2. ...") não abre questão nova,
++      // exceto quando há troca explícita de seção/disciplina com questão anterior já completa (≥2 opções).
++      const nextSec=sectionAt(c.bodyStart);
++      const restartedNewSection=Boolean(last&&explicitMode&&nextSec&&last.sectionSubject&&nextSec!==last.sectionSubject&&countOptions(last.text)>=2);
++      if(last&&!restartedNewSection&&(c.num<=last.num||(!explicitMode&&!isCE&&countOptions(last.text)<2))){last.text+='\n'+body.slice(c.index,end).trim();last.end=end;continue}
+       const rawBlock=body.slice(c.bodyStart,end);
+       blocks.push({num:c.num,start:c.bodyStart,end:end-(rawBlock.length-rawBlock.trimEnd().length),sectionSubject:sectionAt(c.bodyStart),text:rawBlock.trim()});
+     }
+@@ -8427,8 +8476,12 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
+   }
+ 
+   function bindQuestionCenter(){
+-    q('#questionSubject')?.addEventListener('change',()=>{populateTopicFilter();updateQuestionPool()});
+-    for(const selector of ['#questionDifficulty','#questionOrigin','#questionBattleMode','#questionHistoryFilter'])q(selector)?.addEventListener('change',updateQuestionPool);
++    const subj=q('#questionSubject');
++    if(subj&&!subj.dataset.jcBound){subj.dataset.jcBound='1';subj.addEventListener('change',()=>{populateTopicFilter();updateQuestionPool()});}
++    for(const selector of ['#questionDifficulty','#questionOrigin']){
++      const el=q(selector);
++      if(el&&!el.dataset.jcBound){el.dataset.jcBound='1';el.addEventListener('change',updateQuestionPool);}
++    }
+     if(q('#startQuestions'))q('#startQuestions').onclick=startFilteredBattle;
+   }
+ 
+@@ -13264,12 +13317,14 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
+   setInterval(()=>{
+     if(cloudSession&&navigator.onLine&&document.visibilityState==='visible'){
+       const chatActive=Boolean(q('#guildChatDialog')?.open||q('#duel')?.classList.contains('active'));
+-      if(!chatActive){
+-        if(!activeDuelSession)loadDuelArenaHub(true);
+-        if(!guildChatState.wsConnected)loadGuildChatMessages(true);
++      const studyBusy=Boolean(document.querySelector('dialog[open]')||(typeof activeQuestions!=='undefined'&&activeQuestions)||(typeof activeSimulado!=='undefined'&&activeSimulado)||(typeof activeLesson!=='undefined'&&activeLesson));
++      if(!chatActive&&!studyBusy){
++        const onHome=Boolean(q('#today')?.classList.contains('active')||q('#guild')?.classList.contains('active'));
++        if(onHome&&!activeDuelSession)loadDuelArenaHub(true);
++        if(onHome&&!guildChatState.wsConnected)loadGuildChatMessages(true);
+       }
+     }
+-  },25000);
++  },60000);
+   const remembered=(()=>{try{return sessionStorage.getItem(viewKey)}catch{return null}})();
+   if(remembered&&q(`#${CSS.escape(remembered)}`)?.classList.contains('view'))openView(remembered);
+   q('#aboutDialog .tag')&&(q('#aboutDialog .tag').textContent='Versão 78 · experiência orientada ao estudo');
+@@ -15825,8 +15880,8 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
+             const extSources = (typeof window.getTrustedExternalSources === 'function')
+               ? window.getTrustedExternalSources(cleanSubj, topicLabel)
+               : [];
+-            const extLinksHtml = extSources.map(src => `
+-              <a href="${src.url}" target="_blank" rel="noopener noreferrer" class="smartExternalRefLink" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:9px;background:rgba(7,19,32,0.85);border:1px solid rgba(56,189,248,0.28);color:#e2e8f0;text-decoration:none;font-size:.77rem;transition:border-color .2s">
++            const extLinksHtml = extSources.filter(src => typeof window.jcSafeUrl === 'function' ? Boolean(window.jcSafeUrl(src?.url)) : /^https?:\/\//i.test(String(src?.url || ''))).map(src => `
++              <a href="${escText(typeof window.jcSafeUrl === 'function' ? window.jcSafeUrl(src.url) : src.url)}" target="_blank" rel="noopener noreferrer" class="smartExternalRefLink" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:9px;background:rgba(7,19,32,0.85);border:1px solid rgba(56,189,248,0.28);color:#e2e8f0;text-decoration:none;font-size:.77rem;transition:border-color .2s">
+                 <span><b>${escText(src.badge)}</b> · ${escText(src.name)}</span>
+                 <span style="color:#38bdf8;font-weight:800;white-space:nowrap">Consultar Fonte ↗</span>
+               </a>
+diff --git a/package.json b/package.json
+index 771b20c..380f4d5 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "jornada-cacador",
+-  "version": "1.0.186",
++  "version": "1.0.189",
+   "private": true,
+   "scripts": {
+     "test": "node scripts/test-all.mjs",
+diff --git a/scripts/test-r189-evolution-and-hardening.mjs b/scripts/test-r189-evolution-and-hardening.mjs
+new file mode 100644
+index 0000000..178887c
+--- /dev/null
++++ b/scripts/test-r189-evolution-and-hardening.mjs
+@@ -0,0 +1,259 @@
++import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import path from 'node:path';
++import vm from 'node:vm';
++
++const root = process.cwd();
++const read = (...p) => fs.readFileSync(path.join(root, ...p), 'utf8');
++
++const qrCode = read('dist', 'question-review.js');
++const qTextCode = read('dist', 'question-text-quality.js');
++const classCode = read('dist', 'invocador-classroom.js');
++const wsCode = read('dist', 'questions-workspace.js');
++const htmlCode = read('dist', 'index.html');
++const v77Code = read('dist', 'v77-experience.js');
++const swCode = read('dist', 'sw.js');
++const manifestObj = JSON.parse(read('dist', 'manifest.webmanifest'));
++const fnCode = read('supabase', 'functions', 'assistente-pmpe', 'index.ts');
++const dashFnCode = read('supabase', 'dashboard', 'assistente-pmpe', 'index.ts');
++
++console.log('=== Teste r189: Blindagem Crítica, Performance/PWA e Evolução de Estudo ===');
++
++// 1. Reconciliação tolerante a tipografia (preserva gabarito manual) + preservação em parcial + Caderno só com >1 cadernos
++{
++  const sb = { console, window: null, state: {}, cloudSession: null, ALL_QUESTIONS: [] };
++  sb.window = sb;
++  vm.createContext(sb);
++  vm.runInContext(qTextCode, sb);
++  vm.runInContext(qrCode, sb);
++  const api = sb.JCQuestionReview;
++
++  const oldRows = [{
++    id: 'r1',
++    content: {
++      is_question_pack: true,
++      questions: [
++        {
++          id: 'q-typo',
++          question_number: 1,
++          statement: 'S empre que o agente público agir com ilegal idade, assinale a correta.',
++          options: ['Deve fazê - lo imediatamente.', 'Não se aplica - se ao caso.'],
++          correct_index: 1,
++          key_source: 'manual_revisado',
++          answer_key_validation: 'revisado',
++          key_reference: 'Conferido no edital oficial.'
++        },
++        {
++          id: 'q-skipped',
++          question_number: 2,
++          statement: 'Questão antiga válida que foi pulada em reanálise parcial do PDF?',
++          options: ['Alternativa A válida', 'Alternativa B válida'],
++          correct_index: 0,
++          key_source: 'oficial_definitivo',
++          answer_key_validation: 'confirmado'
++        }
++      ]
++    }
++  }];
++
++  const extracted = [{
++    question_number: 1,
++    statement: 'Sempre que o agente público agir com ilegalidade, assinale a correta.',
++    options: ['Deve fazê-lo imediatamente.', 'Não se aplica-se ao caso.'],
++    correct_index: 0,
++    key_source: 'oficial_preliminar'
++  }];
++
++  const res = api.reconcile(oldRows, extracted, { id: 'doc-1', title: 'Prova Simulada' }, {
++    pdfTotalPages: 2,
++    pagesRead: 2,
++    partialInfo: { partial: true, skippedNumbers: [2] }
++  });
++
++  assert.equal(res.report.matched, 1, 'Normalização tipográfica deve casar a questão sem duplicar');
++  assert.equal(res.report.added, 0, 'Não deve criar duplicata quando apenas a tipografia mudou');
++  assert.equal(res.report.preserved_partial, 1, 'Questão pulada em parcial deve ser preservada');
++  assert.equal(res.report.not_matched, 0, 'Questão pulada em parcial não deve ir para quarentena');
++  const q1 = res.candidates[0].content.questions[0];
++  const q2 = res.candidates[0].content.questions[1];
++  assert.equal(q1.correct_index, 1, 'Gabarito manual revisado deve ser preservado');
++  assert.equal(q1.key_source, 'manual_revisado');
++  assert.equal(q2.review_status, 'preserved_partial_skip');
++  assert.equal(q2.correct_index, 0);
++  assert.equal(api.examDocument({ document_type: 'material', title: '100 Provas e Simulados Comentados' }), true);
++  console.log('✓ 1. Reconciliação tolerante a tipografia e preservação parcial validadas');
++}
++
++// 2. Edge Function assistente-pmpe modo aula estruturada (JSON schema sem google_search + dashboard sincronizado)
++{
++  assert.ok(fnCode.includes('async function askStructuredClassroom('), 'Edge Function deve ter handler estruturado para aula');
++  assert.ok(fnCode.includes('responseMimeType: "application/json"') && fnCode.includes('responseSchema: schema'), 'Modo aula deve usar responseMimeType e responseSchema');
++  assert.ok(fnCode.includes('mode.toLowerCase() === "aula interativa estruturada"'), 'Modo aula interativa estruturada deve ser roteado');
++  assert.ok(dashFnCode.includes('askStructuredClassroom'), 'Bundle do dashboard deve estar sincronizado com a Edge Function');
++  console.log('✓ 2. Edge Function assistente-pmpe com schema JSON rígido e bundle dashboard validados');
++}
++
++// 3. Aula Interativa 2.0: parser balanceado, zero invenção de gabarito A, sem cachear JSON quebrado, tópicos fracos e marcadores offline
++{
++  const storage = new Map();
++  let aborted = false;
++  const sb = {
++    console, setTimeout, clearTimeout,
++    AbortController: class {
++      constructor() { this.signal = {}; }
++      abort() { aborted = true; }
++    },
++    SUPABASE_URL: 'https://example.supabase.co',
++    state: {
++      _ownerUserId: 'u1',
++      activeCampaignId: 'pmpe',
++      _resetEpoch: 1,
++      errors: {
++        e1: { campaignId: 'pmpe', subject: 'Direito Constitucional', topic: 'Remédios Constitucionais', count: 4 },
++        e2: { campaignId: 'pcpe', subject: 'Direito Penal', topic: 'Outro Portal', count: 9 }
++      }
++    },
++    cloudSession: { user: { id: 'u1' }, access_token: 'tok-1' },
++    ALL_SUMMARIES: [],
++    activeCampaign: () => ({ dbId: 'db-pmpe', name: 'PMPE' }),
++    validSession: async () => ({ user: { id: 'u1' }, access_token: 'tok-1' }),
++    authHeaders: t => ({ Authorization: `Bearer ${t}` }),
++    toast: () => {},
++    localStorage: {
++      getItem: k => storage.get(k) ?? null,
++      setItem: (k, v) => storage.set(k, String(v)),
++      removeItem: k => storage.delete(k)
++    },
++    fetch: () => new Promise(() => {}),
++    window: null
++  };
++  sb.window = sb;
++  vm.createContext(sb);
++  vm.runInContext(classCode, sb);
++  const api = sb.JCInvocadorClassroom;
++
++  // Nested backticks + trailing prose + invalid quiz correct_index (must drop invalid quiz item, NEVER invent 0)
++  const messy = 'Aqui está sua aula:\n```json\n' + JSON.stringify({
++    title: 'Crase',
++    subject: 'Português',
++    overview: 'Resumo',
++    slides: [{ title: 'Regra', body: 'Use ```a + a = à``` sempre que cabível.', board_box: 'a + a = à', example: 'Vou à aula.', trap: 'Antes de verbo não!', classmate_questions: [] }],
++    quiz: [
++      { statement: 'Sem gabarito válido?', options: ['A', 'B'], correct_index: null, explanation: 'Inválida' },
++      { statement: 'Com gabarito válido?', options: ['Sim', '', 'Não'], correct_index: 1, explanation: 'Correta' }
++    ]
++  }) + '\n```\nFonte: pesquisa web.';
++  const parsed = api.parseClassroomResponse(messy, 'Crase', 'Português');
++  assert.equal(parsed._isFallback, false);
++  assert.equal(parsed.slides.length, 1);
++  assert.equal(parsed.quiz.length, 1, 'Questão sem correct_index válido deve ser descartada (nunca inventar A)');
++  assert.equal(parsed.quiz[0].correct_index, 1);
++
++  // Broken truncated JSON must return _parseError and never render raw JSON as slide 1
++  const broken = '{"title":"Incompleta","slides":[{"title":"S1","body":"cortado...';
++  const parsedBroken = api.parseClassroomResponse(broken, 'Tema', 'Disc');
++  assert.equal(parsedBroken.slides.length, 0);
++  assert.ok(parsedBroken._parseError);
++
++  // Weak topics must respect activeCampaignId scope
++  const weak = api.getWeakTopicSuggestions(4);
++  assert.equal(weak.length, 1);
++  assert.equal(weak[0].topic, 'Remédios Constitucionais');
++
++  // Offline HTML with slide mastery marks escaped
++  const htmlOff = api.buildOfflineLessonHtml(parsed, { 0: 'review' });
++  assert.ok(htmlOff.includes('Revisar depois'));
++
++  // Cancel aborts in-flight fetch
++  api.generateLesson('Crase obrigatória');
++  await new Promise(r => setTimeout(r, 10));
++  api.cancelGeneration();
++  assert.equal(aborted, true, 'Cancelar aula deve abortar a requisição ativa');
++  console.log('✓ 3. Aula Interativa 2.0 (parser balanceado, quiz honesto, cancelamento, tópicos fracos e offline) validada');
++}
++
++// 4. Sanitização de URLs/imagens (jcSafeUrl / jcSafeImageSrc) + Deep Merge + Reset Granular
++{
++  const fnStart = htmlCode.indexOf('function esc(v){');
++  const fnEnd = htmlCode.indexOf('function aiInline(');
++  const mergeStart = htmlCode.indexOf('function mergeProgressStates(');
++  const mergeEnd = htmlCode.indexOf('async function pushCloudState(){');
++  assert.ok(fnStart > 0 && fnEnd > fnStart && mergeStart > 0 && mergeEnd > mergeStart);
++
++  const sb = {
++    window: null,
++    location: { origin: 'https://jornada.wcaio.workers.dev' },
++    URL,
++    normalizeLegalText: s => s,
++    localDayKey: () => '2026-11-24',
++    JCProgress: {
++      mergeScores: (a = [], b = []) => [...a, ...b],
++      mergeLearning: (a = {}, b = {}) => ({ ...a, ...b }),
++      mergeTopicMastery: (a = {}, b = {}) => ({ ...a, ...b })
++    }
++  };
++  sb.window = sb;
++  vm.createContext(sb);
++  vm.runInContext(htmlCode.slice(fnStart, fnEnd) + '\n' + htmlCode.slice(mergeStart, mergeEnd), sb);
++
++  assert.equal(sb.jcSafeUrl('javascript:alert(1)'), '');
++  assert.equal(sb.jcSafeImageSrc('data:image/svg+xml;base64,PHN2Zz4='), '');
++  assert.ok(sb.jcSafeImageSrc('data:image/png;base64,iVBORw0KGgo=').startsWith('data:image/png'));
++  assert.equal(sb.jcSafeUrl('https://planalto.gov.br/ccivil_03/constituicao.htm'), 'https://planalto.gov.br/ccivil_03/constituicao.htm');
++
++  const merged = sb.mergeProgressStates(
++    {
++      questionAnswerOverrides: { q1: { correct_answer: 'A', updatedAt: '2026-11-24T10:00:00Z' } },
++      favoriteQuestions: { q1: true },
++      questionStatsByCampaign: { pmpe: { total: 20, correct: 15 }, pcpe: { total: 10, correct: 8 } },
++      lastStudy: '2026-11-24',
++      streak: 7
++    },
++    {
++      questionAnswerOverrides: { q2: { correct_answer: 'B', updatedAt: '2026-11-24T11:00:00Z' } },
++      favoriteQuestions: { q2: true },
++      questionStatsByCampaign: { pmpe: { total: 12, correct: 9 } },
++      lastStudy: '2026-11-22',
++      streak: 3
++    }
++  );
++  assert.ok(merged.questionAnswerOverrides.q1 && merged.questionAnswerOverrides.q2, 'Deep merge deve preservar overrides de ambos os aparelhos');
++  assert.ok(merged.favoriteQuestions.q1 && merged.favoriteQuestions.q2, 'Deep merge deve unir favoritas');
++  assert.equal(merged.questionStatsByCampaign.pmpe.total, 20);
++  assert.equal(merged.questionStatsByCampaign.pcpe.total, 10);
++  assert.equal(merged.lastStudy, '2026-11-24');
++  assert.equal(merged.streak, 7);
++  console.log('✓ 4. Sanitização XSS/URL e deep merge multi-dispositivo validados');
++}
++
++// 5. Parser de bancas regionais + classificação ampliada de assuntos + Streaming signature + PWA r189
++{
++  const sb = { window: null };
++  sb.window = sb;
++  vm.createContext(sb);
++  vm.runInContext(qTextCode, sb);
++  vm.runInContext(wsCode, sb);
++
++  const leak = sb.JCQuestionText.analyzeOption('Alternativa correta. (UPENET/IAUPE) Assinale a incorreta: a) Um b) Dois');
++  assert.equal(leak.needs_review, true, 'Deve detectar vazamento com banca UPENET/IAUPE');
++  const sig1 = sb.JCQuestionsWorkspace.signature([{ a: 1, b: 2 }, { a: 3, b: 4 }], true);
++  const sig2 = sb.JCQuestionsWorkspace.signature([{ a: 3, b: 4 }, { b: 2, a: 1 }], true);
++  assert.equal(sig1, sig2, 'Streaming signature deve ser invariante à ordem das chaves e dos itens quando unordered=true');
++
++  const infStart = v77Code.indexOf('  function inferQuestionPedagogicalTopic(');
++  const infEnd = v77Code.indexOf('  window.inferQuestionPedagogicalTopic = inferQuestionPedagogicalTopic;');
++  const sbTopic = { window: null };
++  sbTopic.window = sbTopic;
++  vm.createContext(sbTopic);
++  vm.runInContext(v77Code.slice(infStart, infEnd), sbTopic);
++  assert.equal(sbTopic.inferQuestionPedagogicalTopic('A Lei 14.133 trata de licitações e contratos.', 'Direito Administrativo'), 'Licitações e Contratos (Lei 14.133/2021)');
++  assert.equal(sbTopic.inferQuestionPedagogicalTopic('Ataques de phishing e ransomware comprometem a rede.', 'Informática'), 'Segurança da Informação');
++  assert.equal(sbTopic.inferQuestionPedagogicalTopic('A Lei Maria da Penha prevê medidas protetivas.', 'Legislação Extravagante'), 'Lei Maria da Penha (Lei 11.340/2006)');
++
++  assert.ok(swCode.includes('r189') && swCode.includes('NETWORK_TIMEOUT_MS'), 'SW r189 deve conter timeout de rede');
++  assert.equal(manifestObj.id, './', 'Manifesto PWA deve definir id');
++  assert.ok(manifestObj.icons.some(i => i.purpose === 'any') && manifestObj.icons.some(i => i.purpose === 'maskable'), 'Manifesto deve separar ícones any e maskable');
++  console.log('✓ 5. Bancas regionais, tópicos ampliados, streaming signature e PWA r189 validados');
++}
++
++console.log('=== Todos os 5 blocos de validação da r189 passaram com 100% de sucesso! ===');
+diff --git a/supabase/dashboard/MANIFESTO.json b/supabase/dashboard/MANIFESTO.json
+index 73eeca4..0541e3d 100644
+--- a/supabase/dashboard/MANIFESTO.json
++++ b/supabase/dashboard/MANIFESTO.json
+@@ -5,8 +5,8 @@
+     {
+       "function": "assistente-pmpe",
+       "path": "supabase/dashboard/assistente-pmpe/index.ts",
+-      "bytes": 55481,
+-      "sha256": "2f454e199fec352ea8ba2e6f9ea882a24fed058f91f22d2dfdceeb5faf1e2c12"
++      "bytes": 59599,
++      "sha256": "1918d442d74596e0006d657411f1da6d08d7fce89cc9caeecd80931f4329d650"
+     },
+     {
+       "function": "redacao-gemini",
+diff --git a/supabase/dashboard/assistente-pmpe/index.ts b/supabase/dashboard/assistente-pmpe/index.ts
+index c4efab5..043e967 100644
+--- a/supabase/dashboard/assistente-pmpe/index.ts
++++ b/supabase/dashboard/assistente-pmpe/index.ts
+@@ -1,7 +1,7 @@
+ // ARQUIVO AUTOCONTIDO PARA COLAR NO EDITOR DO SUPABASE: assistente-pmpe
+ // Gerado por: node scripts/build-supabase-dashboard.mjs
+ // Fonte: supabase/functions/assistente-pmpe/index.ts
+-// SHA-256 da fonte: 4095f397c30d2fcd51957c070c944bc1104c8fe6a0eeae4938b3bc7470eccc8f
++// SHA-256 da fonte: 495bb40ab311df7b3c99082dc6ffed7b1e7aea19d35edf44f6e8d6332b2806ef
+ // Atualize a fonte e regenere; não exclua os validadores incorporados.
+ 
+ // Jornada do Caçador — função autocontida para CLI e editor do painel.
+@@ -306,6 +306,92 @@ async function askGemini(systemPrompt: string, userPrompt: string, geminiKey = G
+   throw new Error(lastError);
+ }
+ 
++async function askStructuredClassroom(systemPrompt: string, userPrompt: string, geminiKey = GEMINI_API_KEY) {
++  if (!geminiKey) throw new Error("GEMINI_NOT_CONFIGURED");
++  const schema = {
++    type: "OBJECT",
++    properties: {
++      title: { type: "STRING" },
++      subject: { type: "STRING" },
++      overview: { type: "STRING" },
++      slides: {
++        type: "ARRAY",
++        minItems: 3,
++        maxItems: 6,
++        items: {
++          type: "OBJECT",
++          properties: {
++            title: { type: "STRING" },
++            body: { type: "STRING" },
++            board_box: { type: "STRING" },
++            example: { type: "STRING" },
++            trap: { type: "STRING" },
++            classmate_questions: {
++              type: "ARRAY",
++              maxItems: 3,
++              items: {
++                type: "OBJECT",
++                properties: {
++                  q: { type: "STRING" },
++                  a: { type: "STRING" },
++                },
++                required: ["q", "a"],
++              },
++            },
++          },
++          required: ["title", "body", "board_box", "example", "trap", "classmate_questions"],
++        },
++      },
++      quiz: {
++        type: "ARRAY",
++        minItems: 1,
++        maxItems: 4,
++        items: {
++          type: "OBJECT",
++          properties: {
++            statement: { type: "STRING" },
++            options: { type: "ARRAY", minItems: 2, maxItems: 5, items: { type: "STRING" } },
++            correct_index: { type: "INTEGER", minimum: 0, maximum: 4 },
++            explanation: { type: "STRING" },
++          },
++          required: ["statement", "options", "correct_index", "explanation"],
++        },
++      },
++    },
++    required: ["title", "subject", "overview", "slides", "quiz"],
++  };
++  const models = await availableGeminiModels(geminiKey);
++  let lastError = "GEMINI_CLASSROOM_FAILED";
++  for (const model of models) {
++    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
++      method: "POST",
++      headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
++      body: JSON.stringify({
++        systemInstruction: { parts: [{ text: systemPrompt }] },
++        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
++        generationConfig: {
++          temperature: 0.2,
++          maxOutputTokens: 4096,
++          responseMimeType: "application/json",
++          responseSchema: schema,
++        },
++      }),
++    });
++    const data = await response.json().catch(() => ({}));
++    if (!response.ok) {
++      lastError = `GEMINI_${response.status}:${data?.error?.message ?? "falha"}`;
++      if (response.status === 429 || response.status === 503 || response.status === 404 || response.status === 400) continue;
++      throw new Error(lastError);
++    }
++    const parts = Array.isArray(data?.candidates?.[0]?.content?.parts)
++      ? data.candidates[0].content.parts.filter((part: any) => !part?.thought)
++      : [];
++    const answer = (parts.length ? parts : data?.candidates?.[0]?.content?.parts || []).map((part: { text?: string }) => part.text ?? "").join("").trim();
++    if (answer) return { answer, model, provider: "gemini" };
++  }
++  throw new Error(lastError);
++}
++
+ async function askStructuredQuestions(prompt: string, geminiKey = GEMINI_API_KEY, personalFirst = false) {
+   const schema = {
+     type: "OBJECT",
+@@ -858,10 +944,16 @@ CONTRATO ESTRITO DO MODO SOLICITADO (${mode}):
+     let result: { answer: string; model: string; provider: string } | null = null;
+     let keySource: "personal" | "shared" = personalGeminiKey ? "personal" : "shared";
+ 
++    const isClassroomMode = mode.toLowerCase() === "aula interativa estruturada";
++    const classroomSystemPrompt = `Você é o Invocador, professor estruturador da Jornada do Caçador. Responda APENAS com JSON válido conforme o schema solicitado (sem markdown, sem comentários fora do JSON e sem links de rodapé). Regras inegociáveis: nunca invente artigo de lei, súmula, julgado ou percentual de banca; todas as questões do mini-quiz são estritamente formativas e devem ter correct_index válido dentro das opções fornecidas.`;
++    const effectiveSystemPrompt = isClassroomMode ? classroomSystemPrompt : systemPrompt;
++
+     // Prioriza Gemini primeiro (chave pessoal ou compartilhada) para maior precisão jurídica e pesquisa
+     if (personalGeminiKey) {
+       try {
+-        result = await askGemini(systemPrompt, userPrompt, personalGeminiKey);
++        result = isClassroomMode
++          ? await askStructuredClassroom(classroomSystemPrompt, userPrompt, personalGeminiKey)
++          : await askGemini(systemPrompt, userPrompt, personalGeminiKey);
+         keySource = "personal";
+       } catch (personalErr) {
+         console.warn("Chave Gemini pessoal falhou; tentando Gemini compartilhado", personalErr);
+@@ -869,7 +961,9 @@ CONTRATO ESTRITO DO MODO SOLICITADO (${mode}):
+     }
+     if (!result && GEMINI_API_KEY) {
+       try {
+-        result = await askGemini(systemPrompt, userPrompt, GEMINI_API_KEY);
++        result = isClassroomMode
++          ? await askStructuredClassroom(classroomSystemPrompt, userPrompt, GEMINI_API_KEY)
++          : await askGemini(systemPrompt, userPrompt, GEMINI_API_KEY);
+         keySource = "shared";
+       } catch (sharedGeminiErr) {
+         console.warn("Gemini compartilhado falhou; tentando reserva", sharedGeminiErr);
+@@ -878,11 +972,11 @@ CONTRATO ESTRITO DO MODO SOLICITADO (${mode}):
+ 
+     if (!result) {
+       try {
+-        result = await askDeepSeek(systemPrompt, userPrompt);
++        result = await askDeepSeek(effectiveSystemPrompt, userPrompt);
+         keySource = "shared";
+       } catch (deepSeekError) {
+         console.warn("DeepSeek indisponível; acionando Groq", deepSeekError);
+-        result = await askGroq(systemPrompt, userPrompt);
++        result = await askGroq(effectiveSystemPrompt, userPrompt);
+         keySource = "shared";
+       }
+     }
+diff --git a/supabase/functions/assistente-pmpe/index.ts b/supabase/functions/assistente-pmpe/index.ts
+index e7d4e1f..051b496 100644
+--- a/supabase/functions/assistente-pmpe/index.ts
++++ b/supabase/functions/assistente-pmpe/index.ts
+@@ -300,6 +300,92 @@ async function askGemini(systemPrompt: string, userPrompt: string, geminiKey = G
+   throw new Error(lastError);
+ }
+ 
++async function askStructuredClassroom(systemPrompt: string, userPrompt: string, geminiKey = GEMINI_API_KEY) {
++  if (!geminiKey) throw new Error("GEMINI_NOT_CONFIGURED");
++  const schema = {
++    type: "OBJECT",
++    properties: {
++      title: { type: "STRING" },
++      subject: { type: "STRING" },
++      overview: { type: "STRING" },
++      slides: {
++        type: "ARRAY",
++        minItems: 3,
++        maxItems: 6,
++        items: {
++          type: "OBJECT",
++          properties: {
++            title: { type: "STRING" },
++            body: { type: "STRING" },
++            board_box: { type: "STRING" },
++            example: { type: "STRING" },
++            trap: { type: "STRING" },
++            classmate_questions: {
++              type: "ARRAY",
++              maxItems: 3,
++              items: {
++                type: "OBJECT",
++                properties: {
++                  q: { type: "STRING" },
++                  a: { type: "STRING" },
++                },
++                required: ["q", "a"],
++              },
++            },
++          },
++          required: ["title", "body", "board_box", "example", "trap", "classmate_questions"],
++        },
++      },
++      quiz: {
++        type: "ARRAY",
++        minItems: 1,
++        maxItems: 4,
++        items: {
++          type: "OBJECT",
++          properties: {
++            statement: { type: "STRING" },
++            options: { type: "ARRAY", minItems: 2, maxItems: 5, items: { type: "STRING" } },
++            correct_index: { type: "INTEGER", minimum: 0, maximum: 4 },
++            explanation: { type: "STRING" },
++          },
++          required: ["statement", "options", "correct_index", "explanation"],
++        },
++      },
++    },
++    required: ["title", "subject", "overview", "slides", "quiz"],
++  };
++  const models = await availableGeminiModels(geminiKey);
++  let lastError = "GEMINI_CLASSROOM_FAILED";
++  for (const model of models) {
++    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
++      method: "POST",
++      headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
++      body: JSON.stringify({
++        systemInstruction: { parts: [{ text: systemPrompt }] },
++        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
++        generationConfig: {
++          temperature: 0.2,
++          maxOutputTokens: 4096,
++          responseMimeType: "application/json",
++          responseSchema: schema,
++        },
++      }),
++    });
++    const data = await response.json().catch(() => ({}));
++    if (!response.ok) {
++      lastError = `GEMINI_${response.status}:${data?.error?.message ?? "falha"}`;
++      if (response.status === 429 || response.status === 503 || response.status === 404 || response.status === 400) continue;
++      throw new Error(lastError);
++    }
++    const parts = Array.isArray(data?.candidates?.[0]?.content?.parts)
++      ? data.candidates[0].content.parts.filter((part: any) => !part?.thought)
++      : [];
++    const answer = (parts.length ? parts : data?.candidates?.[0]?.content?.parts || []).map((part: { text?: string }) => part.text ?? "").join("").trim();
++    if (answer) return { answer, model, provider: "gemini" };
++  }
++  throw new Error(lastError);
++}
++
+ async function askStructuredQuestions(prompt: string, geminiKey = GEMINI_API_KEY, personalFirst = false) {
+   const schema = {
+     type: "OBJECT",
+@@ -852,10 +938,16 @@ CONTRATO ESTRITO DO MODO SOLICITADO (${mode}):
+     let result: { answer: string; model: string; provider: string } | null = null;
+     let keySource: "personal" | "shared" = personalGeminiKey ? "personal" : "shared";
+ 
++    const isClassroomMode = mode.toLowerCase() === "aula interativa estruturada";
++    const classroomSystemPrompt = `Você é o Invocador, professor estruturador da Jornada do Caçador. Responda APENAS com JSON válido conforme o schema solicitado (sem markdown, sem comentários fora do JSON e sem links de rodapé). Regras inegociáveis: nunca invente artigo de lei, súmula, julgado ou percentual de banca; todas as questões do mini-quiz são estritamente formativas e devem ter correct_index válido dentro das opções fornecidas.`;
++    const effectiveSystemPrompt = isClassroomMode ? classroomSystemPrompt : systemPrompt;
++
+     // Prioriza Gemini primeiro (chave pessoal ou compartilhada) para maior precisão jurídica e pesquisa
+     if (personalGeminiKey) {
+       try {
+-        result = await askGemini(systemPrompt, userPrompt, personalGeminiKey);
++        result = isClassroomMode
++          ? await askStructuredClassroom(classroomSystemPrompt, userPrompt, personalGeminiKey)
++          : await askGemini(systemPrompt, userPrompt, personalGeminiKey);
+         keySource = "personal";
+       } catch (personalErr) {
+         console.warn("Chave Gemini pessoal falhou; tentando Gemini compartilhado", personalErr);
+@@ -863,7 +955,9 @@ CONTRATO ESTRITO DO MODO SOLICITADO (${mode}):
+     }
+     if (!result && GEMINI_API_KEY) {
+       try {
+-        result = await askGemini(systemPrompt, userPrompt, GEMINI_API_KEY);
++        result = isClassroomMode
++          ? await askStructuredClassroom(classroomSystemPrompt, userPrompt, GEMINI_API_KEY)
++          : await askGemini(systemPrompt, userPrompt, GEMINI_API_KEY);
+         keySource = "shared";
+       } catch (sharedGeminiErr) {
+         console.warn("Gemini compartilhado falhou; tentando reserva", sharedGeminiErr);
+@@ -872,11 +966,11 @@ CONTRATO ESTRITO DO MODO SOLICITADO (${mode}):
+ 
+     if (!result) {
+       try {
+-        result = await askDeepSeek(systemPrompt, userPrompt);
++        result = await askDeepSeek(effectiveSystemPrompt, userPrompt);
+         keySource = "shared";
+       } catch (deepSeekError) {
+         console.warn("DeepSeek indisponível; acionando Groq", deepSeekError);
+-        result = await askGroq(systemPrompt, userPrompt);
++        result = await askGroq(effectiveSystemPrompt, userPrompt);
+         keySource = "shared";
+       }
+     }

@@ -1,6 +1,6 @@
 const { app, BrowserWindow, shell } = require('electron');
 
-const APP_URL = 'https://jornada.wcaio.workers.dev';
+const APP_URL = 'https://jornada-cacador.j32341472.chatgpt.site';
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -18,24 +18,9 @@ function createWindow() {
   });
 
   win.loadURL(APP_URL);
-  const openSafeExternal = (url) => {
-    try {
-      const parsed = new URL(url);
-      if (['https:', 'http:', 'mailto:'].includes(parsed.protocol)) {
-        shell.openExternal(parsed.href).catch(() => undefined);
-      }
-    } catch { /* URL inválida: ignora. */ }
-  };
   win.webContents.setWindowOpenHandler(({ url }) => {
-    openSafeExternal(url);
+    shell.openExternal(url);
     return { action: 'deny' };
-  });
-  win.webContents.on('will-navigate', (event, url) => {
-    try {
-      if (new URL(url).origin === new URL(APP_URL).origin) return;
-    } catch { /* URL inválida: bloqueia. */ }
-    event.preventDefault();
-    openSafeExternal(url);
   });
 }
 
