@@ -250,7 +250,7 @@ console.log('=== Teste r189: Blindagem Crítica, Performance/PWA e Evolução de
   assert.equal(sbTopic.inferQuestionPedagogicalTopic('Ataques de phishing e ransomware comprometem a rede.', 'Informática'), 'Segurança da Informação');
   assert.equal(sbTopic.inferQuestionPedagogicalTopic('A Lei Maria da Penha prevê medidas protetivas.', 'Legislação Extravagante'), 'Lei Maria da Penha (Lei 11.340/2006)');
 
-  assert.ok(swCode.includes('r189') && swCode.includes('NETWORK_TIMEOUT_MS'), 'SW r189 deve conter timeout de rede');
+  assert.ok(/r189|r19\d/.test(swCode) && swCode.includes('NETWORK_TIMEOUT_MS'), 'SW r189 deve conter timeout de rede');
   assert.equal(manifestObj.id, './', 'Manifesto PWA deve definir id');
   assert.ok(manifestObj.icons.some(i => i.purpose === 'any') && manifestObj.icons.some(i => i.purpose === 'maskable'), 'Manifesto deve separar ícones any e maskable');
   console.log('✓ 5. Bancas regionais, tópicos ampliados, streaming signature e PWA r189 validados');
