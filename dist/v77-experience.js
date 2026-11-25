@@ -5110,7 +5110,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     if(q('#questionProgressFill'))q('#questionProgressFill').style.width=`${pct}%`;
     if(q('#questionMetaPills')){
       q('#questionMetaPills').innerHTML=`
-        <span class="qMetaPill board">🎯 ${escText(boardLabel)}</span><span class="qMetaPill seal" style="font-weight:bold;background:rgba(56,189,248,0.18);border:1px solid rgba(56,189,248,0.4);">🏷️ ${escText(sealOrigin)}</span>
+        <span class="qMetaPill board">🎯 ${escText(boardLabel)}</span>${(boardLabel==='Autoral IA'&&sealOrigin==='QUESTÃO AUTORAL')?'':`<span class="qMetaPill seal" style="font-weight:bold;background:rgba(56,189,248,0.18);border:1px solid rgba(56,189,248,0.4);">🏷️ ${escText(sealOrigin)}</span>`}
         <span class="qMetaPill">${subjectIconForName(subjName)} ${escText(subjName)}</span>
         <span class="qMetaPill">📌 ${escText(topicName)}</span>
         <span class="qMetaPill ${diff}">${diffLabel}</span>
@@ -8794,7 +8794,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     syncHunterStatsSnapshot();
     const campaign=typeof activeCampaign==='function'?activeCampaign():null;
     const examDateStr=campaign?.examDate||state?.examDate||null;
-    const daysLeft=examDateStr?Math.max(0,Math.ceil((new Date(`${examDateStr}T12:00:00`).getTime()-Date.now())/86400000)):null;
+    const daysLeft=examDateStr?Math.max(0,Math.ceil((new Date(`${examDateStr}T23:59:59`).getTime()-Date.now())/86400000)):null;
     const weeksLeft=daysLeft!==null?Math.max(1,Math.ceil(daysLeft/7)):8;
     const tests=TAF_ORDER.map(k=>({key:k,...taf.tests[k]}));
     const readyCount=tests.filter(t=>tafMetTarget(t)===true).length;
@@ -8842,7 +8842,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
           <button type="button" class="ghost small" data-taf-sw="Isometria Barra|20">⏱️ Isometria Barra</button>
           <button type="button" class="ghost small" data-taf-sw="Natação 50m|60">⏱️ 60s (Natação)</button>
           <button type="button" class="ghost small" data-taf-sw="Corrida 2.400m (12 min)|720">⏱️ 12 min (Corrida)</button>
-          <button type="button" class="action small" id="tafSwPauseBtn">${tafTimerState?.paused_at?'Retomar':'Pausar'}</button>
+          <button type="button" class="action small" id="tafSwPauseBtn">${!tafTimerState?'Iniciar':(tafTimerState.paused_at?'Retomar':'Pausar')}</button>
           <button type="button" class="ghost danger small" id="tafSwResetBtn">Zerar</button>
         </div>
       </div>

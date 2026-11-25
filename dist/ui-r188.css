@@ -385,3 +385,47 @@ body.lightAppTheme .jcClassroomNotice {
 #questionDialog .qHelperTabs {
   margin-bottom: 12px;
 }
+
+/* r191: Correções de contraste Tema Claro (Banner LGPD + Sidebar) e badges PDF */
+body.lightAppTheme #cookieConsentBanner,
+body.lightAppTheme .cookieConsentBanner {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14) !important;
+}
+body.lightAppTheme #cookieConsentBanner *,
+body.lightAppTheme .cookieConsentBanner * {
+  color: #1e293b !important;
+}
+body.lightAppTheme #cookieConsentBanner b,
+body.lightAppTheme .cookieConsentBanner b,
+body.lightAppTheme #cookieConsentBanner strong,
+body.lightAppTheme .cookieConsentBanner strong {
+  color: #0f172a !important;
+}
+body.lightAppTheme #cookieConsentBanner code,
+body.lightAppTheme .cookieConsentBanner code {
+  background: #f1f5f9 !important;
+  color: #0369a1 !important;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+body.lightAppTheme #cookieConsentBanner button.action,
+body.lightAppTheme .cookieConsentBanner button.action {
+  background: #0284c7 !important;
+  color: #ffffff !important;
+}
+body.lightAppTheme #sidebarCollapseBtn,
+body.lightAppTheme .sidebarCollapseBtn {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+.docCard .tag,
+.libraryItem .tag,
+.pdfBadge,
+.docBadge {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
