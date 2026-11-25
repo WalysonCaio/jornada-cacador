@@ -22,8 +22,8 @@ assert.ok(html.includes('interrogatorio noturno'), 'Legislação Extravagante de
 assert.ok(html.includes('Modo offline (IA indisponível)'), 'Status do Invocador deve refletir modo offline');
 
 // 5. Revisão 1-7-30 e Caderno de Erros reclassificam disciplina pelo enunciado
-assert.ok(html.includes('window.classifyQuestion({statement:x.e.question'), 'renderReviews deve reclassificar disciplina pelo enunciado');
-assert.ok(html.includes('window.classifyQuestion({statement:e.question'), 'renderErrorNotebook deve reclassificar disciplina pelo enunciado');
+assert.ok((html.includes('window.classifyQuestion({statement:x.e.question') || html.includes('inferStrictQuestionSubjectDecision(x.e.question||x.e.statement')), 'renderReviews deve reclassificar disciplina pelo enunciado');
+assert.ok((html.includes('window.classifyQuestion({statement:e.question') || html.includes('inferStrictQuestionSubjectDecision(e.question||e.statement')), 'renderErrorNotebook deve reclassificar disciplina pelo enunciado');
 
 // 6. Concordância singular/plural da ofensiva
 assert.ok(html.includes('streakDaysUnit') && html.includes("?'dia seguido':'dias seguidos'"), 'Ofensiva deve usar singular para 1 dia seguido');
