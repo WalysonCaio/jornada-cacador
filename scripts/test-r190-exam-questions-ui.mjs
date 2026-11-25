@@ -143,4 +143,23 @@ assert.ok(swCode.includes('r190') && swCode.includes('./exam-questions-client.js
   assert.equal(sbEd.mapSubjectToActiveEdital('Direito Constitucional', 'Art. 5º'), 'Direito Constitucional');
 }
 
+// 8. Fundamento do fallback Groq não deve ser exposto aos alunos
+{
+  const groqRow = api.mapExamRowToQuestion({
+    id: 'eq-groq',
+    statement: 'Questão validada pelo fallback Groq.',
+    options: ['Opção A', 'Opção B'],
+    correct_index: 0,
+    answer_unknown: false,
+    gabarito_source: 'ia',
+    status_validacao: 'verificada',
+    fundamento_ia: 'Citação duvidosa do Groq',
+    ia_confianca: 'alta',
+    ia_model: 'groq:openai/gpt-oss-120b',
+    fingerprint: 'fp_groq'
+  }, 'camp-1');
+  assert.equal(groqRow.fundamento_ia, '', 'Fundamento do Groq deve ser ocultado dos alunos');
+  assert.equal(groqRow.ia_confianca, 'media', 'Confiança do fallback Groq deve cair para media');
+}
+
 console.log('OK: test-r190-exam-questions-ui.mjs (todas as asserções passaram)');

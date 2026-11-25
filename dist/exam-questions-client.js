@@ -69,8 +69,8 @@
       is_community: Boolean(row.share_with_community && row.user_id && row.campaign_id !== portalDbId),
       status_validacao: statusValidacao,
       resposta_ia: row.resposta_ia === null || row.resposta_ia === undefined ? null : Number(row.resposta_ia),
-      fundamento_ia: row.fundamento_ia ? String(row.fundamento_ia) : '',
-      ia_confianca: row.ia_confianca ? String(row.ia_confianca) : null,
+      fundamento_ia: (row.fundamento_ia && !String(row.ia_model || '').toLowerCase().startsWith('groq:')) ? String(row.fundamento_ia) : '',
+      ia_confianca: (String(row.ia_model || '').toLowerCase().startsWith('groq:') && row.ia_confianca === 'alta') ? 'media' : (row.ia_confianca ? String(row.ia_confianca) : null),
       ia_model: row.ia_model ? String(row.ia_model) : null
     };
   }
