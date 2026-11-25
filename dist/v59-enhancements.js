@@ -79,7 +79,7 @@
       classification_declared_subject:declaredSubject,classification_needs_review:q.classification_needs_review===true||decision.needs_review===true||decision.ambiguous===true,
       classification_reason:decision.reason||q.classification_reason||'Classificação automática; sujeita a conferência.',classification_confidence:decision.confidence,
       subject:cSubj,topic:cTopic,statement:normalizeLegalTitle(q.statement),associated_text:q.associated_text||'',options:q.options.map(normalizeLegalTitle),correct_index:q.correct_index,
-      explanation:normalizeLegalTitle(q.explanation||''),difficulty:q.difficulty||'medio',origin:q.origin||'autoral',board:q.board||row.content?.source||'',
+      explanation:normalizeLegalTitle(q.explanation||''),difficulty:q.difficulty||'medio',origin:q.origin||'autoral',board:q.board||'',
       documentId:row.source_document_id||q.documentId,sourceDocumentId:row.source_document_id||q.sourceDocumentId,source_document_id:row.source_document_id||q.source_document_id,
       documentDbId:q.documentDbId,source_refs:[...(Array.isArray(row.source_refs)?row.source_refs:[]),...(Array.isArray(q.source_refs)?q.source_refs:[])],
       generatedContentId:row.id,sourceContentId:row.id,user_id:userId,campaign_id:portalDbId};
@@ -93,8 +93,8 @@ for(const item of [...personallyReviewed,...cloudQuestions,..._customCampQs,..._
   const key=questionFingerprint(item);if(_seenQKeys.has(key))continue;_seenQKeys.add(key);_mergedQs.push(item);
 }
 ALL_QUESTIONS=_mergedQs;
-if(typeof window.auditAndEnrichAllQuestionsPedagogy==='function')window.auditAndEnrichAllQuestionsPedagogy(ALL_QUESTIONS);
 if(typeof window.ensureNativeQuestionBankLoaded==='function')window.ensureNativeQuestionBankLoaded();
+if(typeof window.auditAndEnrichAllQuestionsPedagogy==='function')window.auditAndEnrichAllQuestionsPedagogy(ALL_QUESTIONS);
     // A private portal refresh retains content already merged from the community.
     const summaryIds=new Set(ALL_SUMMARIES.map(item=>String(item.id)));
     for(const item of previousContent[0])if(item?.is_community&&!summaryIds.has(String(item.id))){ALL_SUMMARIES.push(item);summaryIds.add(String(item.id))}

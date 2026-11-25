@@ -5,8 +5,8 @@
     {
       "function": "assistente-pmpe",
       "path": "supabase/dashboard/assistente-pmpe/index.ts",
-      "bytes": 55481,
-      "sha256": "2f454e199fec352ea8ba2e6f9ea882a24fed058f91f22d2dfdceeb5faf1e2c12"
+      "bytes": 59599,
+      "sha256": "1918d442d74596e0006d657411f1da6d08d7fce89cc9caeecd80931f4329d650"
     },
     {
       "function": "redacao-gemini",

@@ -4,11 +4,13 @@
   const w=window, escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const copy=value=>JSON.parse(JSON.stringify(value)), text=value=>String(value??'').normalize('NFC').replace(/\s+/g,' ').trim();
   const identity=q=>JSON.stringify([text(q?.statement),Array.isArray(q?.options)?q.options.map(text):[]]);
+  const normText=value=>text(typeof w.JCQuestionText?.normalizeTypography==='function'?w.JCQuestionText.normalizeTypography(value):value);
+  const normalizedIdentity=q=>JSON.stringify([normText(q?.statement),Array.isArray(q?.options)?q.options.map(normText):[]]);
   const manualKey=q=>q?.key_source==='manual_revisado'&&q?.answer_key_validation==='revisado';
   const manualClassification=q=>[q?.subject_source,q?.classification_source].some(value=>['manual','manual_revisado','humano','humana','revisado'].includes(String(value||'').toLowerCase()));
   const validQuestion=q=>q&&typeof q.statement==='string'&&text(q.statement).length>=12&&Array.isArray(q.options)&&q.options.length>=2&&q.options.length<=5&&q.options.every(o=>typeof o==='string'&&text(o))&&new Set(q.options.map(text)).size===q.options.length;
   const keyValid=q=>(typeof q.correct_index==='number'||typeof q.correct_index==='string')&&String(q.correct_index).trim()!==''&&Number.isInteger(Number(q.correct_index))&&Number(q.correct_index)>=0&&Number(q.correct_index)<q.options.length;
-  const examDocument=doc=>['prova','simulado'].includes(doc?.document_type)||(['material','anotacao'].includes(doc?.document_type)&&/\b(prova|simulado|quest[oõ]es)\b/i.test(String(doc?.title||'')));
+  const examDocument=doc=>['prova','simulado'].includes(doc?.document_type)||(['material','anotacao'].includes(doc?.document_type)&&/\b(provas?|simulados?|quest[oõ]es?)\b/i.test(String(doc?.title||'')));
   const records=new Map();let running=false,stopRequested=false,selectedScope=null,batchOperation=null;
   function scope(){let s={},session=null;try{s=typeof state==='object'?state:w.state||{};session=typeof cloudSession==='object'?cloudSession:w.cloudSession;}catch{}return{userId:session?.user?.id||'',owner:s._ownerUserId||'',reset:Number(s._resetEpoch||0),portal:s.activeCampaignId||''};}
   const sameScope=s=>{const n=scope();return s.userId&&n.userId===s.userId&&n.owner===s.userId&&n.reset===s.reset&&n.portal===s.portal;};
@@ -54,8 +56,25 @@
     if(!Array.isArray(rows)||!Array.isArray(extracted)||!extracted.length)throw new Error('Nenhuma questão reconhecida; o conteúdo anterior foi preservado.');
     if(extracted.some(q=>!validQuestion(q)))throw new Error('Há questões com enunciado ou alternativas inválidos. Nada foi substituído.');
     const report={kind:'structural_pdf_comparison',factual_review_verified:false,document_id:doc.id,title:doc.title,existing:0,extracted:extracted.length,matched:0,added:0,not_matched:0,classification_changes:0,classification_pending:0,structure_pending:0,board_pending:0,text_integrity_pending:0,keys_preserved:0,key_conflicts:0,duplicates:0,visual_pending:0,source_pages:Number(meta.pdfTotalPages||meta.totalPages||0),pages_read:Number(meta.pagesRead||0),details:[],items:[]};
-    const lookup=new Map();for(const q of extracted){const id=identity(q);const arr=lookup.get(id)||[];arr.push(copy(q));lookup.set(id,arr);}
+    const pool=extracted.map((q,idx)=>({q:copy(q),used:false,id:identity(q),normId:normalizedIdentity(q),idx}));
+    const lookup=new Map(),normLookup=new Map();
+    for(const entry of pool){
+      const arr=lookup.get(entry.id)||[];arr.push(entry);lookup.set(entry.id,arr);
+      // Only allow typography-tolerant matching when no alternative leak cut occurred (preserves manual-key quarantine on leaks).
+      if(!entry.q?.text_integrity_review?.pending){const nArr=normLookup.get(entry.normId)||[];nArr.push(entry);normLookup.set(entry.normId,nArr);}
+    }
+    const takeMatch=old=>{
+      const exact=lookup.get(identity(old));
+      if(exact){const hit=exact.find(e=>!e.used);if(hit){hit.used=true;return hit.q;}}
+      if(!old?.text_integrity_review?.pending){
+        const norm=normLookup.get(normalizedIdentity(old));
+        if(norm){const hit=norm.find(e=>!e.used);if(hit){hit.used=true;return hit.q;}}
+      }
+      return null;
+    };
     const seen=new Set();for(const q of extracted){const id=identity(q);if(seen.has(id))report.duplicates++;seen.add(id);}
+    const partialActive=Boolean(meta?.partialInfo?.partial);
+    const skippedNums=new Set((Array.isArray(meta?.partialInfo?.skippedNumbers)?meta.partialInfo.skippedNumbers:[]).map(Number).filter(Number.isFinite));
     const candidates=copy(rows), protectedKeys=['correct_index','answer_unknown','annulled','anulada','key_source','answer_key_validation','key_reference','answer_key_history','suggested_correct_index'];
     function prepare(q,old){
       if(old){
@@ -89,13 +108,19 @@
     }
     for(const row of candidates){
       const qs=row.content?.questions;if(!Array.isArray(qs))continue;
-      row.content.questions=qs.map(old=>{report.existing++;const bucket=lookup.get(identity(old));
-        if(bucket?.length){report.matched++;return prepare(bucket.shift(),{...old,subject:old.subject||row.content.subject});}
+      row.content.questions=qs.map(old=>{report.existing++;const matchedQ=takeMatch(old);
+        if(matchedQ){report.matched++;return prepare(matchedQ,{...old,subject:old.subject||row.content.subject});}
+        const oldNum=Number(old?.question_number);
+        const oldHasTrustedKey=manualKey(old)||(!old.answer_unknown&&keyValid(old)&&['oficial_definitivo','oficial_preliminar','documento_informado','gabarito_documento'].includes(old.key_source));
+        if(partialActive&&((Number.isFinite(oldNum)&&skippedNums.has(oldNum))||oldHasTrustedKey)){
+          report.preserved_partial=(report.preserved_partial||0)+1;
+          return{...old,review_status:old.review_status==='source_not_matched'?'source_not_matched':'preserved_partial_skip'};
+        }
         report.not_matched++;return{...old,classification_needs_review:true,review_status:'source_not_matched',classification_reason:'Não localizada na nova leitura do PDF. Preservada para conferência, fora dos treinos.'};
       });
       row.approved=false;row.content.review_kind=report.kind;row.content.factual_review_verified=false;
     }
-    const additions=[];for(const bucket of lookup.values())for(const q of bucket){report.added++;additions.push(prepare(q));}
+    const additions=[];for(const entry of pool){if(!entry.used){report.added++;additions.push(prepare(entry.q));}}
     if(additions.length)candidates.push({content_type:'summary',title:`Questões do PDF — ${doc.title}`.slice(0,190),content:{is_question_pack:true,subject:'Prova com disciplinas identificadas por questão',source:doc.title,page_start:1,page_end:report.source_pages,explanation:'Questões extraídas novamente do PDF original. Classificações e gabaritos pendentes permanecem identificados.',points:[],flashcards:[],questions:additions,review_kind:report.kind,factual_review_verified:false},source_refs:[{document_id:doc.id,title:doc.title}],approved:false});
     report.manual_review_required=report.not_matched+report.classification_pending+report.structure_pending+report.board_pending+report.key_conflicts+report.duplicates>0;
     return{candidates,report};
@@ -146,7 +171,7 @@
       const allowPartial=options.allowPartial!==false;
       const coverageInfo=freshCoverage(meta,pages,qs.report,{...options,allowPartial});
       record.partialInfo=coverageInfo;
-      const proposal=reconcile(overlayPersonalReviews(source.rows||[],doc.id),qs,doc,meta);
+      const proposal=reconcile(overlayPersonalReviews(source.rows||[],doc.id),qs,doc,{...meta,partialInfo:coverageInfo});
       proposal.report.partial_extraction=Boolean(coverageInfo?.partial);
       proposal.report.partial_summary=coverageInfo||{};
       proposal.report.local_review_signature=personalSignature(doc.id);
@@ -160,7 +185,7 @@
         ? `Revisão parcial segura (${coverageInfo.extracted}/${coverageInfo.expected||coverageInfo.extracted} lidas · ${coverageInfo.skipped} puladas). As questões não lidas foram preservadas.`
         : 'Proposta pronta. O conteúdo ativo ainda não foi substituído.';
       if(options.autoApply===true){
-        return await applyReview(record,{batchConfirmed:true,silent:true});
+        return await applyReview(record,{batchConfirmed:true,silent:true,skipReload:Boolean(options.skipReload)});
       }
       return true;
     }catch(error){if(!sameScope(s))return false;record.status='blocked';record.message=error.name==='AbortError'?'A consulta excedeu o prazo. Tente novamente.':String(error.message||error);return false;
@@ -176,7 +201,7 @@
     try{record.status='applying';render();const session=await sessionFor(s);const confirmed=await request('rpc/apply_document_question_review',{p_review_id:record.reviewId},s,session);
       if(confirmed?.status!=='applied'||confirmed.document_id!==record.id||!Number.isInteger(confirmed.saved)||confirmed.saved<1)throw new Error('A aplicação desta proposta não foi confirmada pelo servidor.');applied=true;
       record.status='applied';record.message='Revisão aplicada em uma transação. Respostas e histórico não foram apagados.';
-      if(typeof loadGeneratedContent==='function')await loadGeneratedContent();if(!sameScope(s))return false;
+      if(!options.skipReload&&typeof loadGeneratedContent==='function')await loadGeneratedContent();if(!sameScope(s))return false;
       if(typeof w.invalidateQuestionPoolCache==='function')w.invalidateQuestionPoolCache();if(typeof w.markViewsDirty==='function')w.markViewsDirty();if(!options.silent)notify(record.message);return true;
     }catch(error){if(sameScope(s)){record.status=applied?'applied':'pending';record.message=applied?'A revisão foi aplicada; a atualização da tela falhou. Reabra a Biblioteca para carregar o conteúdo.':String(error.message||error);}return applied&&sameScope(s);}finally{if(sameScope(s))render();}
   }
@@ -186,7 +211,7 @@
       const page=await request(path,undefined,s,session);if(!Array.isArray(page))throw new Error('Não foi possível listar seus PDFs.');docs.push(...page.filter(examDocument));if(page.length<200)break;
     }return docs;
   }
-  let lastBatchSummary=null;
+  let lastBatchSummary=null, recordFilter='all';
   async function startBatch(allPortals=false,options={}){
     if(running)return;currentRecords();const s=scope();if(!sameScope(s))return notify('Entre e aguarde sua conta carregar.');
     const autoApply=Boolean(options?.autoApply);
@@ -197,12 +222,13 @@
       if(!docs.length)notify('Nenhuma prova ou simulado encontrado nesse recorte.');
       for(const doc of docs){
         if(operation.cancelled||stopRequested||!sameScope(s))break;
-        await reviewDocument(doc.id,{title:doc.title,autoApply,allowPartial:true});
+        await reviewDocument(doc.id,{title:doc.title,autoApply,allowPartial:true,skipReload:true});
         const rec=records.get(doc.id);
         if(rec?.status==='applied'){appliedDocs++;updatedQuestions+=Number(rec.report?.extracted||0);}
         else if(rec?.status==='pending')pendingDocs++;
         else if(rec?.status==='blocked')blockedDocs++;
       }
+      if(sameScope(s)&&appliedDocs>0&&typeof loadGeneratedContent==='function'){await loadGeneratedContent();}
       if(sameScope(s)&&docs.length){
         lastBatchSummary={total:docs.length,appliedDocs,updatedQuestions,pendingDocs,blockedDocs,autoApply};
         if(autoApply){
@@ -220,9 +246,10 @@
     try{
       for(const rec of pending){
         if(stopRequested||!sameScope(s))break;
-        const ok=await applyReview(rec,{batchConfirmed:true,silent:true});
+        const ok=await applyReview(rec,{batchConfirmed:true,silent:true,skipReload:true});
         if(ok)applied++;
       }
+      if(sameScope(s)&&applied>0&&typeof loadGeneratedContent==='function')await loadGeneratedContent();
       if(sameScope(s))notify(`✅ ${applied} de ${pending.length} proposta(s) aplicada(s) com segurança!`);
     }finally{running=false;if(sameScope(s))render();}
     return applied;
@@ -233,11 +260,17 @@
     }catch(error){if(sameScope(s))notify(String(error.message||error));}
   }
   function render(){
-    const root=document.getElementById('jcQuestionReviewPanel');if(!root)return;const list=currentRecords();
+    const root=document.getElementById('jcQuestionReviewPanel');if(!root)return;const allList=currentRecords();
+    const list=allList.filter(r=>{
+      if(recordFilter==='pending')return r.status==='pending'||r.status==='blocked'||Boolean(r.report?.manual_review_required);
+      if(recordFilter==='leaks')return Number(r.report?.text_integrity_pending||0)>0||Number(r.report?.structure_pending||0)>0;
+      return true;
+    });
     const labels={reading:'Lendo original',pending:'Aguardando conferência',applied:'Aplicada',blocked:'Bloqueada',applying:'Aplicando'};
-    root.innerHTML=`<h3>Conferir questões dos PDFs originais</h3><p>Releia provas e simulados sem apagar a versão atual. A comparação confere extração, disciplina, assunto e gabaritos disponíveis; não certifica a resposta de todas as questões. Este fluxo não usa IA para reescrever a prova.</p><div class="qrActions"><button type="button" class="action" id="qrAutoFixPortal" ${running?'disabled':''} style="width:auto">⚡ Reanalisar e corrigir tudo (este portal)</button><button type="button" class="ghost" id="qrCurrent" ${running?'disabled':''}>Só comparar (este portal)</button><button type="button" class="ghost" id="qrAll" ${running?'disabled':''}>Reanalisar todos os meus portais</button><button type="button" class="ghost" id="qrRestore" ${running?'disabled':''}>Recuperar pendentes</button>${list.some(r=>r.status==='pending')&&!running?'<button type="button" class="action" id="qrApplyAll" style="width:auto">✓ Aplicar todas as propostas prontas</button>':''}${running?'<button type="button" class="ghost" id="qrStop">Pausar após este PDF</button>':''}</div>${lastBatchSummary?`<p class="small" style="margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.3)"><b>Resumo do lote:</b> ${lastBatchSummary.appliedDocs} PDF(s) corrigido(s) · ${lastBatchSummary.updatedQuestions} questões atualizadas · ${lastBatchSummary.pendingDocs} aguardando conferência · ${lastBatchSummary.blockedDocs} bloqueado(s) (escaneados/ambíguos).</p>`:''}<p class="small muted">Gabaritos revisados e histórico são preservados. PDF sem texto, páginas incompletas ou caderno ambíguo exigem conferência. O lote inclui provas, simulados e materiais cujo título identifica questões. Para um arquivo com categoria/título incorretos, confira sua identificação na Biblioteca.</p><div aria-live="polite">${list.map(r=>{const report=r.report;return `<article class="qrRecord"><b>${escape(r.title)}</b><span class="tag">${labels[r.status]||escape(r.status)}</span><p>${escape(r.message||'Preparando extração...')}</p>${report?`<p>${report.extracted} extraídas · ${report.matched} correspondências · ${report.added} novas · ${report.not_matched} antigas não localizadas (preservadas fora do treino) · ${report.classification_pending} classificações pendentes · ${report.structure_pending||0} estruturas pendentes · ${report.text_integrity_pending||0} alternativas com possível vazamento · ${report.board_pending||0} bancas pendentes · ${report.key_conflicts} divergências de gabarito</p><details><summary>Ver comparação e limites</summary><p>Até 50 alterações exibidas aqui; baixe o relatório para conferir todas as questões e alternativas.</p><p>Revisão factual integral: não comprovada. Gabaritos sem fonte continuam pendentes. Respostas, XP e estatísticas históricas não são recalculados retroativamente.</p>${(report.details||[]).slice(0,50).map(d=>`<p>Questão ${escape(d.number||'?')} · página ${escape(d.page||'?')}: ${escape(d.from)} / ${escape(d.topic_from)} → ${escape(d.to)} / ${escape(d.topic_to)}</p>`).join('')}${(report.items||[]).filter(item=>item.structure_pending).slice(0,50).map(item=>`<p>Questão ${escape(item.number||'?')} · página ${escape(item.page||'?')}: ${escape(item.quality_reason)}</p>`).join('')}<p>${(report.items||[]).length} questões no relatório completo.</p></details>`:''}${report?`<button type="button" class="ghost" data-qr-download="${escape(r.id)}">Baixar relatório completo</button>`:''}${r.status==='pending'?`<label class="qrConfirm"><input type="checkbox" data-qr-confirm="${escape(r.reviewId)}"> Conferi a comparação com o PDF e aceito aplicar esta proposta; pendências continuarão bloqueadas.</label><button type="button" class="ghost" data-qr-apply="${escape(r.id)}">Aplicar esta proposta</button>`:''}${r.status==='blocked'?`${r.emptyPages?.length?`<label class="qrConfirm"><input type="checkbox" data-qr-empty="${escape(r.id)}"> Conferi as páginas ${escape(r.emptyPages.join(', '))}: estão em branco e não contêm questões ou imagens necessárias.</label>`:''}${r.ambiguous?`<label>Este PDF tem vários gabaritos — escolha o caderno (${escape((r.cadernos||[]).join(', '))}): <input data-qr-caderno="${escape(r.id)}" placeholder="Ex.: Azul ou Tipo 1"></label>`:''}<button type="button" class="ghost" data-qr-retry="${escape(r.id)}">Reanalisar este PDF</button>`:''}</article>`;}).join('')||'<p class="small muted">Nenhuma revisão iniciada neste contexto. As propostas salvas podem ser recuperadas da conta.</p>'}</div>`;
+    root.innerHTML=`<h3>Conferir questões dos PDFs originais</h3><p>Releia provas e simulados sem apagar a versão atual. A comparação confere extração, disciplina, assunto e gabaritos disponíveis; não certifica a resposta de todas as questões. Este fluxo não usa IA para reescrever a prova.</p><div class="qrActions"><button type="button" class="action" id="qrAutoFixPortal" ${running?'disabled':''} style="width:auto">⚡ Reanalisar e corrigir tudo (este portal)</button><button type="button" class="ghost" id="qrCurrent" ${running?'disabled':''}>Só comparar (este portal)</button><button type="button" class="ghost" id="qrAll" ${running?'disabled':''}>Reanalisar todos os meus portais</button><button type="button" class="ghost" id="qrRestore" ${running?'disabled':''}>Recuperar pendentes</button>${list.some(r=>r.status==='pending')&&!running?'<button type="button" class="action" id="qrApplyAll" style="width:auto">✓ Aplicar todas as propostas prontas</button>':''}${running?'<button type="button" class="ghost" id="qrStop">Pausar após este PDF</button>':''}</div>${lastBatchSummary?`<p class="small" style="margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.3)"><b>Resumo do lote:</b> ${lastBatchSummary.appliedDocs} PDF(s) corrigido(s) · ${lastBatchSummary.updatedQuestions} questões atualizadas · ${lastBatchSummary.pendingDocs} aguardando conferência · ${lastBatchSummary.blockedDocs} bloqueado(s) (escaneados/ambíguos).</p>`:''}${allList.length?`<div class="qrFilterBar" role="group" aria-label="Filtrar fila de revisão"><button type="button" class="ghost small ${recordFilter==='all'?'qrFilterActive':''}" data-qr-filter="all">Todos (${allList.length})</button><button type="button" class="ghost small ${recordFilter==='pending'?'qrFilterActive':''}" data-qr-filter="pending">Com pendências (${allList.filter(r=>r.status==='pending'||r.status==='blocked'||r.report?.manual_review_required).length})</button><button type="button" class="ghost small ${recordFilter==='leaks'?'qrFilterActive':''}" data-qr-filter="leaks">Vazamento alt. E / estrutura (${allList.filter(r=>Number(r.report?.text_integrity_pending||0)>0||Number(r.report?.structure_pending||0)>0).length})</button></div>`:''}<p class="small muted">Gabaritos revisados e histórico são preservados. PDF sem texto, páginas incompletas ou caderno ambíguo exigem conferência. O lote inclui provas, simulados e materiais cujo título identifica questões. Para um arquivo com categoria/título incorretos, confira sua identificação na Biblioteca.</p><div aria-live="polite">${list.map(r=>{const report=r.report;return `<article class="qrRecord"><b>${escape(r.title)}</b><span class="tag">${labels[r.status]||escape(r.status)}</span><p>${escape(r.message||'Preparando extração...')}</p>${report?`<p>${report.extracted} extraídas · ${report.matched} correspondências · ${report.added} novas · ${report.not_matched} antigas não localizadas (preservadas fora do treino) · ${report.classification_pending} classificações pendentes · ${report.structure_pending||0} estruturas pendentes · ${report.text_integrity_pending||0} alternativas com possível vazamento · ${report.board_pending||0} bancas pendentes · ${report.key_conflicts} divergências de gabarito</p><details><summary>Ver comparação e limites</summary><p>Até 50 alterações exibidas aqui; baixe o relatório para conferir todas as questões e alternativas.</p><p>Revisão factual integral: não comprovada. Gabaritos sem fonte continuam pendentes. Respostas, XP e estatísticas históricas não são recalculados retroativamente.</p>${(report.details||[]).slice(0,50).map(d=>`<p>Questão ${escape(d.number||'?')} · página ${escape(d.page||'?')}: ${escape(d.from)} / ${escape(d.topic_from)} → ${escape(d.to)} / ${escape(d.topic_to)}</p>`).join('')}${(report.items||[]).filter(item=>item.structure_pending||item.text_integrity_review?.pending).slice(0,50).map(item=>{const leak=item.text_integrity_review?.leaks?.[0];return`<div class="qrDiffRow"><p><b>Questão ${escape(item.number||'?')} · página ${escape(item.page||'?')}:</b> ${escape(item.quality_reason||'Verificação de integridade textual')}</p>${leak?`<div class="qrDiffGrid"><div><span>Antes (cru no PDF)</span><p>${escape(String(leak.raw||'').slice(0,220))}</p></div><div><span>Depois (trecho retido)</span><p>${escape(String(leak.retained_text||'').slice(0,220))}</p></div></div>`:''}</div>`;}).join('')}<p>${(report.items||[]).length} questões no relatório completo.</p></details>`:''}${report?`<button type="button" class="ghost" data-qr-download="${escape(r.id)}">Baixar relatório completo</button>`:''}${r.status==='pending'?`<label class="qrConfirm"><input type="checkbox" data-qr-confirm="${escape(r.reviewId)}"> Conferi a comparação com o PDF e aceito aplicar esta proposta; pendências continuarão bloqueadas.</label><button type="button" class="ghost" data-qr-apply="${escape(r.id)}">Aplicar esta proposta</button>`:''}${r.status==='blocked'?`${r.emptyPages?.length?`<label class="qrConfirm"><input type="checkbox" data-qr-empty="${escape(r.id)}"> Conferi as páginas ${escape(r.emptyPages.join(', '))}: estão em branco e não contêm questões ou imagens necessárias.</label>`:''}${r.ambiguous&&Array.isArray(r.cadernos)&&r.cadernos.length>1?`<label>Este PDF tem vários gabaritos — escolha o caderno (${escape(r.cadernos.join(', '))}): <input data-qr-caderno="${escape(r.id)}" placeholder="Ex.: Azul ou Tipo 1"></label>`:(r.ambiguous?'<p class="small warnText">Ambiguidade de numeração detectada no gabarito deste PDF (sem cadernos distintos nomeados). Confira o arquivo original na Biblioteca.</p>':'')}<button type="button" class="ghost" data-qr-retry="${escape(r.id)}">Reanalisar este PDF</button>`:''}</article>`;}).join('')||'<p class="small muted">Nenhuma revisão iniciada neste contexto. As propostas salvas podem ser recuperadas da conta.</p>'}</div>`;
     root.querySelector('#qrAutoFixPortal')?.addEventListener('click',()=>startBatch(false,{autoApply:true,allowPartial:true}));root.querySelector('#qrCurrent').onclick=()=>startBatch(false);root.querySelector('#qrAll').onclick=()=>startBatch(true,{autoApply:true,allowPartial:true});root.querySelector('#qrRestore').onclick=restorePending;root.querySelector('#qrApplyAll')?.addEventListener('click',()=>applyAllPending());
     root.querySelector('#qrStop')?.addEventListener('click',()=>{stopRequested=true;notify('O lote será pausado após o PDF atual. Propostas salvas permanecem na conta.');});
+    root.querySelectorAll('[data-qr-filter]').forEach(b=>b.onclick=()=>{recordFilter=b.dataset.qrFilter||'all';render();});
     root.querySelectorAll('[data-qr-download]').forEach(b=>b.onclick=()=>downloadReport(records.get(b.dataset.qrDownload)));
     root.querySelectorAll('[data-qr-apply]').forEach(b=>b.onclick=()=>applyReview(records.get(b.dataset.qrApply)));
     root.querySelectorAll('[data-qr-retry]').forEach(b=>b.onclick=()=>reviewDocument(b.dataset.qrRetry,{title:records.get(b.dataset.qrRetry)?.title,preferredCaderno:[...root.querySelectorAll('[data-qr-caderno]')].find(i=>i.dataset.qrCaderno===b.dataset.qrRetry)?.value||'',confirmEmptyPages:!![...root.querySelectorAll('[data-qr-empty]')].find(i=>i.dataset.qrEmpty===b.dataset.qrRetry)?.checked}));

@@ -1,7 +1,7 @@
 // ARQUIVO AUTOCONTIDO PARA COLAR NO EDITOR DO SUPABASE: assistente-pmpe
 // Gerado por: node scripts/build-supabase-dashboard.mjs
 // Fonte: supabase/functions/assistente-pmpe/index.ts
-// SHA-256 da fonte: 4095f397c30d2fcd51957c070c944bc1104c8fe6a0eeae4938b3bc7470eccc8f
+// SHA-256 da fonte: 495bb40ab311df7b3c99082dc6ffed7b1e7aea19d35edf44f6e8d6332b2806ef
 // Atualize a fonte e regenere; não exclua os validadores incorporados.
 
 // Jornada do Caçador — função autocontida para CLI e editor do painel.
@@ -302,6 +302,92 @@ async function askGemini(systemPrompt: string, userPrompt: string, geminiKey = G
       }
       if (answer) return { answer, model, provider: "gemini" };
     }
+  }
+  throw new Error(lastError);
+}
+
+async function askStructuredClassroom(systemPrompt: string, userPrompt: string, geminiKey = GEMINI_API_KEY) {
+  if (!geminiKey) throw new Error("GEMINI_NOT_CONFIGURED");
+  const schema = {
+    type: "OBJECT",
+    properties: {
+      title: { type: "STRING" },
+      subject: { type: "STRING" },
+      overview: { type: "STRING" },
+      slides: {
+        type: "ARRAY",
+        minItems: 3,
+        maxItems: 6,
+        items: {
+          type: "OBJECT",
+          properties: {
+            title: { type: "STRING" },
+            body: { type: "STRING" },
+            board_box: { type: "STRING" },
+            example: { type: "STRING" },
+            trap: { type: "STRING" },
+            classmate_questions: {
+              type: "ARRAY",
+              maxItems: 3,
+              items: {
+                type: "OBJECT",
+                properties: {
+                  q: { type: "STRING" },
+                  a: { type: "STRING" },
+                },
+                required: ["q", "a"],
+              },
+            },
+          },
+          required: ["title", "body", "board_box", "example", "trap", "classmate_questions"],
+        },
+      },
+      quiz: {
+        type: "ARRAY",
+        minItems: 1,
+        maxItems: 4,
+        items: {
+          type: "OBJECT",
+          properties: {
+            statement: { type: "STRING" },
+            options: { type: "ARRAY", minItems: 2, maxItems: 5, items: { type: "STRING" } },
+            correct_index: { type: "INTEGER", minimum: 0, maximum: 4 },
+            explanation: { type: "STRING" },
+          },
+          required: ["statement", "options", "correct_index", "explanation"],
+        },
+      },
+    },
+    required: ["title", "subject", "overview", "slides", "quiz"],
+  };
+  const models = await availableGeminiModels(geminiKey);
+  let lastError = "GEMINI_CLASSROOM_FAILED";
+  for (const model of models) {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 4096,
+          responseMimeType: "application/json",
+          responseSchema: schema,
+        },
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      lastError = `GEMINI_${response.status}:${data?.error?.message ?? "falha"}`;
+      if (response.status === 429 || response.status === 503 || response.status === 404 || response.status === 400) continue;
+      throw new Error(lastError);
+    }
+    const parts = Array.isArray(data?.candidates?.[0]?.content?.parts)
+      ? data.candidates[0].content.parts.filter((part: any) => !part?.thought)
+      : [];
+    const answer = (parts.length ? parts : data?.candidates?.[0]?.content?.parts || []).map((part: { text?: string }) => part.text ?? "").join("").trim();
+    if (answer) return { answer, model, provider: "gemini" };
   }
   throw new Error(lastError);
 }
@@ -858,10 +944,16 @@ CONTRATO ESTRITO DO MODO SOLICITADO (${mode}):
     let result: { answer: string; model: string; provider: string } | null = null;
     let keySource: "personal" | "shared" = personalGeminiKey ? "personal" : "shared";
 
+    const isClassroomMode = mode.toLowerCase() === "aula interativa estruturada";
+    const classroomSystemPrompt = `Você é o Invocador, professor estruturador da Jornada do Caçador. Responda APENAS com JSON válido conforme o schema solicitado (sem markdown, sem comentários fora do JSON e sem links de rodapé). Regras inegociáveis: nunca invente artigo de lei, súmula, julgado ou percentual de banca; todas as questões do mini-quiz são estritamente formativas e devem ter correct_index válido dentro das opções fornecidas.`;
+    const effectiveSystemPrompt = isClassroomMode ? classroomSystemPrompt : systemPrompt;
+
     // Prioriza Gemini primeiro (chave pessoal ou compartilhada) para maior precisão jurídica e pesquisa
     if (personalGeminiKey) {
       try {
-        result = await askGemini(systemPrompt, userPrompt, personalGeminiKey);
+        result = isClassroomMode
+          ? await askStructuredClassroom(classroomSystemPrompt, userPrompt, personalGeminiKey)
+          : await askGemini(systemPrompt, userPrompt, personalGeminiKey);
         keySource = "personal";
       } catch (personalErr) {
         console.warn("Chave Gemini pessoal falhou; tentando Gemini compartilhado", personalErr);
@@ -869,7 +961,9 @@ CONTRATO ESTRITO DO MODO SOLICITADO (${mode}):
     }
     if (!result && GEMINI_API_KEY) {
       try {
-        result = await askGemini(systemPrompt, userPrompt, GEMINI_API_KEY);
+        result = isClassroomMode
+          ? await askStructuredClassroom(classroomSystemPrompt, userPrompt, GEMINI_API_KEY)
+          : await askGemini(systemPrompt, userPrompt, GEMINI_API_KEY);
         keySource = "shared";
       } catch (sharedGeminiErr) {
         console.warn("Gemini compartilhado falhou; tentando reserva", sharedGeminiErr);
@@ -878,11 +972,11 @@ CONTRATO ESTRITO DO MODO SOLICITADO (${mode}):
 
     if (!result) {
       try {
-        result = await askDeepSeek(systemPrompt, userPrompt);
+        result = await askDeepSeek(effectiveSystemPrompt, userPrompt);
         keySource = "shared";
       } catch (deepSeekError) {
         console.warn("DeepSeek indisponível; acionando Groq", deepSeekError);
-        result = await askGroq(systemPrompt, userPrompt);
+        result = await askGroq(effectiveSystemPrompt, userPrompt);
         keySource = "shared";
       }
     }

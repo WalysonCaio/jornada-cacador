@@ -60,7 +60,7 @@
     for(const match of raw.matchAll(/(?:^|\n)[ \t]*(BLOCO[ \t]+\d+(?:[ \t]+\d+\.)?)[ \t]*(?=\r?\n|$)/g))add(match.index+match[0].indexOf(match[1]),'block_header');
     const command=/\b(?:Assinale[ \t\r\n]+(?:a|o)[ \t\r\n]+(?:alternativa|opção|item)\b|Julgue[ \t\r\n]+(?:os?[ \t\r\n]+)?itens?\b|Marque[ \t\r\n]+(?:a|o)[ \t\r\n]+(?:opção|alternativa|item)\b)/gi;
     for(const match of raw.matchAll(command))add(match.index,'following_question',Boolean(optionSequence(labels.filter(label=>label.index>match.index))));
-    for(const match of raw.matchAll(/\((?:FUNCAB|AOCP|CESPE|CEBRASPE|FGV|FCC|VUNESP|IBFC)\)[ \t\r\n]+/gi))add(match.index,'following_board_question',Boolean(optionSequence(labels.filter(label=>label.index>match.index))));
+    for(const match of raw.matchAll(/\((?:FUNCAB|INSTITUTO[ \t]+AOCP|AOCP|CESPE|CEBRASPE|FGV|FCC|VUNESP|IBFC|IDECAN|UPENET|IAUPE|UPENET\/IAUPE|QUADRIX|CONSULPLAN|IADES|FAPEC|FUNDATEC|OBJETIVA|NUCEPE|SELECON)\)[ \t\r\n]+/gi))add(match.index,'following_board_question',Boolean(optionSequence(labels.filter(label=>label.index>match.index))));
     const sequence=optionSequence(labels);
     if(sequence){
       const prefix=raw.slice(0,sequence.index);

@@ -7,15 +7,24 @@
   // option order, and optionally compare a collection independently of row order.
   function signature(value,unordered=false){
     const imul=Math.imul;
-    const encode=item=>{
-      if(Array.isArray(item))return '['+item.map(encode).join(',')+']';
-      if(item&&typeof item==='object')return '{'+Object.keys(item).filter(key=>!key.startsWith('_')&&!['communitySourceSignature','communitySourceScopeKey'].includes(key)).sort().map(key=>JSON.stringify(key)+':'+encode(item[key])).join(',')+'}';
-      return JSON.stringify(item)??'null';
+    const hashStr=(str,st)=>{for(let i=0;i<str.length;i++){const c=str.charCodeAt(i);st.a=imul(st.a^c,16777619);st.b=imul(st.b,33)^c;st.len++;}};
+    const feed=(item,st)=>{
+      if(Array.isArray(item)){hashStr('[',st);for(let i=0;i<item.length;i++){if(i)hashStr(',',st);feed(item[i],st);}hashStr(']',st);return;}
+      if(item&&typeof item==='object'){
+        hashStr('{',st);
+        const keys=Object.keys(item).filter(key=>!key.startsWith('_')&&key!=='communitySourceSignature'&&key!=='communitySourceScopeKey').sort();
+        for(let i=0;i<keys.length;i++){if(i)hashStr(',',st);hashStr(JSON.stringify(keys[i])+':',st);feed(item[keys[i]],st);}
+        hashStr('}',st);return;
+      }
+      hashStr(JSON.stringify(item)??'null',st);
     };
-    const text=unordered&&Array.isArray(value)?'['+value.map(encode).sort().join(',')+']':encode(value);
-    let a=2166136261,b=5381;
-    for(let i=0;i<text.length;i++){const c=text.charCodeAt(i);a=imul(a^c,16777619);b=imul(b,33)^c}
-    return `${text.length}:${a>>>0}:${b>>>0}`;
+    if(unordered&&Array.isArray(value)){
+      const itemHashes=value.map(item=>{const s={a:2166136261,b:5381,len:0};feed(item,s);return `${s.len}:${s.a>>>0}:${s.b>>>0}`;}).sort();
+      const st={a:2166136261,b:5381,len:0};hashStr('[',st);for(let i=0;i<itemHashes.length;i++){if(i)hashStr(',',st);hashStr(itemHashes[i],st);}hashStr(']',st);
+      return `${value.length}:${st.a>>>0}:${st.b>>>0}`;
+    }
+    const st={a:2166136261,b:5381,len:0};feed(value,st);
+    return `${st.len}:${st.a>>>0}:${st.b>>>0}`;
   }
 
   // The scheduler is independent from the DOM so that context changes can be
@@ -27,10 +36,14 @@
     const readInputs=()=>options.readInputs?.()||null;
     function changedInputs(next){return next&&(!inputSnapshot||next.length!==inputSnapshot.length||next.some((value,index)=>!Object.is(value,inputSnapshot[index])))}
     function invalidate(){revision++;generation++;pending=null;rendered.clear();inputSnapshot=readInputs()}
-    function synchronize(){
+    function synchronizeScope(){
       const next=key();
-      if(next!==scopeKey){scopeKey=next;active='resolver';generation++;pending=null;rendered.clear();mounted.clear();inputSnapshot=readInputs();options.onScopeChange?.()}
-      else{const inputs=readInputs();if(changedInputs(inputs))invalidate()}
+      if(next!==scopeKey){scopeKey=next;active='resolver';generation++;pending=null;rendered.clear();mounted.clear();inputSnapshot=null;options.onScopeChange?.();return true;}
+      return false;
+    }
+    function synchronize(){
+      if(synchronizeScope()){inputSnapshot=readInputs();return;}
+      const inputs=readInputs();if(changedInputs(inputs))invalidate();
     }
     function request(panel){
       synchronize();
@@ -73,11 +86,11 @@
         if(active==='desempenho'){generation++;pending=null}
       },
       get revision(){return revision},
-      get active(){synchronize();return active},
+      get active(){synchronizeScope();return active},
       isMounted(panel){return mounted.has(panel)},
       isRendering(panel){return rendering===panel},
-      isActive(panel){synchronize();return active===panel&&options.isVisible()},
-      scopeKey(){synchronize();return scopeKey}
+      isActive(panel){synchronizeScope();return active===panel&&options.isVisible()},
+      scopeKey(){synchronizeScope();return scopeKey}
     };
   }
 

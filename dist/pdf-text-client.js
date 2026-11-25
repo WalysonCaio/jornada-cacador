@@ -751,7 +751,7 @@
       const chars = Number(meta?.meaningfulCharacters || 0);
       if (diagBox) {
         diagBox.innerHTML = `
-          <div><b>Arquivo:</b> ${String(doc?.title || "PDF").replace(/</g, "&lt;")}</div>
+          <div><b>Arquivo:</b> ${String(doc?.title || "PDF").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]))}</div>
           <div style="margin-top:4px"><b>Diagnóstico do filtro:</b> Detectamos que este arquivo possui <b>${totalP} página(s)</b>, mas apenas <b>${chars} caracteres</b> de texto selecionável (arquivo escaneado como imagem/foto).</div>
           <div style="margin-top:6px;color:#fff">⚠️ <b>Atenção ao uso de tokens:</b> Para transformar páginas escaneadas em questões, flashcards ou missões, é necessário usar o conversor de leitura óptica (OCR) da IA, que consome tokens da sua cota. Deseja prosseguir?</div>
         `;
@@ -916,7 +916,8 @@
           const x = Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0;
           return x >= midX - 6 && x <= midX + 90;
         }).length;
-        const isTwoColumnPage = ["prova", "simulado"].includes(String(doc.document_type || "")) && leftColCount >= 10 && rightColCount >= 10;
+        const isQuestionDoc = ["prova", "simulado"].includes(String(doc.document_type || "")) || (["material", "anotacao"].includes(String(doc.document_type || "")) && /\b(provas?|simulados?|quest[oõ]es?)\b/i.test(String(doc.title || "")));
+        const isTwoColumnPage = isQuestionDoc && leftColCount >= 10 && rightColCount >= 10;
         const rowGroups = isTwoColumnPage
           ? [
               ...groupPdfTextItemsIntoRows(filteredItems.filter((it) => (Array.isArray(it.transform) && Number.isFinite(it.transform[4]) ? it.transform[4] : 0) < midX - 6)),
@@ -933,7 +934,7 @@
           if(!preserveSourceText)rowTxt = stripChrome(rowTxt);
           if (!rowTxt || (!preserveSourceText&&(/^\d{1,3}$/.test(rowTxt)||isWatermarkItem(rowTxt)))) continue;
           const prevLine = pageLines.length ? pageLines[pageLines.length - 1] : "";
-          if (minX >= 47 && minX <= 59 && /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]/.test(rowTxt) && /[.:;]$/.test(prevLine)) {
+          if (!preserveSourceText && minX >= 47 && minX <= 59 && /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]/.test(rowTxt) && /[.:;]$/.test(prevLine)) {
             pageLines.push(`• ${rowTxt}`);
           } else {
             pageLines.push(rowTxt);

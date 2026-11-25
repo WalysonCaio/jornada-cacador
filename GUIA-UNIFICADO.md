@@ -1,5 +1,5 @@
-> Versão atual r186: [Questões, sincronização e publicação](docs/revisao-r186/LEIA-ME.md). O conteúdo abaixo registra os recursos anteriores preservados.
-# Jornada do Caçador — Guia Unificado (r186)
+> Versão atual r189 (evolução sobre r188/r186): [Questões, sincronização e publicação](docs/revisao-r186/LEIA-ME.md). O conteúdo abaixo registra os recursos anteriores preservados.
+# Jornada do Caçador — Guia Unificado (r189)
 
 Revisão de 23/11/2026. [Aplicação da versão, GitHub e Supabase](docs/revisao-r186/LEIA-ME.md) · [Conferência do relato do Gemini e limites](docs/revisao-r186/CONFERENCIA.md) · [Validação](docs/revisao-r186/VALIDACAO.txt).
 

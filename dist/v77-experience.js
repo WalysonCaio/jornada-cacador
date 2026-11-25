@@ -4254,11 +4254,11 @@
     }
     if(!q('#questionBattleMode')){
       filters.insertAdjacentHTML('beforeend',`<label class="field">Modo de aprendizado<select id="questionBattleMode"><option value="progressive">Desafio progressivo (Fácil → Difícil)</option><option value="balanced">Equilibrado (Mistura níveis)</option><option value="errors">Reforço automático (Meus erros)</option></select></label>`);
-      q('#questionBattleMode')?.addEventListener('change',updateQuestionPool);
+      const bm=q('#questionBattleMode');if(bm&&!bm.dataset.jcBound){bm.dataset.jcBound='1';bm.addEventListener('change',updateQuestionPool);}
     }
     if(!q('#questionHistoryFilter')){
       filters.insertAdjacentHTML('beforeend',`<label class="field">Filtro TEC / Caderno<select id="questionHistoryFilter"><option value="all">Todas do banco</option><option value="answered">✓ Resolvidas</option><option value="unanswered">✨ Apenas inéditas (não resolvidas)</option><option value="wrong">❌ Questões que errei</option><option value="correct">✅ Questões que acertei</option><option value="favorites">⭐ Minhas favoritas</option></select></label>`);
-      q('#questionHistoryFilter')?.addEventListener('change',updateQuestionPool);
+      const hf=q('#questionHistoryFilter');if(hf&&!hf.dataset.jcBound){hf.dataset.jcBound='1';hf.addEventListener('change',updateQuestionPool);}
     }
     const trainer=q('.questionTrainer');
     if(trainer&&!q('#trainerQuickActions')){
@@ -5110,10 +5110,11 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       const verified=Boolean(item.verified_by&&item.verified_at);
       normaMetaEl.textContent=`⚖️ Referência sugerida: ${nb} · ${verified?`Conferência informada: ${item.verified_at}`:'Conferência documental pendente'}`;
     }
-    const figUrl=item.figure_data_url||item.image_url||(state?.questionFigures?.[typeof questionFingerprint==='function'?questionFingerprint(item):'']||'');
+    const rawFigUrl=item.figure_data_url||item.image_url||(state?.questionFigures?.[typeof questionFingerprint==='function'?questionFingerprint(item):'']||'');
+    const figUrl=typeof window.jcSafeImageSrc==='function'?window.jcSafeImageSrc(rawFigUrl):(/^https?:\/\//i.test(String(rawFigUrl||''))||/^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(String(rawFigUrl||''))?String(rawFigUrl):'');
     const stmtForVis=String(item.statement||'').replace(/\b(?:quadro[\s-]negro|quadro\s+de\s+\w+|quadro\s+cl[íi]nico|quadro\s+funcional|tabela[\s-]verdade|diagramas?\s+l[óo]gicos?|mapa\s+do\s+edital|mapa\s+mental)\b/gi,' ');const needsVisualCue=/\b(?:(?:observe|analise|veja|conforme|segundo|de\s+acordo\s+com|na|no|da|do|pela|pelo)\s+(?:a\s+|o\s+)?(?:figura|imagem|gr[áa]fico|tabela|planilha|charge|tirinha)|(?:figura|imagem|gr[áa]fico|tabela|quadro|diagrama)\s+(?:abaixo|a\s+seguir|\d+)|charge\s+(?:abaixo|a\s+seguir)|tirinha\s+(?:abaixo|a\s+seguir))\b/i.test(stmtForVis);
     const figHtml=figUrl
-      ?`<div class="questionFigureBox" style="margin:10px 0;padding:10px;border-radius:12px;background:#071320;border:1px solid rgba(56,189,248,0.35);text-align:center;"><img src="${figUrl}" alt="Figura da questão" style="max-width:100%;max-height:280px;border-radius:8px;margin:0 auto;display:block;"><div class="small muted" style="margin-top:6px;">🖼️ Figura/Tabela extraída do documento original</div></div>`
+      ?`<div class="questionFigureBox" style="margin:10px 0;padding:10px;border-radius:12px;background:#071320;border:1px solid rgba(56,189,248,0.35);text-align:center;"><img src="${escText(figUrl)}" alt="Figura da questão" style="max-width:100%;max-height:280px;border-radius:8px;margin:0 auto;display:block;"><div class="small muted" style="margin-top:6px;">🖼️ Figura/Tabela extraída do documento original</div></div>`
       :(needsVisualCue?`<div class="questionFigureBox" style="margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(14,34,56,0.65);border:1px dashed rgba(56,189,248,0.4);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><span class="small muted">🖼️ Esta questão menciona uma figura, tabela ou gráfico:</span><label class="ghost small" style="width:auto;padding:4px 10px;font-size:11px;cursor:pointer;margin:0;">📎 Anexar Figura da Questão<input type="file" accept="image/*" id="attachQuestionFigureInput" hidden></label></div>`:'');
     q('#questionText').innerHTML=questionAnswerNotice(item)+formatStatementWithHighlights(item.statement,item)+figHtml;
     const figInput=q('#attachQuestionFigureInput');
@@ -6798,6 +6799,51 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       return "Língua Portuguesa";
     }
 
+    if (/administrativo/.test(sub)) {
+      if (/\b(?:limpe|legalidade|impessoalidade|moralidade|publicidade|eficiencia|principios? da administracao)\b/i.test(s)) return "Princípios da Administração Pública (LIMPE)";
+      if (/\b(?:ato administrativo|atos administrativos|atributos|presuncao de legitimidade|autoexecutoriedade|imperatividade|revogacao|anulacao|convalidacao)\b/i.test(s)) return "Atos Administrativos";
+      if (/\b(?:poder de policia|poder disciplinar|poder hierarquico|poder regulamentar|poder vinculado|poder discricionario|abuso de poder)\b/i.test(s)) return "Poderes Administrativos";
+      if (/\b(?:licitac(?:ao|oes)|pregao|dispensa|inexigibilidade|14\.?133|8\.?666|contrato administrativo)\b/i.test(s)) return "Licitações e Contratos (Lei 14.133/2021)";
+      if (/\b(?:improbidade|8\.?429|enriquecimento ilicito|lesao ao erario)\b/i.test(s)) return "Improbidade Administrativa";
+      if (/\b(?:autarquia|fundacao publica|empresa publica|sociedade de economia mista|administracao indireta|descentralizacao|desconcentracao)\b/i.test(s)) return "Organização da Administração Pública";
+      if (/\b(?:responsabilidade civil do estado|teoria do risco administrativo|acao regressiva|art\.?\s*37\s*§\s*6)\b/i.test(s)) return "Responsabilidade Civil do Estado";
+      if (/\b(?:servidor publico|agentes? publicos?|cargo publico|estabilidade|estagio probatorio|pad|sindicancia)\b/i.test(s)) return "Agentes Públicos e Regime Disciplinar";
+      return "Direito Administrativo Geral";
+    }
+
+    if (/informatica|tecnologia/.test(sub)) {
+      if (/\b(?:phishing|ransomware|malware|trojan|firewall|criptografia|assinatura digital|certificado digital|seguranca da informacao|backup|engenharia social)\b/i.test(s)) return "Segurança da Informação";
+      if (/\b(?:tcp\/ip|http|https|dns|dhcp|smtp|imap|pop3|ftp|vpn|roteador|intranet|extranet|protocolo|rede)\b/i.test(s)) return "Redes de Computadores e Internet";
+      if (/\b(?:excel|calc|planilha|procv|procx|somase|celula|formula|grafico)\b/i.test(s)) return "Planilhas Eletrônicas (Excel / Calc)";
+      if (/\b(?:word|writer|editor de texto|mala direta|atalho|ctrl\+)\b/i.test(s)) return "Editores de Texto e Produtividade";
+      if (/\b(?:windows|linux|sistema operacional|diretorio|arquivo|terminal|permissao|kernel)\b/i.test(s)) return "Sistemas Operacionais (Windows e Linux)";
+      if (/\b(?:nuvem|cloud|saas|paas|iaas|banco de dados|sql|navegador|browser|cookie)\b/i.test(s)) return "Computação em Nuvem e Navegadores";
+      return "Informática para Concursos";
+    }
+
+    if (/extravagante|legislacao/.test(sub)) {
+      if (/\b(?:maria da penha|11\.?340|violencia domestica|medida protetiva)\b/i.test(s)) return "Lei Maria da Penha (Lei 11.340/2006)";
+      if (/\b(?:drogas|11\.?343|trafico|entorpecente)\b/i.test(s)) return "Lei de Drogas (Lei 11.343/2006)";
+      if (/\b(?:desarmamento|10\.?826|porte ilegal|posse irregular|arma de fogo)\b/i.test(s)) return "Estatuto do Desarmamento (Lei 10.826/2003)";
+      if (/\b(?:abuso de autoridade|13\.?869)\b/i.test(s)) return "Lei de Abuso de Autoridade (Lei 13.869/2019)";
+      if (/\b(?:hediond|8\.?072|tortura|9\.?455)\b/i.test(s)) return "Crimes Hediondos e Lei de Tortura";
+      if (/\b(?:eca|8\.?069|crianca e do adolescente|ato infracional)\b/i.test(s)) return "Estatuto da Criança e do Adolescente (ECA)";
+      if (/\b(?:transito|ctb|9\.?503|embriaguez ao volante|cnh)\b/i.test(s)) return "Código de Trânsito Brasileiro (CTB)";
+      return "Legislação Extravagante";
+    }
+
+    if (/direitos humanos/.test(sub)) {
+      if (/\b(?:declaracao universal|dudh|1948|onu)\b/i.test(s)) return "Declaração Universal dos Direitos Humanos";
+      if (/\b(?:san jose|pacto de san jose|convencao americana|corte interamericana)\b/i.test(s)) return "Pacto de San José da Costa Rica";
+      if (/\b(?:regras de mandela|preso|tratamento de reclusos|uso da forca)\b/i.test(s)) return "Regras de Mandela e Uso da Força";
+      return "Direitos Humanos";
+    }
+
+    if (/militar|etica/.test(sub)) {
+      if (/\b(?:hierarquia|disciplina|transgressao disciplinar|estatuto dos militares|cpm|crime militar|desercao|insubordinacao)\b/i.test(s)) return "Direito Militar, Hierarquia e Disciplina";
+      if (/\b(?:etica|1\.?171|comissao de etica|decoro|deontologia)\b/i.test(s)) return "Ética no Serviço Público";
+    }
+
     return num ? `Questão ${num} · ${subject || 'Geral'}` : (subject || 'Geral');
   }
   window.inferQuestionPedagogicalTopic = inferQuestionPedagogicalTopic;
@@ -6903,8 +6949,11 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     for(let i=0;i<cands.length;i++){
       const c=cands[i],end=i+1<cands.length?cands[i+1].index:body.length;
       const last=blocks[blocks.length-1];
-      // Numeração de afirmativas dentro do enunciado ("1. ... 2. ...") não abre questão nova.
-      if(last&&(c.num<=last.num||(!explicitMode&&!isCE&&countOptions(last.text)<2))){last.text+='\n'+body.slice(c.index,end).trim();last.end=end;continue}
+      // Numeração de afirmativas dentro do enunciado ("1. ... 2. ...") não abre questão nova,
+      // exceto quando há troca explícita de seção/disciplina com questão anterior já completa (≥2 opções).
+      const nextSec=sectionAt(c.bodyStart);
+      const restartedNewSection=Boolean(last&&explicitMode&&nextSec&&last.sectionSubject&&nextSec!==last.sectionSubject&&countOptions(last.text)>=2);
+      if(last&&!restartedNewSection&&(c.num<=last.num||(!explicitMode&&!isCE&&countOptions(last.text)<2))){last.text+='\n'+body.slice(c.index,end).trim();last.end=end;continue}
       const rawBlock=body.slice(c.bodyStart,end);
       blocks.push({num:c.num,start:c.bodyStart,end:end-(rawBlock.length-rawBlock.trimEnd().length),sectionSubject:sectionAt(c.bodyStart),text:rawBlock.trim()});
     }
@@ -8427,8 +8476,12 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   }
 
   function bindQuestionCenter(){
-    q('#questionSubject')?.addEventListener('change',()=>{populateTopicFilter();updateQuestionPool()});
-    for(const selector of ['#questionDifficulty','#questionOrigin','#questionBattleMode','#questionHistoryFilter'])q(selector)?.addEventListener('change',updateQuestionPool);
+    const subj=q('#questionSubject');
+    if(subj&&!subj.dataset.jcBound){subj.dataset.jcBound='1';subj.addEventListener('change',()=>{populateTopicFilter();updateQuestionPool()});}
+    for(const selector of ['#questionDifficulty','#questionOrigin']){
+      const el=q(selector);
+      if(el&&!el.dataset.jcBound){el.dataset.jcBound='1';el.addEventListener('change',updateQuestionPool);}
+    }
     if(q('#startQuestions'))q('#startQuestions').onclick=startFilteredBattle;
   }
 
@@ -13264,12 +13317,14 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   setInterval(()=>{
     if(cloudSession&&navigator.onLine&&document.visibilityState==='visible'){
       const chatActive=Boolean(q('#guildChatDialog')?.open||q('#duel')?.classList.contains('active'));
-      if(!chatActive){
-        if(!activeDuelSession)loadDuelArenaHub(true);
-        if(!guildChatState.wsConnected)loadGuildChatMessages(true);
+      const studyBusy=Boolean(document.querySelector('dialog[open]')||(typeof activeQuestions!=='undefined'&&activeQuestions)||(typeof activeSimulado!=='undefined'&&activeSimulado)||(typeof activeLesson!=='undefined'&&activeLesson));
+      if(!chatActive&&!studyBusy){
+        const onHome=Boolean(q('#today')?.classList.contains('active')||q('#guild')?.classList.contains('active'));
+        if(onHome&&!activeDuelSession)loadDuelArenaHub(true);
+        if(onHome&&!guildChatState.wsConnected)loadGuildChatMessages(true);
       }
     }
-  },25000);
+  },60000);
   const remembered=(()=>{try{return sessionStorage.getItem(viewKey)}catch{return null}})();
   if(remembered&&q(`#${CSS.escape(remembered)}`)?.classList.contains('view'))openView(remembered);
   q('#aboutDialog .tag')&&(q('#aboutDialog .tag').textContent='Versão 78 · experiência orientada ao estudo');
@@ -15825,8 +15880,8 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
             const extSources = (typeof window.getTrustedExternalSources === 'function')
               ? window.getTrustedExternalSources(cleanSubj, topicLabel)
               : [];
-            const extLinksHtml = extSources.map(src => `
-              <a href="${src.url}" target="_blank" rel="noopener noreferrer" class="smartExternalRefLink" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:9px;background:rgba(7,19,32,0.85);border:1px solid rgba(56,189,248,0.28);color:#e2e8f0;text-decoration:none;font-size:.77rem;transition:border-color .2s">
+            const extLinksHtml = extSources.filter(src => typeof window.jcSafeUrl === 'function' ? Boolean(window.jcSafeUrl(src?.url)) : /^https?:\/\//i.test(String(src?.url || ''))).map(src => `
+              <a href="${escText(typeof window.jcSafeUrl === 'function' ? window.jcSafeUrl(src.url) : src.url)}" target="_blank" rel="noopener noreferrer" class="smartExternalRefLink" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:9px;background:rgba(7,19,32,0.85);border:1px solid rgba(56,189,248,0.28);color:#e2e8f0;text-decoration:none;font-size:.77rem;transition:border-color .2s">
                 <span><b>${escText(src.badge)}</b> · ${escText(src.name)}</span>
                 <span style="color:#38bdf8;font-weight:800;white-space:nowrap">Consultar Fonte ↗</span>
               </a>

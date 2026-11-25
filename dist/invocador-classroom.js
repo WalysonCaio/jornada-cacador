@@ -1,17 +1,23 @@
-// r188: Modo Aula Interativa do Invocador (inspirado no THU-MAIC/OpenMAIC, leve para Cloudflare + Supabase)
-// - 1 única chamada de IA gera 4-6 slides + quadro tático + dúvidas da turma + mini-quiz formativo (3 questões)
-// - Isolado por conta, portal e reset; descarta respostas tardias; exporta HTML offline 100% escapado contra XSS.
+// r189 (Onda 1): Modo Aula Interativa do Invocador — Blindagem de Parser, Escopo e Cancelamento
+// - Parser balanceado de JSON; nunca inventa gabarito (A) nem cacheia fallback/JSON quebrado.
+// - Isolado por conta (validando _ownerUserId), portal/campanha (incluindo dbId) e reset com AbortController + timeout.
 (() => {
   'use strict';
   const w = window;
   const STORE_KEY = 'jornada-invocador-classroom-v188';
+  const REQUEST_TIMEOUT_MS = 45000;
   let activeLesson = null;
   let activeSlideIndex = 0;
   let activePeerIdx = -1;
   let quizAnswers = {};
+  let slideMarks = {};
+  let draftTopic = '';
   let busy = false;
   let activeRequestToken = 0;
+  let activeAbortController = null;
+  let activeTimeoutId = null;
   let statusMessage = '';
+  let lastScopeKey = '';
 
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -26,20 +32,31 @@
   }
 
   function currentScope() {
-    let st = {}, sess = null;
+    let st = {}, sess = null, camp = null;
     try {
       st = typeof state === 'object' && state ? state : (w.state || {});
       sess = typeof cloudSession === 'object' && cloudSession ? cloudSession : (w.cloudSession || null);
+      camp = typeof activeCampaign === 'function' ? activeCampaign() : (typeof w.activeCampaign === 'function' ? w.activeCampaign() : null);
     } catch (_e) {}
-    const userId = String(sess?.user?.id || st._ownerUserId || 'guest');
+    const sessionUid = String(sess?.user?.id || '');
+    const ownerUid = String(st._ownerUserId || '');
+    const mismatch = Boolean(sessionUid && ownerUid && sessionUid !== ownerUid);
+    const userId = mismatch ? 'transition' : (sessionUid || ownerUid || 'guest');
     const campaignId = String(st.activeCampaignId || 'default');
+    const campaignDbId = String(camp?.dbId || '');
     const resetEpoch = Number(st._resetEpoch || 0);
-    return { userId, campaignId, resetEpoch, key: `${userId}::${campaignId}::${resetEpoch}` };
+    return { userId, campaignId, campaignDbId, resetEpoch, mismatch, key: `${userId}::${campaignId}::${campaignDbId}::${resetEpoch}` };
   }
 
   function sameScope(snap) {
     const now = currentScope();
-    return Boolean(snap && now.userId === snap.userId && now.campaignId === snap.campaignId && now.resetEpoch === snap.resetEpoch);
+    return Boolean(
+      snap && !snap.mismatch && !now.mismatch &&
+      now.userId === snap.userId &&
+      now.campaignId === snap.campaignId &&
+      now.campaignDbId === snap.campaignDbId &&
+      now.resetEpoch === snap.resetEpoch
+    );
   }
 
   function loadStore() {
@@ -55,6 +72,73 @@
       const entries = Object.entries(data || {}).slice(-25);
       localStorage.setItem(STORE_KEY, JSON.stringify(Object.fromEntries(entries)));
     } catch (_e) {}
+  }
+
+  function clearCache() {
+    try { localStorage.removeItem(STORE_KEY); } catch (_e) {}
+  }
+
+  function abortInFlight(reason = '') {
+    activeRequestToken++;
+    if (activeTimeoutId) {
+      try { clearTimeout(activeTimeoutId); } catch (_e) {}
+      activeTimeoutId = null;
+    }
+    if (activeAbortController) {
+      try { activeAbortController.abort(); } catch (_e) {}
+      activeAbortController = null;
+    }
+    busy = false;
+    if (reason) statusMessage = reason;
+  }
+
+  function syncScope() {
+    const snap = currentScope();
+    if (lastScopeKey && lastScopeKey !== snap.key) {
+      abortInFlight('');
+      activeLesson = null;
+      activeSlideIndex = 0;
+      activePeerIdx = -1;
+      quizAnswers = {};
+      slideMarks = {};
+      statusMessage = '';
+    }
+    lastScopeKey = snap.key;
+    renderClassroom();
+  }
+
+  function getWeakTopicSuggestions(limit = 4) {
+    let st = {};
+    try { st = typeof state === 'object' && state ? state : (w.state || {}); } catch (_e) {}
+    const cid = String(st.activeCampaignId || 'default');
+    const counts = new Map();
+    const errs = st.errors && typeof st.errors === 'object' ? Object.values(st.errors) : [];
+    for (const err of errs) {
+      if (!err || (err.campaignId && err.campaignId !== cid)) continue;
+      const topic = String(err.topic || '').trim();
+      const subject = String(err.subject || '').trim();
+      if (!topic || topic.length < 3 || /^quest[aã]o\s+\d+/i.test(topic)) continue;
+      const key = `${subject.toLowerCase()}::${topic.toLowerCase()}`;
+      const cur = counts.get(key) || { topic, subject, errors: 0 };
+      cur.errors += Math.max(1, Number(err.count || err.wrongCount || 1));
+      counts.set(key, cur);
+    }
+    const mastery = st.topicMastery && typeof st.topicMastery === 'object' ? Object.entries(st.topicMastery) : [];
+    for (const [k, m] of mastery) {
+      if (!m || (m.campaignId && m.campaignId !== cid && !k.startsWith(`${cid}::`))) continue;
+      const attempts = Number(m.attempts || 0), correct = Number(m.correct || 0);
+      if (attempts < 2) continue;
+      const wrong = Math.max(0, attempts - correct);
+      if (wrong < 1) continue;
+      const topic = String(m.topic || m.topicKey || '').trim();
+      const subject = String(m.subject || m.subjectKey || '').trim();
+      if (!topic || topic.length < 3) continue;
+      const key = `${subject.toLowerCase()}::${topic.toLowerCase()}`;
+      const cur = counts.get(key) || { topic, subject, errors: 0 };
+      cur.errors = Math.max(cur.errors, wrong);
+      counts.set(key, cur);
+    }
+    return [...counts.values()].sort((a, b) => b.errors - a.errors).slice(0, limit);
   }
 
   function gatherTopicContext(topicStr) {
@@ -107,22 +191,50 @@
     ].join('\n');
   }
 
-  function parseClassroomResponse(rawAnswer, fallbackTopic, fallbackSubject) {
-    const raw = String(rawAnswer || '').trim();
-    let parsed = null;
-    if (raw) {
-      const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-      const candidate = fenceMatch ? fenceMatch[1].trim() : raw;
-      const start = candidate.indexOf('{');
-      const end = candidate.lastIndexOf('}');
-      if (start !== -1 && end > start) {
-        try {
-          parsed = JSON.parse(candidate.slice(start, end + 1));
-        } catch (_e) {
-          parsed = null;
+  function extractBalancedJsonObject(rawText) {
+    const src = String(rawText || '').trim();
+    if (!src) return null;
+    const unwrapped = src.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+    const candidates = unwrapped !== src ? [unwrapped, src] : [src];
+    for (const text of candidates) {
+      let start = text.indexOf('{');
+      while (start !== -1) {
+        let depth = 0, inStr = false, escaped = false;
+        for (let i = start; i < text.length; i++) {
+          const ch = text[i];
+          if (inStr) {
+            if (escaped) escaped = false;
+            else if (ch === '\\') escaped = true;
+            else if (ch === '"') inStr = false;
+          } else {
+            if (ch === '"') inStr = true;
+            else if (ch === '{') depth++;
+            else if (ch === '}') {
+              depth--;
+              if (depth === 0) {
+                try {
+                  return JSON.parse(text.slice(start, i + 1));
+                } catch (_e) {
+                  break;
+                }
+              }
+            }
+          }
         }
+        start = text.indexOf('{', start + 1);
       }
     }
+    return null;
+  }
+
+  function looksLikeBrokenJson(raw) {
+    const t = String(raw || '').trim();
+    return /^(```json\s*)?\{/i.test(t) && /"slides"\s*:|"title"\s*:|"quiz"\s*:/i.test(t);
+  }
+
+  function parseClassroomResponse(rawAnswer, fallbackTopic, fallbackSubject) {
+    const raw = String(rawAnswer || '').trim();
+    const parsed = extractBalancedJsonObject(raw);
 
     if (parsed && Array.isArray(parsed.slides) && parsed.slides.length > 0) {
       const slides = parsed.slides.slice(0, 6).map((sl, idx) => ({
@@ -137,16 +249,21 @@
       })).filter(sl => sl.body || sl.board_box);
 
       const quiz = Array.isArray(parsed.quiz)
-        ? parsed.quiz.slice(0, 5).filter(q => q && q.statement && Array.isArray(q.options) && q.options.length >= 2).map(q => {
+        ? parsed.quiz.slice(0, 5).map(q => {
+            if (!q || !String(q.statement || '').trim() || !Array.isArray(q.options)) return null;
             const opts = q.options.slice(0, 5).map(o => String(o || '').trim()).filter(Boolean);
-            const idx = Number.isInteger(Number(q.correct_index)) && Number(q.correct_index) >= 0 && Number(q.correct_index) < opts.length ? Number(q.correct_index) : 0;
+            if (opts.length < 2) return null;
+            const rawIdx = q.correct_index;
+            if (rawIdx === null || rawIdx === undefined || String(rawIdx).trim() === '') return null;
+            const idx = Number(rawIdx);
+            if (!Number.isInteger(idx) || idx < 0 || idx >= opts.length) return null;
             return {
               statement: String(q.statement).trim(),
               options: opts,
               correct_index: idx,
               explanation: String(q.explanation || '').trim()
             };
-          })
+          }).filter(Boolean)
         : [];
 
       if (slides.length > 0) {
@@ -157,17 +274,30 @@
           slides,
           quiz,
           createdAt: new Date().toISOString(),
+          _isFallback: false,
           aiFormativeNotice: 'Prática formativa gerada por IA — não altera ranking, XP oficial nem substitui gabarito de banca.'
         };
       }
     }
 
-    // Fallback seguro caso o modelo devolva texto livre em vez de JSON
+    if (looksLikeBrokenJson(raw)) {
+      return {
+        title: String(fallbackTopic || 'Aula do Invocador').trim(),
+        subject: String(fallbackSubject || 'Estudo Direcionado').trim(),
+        overview: '',
+        slides: [],
+        quiz: [],
+        createdAt: new Date().toISOString(),
+        _isFallback: true,
+        _parseError: 'A resposta estruturada veio incompleta. Tente gerar novamente (não foi salva em cache).'
+      };
+    }
+
     const chunks = raw.split(/\n{2,}/).map(s => s.trim()).filter(Boolean).slice(0, 4);
     return {
       title: String(fallbackTopic || 'Aula do Invocador').trim(),
       subject: String(fallbackSubject || 'Estudo Direcionado').trim(),
-      overview: 'Aula estruturada a partir da explicação do Invocador.',
+      overview: 'Aula estruturada a partir da explicação textual do Invocador (não armazenada em cache).',
       slides: (chunks.length ? chunks : ['Conteúdo recebido sem divisão em slides.']).map((txt, idx) => ({
         title: `Bloco ${idx + 1}`,
         body: txt,
@@ -178,34 +308,46 @@
       })),
       quiz: [],
       createdAt: new Date().toISOString(),
+      _isFallback: true,
       aiFormativeNotice: 'Prática formativa gerada por IA — não altera ranking, XP oficial nem substitui gabarito de banca.'
     };
   }
 
-  function buildOfflineLessonHtml(lesson) {
+  function buildOfflineLessonHtml(lesson, marks = {}) {
     if (!lesson) return '';
-    const slidesHtml = (lesson.slides || []).map((sl, i) => `
+    const slidesHtml = (lesson.slides || []).map((sl, i) => {
+      const mark = marks[i] === 'understood' ? 'Dominado' : (marks[i] === 'review' ? 'Revisar depois' : '');
+      return `
       <section class="slide">
-        <h2>Slide ${i + 1}: ${esc(sl.title)}</h2>
+        <h2>Slide ${i + 1}: ${esc(sl.title)}${mark ? ` <span class="meta">· ${esc(mark)}</span>` : ''}</h2>
         <p>${esc(sl.body)}</p>
         ${sl.board_box ? `<pre class="board">${esc(sl.board_box)}</pre>` : ''}
         ${sl.example ? `<div class="box"><strong>Exemplo:</strong> ${esc(sl.example)}</div>` : ''}
         ${sl.trap ? `<div class="box trap"><strong>Pegadinha de prova:</strong> ${esc(sl.trap)}</div>` : ''}
         ${(sl.classmate_questions || []).length ? `<div class="peers"><strong>Dúvidas da turma:</strong><ul>${sl.classmate_questions.map(c => `<li><b>${esc(c.q)}</b> — ${esc(c.a)}</li>`).join('')}</ul></div>` : ''}
       </section>
-    `).join('');
+    `;
+    }).join('');
 
-    const quizHtml = (lesson.quiz || []).length ? `
+    const validQuiz = (lesson.quiz || []).filter(q =>
+      q && Array.isArray(q.options) && q.options.length >= 2 &&
+      Number.isInteger(Number(q.correct_index)) && Number(q.correct_index) >= 0 && Number(q.correct_index) < q.options.length
+    );
+
+    const quizHtml = validQuiz.length ? `
       <section class="slide">
         <h2>Mini-Quiz de Verificação (Prática Formativa)</h2>
         <p class="notice">${esc(lesson.aiFormativeNotice || 'Prática formativa gerada por IA.')}</p>
-        ${lesson.quiz.map((q, qi) => `
+        ${validQuiz.map((q, qi) => {
+          const safeIdx = Math.max(0, Math.min(q.options.length - 1, Number(q.correct_index)));
+          return `
           <div class="quiz">
             <p><b>${qi + 1}. ${esc(q.statement)}</b></p>
             <ol type="A">${q.options.map(o => `<li>${esc(o)}</li>`).join('')}</ol>
-            <details><summary>Ver resposta comentada</summary><p><b>Gabarito sugerido: ${String.fromCharCode(65 + Number(q.correct_index || 0))}</b> — ${esc(q.explanation)}</p></details>
+            <details><summary>Ver resposta comentada</summary><p><b>Gabarito sugerido: ${String.fromCharCode(65 + safeIdx)}</b> — ${esc(q.explanation)}</p></details>
           </div>
-        `).join('')}
+        `;
+        }).join('')}
       </section>
     ` : '';
 
@@ -221,7 +363,7 @@
   header,.slide{background:#0b182a;border:1px solid #1e3a5f;border-radius:14px;padding:18px 20px;margin-bottom:16px}
   h1,h2{color:#65e7ff;margin-top:0}
   .meta{color:#94a3b8;font-size:.86rem}
-  .board{background:#071422;border-left:4px solid #65e7ff;padding:12px 14px;border-radius:8px;white-space:pre-wrap;font-family:ui-monospace,monospace}
+  .board{background:#071422;border:1px solid #24466b;padding:12px 14px;border-radius:8px;white-space:pre-wrap;font-family:ui-monospace,monospace}
   .box{background:#0f223a;border:1px solid #24466b;border-radius:10px;padding:10px 12px;margin-top:10px}
   .box.trap{background:#2d1219;border-color:#9f1239}
   .peers{margin-top:12px;padding-top:10px;border-top:1px solid #1e3a5f}
@@ -246,7 +388,7 @@
 
   function exportOfflineHtml(lesson) {
     if (!lesson || typeof document === 'undefined') return false;
-    const html = buildOfflineLessonHtml(lesson);
+    const html = buildOfflineLessonHtml(lesson, slideMarks);
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -260,27 +402,46 @@
     return true;
   }
 
+  function cancelGeneration() {
+    if (!busy) return;
+    abortInFlight('Geração da aula cancelada.');
+    renderClassroom();
+  }
+
   async function generateLesson(topicInput, subjectInput = '') {
     const topic = String(topicInput || '').trim();
+    draftTopic = topic;
     if (topic.length < 3) {
       statusMessage = 'Informe um assunto ou tópico (mínimo 3 caracteres) para montar a aula.';
       renderClassroom();
       return null;
     }
     const snap = currentScope();
+    if (snap.mismatch) {
+      statusMessage = 'Aguarde a troca de conta finalizar para montar a aula.';
+      renderClassroom();
+      return null;
+    }
+    lastScopeKey = snap.key;
     const cacheId = `${snap.key}::${hashKey(topic.toLowerCase())}`;
     const store = loadStore();
-    if (store[cacheId] && store[cacheId].slides?.length) {
+    if (store[cacheId] && store[cacheId].slides?.length && !store[cacheId]._isFallback) {
       activeLesson = { ...store[cacheId], _scopeKey: snap.key };
       activeSlideIndex = 0;
       activePeerIdx = -1;
       quizAnswers = {};
+      slideMarks = {};
       statusMessage = 'Aula carregada do cache desta conta/portal sem consumir nova chamada de IA.';
       renderClassroom();
       return activeLesson;
     }
 
+    abortInFlight('');
     const reqToken = ++activeRequestToken;
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    activeAbortController = controller;
+    const timeoutId = controller ? setTimeout(() => { try { controller.abort(); } catch (_e) {} }, REQUEST_TIMEOUT_MS) : null;
+    activeTimeoutId = timeoutId;
     busy = true;
     statusMessage = 'Montando slides, quadro tático, dúvidas da turma e mini-quiz (1 chamada de IA)...';
     renderClassroom();
@@ -299,6 +460,7 @@
       const response = await fetch(`${base}/functions/v1/assistente-pmpe`, {
         method: 'POST',
         headers,
+        signal: controller?.signal,
         body: JSON.stringify({
           question: buildClassroomPrompt(topic, subjectInput),
           context,
@@ -314,26 +476,39 @@
       }
 
       const lesson = parseClassroomResponse(result?.answer || '', topic, subjectInput);
+      if (lesson._parseError || !lesson.slides.length) {
+        throw new Error(lesson._parseError || 'Não foi possível estruturar os slides desta aula. Tente novamente.');
+      }
       lesson._scopeKey = snap.key;
-      const nextStore = loadStore();
-      nextStore[cacheId] = lesson;
-      saveStore(nextStore);
+      if (!lesson._isFallback) {
+        const nextStore = loadStore();
+        nextStore[cacheId] = lesson;
+        saveStore(nextStore);
+      }
 
       activeLesson = lesson;
       activeSlideIndex = 0;
       activePeerIdx = -1;
       quizAnswers = {};
-      statusMessage = 'Aula pronta! Navegue pelos slides e teste seu domínio no mini-quiz ao final.';
+      slideMarks = {};
+      statusMessage = lesson._isFallback
+        ? 'Aula exibida em modo simplificado (sem cache). Você pode regerar para tentar o formato completo.'
+        : 'Aula pronta! Navegue pelos slides e teste seu domínio no mini-quiz ao final.';
       return lesson;
     } catch (error) {
       if (!sameScope(snap) || reqToken !== activeRequestToken) return null;
-      statusMessage = String(error?.message || error);
+      statusMessage = error?.name === 'AbortError'
+        ? 'Geração cancelada ou tempo esgotado. Tente novamente quando quiser.'
+        : String(error?.message || error);
       if (typeof w.toast === 'function') w.toast(statusMessage);
       return null;
     } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (activeTimeoutId === timeoutId) activeTimeoutId = null;
+      if (activeAbortController === controller) activeAbortController = null;
       if (reqToken === activeRequestToken) {
         busy = false;
-        if (sameScope(snap)) renderClassroom();
+        renderClassroom();
       }
     }
   }
@@ -349,9 +524,12 @@
       activeSlideIndex = 0;
       activePeerIdx = -1;
       quizAnswers = {};
+      slideMarks = {};
       statusMessage = '';
     }
+    lastScopeKey = snap.key;
 
+    const weakTopics = getWeakTopicSuggestions(4);
     const totalSteps = activeLesson ? activeLesson.slides.length + (activeLesson.quiz?.length ? 1 : 0) : 0;
     const isQuizStep = Boolean(activeLesson && activeLesson.quiz?.length && activeSlideIndex >= activeLesson.slides.length);
     const curSlide = activeLesson && !isQuizStep ? activeLesson.slides[activeSlideIndex] : null;
@@ -362,39 +540,51 @@
       if (curSlide) {
         const peers = curSlide.classmate_questions || [];
         const activePeer = activePeerIdx >= 0 && peers[activePeerIdx] ? peers[activePeerIdx] : null;
+        const isLastSlide = activeSlideIndex >= activeLesson.slides.length - 1;
+        const hasQuiz = Boolean(activeLesson.quiz?.length);
+        const curMark = slideMarks[activeSlideIndex] || '';
+        const okCnt = Object.values(slideMarks).filter(v => v === 'understood').length;
+        const revCnt = Object.values(slideMarks).filter(v => v === 'review').length;
         stageHtml = `
           <div class="jcClassroomStage">
             <div class="jcClassroomHead">
               <div>
-                <span class="tag">${esc(activeLesson.subject)}</span>
-                <h3 style="margin:6px 0 0">${esc(activeLesson.title)}</h3>
+                <div class="jcClassroomMeta">${esc(activeLesson.subject)} · Slide ${activeSlideIndex + 1} de ${activeLesson.slides.length}${okCnt || revCnt ? ` · ${okCnt} dominado(s) · ${revCnt} p/ revisar` : ''}</div>
+                <h3 style="margin:4px 0 0">${esc(activeLesson.title)}</h3>
               </div>
-              <span class="tag">Slide ${activeSlideIndex + 1} de ${activeLesson.slides.length}</span>
+              <div class="jcSlideMarkGroup" role="group" aria-label="Domínio deste slide">
+                <button type="button" class="jcSlideMarkBtn ${curMark === 'understood' ? 'active-ok' : ''}" data-jc-mark="understood">✓ Entendi</button>
+                <button type="button" class="jcSlideMarkBtn ${curMark === 'review' ? 'active-review' : ''}" data-jc-mark="review">⚑ Revisar depois</button>
+              </div>
             </div>
             <div class="jcClassroomProgressTrack"><div class="jcClassroomProgressFill" style="width:${pct}%"></div></div>
-            <h4 style="margin:0 0 8px;color:#65e7ff">${esc(curSlide.title)}</h4>
-            <p style="margin:0;line-height:1.6">${esc(curSlide.body)}</p>
+            <h4 style="margin:0 0 8px;color:#52d9f7">${esc(curSlide.title)}</h4>
+            <p style="margin:0;line-height:1.65">${esc(curSlide.body)}</p>
             ${curSlide.board_box ? `<div class="jcClassroomWhiteboard">${esc(curSlide.board_box)}</div>` : ''}
             ${(curSlide.example || curSlide.trap) ? `
               <div class="jcClassroomCallouts">
-                ${curSlide.example ? `<div class="jcClassroomCallout"><b>📌 Exemplo prático</b><br>${esc(curSlide.example)}</div>` : ''}
-                ${curSlide.trap ? `<div class="jcClassroomCallout trap"><b>⚠️ Pegadinha da banca</b><br>${esc(curSlide.trap)}</div>` : ''}
+                ${curSlide.example ? `<div class="jcClassroomCallout"><b>Exemplo prático</b><br>${esc(curSlide.example)}</div>` : ''}
+                ${curSlide.trap ? `<div class="jcClassroomCallout trap"><b>Pegadinha da banca</b><br>${esc(curSlide.trap)}</div>` : ''}
               </div>
             ` : ''}
             ${peers.length ? `
               <div class="jcPeerChipsWrap">
-                <div class="small muted"><b>💬 Dúvidas da turma neste slide (clique para ver a resposta):</b></div>
+                <div class="small muted"><b>Dúvidas frequentes neste slide:</b></div>
                 <div class="jcPeerChipsRow">
-                  ${peers.map((p, idx) => `<button type="button" class="jcPeerChipBtn ${idx === activePeerIdx ? 'active' : ''}" data-jc-peer="${idx}">🙋 ${esc(p.q)}</button>`).join('')}
+                  ${peers.map((p, idx) => `<button type="button" class="jcPeerChipBtn ${idx === activePeerIdx ? 'active' : ''}" data-jc-peer="${idx}">${esc(p.q)}</button>`).join('')}
                 </div>
-                ${activePeer ? `<div class="jcPeerAnswerBox"><b>🧙‍♂️ Invocador responde:</b> ${esc(activePeer.a)}</div>` : ''}
+                ${activePeer ? `<div class="jcPeerAnswerBox"><b>Invocador responde:</b> ${esc(activePeer.a)}</div>` : ''}
               </div>
             ` : ''}
             <div class="jcClassroomNavBar">
               <button type="button" class="ghost small" id="jcClassPrevBtn" ${activeSlideIndex === 0 ? 'disabled' : ''}>← Anterior</button>
               <div style="display:flex;gap:8px;flex-wrap:wrap">
-                <button type="button" class="ghost small" id="jcClassExportBtn">⬇️ Baixar aula offline (.html)</button>
-                <button type="button" class="action small" id="jcClassNextBtn" style="width:auto">${activeSlideIndex < activeLesson.slides.length - 1 ? 'Próximo slide →' : (activeLesson.quiz?.length ? 'Ir para Mini-Quiz →' : 'Concluir aula')}</button>
+                <button type="button" class="ghost small" id="jcClassExportBtn">Baixar aula offline (.html)</button>
+                ${!isLastSlide
+                  ? '<button type="button" class="action small" id="jcClassNextBtn" style="width:auto">Próximo slide →</button>'
+                  : (hasQuiz
+                    ? '<button type="button" class="action small" id="jcClassNextBtn" style="width:auto">Ir para Mini-Quiz →</button>'
+                    : '<button type="button" class="ghost small" id="jcClassRestartBtn" style="width:auto">Rever do início</button>')}
               </div>
             </div>
           </div>
@@ -407,13 +597,12 @@
           <div class="jcClassroomStage">
             <div class="jcClassroomHead">
               <div>
-                <span class="tag">VERIFICAÇÃO DE APRENDIZAGEM</span>
-                <h3 style="margin:6px 0 0">Mini-Quiz: ${esc(activeLesson.title)}</h3>
+                <div class="jcClassroomMeta">Verificação formativa · ${answeredCount}/${quiz.length} respondidas · ${correctCount} acerto(s)</div>
+                <h3 style="margin:4px 0 0">Mini-Quiz: ${esc(activeLesson.title)}</h3>
               </div>
-              <span class="tag">${answeredCount}/${quiz.length} respondidas · ${correctCount} acerto(s)</span>
             </div>
             <div class="jcClassroomProgressTrack"><div class="jcClassroomProgressFill" style="width:100%"></div></div>
-            <div class="jcClassroomNotice">ℹ️ ${esc(activeLesson.aiFormativeNotice)}</div>
+            <div class="jcClassroomNotice">${esc(activeLesson.aiFormativeNotice)}</div>
             ${quiz.map((q, qi) => {
               const chosen = quizAnswers[qi];
               const hasAns = chosen !== undefined;
@@ -432,26 +621,39 @@
             }).join('')}
             <div class="jcClassroomNavBar">
               <button type="button" class="ghost small" id="jcClassPrevBtn">← Voltar aos slides</button>
-              <button type="button" class="ghost small" id="jcClassExportBtn">⬇️ Baixar aula offline (.html)</button>
+              <button type="button" class="ghost small" id="jcClassExportBtn">Baixar aula offline (.html)</button>
             </div>
           </div>
         `;
       }
     }
 
+    const existingInput = root.querySelector('#jcClassroomTopicInput');
+    if (existingInput && existingInput.value) draftTopic = existingInput.value;
+
     root.innerHTML = `
       <div class="jcClassroomLauncher">
         <div class="jcClassroomHead">
           <div>
-            <div class="eyebrow" style="color:#65e7ff">SALA INTERATIVA · 1 CHAMADA DE IA</div>
-            <h3 style="margin:2px 0 0">🎓 Modo Aula Interativa do Invocador</h3>
+            <div class="jcClassroomMeta">Sala Interativa do Invocador · 1 chamada de IA · Prática formativa</div>
+            <h3 style="margin:4px 0 0">Aula Interativa do Invocador</h3>
           </div>
-          <span class="tag">Slides + Dúvidas + Quiz + Offline HTML</span>
         </div>
-        <p class="small muted" style="margin:0">Digite qualquer tema do edital para gerar uma micro-aula em slides com quadro-esquema, dúvidas típicas de prova e mini-quiz formativo.</p>
+        <p class="small muted" style="margin:0">Gere uma micro-aula em slides com quadro-esquema, dúvidas típicas de prova e mini-quiz formativo (sem alterar XP ou ranking oficial).</p>
+        ${weakTopics.length ? `
+          <div class="jcWeakTopicsBar">
+            <span class="small muted">Revisar tópicos com mais erros:</span>
+            <div class="jcWeakTopicsRow">
+              ${weakTopics.map(t => `<button type="button" class="jcWeakTopicBtn" data-jc-weak-topic="${esc(t.topic)}" data-jc-weak-subj="${esc(t.subject)}" ${busy ? 'disabled' : ''}>${esc(t.topic)} (${t.errors})</button>`).join('')}
+            </div>
+          </div>
+        ` : ''}
         <div class="jcClassroomForm">
-          <input type="text" id="jcClassroomTopicInput" placeholder="Ex.: Art. 144 CF/88, Crase obrigatória, Negação de Condicional..." ${busy ? 'disabled' : ''}>
-          <button type="button" class="action" id="jcClassroomStartBtn" style="width:auto" ${busy ? 'disabled' : ''}>${busy ? '⏳ Montando aula...' : '🎓 Gerar Aula'}</button>
+          <input type="text" id="jcClassroomTopicInput" value="${esc(draftTopic)}" placeholder="Ex.: Art. 144 CF/88, Crase obrigatória, Negação de Condicional..." ${busy ? 'disabled' : ''}>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="action" id="jcClassroomStartBtn" style="width:auto" ${busy ? 'disabled' : ''}>${busy ? 'Montando aula...' : 'Gerar Aula'}</button>
+            ${busy ? '<button type="button" class="ghost" id="jcClassroomCancelBtn" style="width:auto">Cancelar</button>' : ''}
+          </div>
         </div>
         ${statusMessage ? `<p class="small muted" style="margin:8px 0 0">${esc(statusMessage)}</p>` : ''}
         ${stageHtml}
@@ -459,9 +661,10 @@
     `;
 
     const startBtn = root.querySelector('#jcClassroomStartBtn');
+    const cancelBtn = root.querySelector('#jcClassroomCancelBtn');
     const topicInp = root.querySelector('#jcClassroomTopicInput');
-    if (startBtn && topicInp) {
-      startBtn.onclick = () => generateLesson(topicInp.value);
+    if (topicInp) {
+      topicInp.oninput = () => { draftTopic = topicInp.value; };
       topicInp.onkeydown = e => {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -469,6 +672,20 @@
         }
       };
     }
+    if (startBtn && topicInp) startBtn.onclick = () => generateLesson(topicInp.value);
+    if (cancelBtn) cancelBtn.onclick = () => cancelGeneration();
+
+    root.querySelectorAll('[data-jc-weak-topic]').forEach(btn => {
+      btn.onclick = () => generateLesson(btn.dataset.jcWeakTopic, btn.dataset.jcWeakSubj || '');
+    });
+
+    root.querySelectorAll('[data-jc-mark]').forEach(btn => {
+      btn.onclick = () => {
+        const val = btn.dataset.jcMark;
+        slideMarks[activeSlideIndex] = slideMarks[activeSlideIndex] === val ? '' : val;
+        renderClassroom();
+      };
+    });
 
     root.querySelectorAll('[data-jc-peer]').forEach(btn => {
       btn.onclick = () => {
@@ -492,6 +709,12 @@
         activePeerIdx = -1;
         renderClassroom();
       }
+    });
+
+    root.querySelector('#jcClassRestartBtn')?.addEventListener('click', () => {
+      activeSlideIndex = 0;
+      activePeerIdx = -1;
+      renderClassroom();
     });
 
     root.querySelector('#jcClassExportBtn')?.addEventListener('click', () => exportOfflineHtml(activeLesson));
@@ -524,11 +747,21 @@
     mount,
     renderClassroom,
     generateLesson,
+    cancelGeneration,
     parseClassroomResponse,
     buildOfflineLessonHtml,
     exportOfflineHtml,
-    currentScope
+    currentScope,
+    syncScope,
+    clearCache,
+    getWeakTopicSuggestions
   };
+
+  if (typeof w.addEventListener === 'function') {
+    for (const ev of ['jc:scope-changed', 'jc:account-changed', 'jc:campaign-changed', 'jc:progress-reset']) {
+      w.addEventListener(ev, syncScope);
+    }
+  }
 
   if (typeof document !== 'undefined') {
     const boot = () => mount();
