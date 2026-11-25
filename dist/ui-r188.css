@@ -429,3 +429,24 @@ body.lightAppTheme .sidebarCollapseBtn {
   white-space: nowrap;
   flex-shrink: 0;
 }
+
+/* r192: Badge PDF sem quebra em duas linhas + folga no cronômetro */
+#library .tag,
+#documentsList .tag,
+.libraryItem .tag,
+.docCard .tag,
+.docType,
+.fileTypeBadge,
+.docBadge,
+.pdfBadge,
+[class*="doc"] .tag {
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  min-width: max-content !important;
+  flex-shrink: 0 !important;
+}
+.timerDisplay,
+#timerDisplay,
+.focusClock {
+  padding-right: 6px;
+}

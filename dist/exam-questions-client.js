@@ -195,12 +195,20 @@
         detail: 'A resposta cadastrada coincidiu com a resolução independente da IA, mas não substitui gabarito oficial de banca.'
       };
     }
-    if (gs === 'ia' || item.key_source === 'ia_sugerido' || item.answer_unknown || item.correct_index === null || item.correct_index === undefined) {
+    if (gs === 'ia' || item.key_source === 'ia_sugerido' || item.answer_unknown || item.correct_index === null || item.correct_index === undefined || item.origin === 'autoral') {
       return {
         cls: 'pendente',
         icon: '⏳',
         label: 'Gabarito não confirmado',
         detail: 'Questão ainda aguardando validação ou sem gabarito oficial confirmado.'
+      };
+    }
+    if (isOfficialOrManual) {
+      return {
+        cls: 'verificada-oficial',
+        icon: '✓',
+        label: 'Gabarito verificado',
+        detail: 'Conferido contra fonte revisada/oficial.'
       };
     }
     return null;

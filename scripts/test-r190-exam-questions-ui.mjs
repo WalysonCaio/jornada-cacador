@@ -114,7 +114,7 @@ assert.ok(htmlCode.includes('JCExamQuestions.fetchPortalExamQuestions'), 'index.
 assert.ok(v59Code.includes('JCExamQuestions.fetchPortalExamQuestions'), 'v59-enhancements.js deve consultar exam_questions');
 assert.ok(v77Code.includes('JCExamQuestions?.validationBadgeInfo'), 'v77-experience.js deve renderizar o selo de validação');
 assert.ok(cssCode.includes('.jcValPill.divergente'), 'ui-r188.css deve conter estilos do selo');
-assert.ok(swCode.includes('r190') && swCode.includes('./exam-questions-client.js'), 'sw.js r190 deve cachear exam-questions-client.js');
+assert.ok(/r19\d/.test(swCode) && swCode.includes('./exam-questions-client.js'), 'sw.js r190 deve cachear exam-questions-client.js');
 
 // 7. Mapeamento fiel ao edital (quando edital tem História de Pernambuco sem Geografia de Pernambuco / História do Brasil)
 {

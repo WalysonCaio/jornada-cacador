@@ -4319,6 +4319,9 @@
       if(!sArr){sArr=[];bySubjBucket.set(itemSubjKey,sArr);}
       sArr.push(item);
       let cleanItemTopic=String(item.topic||'').trim();
+      if(subjKey==='lingua portuguesa'&&/^art\.?\s*\d+/i.test(cleanItemTopic)){
+        cleanItemTopic=typeof window.inferQuestionPedagogicalTopic==='function'?window.inferQuestionPedagogicalTopic(item.statement,'Língua Portuguesa'):'Língua Portuguesa';
+      }
       if(subjKey!=='all'&&cleanItemTopic&&typeof window.inferStrictQuestionSubjectDecision==='function'){
         const td=window.inferStrictQuestionSubjectDecision(cleanItemTopic,cleanItemTopic,subject,[],{});
         if(td?.subject&&td.confidence>=0.7&&topicKey(canonicalSubjectName(td.subject))!==subjKey){
@@ -17072,10 +17075,17 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       if (!err || typeof err !== 'object') continue;
       if (typeof isPlatformManualStudyArtifact==='function'&&isPlatformManualStudyArtifact({...err,id:k})) continue;
       if (err.campaignId && err.campaignId !== state.activeCampaignId) continue;
-      // Corrige disciplina se estiver com nome de arquivo (ex.: "500 Questões Pmpe")
-      const cleanSubj = typeof resolveStrictQuestionDiscipline === 'function'
-        ? resolveStrictQuestionDiscipline(err.question || '', err.topic || '', err.subject || '', err.options || [])
-        : (err.subject || 'Conteúdo Geral');
+      // Corrige disciplina a partir do enunciado real (ex.: Revolução Pernambucana 1817 salva como Direito Militar)
+      const errStmtText = err.question || err.statement || '';
+      let cleanSubj = err.subject || 'Conteúdo Geral';
+      if (errStmtText && typeof window.inferStrictQuestionSubjectDecision === 'function') {
+        const inferred = window.inferStrictQuestionSubjectDecision(errStmtText, err.topic || '', cleanSubj, err.options || [], {});
+        if (inferred?.subject && !isInvalidTrailSubject(inferred.subject) && inferred.confidence >= 0.7) {
+          cleanSubj = inferred.subject;
+        }
+      } else if (typeof resolveStrictQuestionDiscipline === 'function') {
+        cleanSubj = resolveStrictQuestionDiscipline(errStmtText, err.topic || '', cleanSubj, err.options || []);
+      }
       if (cleanSubj && cleanSubj !== err.subject) {
         err.subject = cleanSubj;
         changed = true;

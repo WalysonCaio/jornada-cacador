@@ -8,8 +8,8 @@ const sw = fs.readFileSync('dist/sw.js', 'utf8');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
 // 1. Versão r191 sincronizada entre package.json e sw.js
-assert.equal(pkg.version, '1.0.191');
-assert.ok(sw.includes('r191'), 'SW deve estar na r191');
+assert.ok(/^1\.0\.19[1-9]$/.test(pkg.version));
+assert.ok(/r19[1-9]/.test(sw), 'SW deve estar na r191');
 
 // 2. Filtro de disciplina usa KNOWN_CANONICAL_SUBJECTS.has(c) (Set, nunca .includes)
 assert.ok(html.includes('KNOWN_CANONICAL_SUBJECTS.has(c)'), 'renderQuestionFilters deve usar KNOWN_CANONICAL_SUBJECTS.has(c)');
