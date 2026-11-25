@@ -2296,6 +2296,35 @@ function normalizeLegalText(raw){
 window.normalizeLegalText=normalizeLegalText;
 var KNOWN_CANONICAL_SUBJECTS = window.KNOWN_CANONICAL_SUBJECTS;
 
+function activeEditalSubjectsSet(){
+  try{
+    const ms=(typeof state!=='undefined'&&Array.isArray(state?.customCampaign?.missions))?state.customCampaign.missions:[];
+    const set=new Set();
+    for(const m of ms){
+      const s=String(m?.subject||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+      if(s)set.add(s);
+    }
+    return set;
+  }catch{return new Set();}
+}
+function mapSubjectToActiveEdital(subj,contextText=''){
+  const s=String(subj||'').trim();
+  if(!s)return s;
+  const edital=activeEditalSubjectsSet();
+  if(!edital.size)return s;
+  const hasHistPE=edital.has('historia de pernambuco');
+  const hasGeoPE=edital.has('geografia de pernambuco');
+  const hasHistBR=edital.has('historia do brasil');
+  if(hasHistPE&&!hasGeoPE&&s==='Geografia de Pernambuco')return 'História de Pernambuco';
+  if(hasHistPE&&!hasHistBR&&s==='História do Brasil'){
+    const norm=String(contextText||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    if(/\b(pernambuco|olinda|recife|capitania|duarte coelho|acucar|engenho|holandes|nassau|mascates|guararapes|tabocas|palmares|brasil colonia|periodo colonial|capitanias hereditarias|sesmarias|governo geral)\b/.test(norm)){
+      return 'História de Pernambuco';
+    }
+  }
+  return s;
+}
+window.mapSubjectToActiveEdital=mapSubjectToActiveEdital;
 function canonicalSubjectName(value,contextHint=''){
   const mLen=(typeof state!=='undefined'&&Array.isArray(state?.customCampaign?.missions))?state.customCampaign.missions.length:0;
   const cKey=`${value||''}|${contextHint||''}|${mLen}`;
@@ -2493,7 +2522,7 @@ window.questionCommandParts=questionCommandParts;
 window.exclusiveQuestionSubjectEvidence=exclusiveQuestionSubjectEvidence;
 function inferStrictQuestionSubjectDecision(statement='',topic='',fallbackSubject='',options=[],context={}){
   const evidence=exclusiveQuestionSubjectEvidence(statement,topic,options,context?.associated_text||'',context?.command||'');
-  if(evidence.subject)return{subject:evidence.subject,confidence:evidence.conflict?0.35:0.95,ambiguous:evidence.conflict,candidates:[],source:evidence.source};
+  if(evidence.subject){const mappedEv=mapSubjectToActiveEdital(evidence.subject,`${statement} ${topic} ${Array.isArray(options)?options.join(' '):''}`);return{subject:mappedEv,confidence:evidence.conflict?0.35:0.95,ambiguous:evidence.conflict,candidates:[],source:evidence.source};}
   const analysisStatement=context?.associated_text||context?.command||/^Texto[- ]base\s*:/i.test(String(statement||''))?evidence.command:statement;
   const rawTopic=String(topic||'').trim();
   const isContaminatedGenericTopic=/^(?:direito constitucional geral|direito penal geral|direito processual penal|lingua portuguesa|raciocinio logico|geral|edital|regras do edital|quest[aã]o\s*\d+|item\s*\d+|simulado.*|corre[cç][aã]o de erro|ponto de aten[cç][aã]o|conte[uú]do.*)$/i.test(rawTopic);
@@ -2509,7 +2538,7 @@ function inferStrictQuestionSubjectDecision(statement='',topic='',fallbackSubjec
     ['Direito Penal',/\b(direito penal|codigo penal|teoria do crime|fato tipico|tipicidade|ilicitude|antijuridicidade|excludentes de ilicitude|legitima defesa|estado de necessidade|estrito cumprimento|exercicio regular de direito|culpabilidade|imputabilidade|inimputavel|menoridade penal|erro de tipo|erro de proibicao|coacao moral|obediencia hierarquica|concurso de pessoas|concurso de crimes|crime continuado|iter criminis|crime consumado|tentativa|desistencia voluntaria|arrependimento eficaz|arrependimento posterior|crime impossivel|crimes contra a pessoa|homicidio|feminicidio|lesao corporal|calunia|difamacao|injuria|crimes contra o patrimonio|furto|roubo|extorsao|estelionato|apropriacao indebita|receptacao|crimes contra a administracao publica|peculato|concussao|corrupcao passiva|corrupcao ativa|prevaricacao|condescendencia criminosa|advocacia administrativa|resistencia|desobediencia|desacato|reducao de pena|forma privilegiada|causa de diminuicao de pena|lei penal no tempo|lei penal no espaco|extincao da punibilidade)\b/g],
     ['Direito Administrativo',/\b(direito administrativo|principios administrativos|principio da legalidade|impessoalidade|moralidade administrativa|eficiencia|regime juridico administrativo|supremacia do interesse publico|atos administrativos|anulacao e revogacao|convalidacao|poderes administrativos|poder de policia|poder hierarquico|poder disciplinar|poder regulamentar|improbidade administrativa|enriquecimento ilicito|lesao ao erario|8 429|licitacoes e contratos|dispensa de licitacao|inexigibilidade|14 133|administracao direta e indireta|descentralizacao|desconcentracao|autarquias|empresa publica|sociedade de economia mista|responsabilidade civil do estado|teoria do risco administrativo|servicos publicos|processo administrativo|9 784|agentes publicos|servidores publicos|provimento e vacancia|estagio probatorio|reintegracao|reconducao|readaptacao|bens publicos|prazo de alienacao)\b/g],
     ['Direitos Humanos',/\b(direitos humanos|declaracao universal dos direitos|dudh|assembleia geral da onu|pacto de san jose|convencao americana|corte interamericana|comissao interamericana|regras de nelson mandela|regras de mandela|regras de bangkok|uso progressivo da forca|sistema interamericano|tratados internacionais de direitos humanos|geracoes de direitos|dimensoes de direitos|bloco de constitucionalidade)\b/g],
-    ['História de Pernambuco',/\b(historia de pernambuco|insurreicao pernambucana|revolucao pernambucana|confederacao do equador|revolucao praieira|guerra dos mascates|capitania de pernambuco|duarte coelho|ocupacao holandesa|invasao holandesa|mauricio de nassau|batalha dos guararapes|batalha das tabocas|frei caneca|conspiracao dos suassunas|guerra dos cabanos|cabanada|quilombo dos palmares|zumbi dos palmares|serra da barriga)\b/g],
+    ['História de Pernambuco',/\b(historia de pernambuco|insurreicao pernambucana|revolucao pernambucana|confederacao do equador|revolucao praieira|guerra dos mascates|capitania de pernambuco|duarte coelho|ocupacao holandesa|invasao holandesa|mauricio de nassau|batalha dos guararapes|batalha das tabocas|frei caneca|conspiracao dos suassunas|guerra dos cabanos|cabanada|quilombo dos palmares|zumbi dos palmares|serra da barriga|brasil colonia|periodo colonial|capitanias hereditarias|economia acucareira|formacao de olinda|formacao do recife)\b/g],
     ['Geografia de Pernambuco',/\b(geografia de pernambuco|mesorregioes de pernambuco|bacias hidrograficas de pernambuco|relevo de pernambuco|agreste pernambucano|sertao pernambucano|zona da mata pernambucana|clima de pernambuco|planalto da borborema|depressao sertaneja|rio capibaribe|rio ipojuca|rio pajeu|fernando de noronha|complexo de suape|sertao do sao francisco|sertao do araripe|agreste setentrional|agreste meridional|zona da mata sul|zona da mata norte|polo gesseiro|gipsita|fruticultura irrigada|vitivinicultura|polos de desenvolvimento|demografia de pernambuco|municipios pernambucanos|organizacao socioespacial.*pernambuco)\b/g],
     ['Informática',/\b(informatica|windows|linux|ubuntu|sistema operacional|explorador de arquivos|painel de controle|gerenciador de tarefas|libreoffice|microsoft office|microsoft word|microsoft excel|powerpoint|calc|writer|impress|planilha eletronica|celula|funcao se|procv|redes de computadores|intranet|extranet|vpn|protocolos tcp|endereco ip|dns|dhcp|https|seguranca da informacao|malware|ransomware|phishing|spyware|trojan|rootkit|firewall|antivirus|backup|computacao em nuvem|cloud computing|navegadores|browser|guia anonima|cookies|correio eletronico|webmail|atalho de teclado)\b/g],
     ['Raciocínio Lógico-Matemático',/\b(raciocinio logico|casa dos pombos|principio das gavetas|dirichlet|dobro da idade|triplo da idade|soma das idades|calcule a soma|calcule o valor|tabela verdade|tautologia|contingencia|contradicao logica|proposicoes|proposicao simples|proposicao composta|conectivos|bicondicional|se e somente se|condicional|disjuncao|conjuncao|logica proposicional|logica de argumentacao|logica sentencial|negacao logica|negacao da proposicao|leis de de morgan|equivalencia logica|implicacao logica|diagramas logicos|diagrama de venn|analise combinatoria|principio fundamental da contagem|arranjo|permutacao|probabilidade|teoria dos conjuntos|conjuntos numericos|porcentagem|regra de tres|juros simples|juros compostos|progressao aritmetica|progressao geometrica|logicamente correto|declaracoes verdadeiras|declaracoes falsas|valor logico|silogismo|premissas|quantificador|sequencia numerica|razao e proporcao|media aritmetica|mediana|equacao do 1|equacao do 2|sistema de equacoes|mmc|mdc)\b/g],
@@ -2540,7 +2569,7 @@ function inferStrictQuestionSubjectDecision(statement='',topic='',fallbackSubjec
   if(bestSubj&&bestScore>=2){
     candidates.sort((a,b)=>b.score-a.score);
     const ambiguous=candidates.length>1&&candidates[1].score>=bestScore*0.8;
-    return {subject:bestSubj,confidence:ambiguous?0.35:0.75,ambiguous,candidates:candidates.slice(0,5),source:'heuristica'};
+    const mappedBest=mapSubjectToActiveEdital(bestSubj,stmtNorm);return {subject:mappedBest,confidence:ambiguous?0.35:0.75,ambiguous,candidates:candidates.slice(0,5),source:'heuristica'};
   }
   // Heurística matemática/quantitativa para problemas numéricos sem termos jurídicos (ex.: idades de João e Ana, proporções, cálculos)
   if(/\b(calcule|soma|dobro|triplo|metade|idade|idades|quantos|quantas|total de|diferenca entre|produto de|dividido por|equacao|probabilidade|gavetas|pombos)\b/.test(stmtOnlyNorm)&&!/\b(art|lei|constituicao|codigo|crime|pena|policia|servidor|administracao)\b/.test(stmtOnlyNorm)){

@@ -116,4 +116,31 @@ assert.ok(v77Code.includes('JCExamQuestions?.validationBadgeInfo'), 'v77-experie
 assert.ok(cssCode.includes('.jcValPill.divergente'), 'ui-r188.css deve conter estilos do selo');
 assert.ok(swCode.includes('r190') && swCode.includes('./exam-questions-client.js'), 'sw.js r190 deve cachear exam-questions-client.js');
 
+// 7. Mapeamento fiel ao edital (quando edital tem História de Pernambuco sem Geografia de Pernambuco / História do Brasil)
+{
+  const s0 = htmlCode.indexOf('function activeEditalSubjectsSet(){');
+  const s1 = htmlCode.indexOf('function canonicalSubjectName(');
+  const sbEd = {
+    window: null,
+    state: {
+      customCampaign: {
+        missions: [
+          { subject: 'Português' },
+          { subject: 'História de Pernambuco' },
+          { subject: 'Informática' },
+          { subject: 'Raciocínio Lógico-Matemático' },
+          { subject: 'Direito Constitucional' },
+          { subject: 'Direitos Humanos e Leis Extravagantes' }
+        ]
+      }
+    }
+  };
+  sbEd.window = sbEd;
+  vm.createContext(sbEd);
+  vm.runInContext(htmlCode.slice(s0, s1), sbEd);
+  assert.equal(sbEd.mapSubjectToActiveEdital('Geografia de Pernambuco', 'Sertão do São Francisco Petrolina'), 'História de Pernambuco');
+  assert.equal(sbEd.mapSubjectToActiveEdital('História do Brasil', 'Brasil Colônia Capitanias Hereditárias'), 'História de Pernambuco');
+  assert.equal(sbEd.mapSubjectToActiveEdital('Direito Constitucional', 'Art. 5º'), 'Direito Constitucional');
+}
+
 console.log('OK: test-r190-exam-questions-ui.mjs (todas as asserções passaram)');
