@@ -4318,10 +4318,17 @@
       let sArr=bySubjBucket.get(itemSubjKey);
       if(!sArr){sArr=[];bySubjBucket.set(itemSubjKey,sArr);}
       sArr.push(item);
-      const tKey=topicKey(item.topic||'');
+      let cleanItemTopic=String(item.topic||'').trim();
+      if(subjKey!=='all'&&cleanItemTopic&&typeof window.inferStrictQuestionSubjectDecision==='function'){
+        const td=window.inferStrictQuestionSubjectDecision(cleanItemTopic,cleanItemTopic,subject,[],{});
+        if(td?.subject&&td.confidence>=0.7&&topicKey(canonicalSubjectName(td.subject))!==subjKey){
+          cleanItemTopic=typeof window.inferQuestionPedagogicalTopic==='function'?window.inferQuestionPedagogicalTopic(item.statement,canonicalSubjectName(subject)):canonicalSubjectName(subject);
+        }
+      }
+      const tKey=topicKey(cleanItemTopic);
       if(tKey){
         byTopicCount.set(tKey,(byTopicCount.get(tKey)||0)+1);
-        if(!byTopicSample.has(tKey))byTopicSample.set(tKey,item);
+        if(!byTopicSample.has(tKey))byTopicSample.set(tKey,{...item,topic:cleanItemTopic});
       }
     }
     const editalMissions=(typeof orderedMissions==='function'?orderedMissions():(typeof missionPool==='function'?missionPool():[])).filter(m=>m&&m.name&&!String(m.id||'').startsWith('setup-')&&(subjKey==='all'||topicKey(canonicalSubjectName(m.subject))===subjKey));

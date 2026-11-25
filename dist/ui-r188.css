@@ -373,3 +373,15 @@ body.lightAppTheme .jcClassroomNotice {
   border: 1px solid rgba(148, 163, 184, 0.35);
   color: #cbd5e1;
 }
+
+/* r190 QA fix: evita corte da barra inferior de ações no modal de questão */
+#questionDialog .questionTrainer,
+#questionDialog .questionModalBody,
+#questionDialog .questionStage {
+  padding-bottom: 20px;
+}
+#questionDialog .questionActionTabs,
+#questionDialog .questionBottomActions,
+#questionDialog .qHelperTabs {
+  margin-bottom: 12px;
+}
