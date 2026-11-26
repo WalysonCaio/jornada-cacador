@@ -512,20 +512,10 @@
           </div>
         `;
         fb.appendChild(extra);
-        extra.querySelector('[data-me-open-classroom]')?.addEventListener('click', () => {
-          try { dlg.close(); } catch (_e) {}
-          if (typeof window.openInvocadorClassroom === 'function') {
-            window.openInvocadorClassroom({ subject: subj, topic });
-          } else {
-            window.openView?.('assistant');
-            setTimeout(() => {
-              const inp = document.querySelector('#assistantInput');
-              if (inp) {
-                inp.value = `Explique de forma clara o tema "${topic}" (${subj}) e a pegadinha principal desta questão.`;
-                inp.focus();
-              }
-            }, 140);
-          }
+        extra.querySelector('[data-me-open-classroom]')?.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          openQuestionToolPopup('invocador', item);
         });
         extra.querySelector('[data-me-report-inline]')?.addEventListener('click', () => openReportQuestionDialog(item));
       });
@@ -826,8 +816,346 @@
     bindQuestionFeedbackObserver();
   }
 
+
+  // ── 9. POP-UP IN-MODAL UNIVERSAL DENTRO DA QUESTÃO (SEM SAIR DA BATERIA!) ──
+  // Intercepta Invocador, Comentário, Teoria & Lei, Cadernos, Anotações e Meu Histórico
+  // abrindo um modal sobreposto (#jcQuestionToolPopup) que preserva 100% a bateria ativa.
+  function getQuestionFp(item) {
+    try {
+      if (typeof questionFingerprint === 'function') return questionFingerprint(item);
+    } catch (_e) {}
+    return String(item?.id || item?._fp || item?.statement?.slice(0, 60) || 'q');
+  }
+
+  async function askInvocadorInPopup(item, promptText, outEl, btnEl) {
+    if (!outEl) return;
+    const text = String(promptText || '').trim();
+    if (text.length < 3) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      outEl.innerHTML = '<div class="meTrapPill">Sem internet no momento. Verifique sua conexão e tente novamente.</div>';
+      return;
+    }
+    const sess = typeof validSession === 'function' ? await validSession().catch(() => null) : (typeof cloudSession !== 'undefined' ? cloudSession : null);
+    if (!sess?.access_token) {
+      outEl.innerHTML = '<div class="meTrapPill">Entre na sua conta para conversar com o Invocador IA.</div>';
+      return;
+    }
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Consultando Invocador...'; }
+    outEl.innerHTML = '<div class="small muted" style="padding:10px 0">🧙‍♂️ Invocador analisando a questão...</div>';
+    try {
+      const camp = getActiveCampaign();
+      const opts = Array.isArray(item?.options)
+        ? item.options.map((o, i) => `${String.fromCharCode(65 + i)}) ${o}`).join('\n')
+        : '';
+      const qContext = [
+        `Disciplina: ${getCanonSubj(item?.subject || 'Geral')} | Tópico: ${item?.topic || 'Geral'} | Banca: ${item?.board || 'Não informada'}`,
+        `Enunciado: ${item?.statement || ''}`,
+        opts ? `Alternativas:\n${opts}` : '',
+        Number.isInteger(Number(item?.correct_index)) ? `Gabarito cadastrado: ${String.fromCharCode(65 + Number(item.correct_index))}` : '',
+        item?.explanation ? `Comentário base: ${String(item.explanation).slice(0, 600)}` : '',
+      ].filter(Boolean).join('\n');
+      const baseUrl = typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : 'https://jybislbbblyjsrcdegjt.supabase.co';
+      const headers = typeof authHeaders === 'function'
+        ? authHeaders(sess.access_token)
+        : { 'Content-Type': 'application/json', Authorization: `Bearer ${sess.access_token}` };
+      const resp = await fetch(`${baseUrl}/functions/v1/assistente-pmpe`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          question: text,
+          context: qContext.slice(0, 12000),
+          mode: 'explicar',
+          campaign_id: camp?.dbId || null,
+          campaign: camp?.name || 'PMPE — Soldado',
+        }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.error || `Erro HTTP ${resp.status}`);
+      const answer = String(data?.answer || '').trim();
+      if (!answer) throw new Error('O Invocador retornou resposta vazia.');
+      outEl.innerHTML = `<div class="jcPopupAnswer">${esc(answer).replace(/\n/g, '<br>')}</div>`;
+    } catch (err) {
+      outEl.innerHTML = `<div class="meTrapPill">Não foi possível consultar o Invocador agora: ${esc(err?.message || 'erro de conexão')}</div>`;
+    } finally {
+      if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Enviar ao Invocador'; }
+    }
+  }
+
+  function renderToolPopupTab(dlg, tab, item) {
+    const body = dlg.querySelector('#jcToolPopupBody');
+    if (!body) return;
+    dlg.querySelectorAll('[data-jc-popup-tab]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.jcPopupTab === tab);
+    });
+    const subj = getCanonSubj(item?.subject || 'Geral');
+    const topic = item?.topic || subj;
+    const fp = getQuestionFp(item);
+    const st = getState();
+
+    if (tab === 'invocador') {
+      body.innerHTML = `
+        <div class="jcPopupContext">
+          <span class="mePill mePill--neutral">${esc(subj)} · ${esc(topic)}</span>
+          <p class="small muted" style="margin:6px 0 0">${esc(String(item?.statement || '').slice(0, 220))}${String(item?.statement || '').length > 220 ? '…' : ''}</p>
+        </div>
+        <div class="jcPopupQuickChips">
+          <button type="button" class="ghost small" data-jc-qprompt="Explique passo a passo por que a alternativa correta é a certa e por que as outras estão erradas.">🎯 Por que essa é a correta?</button>
+          <button type="button" class="ghost small" data-jc-qprompt="Qual é a principal pegadinha da banca nesta questão e como não cair nela?">⚠️ Pegadinha da banca</button>
+          <button type="button" class="ghost small" data-jc-qprompt="Explique o conceito desta questão usando uma analogia simples e fácil de memorizar.">🧠 Analogia fácil</button>
+          <button type="button" class="ghost small" data-jc-qprompt="Cite exatamente a regra, artigo de lei ou princípio teórico cobrado nesta questão.">⚖️ Regra / Lei aplicada</button>
+        </div>
+        <div class="jcPopupInputRow">
+          <textarea id="jcPopupAiInput" rows="2" placeholder="Pergunte qualquer dúvida sobre esta questão ao Invocador..."></textarea>
+          <button type="button" class="action small" id="jcPopupAiSendBtn">Enviar ao Invocador</button>
+        </div>
+        <div id="jcPopupAiOutput" class="jcPopupAiOutput">
+          <p class="small muted">Escolha um atalho acima ou digite sua dúvida. Sua bateria continua intacta logo atrás desta janela.</p>
+        </div>
+      `;
+      const outEl = body.querySelector('#jcPopupAiOutput');
+      const inpEl = body.querySelector('#jcPopupAiInput');
+      const sendBtn = body.querySelector('#jcPopupAiSendBtn');
+      sendBtn.onclick = () => askInvocadorInPopup(item, inpEl.value, outEl, sendBtn);
+      body.querySelectorAll('[data-jc-qprompt]').forEach((chip) => {
+        chip.onclick = () => {
+          inpEl.value = chip.dataset.jcQprompt;
+          askInvocadorInPopup(item, chip.dataset.jcQprompt, outEl, sendBtn);
+        };
+      });
+      return;
+    }
+
+    if (tab === 'comentario') {
+      const exp = String(item?.explanation || item?.fundamento_ia || '').trim();
+      const correctIdx = Number(item?.correct_index);
+      const hasCorrect = Number.isInteger(correctIdx) && correctIdx >= 0 && Array.isArray(item?.options) && correctIdx < item.options.length;
+      body.innerHTML = `
+        <div class="jcPopupContext">
+          <b>${hasCorrect ? `✓ Gabarito: Alternativa ${String.fromCharCode(65 + correctIdx)}` : 'Gabarito em conferência'}</b>
+          <p style="margin:8px 0 0;line-height:1.55">${exp ? esc(exp).replace(/\n/g, '<br>') : 'Esta questão ainda não tem comentário detalhado cadastrado. Clique abaixo para pedir a análise ao Invocador sem sair da questão.'}</p>
+        </div>
+        ${Array.isArray(item?.options) ? `
+          <ul class="jcPopupOptList">
+            ${item.options.map((o, i) => `<li class="${i === correctIdx ? 'isRight' : ''}"><b>${String.fromCharCode(65 + i)})</b> ${esc(o)}</li>`).join('')}
+          </ul>
+        ` : ''}
+        <button type="button" class="action small" style="margin-top:10px" data-jc-switch-tab="invocador">🧙‍♂️ Pedir explicação detalhada ao Invocador</button>
+      `;
+      body.querySelector('[data-jc-switch-tab]')?.addEventListener('click', () => renderToolPopupTab(dlg, 'invocador', item));
+      return;
+    }
+
+    if (tab === 'teoria') {
+      const summaries = Array.isArray(window.ALL_SUMMARIES) ? window.ALL_SUMMARIES : [];
+      const sKey = normKey(subj);
+      const tKey = normKey(topic);
+      const matched = summaries
+        .filter((s) => !(typeof window.isHunterManualArtifact === 'function' && window.isHunterManualArtifact(s)))
+        .filter((s) => {
+          const cat = normKey(s?.category || s?.subject || '');
+          const tit = normKey(s?.title || '');
+          return (tKey && (tit.includes(tKey) || tKey.includes(tit))) || (sKey && (cat.includes(sKey) || sKey.includes(cat)));
+        })
+        .slice(0, 5);
+      body.innerHTML = matched.length
+        ? matched.map((s) => `
+            <details class="jcPopupSummaryCard" open>
+              <summary>📖 ${esc(s.title || s.category || subj)}</summary>
+              <div class="jcPopupSummaryBody">${esc(String(s.content || s.text || s.body || '').replace(/<[^>]+>/g, ' ').slice(0, 1400)).replace(/\n/g, '<br>')}</div>
+            </details>
+          `).join('')
+        : `<div class="jcPopupContext">
+            <p class="small muted">Nenhum resumo local encontrado especificamente para <b>${esc(topic)}</b> (${esc(subj)}).</p>
+            <button type="button" class="action small" style="margin-top:8px" data-jc-ask-theory="1">🧙‍♂️ Gerar resumo rápido com o Invocador aqui</button>
+          </div>`;
+      body.querySelector('[data-jc-ask-theory]')?.addEventListener('click', () => {
+        renderToolPopupTab(dlg, 'invocador', item);
+        const inp = dlg.querySelector('#jcPopupAiInput');
+        const out = dlg.querySelector('#jcPopupAiOutput');
+        const btn = dlg.querySelector('#jcPopupAiSendBtn');
+        if (inp) {
+          inp.value = `Faça um resumo objetivo da teoria e dos artigos de lei essenciais sobre "${topic}" (${subj}) para acertar questões como esta.`;
+          askInvocadorInPopup(item, inp.value, out, btn);
+        }
+      });
+      return;
+    }
+
+    if (tab === 'cadernos') {
+      st.favoriteQuestions = st.favoriteQuestions || {};
+      st.questionNotebooks = st.questionNotebooks || { 'Revisão de Ouro': [], 'Pegadinhas da Banca': [] };
+      const isFav = Boolean(st.favoriteQuestions[fp]);
+      const nbNames = Object.keys(st.questionNotebooks);
+      body.innerHTML = `
+        <div class="jcPopupContext">
+          <button type="button" class="action small" id="jcPopupFavBtn" style="width:100%">${isFav ? '⭐ Salva em Favoritas (clique para remover)' : '☆ Adicionar às Questões Favoritas'}</button>
+        </div>
+        <div style="margin-top:10px">
+          <div class="small muted" style="margin-bottom:6px">Seus cadernos rápidos (sem sair da bateria):</div>
+          <div class="jcPopupNbList">
+            ${nbNames.map((nb) => {
+              const list = Array.isArray(st.questionNotebooks[nb]) ? st.questionNotebooks[nb] : [];
+              const has = list.includes(fp);
+              return `<button type="button" class="ghost small jcPopupNbBtn ${has ? 'active' : ''}" data-jc-nb="${esc(nb)}">${has ? '✓' : '＋'} ${esc(nb)} (${list.length})</button>`;
+            }).join('')}
+          </div>
+          <div class="jcPopupInputRow" style="margin-top:10px">
+            <input type="text" id="jcNewNotebookName" placeholder="Novo caderno (ex.: Direito Penal - Revisão)">
+            <button type="button" class="ghost small" id="jcCreateNotebookBtn">Criar e salvar</button>
+          </div>
+        </div>
+      `;
+      body.querySelector('#jcPopupFavBtn').onclick = () => {
+        if (st.favoriteQuestions[fp]) delete st.favoriteQuestions[fp];
+        else st.favoriteQuestions[fp] = { savedAt: new Date().toISOString(), subject: subj, topic };
+        try { if (typeof save === 'function') save(); } catch (_e) {}
+        renderToolPopupTab(dlg, 'cadernos', item);
+      };
+      body.querySelectorAll('[data-jc-nb]').forEach((b) => {
+        b.onclick = () => {
+          const nb = b.dataset.jcNb;
+          const arr = Array.isArray(st.questionNotebooks[nb]) ? st.questionNotebooks[nb] : (st.questionNotebooks[nb] = []);
+          const idx = arr.indexOf(fp);
+          if (idx >= 0) arr.splice(idx, 1);
+          else arr.push(fp);
+          try { if (typeof save === 'function') save(); } catch (_e) {}
+          renderToolPopupTab(dlg, 'cadernos', item);
+        };
+      });
+      body.querySelector('#jcCreateNotebookBtn').onclick = () => {
+        const name = (body.querySelector('#jcNewNotebookName')?.value || '').trim();
+        if (!name) return;
+        st.questionNotebooks[name] = st.questionNotebooks[name] || [];
+        if (!st.questionNotebooks[name].includes(fp)) st.questionNotebooks[name].push(fp);
+        try { if (typeof save === 'function') save(); } catch (_e) {}
+        renderToolPopupTab(dlg, 'cadernos', item);
+      };
+      return;
+    }
+
+    if (tab === 'anotacoes') {
+      const savedNote = st.questionPersonalNotes?.[fp] || '';
+      body.innerHTML = `
+        <div class="jcPopupContext">
+          <label class="small muted" for="jcPopupNoteArea">✏️ Seu bizu / anotação pessoal nesta questão (${esc(subj)}):</label>
+          <textarea id="jcPopupNoteArea" rows="5" style="width:100%;margin-top:6px" placeholder="Escreva seu mnemônico, resumo da regra ou motivo do erro...">${esc(savedNote)}</textarea>
+          <div class="meFeedbackActions" style="margin-top:8px">
+            <button type="button" class="action small" id="jcPopupSaveNoteBtn">💾 Salvar anotação</button>
+          </div>
+        </div>
+      `;
+      body.querySelector('#jcPopupSaveNoteBtn').onclick = () => {
+        const val = (body.querySelector('#jcPopupNoteArea')?.value || '').trim();
+        st.questionPersonalNotes = st.questionPersonalNotes || {};
+        if (val) st.questionPersonalNotes[fp] = val;
+        else delete st.questionPersonalNotes[fp];
+        const inlineInput = document.querySelector('#personalQuestionCommentInput');
+        if (inlineInput) inlineInput.value = val;
+        try { if (typeof save === 'function') save(); } catch (_e) {}
+        if (typeof toast === 'function') toast(val ? '✏️ Anotação salva sem sair da questão!' : 'Anotação removida.');
+      };
+      return;
+    }
+
+    if (tab === 'historico') {
+      const lastStatus = st.answeredQuestionFingerprints?.[fp] || 'ainda não registrada';
+      const errEntry = Object.values(st.errors || {}).find((e) => e?.fp === fp || (e?.question && item?.statement && String(e.question).slice(0, 60) === String(item.statement).slice(0, 60)));
+      const campId = getCampaignId();
+      const subjScores = (st.scores || []).filter((s) => (!s.campaignId || s.campaignId === campId) && normKey(getCanonSubj(s.subject || '')) === normKey(subj));
+      const sTot = subjScores.reduce((a, b) => a + Number(b.total || 0), 0);
+      const sCor = subjScores.reduce((a, b) => a + Number(b.correct || 0), 0);
+      const sPct = sTot ? Math.round((sCor / sTot) * 100) : null;
+      body.innerHTML = `
+        <div class="meErrKpis">
+          <div class="meErrKpi"><b>${lastStatus === 'correct' ? '✓ Acerto' : lastStatus === 'wrong' ? '✗ Erro' : '—'}</b><span>último status</span></div>
+          <div class="meErrKpi ${Number(errEntry?.misses || 0) >= 2 ? 'isHot' : ''}"><b>${Number(errEntry?.misses || 0)}x</b><span>erros nesta questão</span></div>
+          <div class="meErrKpi ${sPct !== null && sPct >= 72 ? 'isOk' : ''}"><b>${sPct !== null ? `${sPct}%` : '—'}</b><span>média em ${esc(subj.split(' ')[0])}</span></div>
+        </div>
+        <p class="small muted" style="margin-top:10px">${sTot ? `Você já resolveu ${sTot} questões de ${esc(subj)} (${sCor} acertos).` : `Esta é uma das suas primeiras questões em ${esc(subj)}.`}</p>
+      `;
+    }
+  }
+
+  function openQuestionToolPopup(tab = 'invocador', forcedItem = null) {
+    const item = forcedItem || getActiveQuestionItem();
+    if (!item) return false;
+    let dlg = document.querySelector('#jcQuestionToolPopup');
+    if (!dlg) {
+      dlg = document.createElement('dialog');
+      dlg.id = 'jcQuestionToolPopup';
+      dlg.className = 'jcToolPopupDialog';
+      dlg.innerHTML = `
+        <div class="jcToolPopupHead">
+          <div>
+            <div class="eyebrow">APOIO NA QUESTÃO · BATERIA PRESERVADA</div>
+            <h3 style="margin:2px 0 0;font-size:1.05rem">Ferramentas da Questão</h3>
+          </div>
+          <button type="button" class="ghost small" id="jcCloseToolPopupBtn">✕ Voltar para a questão</button>
+        </div>
+        <div class="jcToolPopupTabs" role="tablist">
+          <button type="button" class="ghost small" data-jc-popup-tab="invocador">🧙‍♂️ Invocador</button>
+          <button type="button" class="ghost small" data-jc-popup-tab="comentario">💬 Comentário</button>
+          <button type="button" class="ghost small" data-jc-popup-tab="teoria">📖 Teoria &amp; Lei</button>
+          <button type="button" class="ghost small" data-jc-popup-tab="cadernos">📱 Cadernos</button>
+          <button type="button" class="ghost small" data-jc-popup-tab="anotacoes">✏️ Anotações</button>
+          <button type="button" class="ghost small" data-jc-popup-tab="historico">📈 Histórico</button>
+        </div>
+        <div id="jcToolPopupBody" class="jcToolPopupBody"></div>
+      `;
+      document.body.appendChild(dlg);
+      dlg.querySelector('#jcCloseToolPopupBtn').onclick = () => dlg.close();
+      dlg.addEventListener('click', (ev) => {
+        if (ev.target === dlg) dlg.close();
+      });
+    }
+    dlg.querySelectorAll('[data-jc-popup-tab]').forEach((b) => {
+      b.onclick = () => renderToolPopupTab(dlg, b.dataset.jcPopupTab, item);
+    });
+    renderToolPopupTab(dlg, tab, item);
+    if (!dlg.open) dlg.showModal();
+    return true;
+  }
+
+  function detectToolTabFromButton(btn) {
+    if (!btn) return null;
+    const id = String(btn.id || '').toLowerCase();
+    const txt = normKey(btn.textContent || '');
+    const dataTab = normKey(btn.dataset?.tab || btn.dataset?.tool || btn.dataset?.qtab || '');
+    const combined = `${id} ${txt} ${dataTab}`;
+    // Nunca interceptar botões de navegação/resposta/saída/reporte da bateria
+    if (/proxima|anterior|encerrar|sair|responder|branco|modo papel|reportar|corrigir|favorit|gemea|analogia|flashcard|salvar bizu|salvar no caderno/.test(combined)) {
+      return null;
+    }
+    if (id === 'askqapinstructorbtn' || btn.hasAttribute('data-me-open-classroom') || /\binvocador\b/.test(txt)) return 'invocador';
+    if (/comentario da questao/.test(txt)) return 'comentario';
+    if (/teoria.*lei|\bteoria\b/.test(txt)) return 'teoria';
+    if (/^cadernos$|meus cadernos/.test(txt)) return 'cadernos';
+    if (/^anotacoes$|minhas anotacoes/.test(txt)) return 'anotacoes';
+    if (/meu historico|^historico$/.test(txt)) return 'historico';
+    return null;
+  }
+
+  // Interceptador universal em fase de captura dentro de #questionDialog:
+  // impede que qualquer botão auxiliar feche #questionDialog ou redirecione para fora da bateria!
+  if (!window._jcQuestionPopupInterceptorBound) {
+    window._jcQuestionPopupInterceptorBound = true;
+    document.addEventListener('click', (ev) => {
+      const btn = ev.target?.closest?.('button, a');
+      if (!btn) return;
+      const qDlg = btn.closest('#questionDialog');
+      if (!qDlg || !qDlg.open) return;
+      const tab = detectToolTabFromButton(btn);
+      if (!tab) return;
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      openQuestionToolPopup(tab, getActiveQuestionItem());
+    }, true);
+  }
+
   window.JCMissaoElite = {
-    version: 'r196',
+    version: 'r197',
+    openQuestionToolPopup,
+    detectToolTabFromButton,
     computeEliminationRadar,
     getTodayMissionBlocks,
     highlightEssayText,

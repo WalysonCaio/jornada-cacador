@@ -40,11 +40,20 @@
     // Progress and filter changes are not content sources and must survive a read.
     const contentScope=JSON.stringify([cloudSession?.user?.id||state._ownerUserId||'guest',state.activeCampaignId||'',activeCampaign()?.dbId||'',Number(state._resetEpoch||0)]);
     const contentSignature=value=>{
-      const transient=new Set(['_fp','_fpSource','_answerStartedAt','_chosenAnswerIndex','_userChosenIndex','_isCorrect','_userAnswered','_userMarkedBlank','communitySourceSignature','communitySourceScopeKey']);
-      const stable=item=>Array.isArray(item)?item.map(stable):item&&typeof item==='object'?Object.fromEntries(Object.keys(item).filter(key=>!transient.has(key)).sort().map(key=>[key,stable(item[key])])):item;
-      return JSON.stringify(stable(value));
+      if(typeof value==='string')return value;
+      if(Array.isArray(value))return `${value.length}:${String(value[0]??'').slice(0,24)}:${String(value[1]??'').slice(0,32)}`;
+      if(value&&typeof value==='object')return `${value.id||value.examQuestionId||''}|${value.subject||value.category||''}|${value.topic||value.title||''}|${String(value.statement||'').slice(0,48)}|${value.correct_index??''}|${value.key_source||''}|${value.status_validacao||''}|${Array.isArray(value.options)?value.options.length:0}`;
+      return String(value??'');
     };
-    const contentListSignature=items=>JSON.stringify((items||[]).map(contentSignature).sort());
+    const contentListSignature=items=>{
+      const arr=Array.isArray(items)?items:[];
+      let h1=2166136261,h2=5381;
+      for(let i=0;i<arr.length;i++){
+        const s=contentSignature(arr[i]);
+        for(let j=0;j<s.length;j++){const c=s.charCodeAt(j);h1=Math.imul(h1^c,16777619);h2=Math.imul(h2,33)^c;}
+      }
+      return `${arr.length}:${h1>>>0}:${h2>>>0}`;
+    };
     const communityQuestion=item=>item&&(item.is_community===true||item.from_community===true||item.fromSharedBank===true);
     const contentSource=rows=>JSON.stringify([rows,typeof cloudDocuments==='undefined'?[]:cloudDocuments,state.customQuestionsByCampaign?.[state.activeCampaignId]||[],state.customFlashcardsByCampaign?.[state.activeCampaignId]||[],typeof extractFlashcardsFromUserNotes==='function'?extractFlashcardsFromUserNotes():[],(ALL_SUMMARIES||[]).filter(item=>item?.is_community),(ALL_FLASHCARDS||[]).filter(item=>item?.[3]?.is_community),(ALL_QUESTIONS||[]).filter(communityQuestion)].map(contentListSignature));
     const contentPipeline=()=>[window.classifyQuestion,window.getQuestionQualityDecision,window.auditAndEnrichAllQuestionsPedagogy,window.ensureNativeQuestionBankLoaded,window.ensureNativePedagogicalCouplingLoaded,window.sanitizeSummaryObject,window.isValidPedagogicalQuestion,window.isValidPedagogicalSummary,window.isValidFlashcardItem,window.isAllowedFlashcardRow,typeof resolveDocumentDiscipline==='function'?resolveDocumentDiscipline:null];
@@ -57,9 +66,9 @@
       return true;
     };
     const finishContent=rows=>{
-      const current=[ALL_SUMMARIES,ALL_FLASHCARDS,ALL_QUESTIONS,LEARNING_SUBJECTS],same=current.map((items,index)=>contentListSignature(items)===previousSignatures[index]);
+      const current=[ALL_SUMMARIES,ALL_FLASHCARDS,ALL_QUESTIONS,LEARNING_SUBJECTS],currSigs=current.map(contentListSignature),same=currSigs.map((sig,index)=>sig===previousSignatures[index]);
       if(same[0])ALL_SUMMARIES=previousContent[0];if(same[1])ALL_FLASHCARDS=previousContent[1];if(same[2])ALL_QUESTIONS=previousContent[2];if(same[3])LEARNING_SUBJECTS=previousContent[3];
-      loadGeneratedContent._semanticSourceCache={scope:contentScope,source:contentSource(rows),pipeline:contentPipeline(),outputs:[ALL_SUMMARIES,ALL_FLASHCARDS,ALL_QUESTIONS,LEARNING_SUBJECTS].map(contentListSignature)};
+      loadGeneratedContent._semanticSourceCache={scope:contentScope,source:contentSource(rows),pipeline:contentPipeline(),outputs:currSigs};
       return same.some(equal=>!equal);
     };
 
@@ -311,7 +320,7 @@ LEARNING_SUBJECTS=typeof computeValidLearningSubjects==='function'?computeValidL
   let restoringSummaries=false;
   const restoreOpenSummaries=()=>{if(restoringSummaries)return;restoringSummaries=true;try{document.querySelectorAll('[data-summary]:not([data-norm-done="1"])').forEach(button=>{button.dataset.normDone='1';const open=!!libraryUI.openSummaries[summaryStateKey(button.dataset.summary)],card=button.closest('.summaryCard'),icon=open?'−':'＋';card?.classList.toggle('open',open);if(button.lastElementChild&&button.lastElementChild.textContent!==icon)button.lastElementChild.textContent=icon;const title=button.querySelector('.summaryTitle span:last-child'),normalized=normalizeLegalTitle(title?.textContent);if(title&&title.textContent!==normalized)title.textContent=normalized})}finally{restoringSummaries=false}};
   document.querySelector('#summaryList')?.addEventListener('click',event=>{const button=event.target.closest?.('[data-summary]');if(!button)return;libraryUI.openSummaries[summaryStateKey(button.dataset.summary)]=!button.closest('.summaryCard')?.classList.contains('open');saveLibraryUI()},{capture:true});
-  const summaryObserver=new MutationObserver(()=>restoreOpenSummaries());
+  let _sumObsRaf=0;const summaryObserver=new MutationObserver(()=>{if(_sumObsRaf)return;_sumObsRaf=requestAnimationFrame(()=>{_sumObsRaf=0;restoreOpenSummaries()})});
   if(document.querySelector('#summaryList'))summaryObserver.observe(document.querySelector('#summaryList'),{childList:true});
   restoreOpenSummaries();
 

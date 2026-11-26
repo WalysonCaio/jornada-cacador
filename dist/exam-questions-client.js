@@ -75,8 +75,17 @@
     };
   }
 
+  const _examFetchCache = new Map();
+  const _examInFlight = new Map();
+  const EXAM_CACHE_TTL_MS = 300000;
+
   async function fetchPortalExamQuestions(portalDbId, userId, options = {}) {
     if (!portalDbId && !userId) return [];
+    const cacheKey = `${portalDbId || ''}::${userId || ''}`;
+    const now = Date.now();
+    const cached = _examFetchCache.get(cacheKey);
+    if (!options.force && cached && (now - cached.at) < EXAM_CACHE_TTL_MS) return cached.rows;
+    if (!options.force && _examInFlight.has(cacheKey)) return _examInFlight.get(cacheKey);
     const fetchFn = options.cloudFetch || (typeof w.cloudFetch === 'function' ? w.cloudFetch : null);
     if (!fetchFn) return [];
     const select = [
@@ -97,7 +106,7 @@
       const filter = portalDbId
         ? `or=(campaign_id.eq.${encodeURIComponent(portalDbId)},share_with_community.eq.true)`
         : `user_id=eq.${encodeURIComponent(userId)}`;
-      const path = `exam_questions?${filter}&select=${encodeURIComponent(select)}&order=created_at.desc&limit=${pageSize}&offset=${offset}`;
+      const path = `exam_questions?superseded_at=is.null&${filter}&select=${encodeURIComponent(select)}&order=created_at.desc&limit=${pageSize}&offset=${offset}`;
       const res = await fetchFn(path).catch(() => null);
       if (!res || !res.ok) break;
       const rows = await res.json().catch(() => null);
@@ -108,6 +117,7 @@
       }
       if (rows.length < pageSize) break;
     }
+    _examFetchCache.set(cacheKey, { at: Date.now(), rows: all });
     return all;
   }
 

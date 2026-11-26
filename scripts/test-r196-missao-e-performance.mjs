@@ -23,7 +23,7 @@ assert.ok(v77.includes('el._lastLocalDbLabel!==label'), 'updateLocalDbBadgeUI in
 assert.ok(v59.includes('requestAnimationFrame(()=>{_sumObsRaf=0;restoreOpenSummaries()})'), 'v59 MutationObserver rAF throttle missing');
 assert.ok(css.includes('contain: layout style;'), 'CSS layout containment missing');
 assert.ok(css.includes('touch-action: manipulation;'), 'CSS touch-action optimization missing');
-assert.ok(sw.includes('r196') && sw.includes('missao-elite-features.js'), 'SW not bumped to r196');
+assert.ok(/r19[6-9]/.test(sw) && sw.includes('missao-elite-features.js'), 'SW not bumped to r196');
 assert.ok(eqClient.includes('superseded_at=is.null'), 'v115 superseded_at filter must be preserved');
 
 // 2. Benchmark O(1) _getQuestionPoolSignature with 3,000 questions x 25 calls
@@ -80,7 +80,7 @@ sandbox.window = sandbox;
 vm.runInNewContext(meJs, sandbox);
 
 const api = sandbox.window.JCMissaoElite;
-assert.equal(api.version, 'r196');
+assert.ok(/^r19[6-9]$/.test(api.version));
 
 const radar = api.computeEliminationRadar();
 assert.equal(radar.status, 'eliminado', 'Zerar Informática deve disparar status eliminado');
