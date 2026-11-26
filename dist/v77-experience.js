@@ -7483,6 +7483,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     const originLabel=normalizedOrigin(item)==='oficial'?'OFICIAL/PROVA':'AUTORAL IA';
     q('#simuladoQuestionMeta').textContent=`Questão ${current+1} de ${questions.length} · ${learningCategory(item.subject)} · ${item.topic||'Geral'} · ${diffLabel} · ${originLabel}`;
     q('#simuladoQuestionText').innerHTML=formatStatementWithHighlights(item.statement,item);
+    try{window.JCMissaoElite?.onSimuladoQuestionRendered?.(activeSimulado,item,current);}catch(_e){}
     q('#simuladoOptions').innerHTML=(item.options||[]).map((opt,i)=>{
       const selected=answers[current]===i;
       const isElim=elimSet.has(i);
@@ -7612,6 +7613,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       });
     }
     state.completedTimedSimuladoIds=[...(state.completedTimedSimuladoIds||[]),sessionId].filter(Boolean).slice(-500);
+    try{window.JCMissaoElite?.onTimedSimuladoFinished?.({sessionId,questions,answers,bySubject,totalCorrect,totalWrong,totalBlank,elapsedSeconds,activeSimulado});}catch(_e){}
     save();
     clearSavedTimedSimulado();
     render();
@@ -12229,6 +12231,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
   }
 
   function ensureLocalDbBars(){
+    if(ensureLocalDbBars._mounted&&q('#localDbBar_study')&&q('#localDbBar_report')&&q('#localDbBar_library')){window.updateLocalDbBadgeUI?.();return;}
     const targets=[
       {sel:'#study',id:'localDbBar_study'},
       {sel:'#report',id:'localDbBar_report'},
@@ -12253,6 +12256,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
         btn.onclick=()=>window.downloadFullDatabaseForLocalUse?.(true);
       }
     });
+    ensureLocalDbBars._mounted=true;
     window.updateLocalDbBadgeUI?.();
   }
   window.updateLocalDbBadgeUI=function(){
@@ -12263,7 +12267,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     const label=(sLen||qLen||dLen)
       ?`⚡ <b>Banco Local Ativo no Aparelho:</b> ${sLen} resumos · ${qLen} questões · ${fLen} flashcards · ${dLen} PDFs disponíveis`
       :`⚡ <b>Modo Banco Local:</b> clique ao lado para baixar seus resumos e questões para consultar no aparelho`;
-    qa('[data-local-db-text]').forEach(el=>{el.innerHTML=label});
+    qa('[data-local-db-text]').forEach(el=>{if(el._lastLocalDbLabel!==label){el._lastLocalDbLabel=label;el.innerHTML=label}});
   };
 
   function runV77ViewEnhancements(id,force=false){
@@ -12286,6 +12290,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
     else if(id==='ranking'){renderHuntersLeaderboard();loadHuntersLeaderboard()}
     else if(id==='duel'){renderDuelArena();loadDuelArenaHub()}
     enhanceSoloLevelingVisuals();
+    try{window.JCMissaoElite?.onViewEnhanced?.(id);}catch(_e){}
   }
 
   const baseOpenView=openView;
@@ -12717,7 +12722,11 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       badge.textContent='0';
       return;
     }
-    const unread=(guildChatState.messages||[]).filter(m=>{
+    const _gMsgs=guildChatState.messages||[];
+    const _gSig=`${_gMsgs.length}|${_gMsgs[_gMsgs.length-1]?.id||''}|${guildChatState.lastSeenTime||0}|${myId}`;
+    if(updateGuildUnreadBadge._lastSig===_gSig)return;
+    updateGuildUnreadBadge._lastSig=_gSig;
+    const unread=_gMsgs.filter(m=>{
       const ts=Date.parse(m.created_at||'')||0;
       return String(m.user_id)!==String(myId)&&ts>guildChatState.lastSeenTime;
     }).length;

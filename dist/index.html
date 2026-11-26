@@ -1435,7 +1435,10 @@ function completedStudyDay(value){
  if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/.test(value)||!validStudyDayKey(value.slice(0,10)))return'';
  const date=new Date(value);return Number.isFinite(date.getTime())?localDayKey(date):'';
 }
-function persistProgressLocally(){try{localStorage.setItem(KEY,JSON.stringify(state));return true}catch(error){if(!window._storageWarned){window._storageWarned=true;toast('Não foi possível salvar neste navegador. Mantenha esta página aberta, tente sincronizar e exporte um backup em Configurações.')}return false}}
+let _persistLocalTimer=null,_persistLocalPending=false;
+function persistProgressLocallyNow(){if(_persistLocalTimer){clearTimeout(_persistLocalTimer);_persistLocalTimer=null}_persistLocalPending=false;try{localStorage.setItem(KEY,JSON.stringify(state));return true}catch(error){if(!window._storageWarned){window._storageWarned=true;toast('Não foi possível salvar neste navegador. Mantenha esta página aberta, tente sincronizar e exporte um backup em Configurações.')}return false}}
+function persistProgressLocally(immediate=false){if(immediate)return persistProgressLocallyNow();_persistLocalPending=true;if(_persistLocalTimer)clearTimeout(_persistLocalTimer);_persistLocalTimer=setTimeout(persistProgressLocallyNow,220);return true}
+if(typeof window!=='undefined'&&!window._jcPersistFlushBound){window._jcPersistFlushBound=true;const _flushNow=()=>{if(_persistLocalPending)persistProgressLocallyNow()};window.addEventListener('pagehide',_flushNow);window.addEventListener('beforeunload',_flushNow);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')_flushNow()})}
 function createProgressEventId(kind='activity'){return `${kind}:${globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`}`}
 function creditLearningXp(amount,reason,eventId){
   if(!window.JCProgress||!Number.isFinite(amount)||amount<=0)return false;
@@ -2901,35 +2904,25 @@ function questionPool(){
   root._jcQuestionPoolCache=out;
   return out;
 }
+window._jcQuestionPoolEpoch = window._jcQuestionPoolEpoch || 0;
+window.bumpQuestionPoolVersion = function(){ window._jcQuestionPoolEpoch = (window._jcQuestionPoolEpoch || 0) + 1; };
 function _getQuestionPoolSignature(){
   const root=typeof window!=='undefined'?window:globalThis;
   const app=typeof state==='object'&&state?state:{};
   const sessionOwner=typeof cloudSession!=='undefined'?(cloudSession?.user?.id||''):(app._ownerUserId||'');
-  const scope=JSON.stringify([sessionOwner,app._ownerUserId||'',app.activeCampaignId||'',Number(app._resetEpoch||0)]);
+  const scope=`${sessionOwner}|${app._ownerUserId||''}|${app.activeCampaignId||''}|${Number(app._resetEpoch||0)}`;
   const arr=Array.isArray(ALL_QUESTIONS)?ALL_QUESTIONS:[];
-  const tracker=_getQuestionPoolSignature._tracker||(_getQuestionPoolSignature._tracker={generation:0,scope:null,array:null,records:[]});
+  const len=arr.length;
+  const first=len?arr[0]:null, mid=len?arr[len>>1]:null, last=len?arr[len-1]:null;
+  const sample=`${len}|${first?.id||''}:${first?.subject||''}:${first?.correct_index??''}|${mid?.id||''}:${mid?.subject||''}|${last?.id||''}:${last?.subject||''}:${last?.correct_index??''}|${Number(root._jcQuestionPoolEpoch||0)}|${Number(root.JCQuestionsWorkspace?.revision||0)}`;
+  const tracker=_getQuestionPoolSignature._tracker||(_getQuestionPoolSignature._tracker={generation:0,scope:null,array:null,sample:'',validators:null});
   const validators=[root.isValidPedagogicalQuestion,root.isQuestionDisciplineEligible,root.resolveStrictQuestionDiscipline,root.answerKeyStatus,root.isHunterManualArtifact,root.isPlatformManualStudyArtifact];
-  let changed=tracker.scope!==scope||tracker.array!==arr||tracker.records.length!==arr.length||!tracker.validators||validators.some((value,index)=>value!==tracker.validators[index]);
-  const records=[];
-  for(let index=0;index<arr.length;index++){
-    const item=arr[index];
-    let snapshot='';
-    if(item&&typeof item==='object'){
-      const options=Array.isArray(item.options)?item.options.map(option=>typeof option==='string'?option:[typeof option,String(option)]):null;
-      const rawKey=item.correct_index;
-      const keySnapshot=rawKey===null||rawKey===undefined||['number','string','boolean'].includes(typeof rawKey)?rawKey:typeof rawKey==='object'?Object.prototype.toString.call(rawKey):String(rawKey);
-      snapshot=JSON.stringify([item.id,item.subject,item.classification_declared_subject,item.subject_source,item.classification_source,item.topic,item.topic_canonical,item.category,item.statement,item.associated_text,item.command,item.needs_source,item.structure_needs_review,item.quality_status,item.quality_reason,options,typeof rawKey,keySnapshot,item.origin,item.board,item.difficulty,item.answer_unknown,item.annulled,item.anulada,item.key_source,item.answer_key_validation,item.needs_review,item.classification_needs_review,item.explanation,item.title,item.source_label]);
-    }else snapshot=String(item);
-    const previous=tracker.records[index];
-    if(!previous||previous.item!==item||previous.snapshot!==snapshot)changed=true;
-    records.push({item,snapshot});
-  }
+  const changed=tracker.scope!==scope||tracker.array!==arr||tracker.sample!==sample||!tracker.validators||validators.some((v,idx)=>v!==tracker.validators[idx]);
   if(changed){
     tracker.generation++;
-    tracker.scope=scope;tracker.array=arr;tracker.records=records;tracker.validators=validators;
+    tracker.scope=scope;tracker.array=arr;tracker.sample=sample;tracker.validators=validators;
     root._jcLearningUnitsCache?.clear?.();
   }
-  // A cheap content scan invalidates expensive validation/sorting only after actual edits.
   return `${scope}|${tracker.generation}`;
 }
 function _questionCanTrain(item,subject='all'){
@@ -4584,5 +4577,6 @@ setTimeout(()=>window.dismissAppBootSplash?.(),420);if(cloudSession&&!recovering
 
 <script src="question-review.js" defer></script>
 <script src="invocador-classroom.js" defer></script>
+<script src="missao-elite-features.js" defer></script>
 </body>
 </html>

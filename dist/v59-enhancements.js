@@ -320,7 +320,7 @@ LEARNING_SUBJECTS=typeof computeValidLearningSubjects==='function'?computeValidL
   let restoringSummaries=false;
   const restoreOpenSummaries=()=>{if(restoringSummaries)return;restoringSummaries=true;try{document.querySelectorAll('[data-summary]:not([data-norm-done="1"])').forEach(button=>{button.dataset.normDone='1';const open=!!libraryUI.openSummaries[summaryStateKey(button.dataset.summary)],card=button.closest('.summaryCard'),icon=open?'−':'＋';card?.classList.toggle('open',open);if(button.lastElementChild&&button.lastElementChild.textContent!==icon)button.lastElementChild.textContent=icon;const title=button.querySelector('.summaryTitle span:last-child'),normalized=normalizeLegalTitle(title?.textContent);if(title&&title.textContent!==normalized)title.textContent=normalized})}finally{restoringSummaries=false}};
   document.querySelector('#summaryList')?.addEventListener('click',event=>{const button=event.target.closest?.('[data-summary]');if(!button)return;libraryUI.openSummaries[summaryStateKey(button.dataset.summary)]=!button.closest('.summaryCard')?.classList.contains('open');saveLibraryUI()},{capture:true});
-  const summaryObserver=new MutationObserver(()=>restoreOpenSummaries());
+  let _sumObsRaf=0;const summaryObserver=new MutationObserver(()=>{if(_sumObsRaf)return;_sumObsRaf=requestAnimationFrame(()=>{_sumObsRaf=0;restoreOpenSummaries()})});
   if(document.querySelector('#summaryList'))summaryObserver.observe(document.querySelector('#summaryList'),{childList:true});
   restoreOpenSummaries();
 

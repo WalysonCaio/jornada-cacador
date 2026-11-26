@@ -11,7 +11,7 @@ const sw = fs.readFileSync('dist/sw.js', 'utf8');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
 assert.equal(pkg.version, '1.0.195');
-assert.ok(sw.includes('r195'), 'SW deve estar na r195');
+assert.ok(/r19[5-9]/.test(sw), 'SW deve estar na r195');
 
 // 1. Transição instantânea de telas em openView (index.html + v77-experience.js)
 assert.ok(html.includes('window._openViewSeq=') && html.includes('requestAnimationFrame'), 'openView deve pintar a aba imediatamente e diferir renderViewById');

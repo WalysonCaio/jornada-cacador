@@ -509,3 +509,342 @@ body.lightAppTheme .hero .metric b {
     contain-intrinsic-size: auto 150px;
   }
 }
+
+/* ── r196: Isolamento de layout para troca instantânea de abas + Componentes Missão Elite ── */
+.view {
+  contain: layout style;
+}
+.card {
+  contain: style;
+}
+.tab, button, a {
+  touch-action: manipulation;
+}
+
+.meTodayMission, .meRadarCard, .meErrorBar, .meEssayPanel, .meScheduleCard {
+  margin-bottom: 14px;
+  border-radius: 16px;
+}
+.meMissionHead, .meRadarHead, .meErrHeader, .meEssayTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.meMissionCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.16);
+  color: #38bdf8;
+  font-weight: 800;
+  font-size: 0.8rem;
+  margin-right: 6px;
+}
+.meMissionTitle, .meRadarTitle {
+  font-size: 1rem;
+  margin: 4px 0 0;
+}
+.meMissionList {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.meMissionRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  color: inherit;
+  cursor: pointer;
+}
+.meMissionRow.done {
+  border-color: rgba(34, 197, 94, 0.45);
+  opacity: 0.82;
+}
+.meMissionCheck {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.meMissionBody {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+}
+.meMissionBody small {
+  opacity: 0.78;
+  font-size: 0.78rem;
+}
+.meMissionProg {
+  font-weight: 800;
+  color: #38bdf8;
+  white-space: nowrap;
+}
+.meMissionFoot {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.mePill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.mePill--danger { background: rgba(239, 68, 68, 0.18); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+.mePill--warn { background: rgba(245, 158, 11, 0.18); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+.mePill--ok { background: rgba(34, 197, 94, 0.18); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); }
+.mePill--neutral { background: rgba(148, 163, 184, 0.16); color: inherit; border: 1px solid rgba(148, 163, 184, 0.3); }
+
+.meBlockGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.meBlockItem {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+.meBlockItem.isRisk {
+  border-color: rgba(239, 68, 68, 0.55);
+}
+.meBlockTop {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.84rem;
+  margin-bottom: 6px;
+}
+.meBlockTrack {
+  position: relative;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.22);
+  overflow: visible;
+}
+.meBlockTrack i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #38bdf8, #22c55e);
+}
+.meBlockItem.isRisk .meBlockTrack i {
+  background: linear-gradient(90deg, #ef4444, #f59e0b);
+}
+.meBlockTrack s {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 11px;
+  background: #f8fafc;
+  opacity: 0.7;
+}
+.meBlockSubs {
+  margin-top: 6px;
+  font-size: 0.76rem;
+  opacity: 0.85;
+}
+.meBlockSubs .isZero {
+  color: #f87171;
+  font-weight: 800;
+}
+
+.meErrKpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.meErrKpi {
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  text-align: center;
+}
+.meErrKpi b { display: block; font-size: 1.15rem; }
+.meErrKpi span { font-size: 0.74rem; opacity: 0.8; }
+.meErrKpi.isHot { border-color: rgba(239, 68, 68, 0.45); color: #fca5a5; }
+.meErrKpi.isOk { border-color: rgba(34, 197, 94, 0.45); color: #86efac; }
+
+.meErrSubjList {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.meErrSubjRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.35);
+}
+.meReincBadge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.meFeedbackExtra {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.3);
+  display: grid;
+  gap: 8px;
+}
+.meTrapPill {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  font-size: 0.84rem;
+}
+.meOtherOpts summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.84rem;
+  color: #38bdf8;
+}
+.meOtherOpts ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 0.82rem;
+  display: grid;
+  gap: 4px;
+}
+.meFeedbackActions, .meSimActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.meSimActions .isMarked {
+  border-color: #fbbf24;
+  color: #fbbf24;
+}
+.sheetBubble.markedReview {
+  box-shadow: 0 0 0 2px #fbbf24 inset;
+}
+.meReportBtn {
+  width: 100%;
+  margin-top: 6px;
+  opacity: 0.86;
+}
+.meReportDialog {
+  width: min(94vw, 480px);
+  border-radius: 18px;
+  padding: 18px;
+}
+.meReportReasons {
+  display: grid;
+  gap: 8px;
+  font-size: 0.88rem;
+}
+.meReportReasons label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.meEssayCritGrid {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.meEssayCritHead {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.84rem;
+  margin-bottom: 4px;
+}
+.meEssayHighlightBox {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.38);
+}
+.meEssayHighlightBox summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #38bdf8;
+}
+.meEssayMarkedText {
+  margin-top: 10px;
+  line-height: 1.65;
+  font-size: 0.9rem;
+}
+.meEssayMark {
+  background: rgba(239, 68, 68, 0.22);
+  color: inherit;
+  border-bottom: 2px solid #f87171;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.meEssayMark sup {
+  color: #f87171;
+  font-weight: 900;
+  margin-left: 2px;
+}
+
+.meHeatmapWrap {
+  margin-top: 12px;
+}
+.meHeatmapGrid {
+  display: grid;
+  grid-template-columns: repeat(14, 1fr);
+  gap: 4px;
+}
+.meHeatCell {
+  aspect-ratio: 1 / 1;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.16);
+}
+.meHeatCell.lvl1 { background: rgba(56, 189, 248, 0.38); }
+.meHeatCell.lvl2 { background: rgba(56, 189, 248, 0.72); }
+.meHeatCell.lvl3 { background: #22c55e; }
+
+/* Suporte ao Tema Claro */
+[data-theme="light"] .meMissionRow,
+[data-theme="light"] .meBlockItem,
+[data-theme="light"] .meErrKpi,
+[data-theme="light"] .meErrSubjRow,
+[data-theme="light"] .meEssayHighlightBox {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: rgba(15, 23, 42, 0.14);
+}
+[data-theme="light"] .mePill--danger { color: #b91c1c; }
+[data-theme="light"] .mePill--warn { color: #b45309; }
+[data-theme="light"] .mePill--ok { color: #15803d; }
+[data-theme="light"] .meErrKpi.isHot { color: #b91c1c; }
+[data-theme="light"] .meErrKpi.isOk { color: #15803d; }
+[data-theme="light"] .meReincBadge { color: #b91c1c; }
