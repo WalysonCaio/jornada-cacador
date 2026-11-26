@@ -106,7 +106,7 @@
       const filter = portalDbId
         ? `or=(campaign_id.eq.${encodeURIComponent(portalDbId)},share_with_community.eq.true)`
         : `user_id=eq.${encodeURIComponent(userId)}`;
-      const path = `exam_questions?${filter}&select=${encodeURIComponent(select)}&order=created_at.desc&limit=${pageSize}&offset=${offset}`;
+      const path = `exam_questions?superseded_at=is.null&${filter}&select=${encodeURIComponent(select)}&order=created_at.desc&limit=${pageSize}&offset=${offset}`;
       const res = await fetchFn(path).catch(() => null);
       if (!res || !res.ok) break;
       const rows = await res.json().catch(() => null);

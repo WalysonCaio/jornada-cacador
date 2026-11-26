@@ -1,16 +1,15 @@
-// validate-questions (v2) — valida respostas de public.exam_questions em lotes.
+// validate-questions (v2.1) — valida respostas de public.exam_questions em lotes.
 // Integra prompt-v2 (checagem de comando/itens + dupla passagem com ordem invertida)
-// mantendo VALIDATION_MODEL fixo (ex.: gemini-3.6-flash) e ritmo anti-429.
+// com fallback automático: Gemini (VALIDATION_MODEL) -> DeepSeek -> Groq quando houver 429.
 // Uso (somente admin): POST com header x-admin-token = VALIDATION_ADMIN_TOKEN
-// Body: { "limit": 15, "priority": "ia" | "desconhecido" | "all", "dupla": true, "dry_run": false }
-// Secrets: VALIDATION_ADMIN_TOKEN, GEMINI_API_KEY, VALIDATION_MODEL (recomendado: gemini-3.6-flash)
+// Body: { "limit": 15, "priority": "ia" | "desconhecido" | "all", "dupla": true, "provider": "auto"|"gemini"|"deepseek"|"groq", "dry_run": false }
+// Secrets: VALIDATION_ADMIN_TOKEN, GEMINI_API_KEY, VALIDATION_MODEL, DEEPSEEK_API_KEY, DEEPSEEK_MODEL, GROQ_API_KEY, GROQ_MODEL
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 const LETTERS = ["A", "B", "C", "D", "E"];
 const MAX_LIMIT = 50;
-const CONCURRENCY = 1;       // 1 por vez para evitar rajada 429 na chave gratuita
-const PAUSE_MS = 1100;       // pequena pausa entre chamadas Gemini
-const RETRY_429_MS = 4500;   // backoff caso receba 429 pontual
+const CONCURRENCY = 2;
+const PAUSE_MS = 400;
 
 const sb = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -19,17 +18,17 @@ const sb = createClient(
 );
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-let cachedModels: string[] | null = null;
+let cachedGeminiModels: string[] | null = null;
 
-async function getActiveModels(apiKey: string): Promise<string[]> {
+async function getGeminiModels(apiKey: string): Promise<string[]> {
   const forced = Deno.env.get("VALIDATION_MODEL")?.trim();
   if (forced) return [forced];
-  if (cachedModels?.length) return cachedModels;
+  if (cachedGeminiModels?.length) return cachedGeminiModels;
 
   const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=100", {
     headers: { "x-goog-api-key": apiKey },
   });
-  if (!r.ok) throw new Error(`list_models_${r.status}: ${(await r.text()).slice(0, 150)}`);
+  if (!r.ok) throw new Error(`list_models_${r.status}`);
   const j = await r.json();
   const candidates: string[] = (j?.models ?? [])
     .filter((m: any) =>
@@ -53,8 +52,8 @@ async function getActiveModels(apiKey: string): Promise<string[]> {
   };
   candidates.sort((a, b) => score(b) - score(a));
   if (!candidates.length) throw new Error("nenhum_modelo_gemini_flash_ativo");
-  cachedModels = candidates.slice(0, 3);
-  return cachedModels;
+  cachedGeminiModels = candidates.slice(0, 2);
+  return cachedGeminiModels;
 }
 
 const optText = (o: unknown) =>
@@ -102,55 +101,157 @@ function aceitar(parsed: any, n: number): { idx: number | null; problema?: strin
   return { idx };
 }
 
-async function askGemini(prompt: string, models: string[], apiKey: string) {
+function parseJsonSafe(rawText: string) {
+  const cleaned = String(rawText || "").replace(/```json|```/gi, "").trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  const slice = start !== -1 && end > start ? cleaned.slice(start, end + 1) : cleaned;
+  return JSON.parse(slice);
+}
+
+type ProviderState = {
+  preferred: "auto" | "gemini" | "deepseek" | "groq";
+  geminiKeyOverride?: string;
+  geminiBlocked: boolean;
+  deepseekBlocked: boolean;
+  groqBlocked: boolean;
+};
+
+async function callGemini(prompt: string, apiKey: string) {
+  const models = await getGeminiModels(apiKey);
   let lastErr = "gemini_sem_resposta";
   for (const model of models) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": apiKey,
-          },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0, responseMimeType: "application/json" },
-          }),
-        },
-      );
-      if (!r.ok) {
-        lastErr = `gemini_${r.status}_${model}: ${(await r.text()).slice(0, 180)}`;
-        if (r.status === 429 && attempt === 0) {
-          await sleep(RETRY_429_MS);
-          continue;
-        }
-        if ([404, 429, 503].includes(r.status)) break;
-        throw new Error(lastErr);
-      }
-      const j = await r.json();
-      const rawParts = Array.isArray(j?.candidates?.[0]?.content?.parts) ? j.candidates[0].content.parts : [];
-      const answerParts = rawParts.filter((p: any) => !p?.thought);
-      const text = (answerParts.length ? answerParts : rawParts).map((p: any) => p?.text ?? "").join("");
-      const usage = j?.usageMetadata ?? {};
-      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-      return { parsed, model, tokens_in: usage.promptTokenCount ?? 0, tokens_out: usage.candidatesTokenCount ?? 0 };
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0, responseMimeType: "application/json" },
+        }),
+      },
+    );
+    if (!r.ok) {
+      lastErr = `gemini_${r.status}_${model}: ${(await r.text()).slice(0, 150)}`;
+      if (r.status === 429) throw Object.assign(new Error(lastErr), { rateLimited: true });
+      if (r.status === 404 || r.status === 503) continue;
+      throw new Error(lastErr);
     }
+    const j = await r.json();
+    const rawParts = Array.isArray(j?.candidates?.[0]?.content?.parts) ? j.candidates[0].content.parts : [];
+    const answerParts = rawParts.filter((p: any) => !p?.thought);
+    const text = (answerParts.length ? answerParts : rawParts).map((p: any) => p?.text ?? "").join("");
+    const usage = j?.usageMetadata ?? {};
+    return {
+      parsed: parseJsonSafe(text),
+      model,
+      tokens_in: usage.promptTokenCount ?? 0,
+      tokens_out: usage.candidatesTokenCount ?? 0,
+    };
   }
   throw new Error(lastErr);
 }
 
-async function resolver(
-  q: any,
-  ask: (prompt: string) => Promise<{ parsed: any; model: string; tokens_in: number; tokens_out: number }>,
-  dupla: boolean,
+async function callOpenAICompat(
+  endpoint: string,
+  apiKey: string,
+  model: string,
+  prefix: string,
+  prompt: string,
 ) {
+  const r = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: "Responda estritamente com um objeto JSON válido conforme solicitado." },
+        { role: "user", content: prompt },
+      ],
+    }),
+  });
+  if (!r.ok) {
+    const msg = `${prefix}_${r.status}_${model}: ${(await r.text()).slice(0, 150)}`;
+    if (r.status === 429 || r.status === 402) throw Object.assign(new Error(msg), { rateLimited: true });
+    throw new Error(msg);
+  }
+  const j = await r.json();
+  const text = String(j?.choices?.[0]?.message?.content ?? "");
+  const usage = j?.usage ?? {};
+  return {
+    parsed: parseJsonSafe(text),
+    model: `${prefix}:${model}`,
+    tokens_in: usage.prompt_tokens ?? 0,
+    tokens_out: usage.completion_tokens ?? 0,
+  };
+}
+
+async function askWithFallback(prompt: string, pState: ProviderState) {
+  const geminiKey = (pState.geminiKeyOverride || Deno.env.get("GEMINI_API_KEY") || "").trim();
+  const deepseekKey = Deno.env.get("DEEPSEEK_API_KEY")?.trim();
+  const deepseekModel = Deno.env.get("DEEPSEEK_MODEL")?.trim() || "deepseek-chat";
+  const groqKey = Deno.env.get("GROQ_API_KEY")?.trim();
+  const groqModel = Deno.env.get("GROQ_MODEL")?.trim() || "llama-3.3-70b-versatile";
+
+  const order: Array<"gemini" | "deepseek" | "groq"> =
+    pState.preferred === "deepseek" ? ["deepseek", "groq", "gemini"]
+      : pState.preferred === "groq" ? ["groq", "deepseek", "gemini"]
+      : ["gemini", "deepseek", "groq"];
+
+  const errors: string[] = [];
+  for (const prov of order) {
+    if (prov === "gemini" && geminiKey && !pState.geminiBlocked) {
+      try {
+        return await callGemini(prompt, geminiKey);
+      } catch (e: any) {
+        if (e?.rateLimited) pState.geminiBlocked = true;
+        errors.push(String(e?.message || e));
+      }
+    }
+    if (prov === "deepseek" && deepseekKey && !pState.deepseekBlocked) {
+      try {
+        return await callOpenAICompat(
+          "https://api.deepseek.com/chat/completions",
+          deepseekKey,
+          deepseekModel,
+          "deepseek",
+          prompt,
+        );
+      } catch (e: any) {
+        if (e?.rateLimited) pState.deepseekBlocked = true;
+        errors.push(String(e?.message || e));
+      }
+    }
+    if (prov === "groq" && groqKey && !pState.groqBlocked) {
+      try {
+        return await callOpenAICompat(
+          "https://api.groq.com/openai/v1/chat/completions",
+          groqKey,
+          groqModel,
+          "groq",
+          prompt,
+        );
+      } catch (e: any) {
+        if (e?.rateLimited) pState.groqBlocked = true;
+        errors.push(String(e?.message || e));
+      }
+    }
+  }
+  throw new Error(errors.join(" | ").slice(0, 240) || "nenhum_provedor_ia_disponivel");
+}
+
+async function resolver(q: any, pState: ProviderState, dupla: boolean) {
   const n = (q.options as unknown[]).length;
   const direta = [...Array(n).keys()];
   const invertida = [...direta].reverse();
 
-  const res1 = await ask(buildPromptV2(q, direta));
+  const res1 = await askWithFallback(buildPromptV2(q, direta), pState);
   let tin = res1.tokens_in, tout = res1.tokens_out, model = res1.model;
   const a1 = aceitar(res1.parsed, n);
   if (a1.idx === null) {
@@ -162,10 +263,9 @@ async function resolver(
   }
 
   await sleep(PAUSE_MS);
-  const res2 = await ask(buildPromptV2(q, invertida));
+  const res2 = await askWithFallback(buildPromptV2(q, invertida), pState);
   tin += res2.tokens_in;
   tout += res2.tokens_out;
-  model = res2.model || model;
   const a2 = aceitar(res2.parsed, n);
   if (a2.idx === null) {
     return { idx: null, problema: `passe2:${a2.problema || "sem_resposta"}`, parsed: res1.parsed, model, tokens_in: tin, tokens_out: tout };
@@ -184,9 +284,9 @@ async function resolver(
   return { idx: orig1, problema: null, parsed: res1.parsed, model, tokens_in: tin, tokens_out: tout };
 }
 
-async function validateOne(q: any, batch: string, models: string[], apiKey: string, dupla: boolean) {
+async function validateOne(q: any, batch: string, pState: ProviderState, dupla: boolean) {
   try {
-    const r = await resolver(q, (prompt) => askGemini(prompt, models, apiKey), dupla);
+    const r = await resolver(q, pState, dupla);
     const conf = ["alta", "media", "baixa"].includes(r.parsed?.confianca) ? r.parsed.confianca : "baixa";
     const { data, error } = await sb.rpc("save_question_validation", {
       p_id: q.id,
@@ -206,11 +306,11 @@ async function validateOne(q: any, batch: string, models: string[], apiKey: stri
       p_resposta: null,
       p_fundamento: "",
       p_confianca: "baixa",
-      p_model: models[0] ?? "unknown",
+      p_model: "fallback_error",
       p_batch: batch,
       p_erro: msg,
     });
-    return { id: q.id, model: models[0] ?? "unknown", resultado: "erro", problema: msg, tokens_in: 0, tokens_out: 0 };
+    return { id: q.id, model: "fallback_error", resultado: "erro", problema: msg, tokens_in: 0, tokens_out: 0 };
   }
 }
 
@@ -219,17 +319,17 @@ Deno.serve(async (req) => {
   if (!expectedToken || req.headers.get("x-admin-token") !== expectedToken) {
     return new Response("forbidden", { status: 403 });
   }
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-  if (!apiKey) return Response.json({ error: "GEMINI_API_KEY_NAO_CONFIGURADA" }, { status: 500 });
 
   const body = await req.json().catch(() => ({}));
   const limit = Math.min(Math.max(Number(body.limit ?? 15), 1), MAX_LIMIT);
   const priority = ["ia", "desconhecido", "all"].includes(body.priority) ? body.priority : "ia";
   const dupla = typeof body.dupla === "boolean" ? body.dupla : (priority === "ia");
+  const preferred = ["auto", "gemini", "deepseek", "groq"].includes(body.provider) ? body.provider : "auto";
 
   let q = sb.from("exam_questions")
     .select("id,statement,options,subject,topic,board,gabarito_source")
     .eq("status_validacao", "pendente")
+    .is("superseded_at", null)
     .is("resposta_ia", null)
     .lt("validation_attempts", 3)
     .or("validation_error.is.null,validation_error.not.like.passes_divergentes%");
@@ -240,31 +340,38 @@ Deno.serve(async (req) => {
     .limit(limit);
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
-  const models = await getActiveModels(apiKey);
   if (body.dry_run) {
     const sample = rows?.[0];
     const n = sample ? (sample.options as unknown[]).length : 0;
     return Response.json({
       dry_run: true,
       dupla,
-      models_detectados: models,
+      preferred_provider: preferred,
       selecionadas: rows!.length,
       exemplo_prompt_v2: sample ? buildPromptV2(sample, [...Array(n).keys()]) : null,
     });
   }
 
+  const pState: ProviderState = {
+    preferred,
+    geminiKeyOverride: req.headers.get("x-gemini-api-key")?.trim() || undefined,
+    geminiBlocked: false,
+    deepseekBlocked: false,
+    groqBlocked: false,
+  };
   const batch = `${new Date().toISOString().slice(0, 16)}-${priority}${dupla ? "-dupla" : ""}`;
   const resumo: Record<string, number> = {};
+  const modelosUsados: Record<string, number> = {};
   const motivos: Record<string, number> = {};
-  let tin = 0, tout = 0, usedModel = models[0];
+  let tin = 0, tout = 0;
   const fila = [...rows!];
 
   await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
     while (fila.length) {
       const item = fila.shift()!;
-      const r = await validateOne(item, batch, models, apiKey, dupla);
-      usedModel = r.model;
+      const r = await validateOne(item, batch, pState, dupla);
       resumo[r.resultado] = (resumo[r.resultado] ?? 0) + 1;
+      modelosUsados[r.model] = (modelosUsados[r.model] ?? 0) + 1;
       if (r.problema) {
         const key = r.problema.split(":")[0];
         motivos[key] = (motivos[key] ?? 0) + 1;
@@ -277,10 +384,10 @@ Deno.serve(async (req) => {
 
   return Response.json({
     batch,
-    model: usedModel,
     dupla,
     processadas: rows!.length,
     resumo,
+    modelos_usados: modelosUsados,
     motivos,
     tokens_entrada: tin,
     tokens_saida: tout,
