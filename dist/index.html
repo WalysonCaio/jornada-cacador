@@ -1393,7 +1393,7 @@ function renderViewById(id,force=false){
   else if(id==='profile'&&typeof window.renderHunterProfileHub==='function'){window.renderHunterProfileHub()}
   window._renderedViews?.add(id);
 }
-function openView(id){const labels={today:'Hoje',map:'Portais',assistant:'Invocador',study:'Central de estudo',learning:'Trilha',library:'Biblioteca',essay:'Redação',taf:'TAF Policial',ranking:'Ranking de Caçadores',duel:'Arena Duelo X1',review:'Revisões',report:'Relatório',profile:'Meu Perfil'},menuViews=new Set(['learning','assistant','library','essay','taf','ranking','duel','review','profile']);$$('.tab').forEach(x=>{const active=x.dataset.view===id||(x.id==='moreBtn'&&menuViews.has(id));x.classList.toggle('active',active);if(active)x.setAttribute('aria-current','page');else x.removeAttribute('aria-current')});$$('.view').forEach(v=>v.classList.toggle('active',v.id===id));const hero=$('.hero');if(hero)hero.hidden=(id!=='today');document.title=`${labels[id]||'Jornada'} — Jornada do Caçador`;window.scrollTo(0,0);const _ovSeq=(window._openViewSeq=(window._openViewSeq||0)+1);const _runRender=()=>{if(window._openViewSeq!==_ovSeq)return;renderViewById(id,false);};if(typeof requestAnimationFrame==='function'){requestAnimationFrame(()=>setTimeout(_runRender,0));}else{_runRender();}}
+function openView(id){const labels={today:'Hoje',map:'Portais',assistant:'Invocador',study:'Central de estudo',learning:'Trilha',library:'Biblioteca',essay:'Redação',taf:'TAF Policial',ranking:'Ranking de Caçadores',duel:'Arena Duelo X1',review:'Revisões',report:'Relatório',profile:'Meu Perfil'},menuViews=new Set(['learning','assistant','library','essay','taf','ranking','duel','review','profile']);$$('.tab').forEach(x=>{const active=x.dataset.view===id||(x.id==='moreBtn'&&menuViews.has(id));x.classList.toggle('active',active);if(active)x.setAttribute('aria-current','page');else x.removeAttribute('aria-current')});$$('.view').forEach(v=>v.classList.toggle('active',v.id===id));const hero=$('.hero');if(hero)hero.hidden=(id!=='today');document.title=`${labels[id]||'Jornada'} — Jornada do Caçador`;window.scrollTo(0,0);renderViewById(id,false)}
 var cloudEssays=[];const LIBRARY_UI_KEY='jornada-library-ui-v57';let libraryUI=JSON.parse(localStorage.getItem(LIBRARY_UI_KEY)||'{"folders":{"edital":true},"subjects":{},"studyFolders":{},"summaryFilter":{},"cardFilter":{},"trailSubject":{}}');libraryUI.studyFolders=libraryUI.studyFolders||{};libraryUI.summaryFilter=libraryUI.summaryFilter||{};libraryUI.cardFilter=libraryUI.cardFilter||{};libraryUI.trailSubject=libraryUI.trailSubject||{};let selectedCustomSubject='';function saveLibraryUI(){localStorage.setItem(LIBRARY_UI_KEY,JSON.stringify(libraryUI))}function portalSelectionKey(){return`jornada-portal-subject-${state.activeCampaignId||'default'}`}state.manualStudyEntries=Array.isArray(state.manualStudyEntries)?state.manualStudyEntries:[];state.campaigns=state.campaigns||[{id:'pmpe',name:'PMPE — Soldado',organization:'Polícia Militar de Pernambuco',priority:1,template:'custom',customCampaign:state.customCampaign}];state.activeCampaignId=state.activeCampaignId||state.campaigns[0].id;selectedCustomSubject=localStorage.getItem(portalSelectionKey())||'';
 function localDayKey(date=new Date()){
  if(validStudyDayKey(date))return date;
@@ -1435,10 +1435,7 @@ function completedStudyDay(value){
  if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/.test(value)||!validStudyDayKey(value.slice(0,10)))return'';
  const date=new Date(value);return Number.isFinite(date.getTime())?localDayKey(date):'';
 }
-let _persistLocalTimer=null,_persistLocalPending=false;
-function persistProgressLocallyNow(){if(_persistLocalTimer){clearTimeout(_persistLocalTimer);_persistLocalTimer=null}_persistLocalPending=false;try{localStorage.setItem(KEY,JSON.stringify(state));return true}catch(error){if(!window._storageWarned){window._storageWarned=true;toast('Não foi possível salvar neste navegador. Mantenha esta página aberta, tente sincronizar e exporte um backup em Configurações.')}return false}}
-function persistProgressLocally(immediate=false){if(immediate)return persistProgressLocallyNow();_persistLocalPending=true;if(_persistLocalTimer)clearTimeout(_persistLocalTimer);_persistLocalTimer=setTimeout(persistProgressLocallyNow,220);return true}
-if(typeof window!=='undefined'&&!window._jcPersistFlushBound){window._jcPersistFlushBound=true;const _flushNow=()=>{if(_persistLocalPending)persistProgressLocallyNow()};window.addEventListener('pagehide',_flushNow);window.addEventListener('beforeunload',_flushNow);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')_flushNow()})}
+function persistProgressLocally(){try{localStorage.setItem(KEY,JSON.stringify(state));return true}catch(error){if(!window._storageWarned){window._storageWarned=true;toast('Não foi possível salvar neste navegador. Mantenha esta página aberta, tente sincronizar e exporte um backup em Configurações.')}return false}}
 function createProgressEventId(kind='activity'){return `${kind}:${globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`}`}
 function creditLearningXp(amount,reason,eventId){
   if(!window.JCProgress||!Number.isFinite(amount)||amount<=0)return false;
@@ -2904,25 +2901,35 @@ function questionPool(){
   root._jcQuestionPoolCache=out;
   return out;
 }
-window._jcQuestionPoolEpoch = window._jcQuestionPoolEpoch || 0;
-window.bumpQuestionPoolVersion = function(){ window._jcQuestionPoolEpoch = (window._jcQuestionPoolEpoch || 0) + 1; };
 function _getQuestionPoolSignature(){
   const root=typeof window!=='undefined'?window:globalThis;
   const app=typeof state==='object'&&state?state:{};
   const sessionOwner=typeof cloudSession!=='undefined'?(cloudSession?.user?.id||''):(app._ownerUserId||'');
-  const scope=`${sessionOwner}|${app._ownerUserId||''}|${app.activeCampaignId||''}|${Number(app._resetEpoch||0)}`;
+  const scope=JSON.stringify([sessionOwner,app._ownerUserId||'',app.activeCampaignId||'',Number(app._resetEpoch||0)]);
   const arr=Array.isArray(ALL_QUESTIONS)?ALL_QUESTIONS:[];
-  const len=arr.length;
-  const first=len?arr[0]:null, mid=len?arr[len>>1]:null, last=len?arr[len-1]:null;
-  const sample=`${len}|${first?.id||''}:${first?.subject||''}:${first?.correct_index??''}|${mid?.id||''}:${mid?.subject||''}|${last?.id||''}:${last?.subject||''}:${last?.correct_index??''}|${Number(root._jcQuestionPoolEpoch||0)}|${Number(root.JCQuestionsWorkspace?.revision||0)}`;
-  const tracker=_getQuestionPoolSignature._tracker||(_getQuestionPoolSignature._tracker={generation:0,scope:null,array:null,sample:'',validators:null});
+  const tracker=_getQuestionPoolSignature._tracker||(_getQuestionPoolSignature._tracker={generation:0,scope:null,array:null,records:[]});
   const validators=[root.isValidPedagogicalQuestion,root.isQuestionDisciplineEligible,root.resolveStrictQuestionDiscipline,root.answerKeyStatus,root.isHunterManualArtifact,root.isPlatformManualStudyArtifact];
-  const changed=tracker.scope!==scope||tracker.array!==arr||tracker.sample!==sample||!tracker.validators||validators.some((v,idx)=>v!==tracker.validators[idx]);
+  let changed=tracker.scope!==scope||tracker.array!==arr||tracker.records.length!==arr.length||!tracker.validators||validators.some((value,index)=>value!==tracker.validators[index]);
+  const records=[];
+  for(let index=0;index<arr.length;index++){
+    const item=arr[index];
+    let snapshot='';
+    if(item&&typeof item==='object'){
+      const options=Array.isArray(item.options)?item.options.map(option=>typeof option==='string'?option:[typeof option,String(option)]):null;
+      const rawKey=item.correct_index;
+      const keySnapshot=rawKey===null||rawKey===undefined||['number','string','boolean'].includes(typeof rawKey)?rawKey:typeof rawKey==='object'?Object.prototype.toString.call(rawKey):String(rawKey);
+      snapshot=JSON.stringify([item.id,item.subject,item.classification_declared_subject,item.subject_source,item.classification_source,item.topic,item.topic_canonical,item.category,item.statement,item.associated_text,item.command,item.needs_source,item.structure_needs_review,item.quality_status,item.quality_reason,options,typeof rawKey,keySnapshot,item.origin,item.board,item.difficulty,item.answer_unknown,item.annulled,item.anulada,item.key_source,item.answer_key_validation,item.needs_review,item.classification_needs_review,item.explanation,item.title,item.source_label]);
+    }else snapshot=String(item);
+    const previous=tracker.records[index];
+    if(!previous||previous.item!==item||previous.snapshot!==snapshot)changed=true;
+    records.push({item,snapshot});
+  }
   if(changed){
     tracker.generation++;
-    tracker.scope=scope;tracker.array=arr;tracker.sample=sample;tracker.validators=validators;
+    tracker.scope=scope;tracker.array=arr;tracker.records=records;tracker.validators=validators;
     root._jcLearningUnitsCache?.clear?.();
   }
+  // A cheap content scan invalidates expensive validation/sorting only after actual edits.
   return `${scope}|${tracker.generation}`;
 }
 function _questionCanTrain(item,subject='all'){
@@ -4294,20 +4301,11 @@ async function loadGeneratedContent(){if(cloudSession?.user?.id&&state._ownerUse
     // Progress and filter changes are not content sources and must survive a read.
     const contentScope=JSON.stringify([cloudSession?.user?.id||state._ownerUserId||'guest',state.activeCampaignId||'',activeCampaign()?.dbId||'',Number(state._resetEpoch||0)]);
     const contentSignature=value=>{
-      if(typeof value==='string')return value;
-      if(Array.isArray(value))return `${value.length}:${String(value[0]??'').slice(0,24)}:${String(value[1]??'').slice(0,32)}`;
-      if(value&&typeof value==='object')return `${value.id||value.examQuestionId||''}|${value.subject||value.category||''}|${value.topic||value.title||''}|${String(value.statement||'').slice(0,48)}|${value.correct_index??''}|${value.key_source||''}|${value.status_validacao||''}|${Array.isArray(value.options)?value.options.length:0}`;
-      return String(value??'');
+      const transient=new Set(['_fp','_fpSource','_answerStartedAt','_chosenAnswerIndex','_userChosenIndex','_isCorrect','_userAnswered','_userMarkedBlank','communitySourceSignature','communitySourceScopeKey']);
+      const stable=item=>Array.isArray(item)?item.map(stable):item&&typeof item==='object'?Object.fromEntries(Object.keys(item).filter(key=>!transient.has(key)).sort().map(key=>[key,stable(item[key])])):item;
+      return JSON.stringify(stable(value));
     };
-    const contentListSignature=items=>{
-      const arr=Array.isArray(items)?items:[];
-      let h1=2166136261,h2=5381;
-      for(let i=0;i<arr.length;i++){
-        const s=contentSignature(arr[i]);
-        for(let j=0;j<s.length;j++){const c=s.charCodeAt(j);h1=Math.imul(h1^c,16777619);h2=Math.imul(h2,33)^c;}
-      }
-      return `${arr.length}:${h1>>>0}:${h2>>>0}`;
-    };
+    const contentListSignature=items=>JSON.stringify((items||[]).map(contentSignature).sort());
     const communityQuestion=item=>item&&(item.is_community===true||item.from_community===true||item.fromSharedBank===true);
     const contentSource=rows=>JSON.stringify([rows,typeof cloudDocuments==='undefined'?[]:cloudDocuments,state.customQuestionsByCampaign?.[state.activeCampaignId]||[],state.customFlashcardsByCampaign?.[state.activeCampaignId]||[],typeof extractFlashcardsFromUserNotes==='function'?extractFlashcardsFromUserNotes():[],(ALL_SUMMARIES||[]).filter(item=>item?.is_community),(ALL_FLASHCARDS||[]).filter(item=>item?.[3]?.is_community),(ALL_QUESTIONS||[]).filter(communityQuestion)].map(contentListSignature));
     const contentPipeline=()=>[window.classifyQuestion,window.getQuestionQualityDecision,window.auditAndEnrichAllQuestionsPedagogy,window.ensureNativeQuestionBankLoaded,window.ensureNativePedagogicalCouplingLoaded,window.sanitizeSummaryObject,window.isValidPedagogicalQuestion,window.isValidPedagogicalSummary,window.isValidFlashcardItem,window.isAllowedFlashcardRow,typeof resolveDocumentDiscipline==='function'?resolveDocumentDiscipline:null];
@@ -4320,9 +4318,9 @@ async function loadGeneratedContent(){if(cloudSession?.user?.id&&state._ownerUse
       return true;
     };
     const finishContent=rows=>{
-      const current=[ALL_SUMMARIES,ALL_FLASHCARDS,ALL_QUESTIONS,LEARNING_SUBJECTS],currSigs=current.map(contentListSignature),same=currSigs.map((sig,index)=>sig===previousSignatures[index]);
+      const current=[ALL_SUMMARIES,ALL_FLASHCARDS,ALL_QUESTIONS,LEARNING_SUBJECTS],same=current.map((items,index)=>contentListSignature(items)===previousSignatures[index]);
       if(same[0])ALL_SUMMARIES=previousContent[0];if(same[1])ALL_FLASHCARDS=previousContent[1];if(same[2])ALL_QUESTIONS=previousContent[2];if(same[3])LEARNING_SUBJECTS=previousContent[3];
-      loadGeneratedContent._semanticSourceCache={scope:contentScope,source:contentSource(rows),pipeline:contentPipeline(),outputs:currSigs};
+      loadGeneratedContent._semanticSourceCache={scope:contentScope,source:contentSource(rows),pipeline:contentPipeline(),outputs:[ALL_SUMMARIES,ALL_FLASHCARDS,ALL_QUESTIONS,LEARNING_SUBJECTS].map(contentListSignature)};
       return same.some(equal=>!equal);
     };
 const campaign=activeCampaign();if(!cloudSession||!campaign?.dbId){if(!beginContent(null))return false;ALL_SUMMARIES=[];ALL_FLASHCARDS=[...(state.customFlashcardsByCampaign?.[state.activeCampaignId]||[]),...extractFlashcardsFromUserNotes()];ALL_QUESTIONS=[...(state.customQuestionsByCampaign?.[state.activeCampaignId]||[])];if(typeof window.ensureNativeQuestionBankLoaded==='function')window.ensureNativeQuestionBankLoaded();if(typeof window.ensureNativePedagogicalCouplingLoaded==='function')window.ensureNativePedagogicalCouplingLoaded();LEARNING_SUBJECTS=computeValidLearningSubjects();if(!finishContent(null))return false;renderStudy();renderLearning();renderQuestionFilters();return true}const userId=cloudSession?.user?.id,portalId=state.activeCampaignId,portalDbId=campaign?.dbId,resetEpoch=Number(state._resetEpoch||0);const operation={};loadGeneratedContent._operation=operation;const currentScope=()=>loadGeneratedContent._operation===operation&&cloudSession?.user?.id===userId&&(!state._ownerUserId||state._ownerUserId===userId)&&state.activeCampaignId===portalId&&activeCampaign()?.dbId===portalDbId&&Number(state._resetEpoch||0)===resetEpoch;if(!currentScope())return false;try{const session=await validSession();if(!session||session.user?.id!==userId||!currentScope())return false;const response=await cloudFetch(`generated_study_content?campaign_id=eq.${encodeURIComponent(campaign.dbId)}&user_id=eq.${encodeURIComponent(userId)}&content_type=in.(summary,question_pack)&select=id,title,content_type,content,source_refs,source_document_id,approved&order=created_at.asc`,{headers:{Authorization:`Bearer ${session.access_token}`}});if(!currentScope())return false;const rows=await response.json();if(!currentScope())return false;if(!Array.isArray(rows))throw new Error('Resposta de conteúdo inválida.');if(!response.ok)throw new Error(rows?.message||'Não foi possível carregar o conteúdo gerado.');if(!beginContent(rows))return false;const rawSubjects=rows.map(row=>row.content?.subject||'Conteúdo geral');migrateLearningSubjectKeys(rawSubjects);const resolveRowSubject=row=>{const parentDoc=findSourceDocumentForContent(row.source_document_id,row.content?.source||'');return resolveDocumentDiscipline(parentDoc,row.content?.subject,`${row.content?.source||''} ${row.title||''}`)};const resolveRowDocTitle=row=>{const parentDoc=findSourceDocumentForContent(row.source_document_id,row.content?.source||'');return parentDoc?.title?standardizeDocumentTitle(parentDoc.title):standardizeDocumentTitle(row.content?.source||'PDF enviado')};const validRows=rows.filter(row=>{const parentDoc=findSourceDocumentForContent(row.source_document_id,row.content?.source||'');const subj=resolveRowSubject(row);return !isInvalidTrailSubject(subj,row.title,row.content?.source||'',parentDoc)});ALL_SUMMARIES=validRows.filter(row=>{const parentDoc=findSourceDocumentForContent(row.source_document_id,row.content?.source||'');return !row.content?.is_question_pack&&row.content_type!=='question_pack'&&!['prova','simulado'].includes(parentDoc?.document_type)&&isValidPedagogicalSummary(row)}).map(row=>sanitizeSummaryObject({id:row.id,documentId:row.source_document_id,title:row.title,source:resolveRowDocTitle(row),category:resolveRowSubject(row),approved:!!row.approved,explanation:row.content?.explanation||'',points:row.content?.points||[],example:row.content?.example||'',bizu:row.content?.bizu||'',mnemonic:cleanPedagogicalMnemonic(row.content?.mnemonic||'',row.title,row.content?.explanation),trap:row.content?.trap||''}));ALL_FLASHCARDS=[...validRows.filter(row=>isAllowedFlashcardRow(row,findSourceDocumentForContent(row.source_document_id,row.content?.source||''))).flatMap(row=>{const subj=resolveRowSubject(row);return(row.content?.flashcards||[]).filter(card=>isValidFlashcardItem(card?.question,card?.answer)).map(card=>[subj,card.question,card.answer])}),...(state.customFlashcardsByCampaign?.[state.activeCampaignId]||[]).filter(card=>!isInvalidTrailSubject(card?.[0])&&isValidFlashcardItem(card?.[1],card?.[2])),...extractFlashcardsFromUserNotes()];const _genRowQs=validRows.flatMap(row=>{const subj=resolveRowSubject(row);return(row.content?.questions||[]).filter(q=>Array.isArray(q.options)&&q.options.length>=2&&q.options.length<=5&&q.options.every(option=>String(option??'').trim())).map(q=>{const declaredSubject=String(q.classification_declared_subject||q.subject||subj||'');const sourceConflict=Boolean(row.source_document_id&&typeof cloudDocuments!=='undefined'&&[q.sourceDocumentId,q.documentId,q.source_document_id,q.document_id,q.documentDbId].filter(Boolean).some(id=>String(id)!==String(row.source_document_id)&&(cloudDocuments||[]).some(doc=>String(doc.id)!==String(row.source_document_id)&&[doc.id,doc.documentDbId,doc.document_id].filter(Boolean).map(String).includes(String(id)))));const classificationInput={...q,subject:q.subject||subj,classification_declared_subject:declaredSubject,...(sourceConflict?{review_status:'source_not_matched',needs_source:true}:{} )};const decision=typeof window.classifyQuestion==='function'?window.classifyQuestion(classificationInput):(typeof inferStrictQuestionSubjectDecision==='function'?inferStrictQuestionSubjectDecision(q.statement,q.topic,q.subject||subj,q.options):{subject:inferStrictQuestionSubject(q.statement,q.topic,q.subject||subj,q.options),confidence:0.4});const cSubj=decision.subject;const isGenTopic=!q.topic||q.topic.startsWith('Questão ')||q.topic.startsWith('Item ')||q.topic===row.title;const cTopic=isGenTopic&&(typeof window.inferQuestionPedagogicalTopic==='function')?window.inferQuestionPedagogicalTopic(q.statement,cSubj):q.topic||row.title;const quality=typeof window.getQuestionQualityDecision==='function'?window.getQuestionQualityDecision(classificationInput):{needs_review:false};return{...q,_fp:undefined,...(sourceConflict?{review_status:'source_not_matched',source_provenance_needs_review:true}:{}),...(quality.needs_review?{needs_source:true,structure_needs_review:true,quality_status:quality.quality_status,quality_reason:quality.reason}:{}),classification_declared_subject:declaredSubject,classification_needs_review:q.classification_needs_review===true||decision.needs_review===true||decision.ambiguous===true,classification_reason:decision.reason||q.classification_reason||'Classificação automática; sujeita a conferência.',classification_confidence:decision.confidence,subject:cSubj,topic:cTopic,statement:q.statement,associated_text:q.associated_text||'',board:q.board||'',options:q.options,correct_index:q.correct_index,explanation:q.explanation||'',difficulty:q.difficulty||'medio',origin:q.origin||'autoral',documentId:row.source_document_id||q.documentId,sourceDocumentId:row.source_document_id||q.sourceDocumentId,source_document_id:row.source_document_id||q.source_document_id,documentDbId:q.documentDbId,source_refs:[...(Array.isArray(row.source_refs)?row.source_refs:[]),...(Array.isArray(q.source_refs)?q.source_refs:[])],generatedContentId:row.id,sourceContentId:row.id,user_id:userId,campaign_id:portalDbId}})}).filter(q=>!isInvalidTrailSubject(q.subject,q.topic)&&isValidPedagogicalQuestion(q,{allowSourceReview:true}));
@@ -4577,6 +4575,5 @@ setTimeout(()=>window.dismissAppBootSplash?.(),420);if(cloudSession&&!recovering
 
 <script src="question-review.js" defer></script>
 <script src="invocador-classroom.js" defer></script>
-<script src="missao-elite-features.js" defer></script>
 </body>
 </html>

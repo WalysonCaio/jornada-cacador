@@ -8,8 +8,8 @@ const css = fs.readFileSync('dist/ui-r188.css', 'utf8');
 const sw = fs.readFileSync('dist/sw.js', 'utf8');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
-assert.ok(/^1\.0\.19[3-9]$/.test(pkg.version));
-assert.ok(/r19[3-9]/.test(sw), 'SW deve estar na r193');
+assert.equal(pkg.version, '1.0.193');
+assert.ok(sw.includes('r193'), 'SW deve estar na r193');
 
 // 1. Ofensiva do Caçador com ícone 🔥 e span .streakDaysUnit
 assert.ok(html.includes('<span id="streakCardCount">0</span> <span class="streakDaysUnit">dias seguidos</span>'), 'Ofensiva deve usar .streakDaysUnit');
