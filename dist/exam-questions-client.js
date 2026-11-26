@@ -75,8 +75,17 @@
     };
   }
 
+  const _examFetchCache = new Map();
+  const _examInFlight = new Map();
+  const EXAM_CACHE_TTL_MS = 300000;
+
   async function fetchPortalExamQuestions(portalDbId, userId, options = {}) {
     if (!portalDbId && !userId) return [];
+    const cacheKey = `${portalDbId || ''}::${userId || ''}`;
+    const now = Date.now();
+    const cached = _examFetchCache.get(cacheKey);
+    if (!options.force && cached && (now - cached.at) < EXAM_CACHE_TTL_MS) return cached.rows;
+    if (!options.force && _examInFlight.has(cacheKey)) return _examInFlight.get(cacheKey);
     const fetchFn = options.cloudFetch || (typeof w.cloudFetch === 'function' ? w.cloudFetch : null);
     if (!fetchFn) return [];
     const select = [
@@ -108,6 +117,7 @@
       }
       if (rows.length < pageSize) break;
     }
+    _examFetchCache.set(cacheKey, { at: Date.now(), rows: all });
     return all;
   }
 

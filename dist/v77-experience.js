@@ -58,7 +58,7 @@
     if(!today||!streak||q('#todayCommand'))return;
     const panel=document.createElement('div');
     panel.id='todayCommand';panel.className='todayCommand';
-    panel.innerHTML=`<button class="commandPrimary" id="continueJourney"><span class="eyebrow">⚡ PRÓXIMA AÇÃO DO DIA</span><b id="continueJourneyTitle">Continuar missão diária</b><span id="continueJourneyMeta">Retome exatamente de onde parou.</span></button><button class="commandShortcut" id="openUrgentReview"><div class="cmdHead"><i>↻</i><span class="cmdPill" id="urgentReviewPill">Ciclo 1·7·30</span></div><div><b>Revisar agora</b><span id="urgentReviewMeta">Confira suas revisões pendentes</span></div></button><button class="commandShortcut" id="openQuestionCenter"><div class="cmdHead"><i>◎</i><span class="cmdPill" id="questionShortcutPill">Treino ativo</span></div><div><b>Resolver questões</b><span id="questionShortcutMeta">Treino por disciplina e tópico</span></div></button>`;
+    panel.innerHTML=`<button class="commandPrimary" id="continueJourney"><span class="eyebrow">⚡ PRÓXIMA AÇÃO DO DIA</span><b id="continueJourneyTitle">Continuar missão diária</b><span id="continueJourneyMeta">Retome exatamente de onde parou.</span></button><button class="commandShortcut" id="openUrgentReview"><div class="cmdHead"><i>🔄</i><span class="cmdPill" id="urgentReviewPill">Ciclo 1·7·30</span></div><div><b>Revisar agora</b><span id="urgentReviewMeta">Confira suas revisões pendentes</span></div></button><button class="commandShortcut" id="openQuestionCenter"><div class="cmdHead"><i>🎯</i><span class="cmdPill" id="questionShortcutPill">Treino ativo</span></div><div><b>Resolver questões</b><span id="questionShortcutMeta">Treino por disciplina e tópico</span></div></button>`;
     today.insertBefore(panel,streak);
     q('#continueJourney').onclick=()=>{q('#dailyMission')?.scrollIntoView({behavior:'smooth',block:'center'});q('#dailyMission button:not([disabled]),#dailyMission input:not([disabled])')?.focus({preventScroll:true})};
     q('#openUrgentReview').onclick=()=>openView('review');
@@ -3374,6 +3374,11 @@
           ALL_QUESTIONS.splice(i,1);
           continue;
         }
+        if(!force&&qItem._jcSanitizedCamp===campId&&qItem._jcSanitizedMissions===missionsLen&&qItem.subject_canonical&&qItem._hayKey){
+          const stKeyFast=topicKey(qItem.statement||'');
+          if(stKeyFast&&stKeyFast.length>=15&&!byStmt.has(stKeyFast))byStmt.set(stKeyFast,qItem);
+          continue;
+        }
         if(typeof window.applyQuestionTopicEvidence==='function')window.applyQuestionTopicEvidence(qItem);
         if(typeof window.applyQuestionBoardEvidence==='function')window.applyQuestionBoardEvidence(qItem);
         const decision=questionDisciplineDecision(qItem);
@@ -3400,6 +3405,8 @@
           qItem.learning_order=computeQuestionEditalLearningOrder(qItem);
           qItem._loCampId=campId;
         }
+        qItem._jcSanitizedCamp=campId;
+        qItem._jcSanitizedMissions=missionsLen;
         const stKey=topicKey(qItem.statement||'');
         if(stKey&&stKey.length>=15&&!byStmt.has(stKey))byStmt.set(stKey,qItem);
       }
@@ -12294,7 +12301,9 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       scheduleQuestionReportExtras();
     }
     try{sessionStorage.setItem(viewKey,id)}catch{}
-    runV77ViewEnhancements(id,false);
+    const _v77Seq=window._openViewSeq||0;
+    const _runEnh=()=>{if((window._openViewSeq||0)!==_v77Seq)return;runV77ViewEnhancements(id,false);};
+    if(typeof requestAnimationFrame==='function'){requestAnimationFrame(()=>setTimeout(_runEnh,16));}else{_runEnh();}
   };
   const baseTickClock=typeof tickClock==='function'?tickClock:null;
   if(baseTickClock){
@@ -14064,7 +14073,12 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       body.lightAppTheme .hero .metric b {
         color: #ffffff !important;
       }
-      body.lightAppTheme .hero .metric span,
+      body.lightAppTheme section.hero .metric span,
+body.lightAppTheme section.hero .heroMeta,
+body.lightAppTheme section.hero .heroMeta span,
+body.lightAppTheme section.hero .muted,
+body.lightAppTheme section.hero .small.muted,
+body.lightAppTheme .hero .metric span,
       body.lightAppTheme .hero .heroMeta,
       body.lightAppTheme .hero .muted {
         color: #e2e8f0 !important;
@@ -17079,7 +17093,7 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       const errStmtText = err.question || err.statement || '';
       let cleanSubj = err.subject || 'Conteúdo Geral';
       if (errStmtText && typeof window.inferStrictQuestionSubjectDecision === 'function') {
-        const inferred = window.inferStrictQuestionSubjectDecision(errStmtText, err.topic || '', cleanSubj, err.options || [], {});
+        const inferred = window.inferStrictQuestionSubjectDecision(errStmtText, '', '', err.options || [], {});
         if (inferred?.subject && !isInvalidTrailSubject(inferred.subject) && inferred.confidence >= 0.7) {
           cleanSubj = inferred.subject;
         }

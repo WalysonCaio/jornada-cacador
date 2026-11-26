@@ -7,8 +7,8 @@ const css = fs.readFileSync('dist/ui-r188.css', 'utf8');
 const sw = fs.readFileSync('dist/sw.js', 'utf8');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
-assert.equal(pkg.version, '1.0.194');
-assert.ok(sw.includes('r194'), 'SW deve estar na r194');
+assert.ok(/^1\.0\.19[4-9]$/.test(pkg.version));
+assert.ok(/r19[4-9]/.test(sw), 'SW deve estar na r194');
 
 // 1. Ícone Minha conta no #moreDialog e ícones Revisar agora / Resolver questões na Home
 assert.ok(html.includes('👤<span>Minha conta</span>'), 'Minha conta deve usar ícone 👤');
