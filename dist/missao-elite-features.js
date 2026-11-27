@@ -837,6 +837,30 @@
   }
 
   // ── ORQUESTRAÇÃO LEVE POR ABA (ZERO TRAVAMENTO) ──
+
+  function ensureProfileLogoutButton() {
+    const prof = document.querySelector('#profile');
+    if (!prof) return;
+    const signed = Boolean(typeof cloudSession !== 'undefined' && cloudSession?.user?.id);
+    let bar = prof.querySelector('#meProfileLogoutBar');
+    if (!signed) {
+      if (bar) bar.remove();
+      return;
+    }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'meProfileLogoutBar';
+      bar.className = 'card';
+      bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px';
+      bar.innerHTML = '<div><strong>Sessão ativa</strong><div class="small muted">Seu progresso é salvo automaticamente na nuvem.</div></div><button type="button" class="ghost danger" id="meProfileLogoutBtn">🚪 Sair desta conta</button>';
+      prof.appendChild(bar);
+      bar.querySelector('#meProfileLogoutBtn').onclick = () => {
+        if (typeof window.requestLogoutAccount === 'function') window.requestLogoutAccount();
+        else document.querySelector('#logoutBtn')?.click();
+      };
+    }
+  }
+
   function onViewEnhanced(id) {
     if (id === 'today') {
       renderHomeTodayMission();
@@ -847,6 +871,8 @@
       enhanceEssayView40();
     } else if (id === 'map') {
       renderAdaptiveScheduleAndHeatmap();
+    } else if (id === 'profile') {
+      ensureProfileLogoutButton();
     }
     bindQuestionFeedbackObserver();
   }

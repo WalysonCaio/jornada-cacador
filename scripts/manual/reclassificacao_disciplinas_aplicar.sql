@@ -1,0 +1,122 @@
+-- SCRIPT MANUAL — rodar DEPOIS da v120 e da amostra. Não colocar em migrations.
+-- Parte 1: renomeios determinísticos já aprovados (rótulo antigo -> disciplina oficial). Marca origem 'mapa'.
+-- Parte 2: a classificação por IA roda pela Edge Function classify-subjects (lotes), não por este script.
+-- Parte 3: aprovação humana de propostas.
+-- Protegido: rótulo 'manual' nunca é alterado. Não apaga nada. Reversível pelo backup.
+-- Atenção: os rótulos com travessão (–) precisam ser exatos. A prévia mostra quantas linhas casaram; se algum
+-- rótulo não aparecer, confira o texto antes de aplicar.
+
+-- ───────────── Mapa de renomeio (revise antes de aplicar) ─────────────
+-- create table if not exists public.mapa_disciplinas_20261126 (de text primary key, para text not null);
+-- alter table public.mapa_disciplinas_20261126 enable row level security;
+-- revoke all on public.mapa_disciplinas_20261126 from anon, authenticated;
+-- delete from public.mapa_disciplinas_20261126;
+-- insert into public.mapa_disciplinas_20261126 (de, para) values
+--   ('Legislação Específica', 'Legislação Extravagante'),
+--   ('Direito Militar - Estrutura da PMPE', 'Direito Militar'),
+--   ('Direito Militar - Licenças, afastamentos e uniformes', 'Direito Militar'),
+--   ('Direito Militar - Promoções, agregação, remuneração e disciplina', 'Direito Militar'),
+--   ('Lógica Proposicional – Conceitos Básicos', 'Raciocínio Lógico-Matemático'),
+--   ('Lógica Proposicional – Equivalência e Tabelas Verdade', 'Raciocínio Lógico-Matemático'),
+--   ('Lógica Proposicional – Aplicações e Erros Comuns', 'Raciocínio Lógico-Matemático'),
+--   ('Lógica de Proposições – Negação dos Quantificadores', 'Raciocínio Lógico-Matemático'),
+--   ('Raciocínio Lógico – Tabela Verdade', 'Raciocínio Lógico-Matemático'),
+--   ('Lógica Matemática', 'Raciocínio Lógico-Matemático'),
+--   ('Probabilidade com Combinações', 'Raciocínio Lógico-Matemático'),
+--   ('Contagem Básica', 'Raciocínio Lógico-Matemático'),
+--   ('Direito - Lei Maria da Penha', 'Legislação Extravagante'),
+--   ('Medidas Protetivas de Urgência à Ofendida', 'Legislação Extravagante'),
+--   ('Política Nacional de Drogas', 'Legislação Extravagante'),
+--   ('Conceito e Abrangência da Lei 7.716/1989', 'Legislação Extravagante'),
+--   ('Crimes de Discriminação e Preconceito', 'Legislação Extravagante'),
+--   ('Conceito e Modalidades de Tortura', 'Legislação Extravagante'),
+--   ('Crimes de Tortura', 'Legislação Extravagante'),
+--   ('Conceitos e Sujeitos do Crime de Abuso de Autoridade', 'Legislação Extravagante'),
+--   ('Direito - Estatuto da Criança e do Adolescente', 'Legislação Extravagante'),
+--   ('Assistência, Acompanhante, Obrigações Hospitalares e Adoção', 'Legislação Extravagante'),
+--   ('Crimes Hediondos – Conceitos e Tipificação', 'Direito Penal'),
+--   ('Crimes Hediondos – Definição e Tipificação', 'Direito Penal'),
+--   ('Penas e Efeitos', 'Direito Penal'),
+--   ('Penas, Aumentos e Efeitos', 'Direito Penal'),
+--   ('Penas e Causas de Aumento', 'Direito Penal'),
+--   ('Penas e Regime de Cumprimento – Art. 2º, §1º, §3º, §4º', 'Direito Penal'),
+--   ('Regime Inicial de Cumprimento da Pena', 'Direito Penal'),
+--   ('Redação Discursiva', 'Redação'),
+--   ('Redação', 'Redação'),
+--   ('Flexão de Gênero e Número', 'Língua Portuguesa'),
+--   ('Fundamentos de Formação de Palavras', 'Língua Portuguesa'),
+--   ('Sinonímia e Substituição Lexical', 'Língua Portuguesa'),
+--   ('Funções da Linguagem', 'Língua Portuguesa'),
+--   ('Análise de Discurso e Vocabulário', 'Língua Portuguesa'),
+--   ('História do Brasil', 'História');
+-- -- Não mapeados de propósito (vão para a IA): '500 Questões Pmpe', '100 Questões-rlm', 'Simulado Pmpe',
+-- -- 'Simulado2 Pmpe', 'Edital e Prova', 'Questões-direitos Individuais', 'Execução Penal', 'Lógica Formal',
+-- -- 'Geografia de Pernambuco' (decisão pendente: manter ou juntar em 'Geografia').
+
+-- ───────────── PASSO 1 — PRÉVIA (só leitura) ─────────────
+-- select m.de, m.para, count(q.id) as linhas, count(q.id) filter (where q.subject_origem = 'manual') as protegidas_manual
+-- from public.mapa_disciplinas_20261126 m left join public.exam_questions q on q.subject = m.de and q.superseded_at is null
+-- group by 1, 2 order by 3 desc;
+-- Confira: linhas = 0 significa rótulo que não casou (provavelmente diferença de travessão ou espaço).
+-- Esperado no total (sem as protegidas): ~155.
+
+-- ───────────── PASSO 2 — APLICAR (descomente o bloco inteiro). Trava: total dado pela contagem. ─────────────
+-- begin;
+-- create table if not exists public.bkp_disciplinas_20261126 as
+--   select q.id, q.subject as subject_anterior, q.subject_origem as origem_anterior, now() as copiado_em
+--   from public.exam_questions q join public.mapa_disciplinas_20261126 m on q.subject = m.de
+--   where q.superseded_at is null and q.subject_origem is distinct from 'manual';
+-- alter table public.bkp_disciplinas_20261126 enable row level security;
+-- revoke all on public.bkp_disciplinas_20261126 from anon, authenticated;
+--
+-- with upd as (
+--   update public.exam_questions q
+--      set subject_anterior = q.subject,
+--          subject = m.para,
+--          subject_origem = 'mapa',
+--          subject_classificado_em = now()
+--     from public.mapa_disciplinas_20261126 m
+--    where q.subject = m.de
+--      and q.superseded_at is null
+--      and q.subject_origem is distinct from 'manual'
+--   returning q.id
+-- )
+-- select count(*) as renomeadas from upd;   -- confira com o total da prévia; senão, rode: rollback;
+-- commit;
+
+-- ───────────── PARTE 3 — APROVAÇÃO HUMANA DE PROPOSTAS ─────────────
+-- Propostas da IA que NÃO foram aplicadas automaticamente (IA incerta ou discordou da palavra-chave):
+-- select count(*) as propostas,
+--        count(*) filter (where subject_confianca = 'alta') as ia_alta_discordou_da_palavra_chave,
+--        count(*) filter (where subject_confianca = 'media') as media
+-- from public.exam_questions
+-- where superseded_at is null and subject_proposta is not null and subject_origem in ('pacote', 'padrao');
+--
+-- Revise em lotes (enunciado + proposta + rótulo atual) e aprove com origem 'manual' (passa a ser protegido):
+-- select left(id::text, 8) as id, subject as atual, subject_proposta as proposta, subject_confianca as confianca,
+--        left(regexp_replace(statement, '\s+', ' ', 'g'), 200) as enunciado
+-- from public.exam_questions
+-- where superseded_at is null and subject_proposta is not null and subject_origem in ('pacote', 'padrao')
+-- order by subject_confianca desc, id limit 30;
+--
+-- Aprovar UMA proposta (use o id completo):
+-- begin;
+-- update public.exam_questions set subject_anterior = subject, subject = subject_proposta, subject_origem = 'manual',
+--        subject_classificado_em = now()
+--  where id = '<uuid>' and subject_origem in ('pacote', 'padrao') and subject_proposta is not null;
+-- commit;
+--
+-- Rejeitar UMA proposta (mantém o rótulo atual; não entra mais na fila da IA):
+-- update public.exam_questions set subject_origem = 'item' where id = '<uuid>' and subject_origem in ('pacote', 'padrao');
+
+-- ───────────── REVERSÃO DO PASSO 2 (renomeios) ─────────────
+-- begin;
+-- update public.exam_questions q set subject = b.subject_anterior, subject_origem = b.origem_anterior
+--   from public.bkp_disciplinas_20261126 b where q.id = b.id;   -- tem que dar o total do backup
+-- commit;
+
+-- ───────────── REVERSÃO DAS APLICAÇÕES DA IA (se a classificação errar em massa) ─────────────
+-- begin;
+-- update public.exam_questions set subject = subject_anterior, subject_origem = 'pacote'
+--  where subject_origem = 'ia' and subject_classificado_em >= '<início da rodada>';
+-- commit;
