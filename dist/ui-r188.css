@@ -834,20 +834,20 @@ body.lightAppTheme .hero .metric b {
 .meHeatCell.lvl3 { background: #22c55e; }
 
 /* Suporte ao Tema Claro */
-[data-theme="light"] .meMissionRow,
-[data-theme="light"] .meBlockItem,
-[data-theme="light"] .meErrKpi,
-[data-theme="light"] .meErrSubjRow,
-[data-theme="light"] .meEssayHighlightBox {
+body.lightAppTheme .meMissionRow,
+body.lightAppTheme .meBlockItem,
+body.lightAppTheme .meErrKpi,
+body.lightAppTheme .meErrSubjRow,
+body.lightAppTheme .meEssayHighlightBox {
   background: rgba(15, 23, 42, 0.04);
   border-color: rgba(15, 23, 42, 0.14);
 }
-[data-theme="light"] .mePill--danger { color: #b91c1c; }
-[data-theme="light"] .mePill--warn { color: #b45309; }
-[data-theme="light"] .mePill--ok { color: #15803d; }
-[data-theme="light"] .meErrKpi.isHot { color: #b91c1c; }
-[data-theme="light"] .meErrKpi.isOk { color: #15803d; }
-[data-theme="light"] .meReincBadge { color: #b91c1c; }
+body.lightAppTheme .mePill--danger { color: #b91c1c; }
+body.lightAppTheme .mePill--warn { color: #b45309; }
+body.lightAppTheme .mePill--ok { color: #15803d; }
+body.lightAppTheme .meErrKpi.isHot { color: #b91c1c; }
+body.lightAppTheme .meErrKpi.isOk { color: #15803d; }
+body.lightAppTheme .meReincBadge { color: #b91c1c; }
 
 /* ── r197: Pop-up In-Modal Universal para ferramentas dentro da questão ── */
 .jcToolPopupDialog {
@@ -961,20 +961,20 @@ body.lightAppTheme .hero .metric b {
   border-color: #22c55e;
   color: #4ade80;
 }
-[data-theme="light"] .jcToolPopupDialog {
+body.lightAppTheme .jcToolPopupDialog {
   background: #ffffff;
   color: #0f172a;
   border-color: rgba(15, 23, 42, 0.2);
 }
-[data-theme="light"] .jcPopupContext,
-[data-theme="light"] .jcPopupSummaryCard,
-[data-theme="light"] .jcPopupAnswer {
+body.lightAppTheme .jcPopupContext,
+body.lightAppTheme .jcPopupSummaryCard,
+body.lightAppTheme .jcPopupAnswer {
   background: #f8fafc;
   color: #0f172a;
   border-color: rgba(15, 23, 42, 0.14);
 }
-[data-theme="light"] .jcPopupInputRow textarea,
-[data-theme="light"] .jcPopupInputRow input {
+body.lightAppTheme .jcPopupInputRow textarea,
+body.lightAppTheme .jcPopupInputRow input {
   background: #ffffff;
   color: #0f172a;
   border-color: rgba(15, 23, 42, 0.22);
@@ -989,18 +989,66 @@ body.lightAppTheme .hero .metric b {
   outline: none;
   box-shadow: none;
 }
-[data-theme="light"] .meMissionProg {
+body.lightAppTheme .meMissionProg {
   color: #0369a1;
 }
-[data-theme="light"] .meMissionCount {
+body.lightAppTheme .meMissionCount {
   color: #0369a1;
   background: rgba(3, 105, 161, 0.14);
 }
-[data-theme="light"] .jcToolPopupTabs button.active {
+body.lightAppTheme .jcToolPopupTabs button.active {
   background: rgba(3, 105, 161, 0.12);
   border-color: #0369a1;
   color: #0369a1;
 }
 #profile .grid, #profileHubRoot .grid, #profileHubRoot [style*="grid-template-columns"] {
   align-items: end;
+}
+
+/* ── r199: Tema Claro real (body.lightAppTheme), Cabeçalho do Perfil e Drawer de Identidade (#jcEditProfileDrawer) ── */
+html.lightAppTheme {
+  color-scheme: light;
+}
+body.lightAppTheme .meMissionRow {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: rgba(15, 23, 42, 0.14);
+}
+body.lightAppTheme .meMissionProg {
+  color: #0369a1;
+}
+body.lightAppTheme .meMissionCount {
+  color: #0369a1;
+  background: rgba(3, 105, 161, 0.14);
+}
+body.lightAppTheme #profile .jcProfileTitleBlock strong {
+  color: #0f172a !important;
+}
+body.lightAppTheme #profile .jcProfileRoleBadge {
+  color: #075985 !important;
+  background: #e0f2fe !important;
+  border-color: #0284c7 !important;
+}
+body.lightAppTheme #profile .jcProfileStatItem span {
+  color: #475569 !important;
+}
+body.lightAppTheme #profile .jcProfileStatItem b:not([style]) {
+  color: #0369a1 !important;
+}
+#jcEditProfileDrawer[hidden] {
+  display: none !important;
+}
+#jcEditProfileDrawer [style*="grid-template-columns"] {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)) !important;
+  gap: 10px !important;
+  align-items: end !important;
+}
+#jcEditProfileDrawer .field {
+  min-width: 0;
+}
+#jcEditProfileDrawer input[type="text"],
+#jcEditProfileDrawer select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }

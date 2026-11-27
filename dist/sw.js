@@ -1,4 +1,4 @@
-const CACHE='jornada-cacador-v78-smart-notebook-r198';
+const CACHE='jornada-cacador-v78-smart-notebook-r199';
 const ASSETS=['./','./index.html','./ui-v75.css','./ui-v77.css','./ui-v78.css','./ui-r184.css','./ui-r188.css','./questions-workspace.css','./questions-workspace.js','./progress-ledger.js','./question-text-quality.js','./question-availability.js','./exam-questions-client.js','./question-review.js','./invocador-classroom.js',
   './missao-elite-features.js','./v59-enhancements.js','./question-session-store.js','./v77-experience.js','./v78-smart-notebook.js','./jc-architecture-modules.js','./pdf-text-client.js','./hunter-manuals.js','./hunter-manuals.css','./content-summaries.js','./native-question-bank.json','./native-laws-database.json','./material-deep-dives.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./login-banner.jpg',
   './login-banner.webp',
@@ -51,7 +51,13 @@ self.addEventListener('fetch', e => {
     try {
       const r = await fetchWithTimeout(e.request);
       if (r.status === 200 && r.type==='basic') {
-        await cache.put(e.request, r.clone()).catch(() => undefined);
+        const cloned = r.clone();
+        e.waitUntil(cache.put(e.request, cloned).catch(() => undefined));
+        return r;
+      }
+      if (r.status >= 500) {
+        const cached = await cache.match(e.request);
+        if (cached) return cached;
       }
       return r;
     } catch {

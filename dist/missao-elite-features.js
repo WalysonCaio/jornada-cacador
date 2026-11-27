@@ -25,7 +25,31 @@
     try {
       if (typeof window.localDayKey === 'function') return window.localDayKey();
     } catch (_e) {}
-    return new Date().toISOString().slice(0, 10);
+    const d = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    return d.toISOString().slice(0, 10);
+  };
+
+  const scoreDayKey = (rawDate) => {
+    if (!rawDate) return '';
+    if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate.trim())) return rawDate.trim();
+    const dt = rawDate instanceof Date ? rawDate : new Date(rawDate);
+    if (!Number.isFinite(dt.getTime())) return '';
+    try {
+      if (typeof window.localDayKey === 'function') return window.localDayKey(dt);
+    } catch (_e) {}
+    const fallback = new Date(dt.getTime() - 3 * 60 * 60 * 1000);
+    return fallback.toISOString().slice(0, 10);
+  };
+
+  const validKeyIndex = (item) => {
+    if (!item || item.answer_unknown || item.annulled || item.anulada) return null;
+    const raw = item.correct_index;
+    if (raw === null || raw === undefined || typeof raw === 'boolean') return null;
+    if (typeof raw === 'string' && raw.trim() === '') return null;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0) return null;
+    if (Array.isArray(item.options) && n >= item.options.length) return null;
+    return n;
   };
 
   const getState = () => (typeof state === 'object' && state ? state : (window.state || {}));
@@ -62,7 +86,7 @@
   function getEditalBlocks() {
     const camp = getActiveCampaign();
     const cname = normKey(camp?.name || '');
-    if (!cname || cname.includes('pmpe') || cname.includes('pernambuco') || cname.includes('cbmpe')) {
+    if (!cname || cname.includes('pmpe') || cname.includes('policia militar de pernambuco')) {
       return PMPE_BLOCKS;
     }
     const missions = camp?.customCampaign?.missions || getState().customCampaign?.missions || [];
@@ -154,6 +178,9 @@
       } else if (projected60 !== null && projected60 < 18) {
         status = 'risco';
         headline = `Projeção atual em ${projected60}/60 pontos (mínimo geral do edital: 18/60).`;
+      } else if (totalAnswered < 10 || blockResults.filter((b) => b.total > 0).length < Math.min(2, blockResults.length)) {
+        status = 'sem_dados';
+        headline = `Amostra inicial (${totalAnswered} questão${totalAnswered === 1 ? '' : 'ões'}): responda pelo menos 10 questões distribuídas nos blocos para projeção confiável do edital.`;
       } else {
         status = 'seguro';
         headline = `Dentro dos mínimos do edital (${overallPct}% geral · projeção ${projected60}/60). Continue subindo para a nota de corte.`;
@@ -246,7 +273,7 @@
     if (!top2.length) {
       top2.push({ subject: 'Língua Portuguesa', pct: null }, { subject: 'História de Pernambuco', pct: null });
     }
-    const todayScores = (st.scores || []).filter((s) => (!s.campaignId || s.campaignId === campId) && String(s.date || '').slice(0, 10) === day);
+    const todayScores = (st.scores || []).filter((s) => (!s.campaignId || s.campaignId === campId) && scoreDayKey(s.date) === day);
     return top2.map((item, idx) => {
       const done = todayScores
         .filter((s) => normKey(getCanonSubj(s.subject || '')) === normKey(item.subject))
@@ -634,10 +661,18 @@
   let simActiveTimer = null;
   let lastInteractionTs = Date.now();
 
+  function stopActiveSimuladoClock() {
+    if (simActiveTimer) { clearInterval(simActiveTimer); simActiveTimer = null; }
+  }
   function startActiveSimuladoClock() {
-    if (simActiveTimer) clearInterval(simActiveTimer);
+    stopActiveSimuladoClock();
     simActiveSec = 0;
     lastInteractionTs = Date.now();
+    const simDlg = document.querySelector('#simuladoDialog');
+    if (simDlg && !simDlg.dataset.meCloseBound) {
+      simDlg.dataset.meCloseBound = '1';
+      simDlg.addEventListener('close', stopActiveSimuladoClock);
+    }
     simActiveTimer = setInterval(() => {
       if (document.visibilityState === 'visible' && (Date.now() - lastInteractionTs) < 60_000) {
         simActiveSec += 1;
@@ -827,7 +862,32 @@
     return String(item?.id || item?._fp || item?.statement?.slice(0, 60) || 'q');
   }
 
-  async function askInvocadorInPopup(item, promptText, outEl, btnEl) {
+  let _popupAiSeq = 0;
+  let _popupAiController = null;
+
+  function abortPopupAiRequest() {
+    _popupAiSeq += 1;
+    if (_popupAiController) {
+      try { _popupAiController.abort(); } catch (_e) {}
+      _popupAiController = null;
+    }
+  }
+
+  function buildQuestionContextForPopup(item) {
+    const opts = Array.isArray(item?.options)
+      ? item.options.map((o, i) => `${String.fromCharCode(65 + i)}) ${o}`).join('\n')
+      : '';
+    const validCi = validKeyIndex(item);
+    return [
+      `Disciplina: ${getCanonSubj(item?.subject || 'Geral')} | Tópico: ${item?.topic || 'Geral'} | Banca: ${item?.board || 'Não informada'}`,
+      `Enunciado: ${item?.statement || ''}`,
+      opts ? `Alternativas:\n${opts}` : '',
+      validCi !== null ? `Gabarito cadastrado: ${String.fromCharCode(65 + validCi)}` : 'Gabarito cadastrado: não confirmado',
+      item?.explanation ? `Comentário base: ${String(item.explanation).slice(0, 600)}` : '',
+    ].filter(Boolean).join('\n');
+  }
+
+  async function askInvocadorInPopup(item, promptText, outEl, btnEl, scopeRoot = null) {
     if (!outEl) return;
     const text = String(promptText || '').trim();
     if (text.length < 3) return;
@@ -836,24 +896,42 @@
       return;
     }
     const sess = typeof validSession === 'function' ? await validSession().catch(() => null) : (typeof cloudSession !== 'undefined' ? cloudSession : null);
+    const startUserId = sess?.user?.id || getState()?._ownerUserId || '';
+    const startCampId = getCampaignId();
+    const startReset = Number(getState()?._resetEpoch || 0);
+    const startFp = getQuestionFp(item);
     if (!sess?.access_token) {
       outEl.innerHTML = '<div class="meTrapPill">Entre na sua conta para conversar com o Invocador IA.</div>';
       return;
     }
-    if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Consultando Invocador...'; }
+
+    abortPopupAiRequest();
+    const mySeq = _popupAiSeq;
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    _popupAiController = controller;
+
+    const root = scopeRoot || outEl.closest('#jcQuestionToolPopup') || document;
+    const chips = [...root.querySelectorAll('[data-jc-qprompt]')];
+    const setBusy = (busy) => {
+      if (btnEl) { btnEl.disabled = busy; btnEl.textContent = busy ? 'Consultando Invocador...' : 'Enviar ao Invocador'; }
+      chips.forEach((c) => { c.disabled = busy; });
+    };
+    const stillValid = () => {
+      const curUser = (typeof cloudSession !== 'undefined' && cloudSession?.user?.id) || getState()?._ownerUserId || '';
+      const dlg = document.querySelector('#jcQuestionToolPopup');
+      return _popupAiSeq === mySeq
+        && curUser === startUserId
+        && getCampaignId() === startCampId
+        && Number(getState()?._resetEpoch || 0) === startReset
+        && getQuestionFp(getActiveQuestionItem() || item) === startFp
+        && (!dlg || dlg.open);
+    };
+
+    setBusy(true);
     outEl.innerHTML = '<div class="small muted" style="padding:10px 0">🧙‍♂️ Invocador analisando a questão...</div>';
     try {
       const camp = getActiveCampaign();
-      const opts = Array.isArray(item?.options)
-        ? item.options.map((o, i) => `${String.fromCharCode(65 + i)}) ${o}`).join('\n')
-        : '';
-      const qContext = [
-        `Disciplina: ${getCanonSubj(item?.subject || 'Geral')} | Tópico: ${item?.topic || 'Geral'} | Banca: ${item?.board || 'Não informada'}`,
-        `Enunciado: ${item?.statement || ''}`,
-        opts ? `Alternativas:\n${opts}` : '',
-        Number.isInteger(Number(item?.correct_index)) ? `Gabarito cadastrado: ${String.fromCharCode(65 + Number(item.correct_index))}` : '',
-        item?.explanation ? `Comentário base: ${String(item.explanation).slice(0, 600)}` : '',
-      ].filter(Boolean).join('\n');
+      const qContext = buildQuestionContextForPopup(item);
       const baseUrl = typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : 'https://jybislbbblyjsrcdegjt.supabase.co';
       const headers = typeof authHeaders === 'function'
         ? authHeaders(sess.access_token)
@@ -861,6 +939,7 @@
       const resp = await fetch(`${baseUrl}/functions/v1/assistente-pmpe`, {
         method: 'POST',
         headers,
+        signal: controller?.signal,
         body: JSON.stringify({
           question: text,
           context: qContext.slice(0, 12000),
@@ -869,15 +948,32 @@
           campaign: camp?.name || 'PMPE — Soldado',
         }),
       });
+      if (!stillValid()) return;
       const data = await resp.json().catch(() => ({}));
+      if (!stillValid()) return;
       if (!resp.ok) throw new Error(data?.error || `Erro HTTP ${resp.status}`);
       const answer = String(data?.answer || '').trim();
       if (!answer) throw new Error('O Invocador retornou resposta vazia.');
       outEl.innerHTML = `<div class="jcPopupAnswer">${esc(answer).replace(/\n/g, '<br>')}</div>`;
     } catch (err) {
+      if (err?.name === 'AbortError' || !stillValid()) return;
       outEl.innerHTML = `<div class="meTrapPill">Não foi possível consultar o Invocador agora: ${esc(err?.message || 'erro de conexão')}</div>`;
     } finally {
-      if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Enviar ao Invocador'; }
+      if (_popupAiSeq === mySeq) {
+        _popupAiController = null;
+        setBusy(false);
+      }
+    }
+  }
+
+  function resetForAccountChange() {
+    abortPopupAiRequest();
+    stopActiveSimuladoClock();
+    const dlg = document.querySelector('#jcQuestionToolPopup');
+    if (dlg) {
+      try { if (dlg.open) dlg.close(); } catch (_e) {}
+      const body = dlg.querySelector('#jcToolPopupBody');
+      if (body) body.innerHTML = '';
     }
   }
 
@@ -942,8 +1038,8 @@
         return;
       }
       const exp = String(item?.explanation || item?.fundamento_ia || '').trim();
-      const correctIdx = Number(item?.correct_index);
-      const hasCorrect = Number.isInteger(correctIdx) && correctIdx >= 0 && Array.isArray(item?.options) && correctIdx < item.options.length;
+      const correctIdx = validKeyIndex(item);
+      const hasCorrect = correctIdx !== null;
       body.innerHTML = `
         <div class="jcPopupContext">
           <b>${hasCorrect ? `✓ Gabarito: Alternativa ${String.fromCharCode(65 + correctIdx)}` : 'Gabarito em conferência'}</b>
@@ -1118,13 +1214,14 @@
         <div id="jcToolPopupBody" class="jcToolPopupBody"></div>
       `;
       document.body.appendChild(dlg);
-      dlg.querySelector('#jcCloseToolPopupBtn').onclick = () => dlg.close();
+      dlg.querySelector('#jcCloseToolPopupBtn').onclick = () => { abortPopupAiRequest(); dlg.close(); };
+      dlg.addEventListener('close', abortPopupAiRequest);
       dlg.addEventListener('click', (ev) => {
         if (ev.target === dlg) dlg.close();
       });
     }
     dlg.querySelectorAll('[data-jc-popup-tab]').forEach((b) => {
-      b.onclick = () => { b.blur(); renderToolPopupTab(dlg, b.dataset.jcPopupTab, item); };
+      b.onclick = () => { b.blur(); abortPopupAiRequest(); renderToolPopupTab(dlg, b.dataset.jcPopupTab, item); };
     });
     renderToolPopupTab(dlg, tab, item);
     if (!dlg.open) dlg.showModal();
@@ -1168,7 +1265,11 @@
   }
 
   window.JCMissaoElite = {
-    version: 'r198',
+    version: 'r199',
+    scoreDayKey,
+    validKeyIndex,
+    buildQuestionContextForPopup,
+    resetForAccountChange,
     openQuestionToolPopup,
     detectToolTabFromButton,
     computeEliminationRadar,

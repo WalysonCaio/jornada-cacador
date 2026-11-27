@@ -373,13 +373,18 @@ async function validateOne(q: any, batch: string, pState: ProviderState, dupla: 
 }
 
 Deno.serve(async (req) => {
+  if (req.method !== "POST") {
+    return new Response("method_not_allowed", { status: 405 });
+  }
   const expectedToken = Deno.env.get("VALIDATION_ADMIN_TOKEN");
   if (!expectedToken || req.headers.get("x-admin-token") !== expectedToken) {
     return new Response("forbidden", { status: 403 });
   }
 
   const body = await req.json().catch(() => ({}));
-  const limit = Math.min(Math.max(Number(body.limit ?? 2), 1), MAX_LIMIT);
+  const rawLimit = Number(body.limit ?? 2);
+  const safeLimit = Number.isFinite(rawLimit) ? Math.trunc(rawLimit) : 2;
+  const limit = Math.min(Math.max(safeLimit, 1), MAX_LIMIT);
   const priority = ["ia", "desconhecido", "all"].includes(body.priority) ? body.priority : "ia";
   const dupla = typeof body.dupla === "boolean" ? body.dupla : (priority === "ia");
   const preferred = ["auto", "gemini", "deepseek", "groq"].includes(body.provider) ? body.provider : "auto";
