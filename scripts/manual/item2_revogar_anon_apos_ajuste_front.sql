@@ -1,0 +1,92 @@
+-- SCRIPT MANUAL — NÃO aplicar antes de conferir o front (ver PRÉ-REQUISITOS). Não colocar em migrations.
+--
+-- PRÉ-REQUISITOS (o front não está no sandbox; confira no repositório):
+--   grep -rn "check_email_registered\|claim_ai_request\|finish_ai_request" --include=*.js --include=*.ts --include=*.html .
+--   1) check_email_registered: se a tela de login ou cadastro chama essa RPC ANTES de haver sessão (provável),
+--      a revogação quebra esse fluxo. Antes de aplicar, troque a chamada por uma resposta genérica
+--      ("se o e-mail existir, enviaremos instruções") ou mova a checagem para uma Edge Function com limite de taxa.
+--   2) claim_ai_request / finish_ai_request: o wrapper abaixo mantém authenticated funcionando, desde que a chamada
+--      use a sessão do usuário e o p_user_id seja o próprio usuário. Se alguma chamada for feita SEM sessão (anon),
+--      ela vai falhar; se for feita com service_role (Edge Function), continua funcionando.
+--
+-- O QUE FAZ: renomeia as funções reais para *_impl, tira EXECUTE delas de todos os papéis de cliente,
+-- e cria wrappers com o mesmo nome e assinatura que checam auth.uid() (ou service_role) antes de chamar.
+-- Assim o front não precisa mudar a chamada, só deixa de funcionar sem sessão.
+
+-- ───────────── PASSO 1 — PRÉVIA (só leitura) ─────────────
+select p.proname, pg_get_function_identity_arguments(p.oid) as argumentos,
+       has_function_privilege('anon', p.oid, 'EXECUTE') as anon_executa,
+       has_function_privilege('authenticated', p.oid, 'EXECUTE') as auth_executa
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.proname in ('claim_ai_request', 'finish_ai_request', 'check_email_registered');
+-- Esperado: as três com anon_executa = true antes da aplicação.
+
+-- ───────────── PASSO 2 — APLICAR (descomente o bloco inteiro, depois dos pré-requisitos) ─────────────
+-- begin;
+--
+-- -- claim_ai_request: wrapper com checagem do dono
+-- alter function public.claim_ai_request(uuid, text, uuid, text) rename to claim_ai_request_impl;
+-- revoke all on function public.claim_ai_request_impl(uuid, text, uuid, text) from public, anon, authenticated;
+--
+-- create function public.claim_ai_request(p_user_id uuid, p_kind text, p_document_id uuid default null, p_request_hash text default null)
+-- returns jsonb
+-- language plpgsql
+-- security definer
+-- set search_path = public
+-- as $fn$
+-- begin
+--   if coalesce(auth.role(), '') <> 'service_role' and auth.uid() is distinct from p_user_id then
+--     raise exception 'not_authorized' using errcode = '42501';
+--   end if;
+--   return public.claim_ai_request_impl(p_user_id, p_kind, p_document_id, p_request_hash);
+-- end
+-- $fn$;
+-- revoke all on function public.claim_ai_request(uuid, text, uuid, text) from public, anon;
+-- grant execute on function public.claim_ai_request(uuid, text, uuid, text) to authenticated, service_role;
+--
+-- -- finish_ai_request: wrapper que confere se o job é do usuário
+-- alter function public.finish_ai_request(uuid, text, text, text) rename to finish_ai_request_impl;
+-- revoke all on function public.finish_ai_request_impl(uuid, text, text, text) from public, anon, authenticated;
+--
+-- create function public.finish_ai_request(p_job_id uuid, p_provider text, p_status text default 'ready', p_error_code text default null)
+-- returns void
+-- language plpgsql
+-- security definer
+-- set search_path = public
+-- as $fn$
+-- begin
+--   if coalesce(auth.role(), '') <> 'service_role' and not exists (
+--     select 1 from public.ai_processing_jobs j where j.id = p_job_id and j.user_id = auth.uid()
+--   ) then
+--     raise exception 'not_authorized' using errcode = '42501';
+--   end if;
+--   perform public.finish_ai_request_impl(p_job_id, p_provider, p_status, p_error_code);
+-- end
+-- $fn$;
+-- revoke all on function public.finish_ai_request(uuid, text, text, text) from public, anon;
+-- grant execute on function public.finish_ai_request(uuid, text, text, text) to authenticated, service_role;
+--
+-- -- check_email_registered: só revogar (a função já é segura por conteúdo; o problema é a enumeração sem sessão)
+-- revoke all on function public.check_email_registered(text) from public, anon;
+-- grant execute on function public.check_email_registered(text) to authenticated, service_role;
+--
+-- commit;
+
+-- ───────────── CONFERÊNCIA depois de aplicar (deve dar anon_executa = false nas três) ─────────────
+-- select p.proname, has_function_privilege('anon', p.oid, 'EXECUTE') as anon_executa,
+--        has_function_privilege('authenticated', p.oid, 'EXECUTE') as auth_executa
+-- from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+-- where n.nspname = 'public' and p.proname in ('claim_ai_request', 'finish_ai_request', 'check_email_registered');
+
+-- ───────────── REVERSÃO (se o front quebrar) ─────────────
+-- begin;
+-- drop function public.claim_ai_request(uuid, text, uuid, text);
+-- alter function public.claim_ai_request_impl(uuid, text, uuid, text) rename to claim_ai_request;
+-- grant execute on function public.claim_ai_request(uuid, text, uuid, text) to anon, authenticated, service_role;
+--
+-- drop function public.finish_ai_request(uuid, text, text, text);
+-- alter function public.finish_ai_request_impl(uuid, text, text, text) rename to finish_ai_request;
+-- grant execute on function public.finish_ai_request(uuid, text, text, text) to anon, authenticated, service_role;
+--
+-- grant execute on function public.check_email_registered(text) to anon, authenticated, service_role;
+-- commit;
