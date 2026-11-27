@@ -1,24 +1,80 @@
-// validate-questions (v2.1) — valida respostas de public.exam_questions em lotes.
-// Integra prompt-v2 (checagem de comando/itens + dupla passagem com ordem invertida)
-// com fallback automático: Gemini (VALIDATION_MODEL) -> DeepSeek -> Groq quando houver 429.
+// validate-questions (v2.2) — zero dependências externas (sem @supabase/supabase-js)
+// para eliminar erro HTTP 546 WORKER_RESOURCE_LIMIT no plano Free do Supabase.
+// Integra prompt-v2 (checagem de comando/itens + dupla passagem com ordem invertida),
+// filtro superseded_at is null (v115) e fallback automático: Gemini -> DeepSeek -> Groq.
 // Uso (somente admin): POST com header x-admin-token = VALIDATION_ADMIN_TOKEN
-// Body: { "limit": 15, "priority": "ia" | "desconhecido" | "all", "dupla": true, "provider": "auto"|"gemini"|"deepseek"|"groq", "dry_run": false }
+// Body: { "limit": 2, "priority": "ia" | "desconhecido" | "all", "dupla": true, "provider": "auto"|"gemini"|"deepseek"|"groq", "dry_run": false }
 // Secrets: VALIDATION_ADMIN_TOKEN, GEMINI_API_KEY, VALIDATION_MODEL, DEEPSEEK_API_KEY, DEEPSEEK_MODEL, GROQ_API_KEY, GROQ_MODEL
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 const LETTERS = ["A", "B", "C", "D", "E"];
-const MAX_LIMIT = 50;
-const CONCURRENCY = 2;
-const PAUSE_MS = 400;
+const MAX_LIMIT = 20;
+const PAUSE_MS = 350;
+const LLM_TIMEOUT_MS = 45_000;
 
-const sb = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  { auth: { persistSession: false } },
-);
+const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") || "").replace(/\/+$/, "");
+const SERVICE_KEY = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let cachedGeminiModels: string[] | null = null;
+
+function sbHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const h: Record<string, string> = {
+    apikey: SERVICE_KEY,
+    "Content-Type": "application/json",
+    ...extra,
+  };
+  if (SERVICE_KEY && !SERVICE_KEY.startsWith("sb_secret_")) {
+    h.Authorization = `Bearer ${SERVICE_KEY}`;
+  }
+  return h;
+}
+
+async function fetchPendingQuestions(priority: string, limit: number) {
+  const params = new URLSearchParams();
+  params.set("select", "id,statement,options,subject,topic,board,gabarito_source");
+  params.set("status_validacao", "eq.pendente");
+  params.set("superseded_at", "is.null");
+  params.set("resposta_ia", "is.null");
+  params.set("validation_attempts", "lt.3");
+  params.set("or", "(validation_error.is.null,validation_error.not.like.passes_divergentes*)");
+  if (priority !== "all") params.set("gabarito_source", `eq.${priority}`);
+  params.set("order", "gabarito_source.desc,fingerprint.asc");
+  params.set("limit", String(limit));
+
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/exam_questions?${params.toString()}`, {
+    method: "GET",
+    headers: sbHeaders(),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`postgrest_select_${r.status}: ${txt.slice(0, 200)}`);
+  }
+  return await r.json();
+}
+
+async function rpcSaveValidation(payload: {
+  p_id: string;
+  p_resposta: number | null;
+  p_fundamento: string;
+  p_confianca: string;
+  p_model: string;
+  p_batch: string;
+  p_erro: string | null;
+}): Promise<string> {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/save_question_validation`, {
+    method: "POST",
+    headers: sbHeaders(),
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`rpc_save_${r.status}: ${txt.slice(0, 200)}`);
+  }
+  const data = await r.json();
+  return String(data ?? "erro");
+}
 
 async function getGeminiModels(apiKey: string): Promise<string[]> {
   const forced = Deno.env.get("VALIDATION_MODEL")?.trim();
@@ -27,6 +83,7 @@ async function getGeminiModels(apiKey: string): Promise<string[]> {
 
   const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=100", {
     headers: { "x-goog-api-key": apiKey },
+    signal: AbortSignal.timeout(15_000),
   });
   if (!r.ok) throw new Error(`list_models_${r.status}`);
   const j = await r.json();
@@ -130,6 +187,7 @@ async function callGemini(prompt: string, apiKey: string) {
           contents: [{ role: "user", parts: [{ text: prompt }] }],
           generationConfig: { temperature: 0, responseMimeType: "application/json" },
         }),
+        signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
       },
     );
     if (!r.ok) {
@@ -175,6 +233,7 @@ async function callOpenAICompat(
         { role: "user", content: prompt },
       ],
     }),
+    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
   });
   if (!r.ok) {
     const msg = `${prefix}_${r.status}_${model}: ${(await r.text()).slice(0, 150)}`;
@@ -288,7 +347,7 @@ async function validateOne(q: any, batch: string, pState: ProviderState, dupla: 
   try {
     const r = await resolver(q, pState, dupla);
     const conf = ["alta", "media", "baixa"].includes(r.parsed?.confianca) ? r.parsed.confianca : "baixa";
-    const { data, error } = await sb.rpc("save_question_validation", {
+    const resultado = await rpcSaveValidation({
       p_id: q.id,
       p_resposta: r.idx,
       p_fundamento: String(r.parsed?.fundamento ?? ""),
@@ -297,11 +356,10 @@ async function validateOne(q: any, batch: string, pState: ProviderState, dupla: 
       p_batch: batch,
       p_erro: r.idx === null ? String(r.problema || "sem_resposta") : null,
     });
-    if (error) throw new Error(error.message);
-    return { id: q.id, model: r.model, resultado: data as string, problema: r.problema, tokens_in: r.tokens_in, tokens_out: r.tokens_out };
+    return { id: q.id, model: r.model, resultado, problema: r.problema, tokens_in: r.tokens_in, tokens_out: r.tokens_out };
   } catch (e) {
     const msg = String((e as Error)?.message || "erro_desconhecido").slice(0, 250);
-    await sb.rpc("save_question_validation", {
+    await rpcSaveValidation({
       p_id: q.id,
       p_resposta: null,
       p_fundamento: "",
@@ -309,7 +367,7 @@ async function validateOne(q: any, batch: string, pState: ProviderState, dupla: 
       p_model: "fallback_error",
       p_batch: batch,
       p_erro: msg,
-    });
+    }).catch(() => {});
     return { id: q.id, model: "fallback_error", resultado: "erro", problema: msg, tokens_in: 0, tokens_out: 0 };
   }
 }
@@ -321,33 +379,27 @@ Deno.serve(async (req) => {
   }
 
   const body = await req.json().catch(() => ({}));
-  const limit = Math.min(Math.max(Number(body.limit ?? 15), 1), MAX_LIMIT);
+  const limit = Math.min(Math.max(Number(body.limit ?? 2), 1), MAX_LIMIT);
   const priority = ["ia", "desconhecido", "all"].includes(body.priority) ? body.priority : "ia";
   const dupla = typeof body.dupla === "boolean" ? body.dupla : (priority === "ia");
   const preferred = ["auto", "gemini", "deepseek", "groq"].includes(body.provider) ? body.provider : "auto";
 
-  let q = sb.from("exam_questions")
-    .select("id,statement,options,subject,topic,board,gabarito_source")
-    .eq("status_validacao", "pendente")
-    .is("superseded_at", null)
-    .is("resposta_ia", null)
-    .lt("validation_attempts", 3)
-    .or("validation_error.is.null,validation_error.not.like.passes_divergentes%");
-  if (priority !== "all") q = q.eq("gabarito_source", priority);
-  const { data: rows, error } = await q
-    .order("gabarito_source", { ascending: false })
-    .order("fingerprint")
-    .limit(limit);
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  let rows: any[];
+  try {
+    rows = await fetchPendingQuestions(priority, limit);
+  } catch (e: any) {
+    return Response.json({ error: String(e?.message || e) }, { status: 500 });
+  }
 
   if (body.dry_run) {
     const sample = rows?.[0];
     const n = sample ? (sample.options as unknown[]).length : 0;
     return Response.json({
       dry_run: true,
+      version: "v2.2-zero-deps",
       dupla,
       preferred_provider: preferred,
-      selecionadas: rows!.length,
+      selecionadas: rows.length,
       exemplo_prompt_v2: sample ? buildPromptV2(sample, [...Array(n).keys()]) : null,
     });
   }
@@ -364,28 +416,25 @@ Deno.serve(async (req) => {
   const modelosUsados: Record<string, number> = {};
   const motivos: Record<string, number> = {};
   let tin = 0, tout = 0;
-  const fila = [...rows!];
 
-  await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
-    while (fila.length) {
-      const item = fila.shift()!;
-      const r = await validateOne(item, batch, pState, dupla);
-      resumo[r.resultado] = (resumo[r.resultado] ?? 0) + 1;
-      modelosUsados[r.model] = (modelosUsados[r.model] ?? 0) + 1;
-      if (r.problema) {
-        const key = r.problema.split(":")[0];
-        motivos[key] = (motivos[key] ?? 0) + 1;
-      }
-      tin += r.tokens_in;
-      tout += r.tokens_out;
-      if (fila.length) await sleep(PAUSE_MS);
+  for (let i = 0; i < rows.length; i++) {
+    const r = await validateOne(rows[i], batch, pState, dupla);
+    resumo[r.resultado] = (resumo[r.resultado] ?? 0) + 1;
+    modelosUsados[r.model] = (modelosUsados[r.model] ?? 0) + 1;
+    if (r.problema) {
+      const key = r.problema.split(":")[0];
+      motivos[key] = (motivos[key] ?? 0) + 1;
     }
-  }));
+    tin += r.tokens_in;
+    tout += r.tokens_out;
+    if (i + 1 < rows.length) await sleep(PAUSE_MS);
+  }
 
   return Response.json({
     batch,
+    version: "v2.2-zero-deps",
     dupla,
-    processadas: rows!.length,
+    processadas: rows.length,
     resumo,
     modelos_usados: modelosUsados,
     motivos,
