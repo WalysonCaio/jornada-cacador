@@ -739,8 +739,8 @@
     const st = getState();
     const camp = getActiveCampaign();
     const examDateStr = camp?.examDate || camp?.exam_date || '2027-02-21';
-    const today = new Date(`${todayKey()}T12:00:00`);
-    const examDate = new Date(`${examDateStr}T12:00:00`);
+    const today = new Date(`${todayKey()}T00:00:00`);
+    const examDate = new Date(`${examDateStr}T23:59:59`);
     const daysLeft = Math.max(1, Math.ceil((examDate - today) / 86_400_000));
 
     const missions = camp?.customCampaign?.missions || st.customCampaign?.missions || [];
@@ -926,6 +926,21 @@
     }
 
     if (tab === 'comentario') {
+      const isAnswered = Boolean((typeof activeQuestions === 'object' && activeQuestions?.answered) || item?._lastAttempt || item?._meSpoilerRevealed);
+      if (!isAnswered) {
+        body.innerHTML = `
+          <div class="jcPopupContext">
+            <b>🔒 Gabarito oculto para evitar spoiler</b>
+            <p class="small muted" style="margin:8px 0 12px;line-height:1.55">Responda à questão primeiro para ver o gabarito e o comentário completo. Se quiser estudar a resolução antes de marcar, clique abaixo.</p>
+            <button type="button" class="ghost small" id="jcRevealSpoilerBtn">👁️ Revelar gabarito e comentário mesmo assim</button>
+          </div>
+        `;
+        body.querySelector('#jcRevealSpoilerBtn')?.addEventListener('click', () => {
+          if (item) item._meSpoilerRevealed = true;
+          renderToolPopupTab(dlg, 'comentario', item);
+        });
+        return;
+      }
       const exp = String(item?.explanation || item?.fundamento_ia || '').trim();
       const correctIdx = Number(item?.correct_index);
       const hasCorrect = Number.isInteger(correctIdx) && correctIdx >= 0 && Array.isArray(item?.options) && correctIdx < item.options.length;
@@ -1090,7 +1105,7 @@
             <div class="eyebrow">APOIO NA QUESTÃO · BATERIA PRESERVADA</div>
             <h3 style="margin:2px 0 0;font-size:1.05rem">Ferramentas da Questão</h3>
           </div>
-          <button type="button" class="ghost small" id="jcCloseToolPopupBtn">✕ Voltar para a questão</button>
+          <button type="button" class="ghost small" id="jcCloseToolPopupBtn"><span aria-hidden="true" style="font-weight:900;margin-right:4px">&times;</span>Voltar para a questão</button>
         </div>
         <div class="jcToolPopupTabs" role="tablist">
           <button type="button" class="ghost small" data-jc-popup-tab="invocador">🧙‍♂️ Invocador</button>
@@ -1109,7 +1124,7 @@
       });
     }
     dlg.querySelectorAll('[data-jc-popup-tab]').forEach((b) => {
-      b.onclick = () => renderToolPopupTab(dlg, b.dataset.jcPopupTab, item);
+      b.onclick = () => { b.blur(); renderToolPopupTab(dlg, b.dataset.jcPopupTab, item); };
     });
     renderToolPopupTab(dlg, tab, item);
     if (!dlg.open) dlg.showModal();
@@ -1153,7 +1168,7 @@
   }
 
   window.JCMissaoElite = {
-    version: 'r197',
+    version: 'r198',
     openQuestionToolPopup,
     detectToolTabFromButton,
     computeEliminationRadar,

@@ -979,3 +979,28 @@ body.lightAppTheme .hero .metric b {
   color: #0f172a;
   border-color: rgba(15, 23, 42, 0.22);
 }
+
+/* ── r198: Polimento de contraste Tema Claro, abas do pop-up e alinhamento do Perfil ── */
+.jcToolPopupTabs button:not(.active) {
+  border-color: rgba(148, 163, 184, 0.25);
+  outline: none;
+}
+.jcToolPopupTabs button:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+[data-theme="light"] .meMissionProg {
+  color: #0369a1;
+}
+[data-theme="light"] .meMissionCount {
+  color: #0369a1;
+  background: rgba(3, 105, 161, 0.14);
+}
+[data-theme="light"] .jcToolPopupTabs button.active {
+  background: rgba(3, 105, 161, 0.12);
+  border-color: #0369a1;
+  color: #0369a1;
+}
+#profile .grid, #profileHubRoot .grid, #profileHubRoot [style*="grid-template-columns"] {
+  align-items: end;
+}

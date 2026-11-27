@@ -7897,21 +7897,21 @@ Uma validação pessoal não transforma a resposta em gabarito oficial.`, '');
       adviceEl.textContent=`Com ${total} questão(ões) respondida(s), seu acerto provável está entre ${interval}. Resolva pelo menos ${CUTOFF_MIN_SAMPLE} para uma leitura confiável.${disclaimer}`;
     }else if(rate>=a.elite){
       badgeEl.textContent=`🏆 Margem de segurança (≥${a.elite}%)`;
-      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — acima da sua meta, com margem`;
+      titleEl.textContent=`Precisão Global (histórico geral): ${rate}% (${correct}/${total}) — acima da sua meta, com margem`;
       adviceEl.textContent=(bottlenecks.length
         ?`Seu acerto geral (${rate}%, provável ${interval}) está bem acima da meta, mas ainda há ${bottlenecks.length} disciplina(s) com erros ou abaixo de ${target}%. Elimine esses pontos para blindar sua preparação.`
         :'Todas as disciplinas praticadas estão acima da meta. Mantenha o ritmo com simulados cronometrados e revisão espaçada.')+disclaimer;
     }else if(rate>=target){
       badgeEl.textContent=`✓ Meta atingida (≥${target}%)`;
-      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — dentro da sua meta`;
+      titleEl.textContent=`Precisão Global (histórico geral): ${rate}% (${correct}/${total}) — dentro da sua meta`;
       adviceEl.textContent=`Você superou sua meta de ${target}% (acerto provável ${interval}). Corrija os gargalos abaixo e acerte mais ${a.needElite} questão(ões) seguida(s) para ganhar margem de segurança.${disclaimer}`;
     }else if(rate>=60){
       badgeEl.textContent=`⚡ Habilitado (60–${target-1}%)`;
-      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — faltam +${a.needTarget} acertos p/ a meta (${target}%)`;
+      titleEl.textContent=`Precisão Global (histórico geral): ${rate}% (${correct}/${total}) — faltam +${a.needTarget} acertos p/ a meta (${target}%)`;
       adviceEl.textContent=`Você passou do mínimo de 60%, mas precisa subir ${target-rate}% para atingir sua meta (acerto provável ${interval}). Veja abaixo quais matérias e assuntos puxam sua nota para baixo:${disclaimer}`;
     }else{
       badgeEl.textContent='🎯 Abaixo do mínimo (<60%)';
-      titleEl.textContent=`Precisão Global: ${rate}% (${correct}/${total}) — foco em corrigir os gargalos`;
+      titleEl.textContent=`Precisão Global (histórico geral): ${rate}% (${correct}/${total}) — foco em corrigir os gargalos`;
       adviceEl.textContent=`Faltam +${a.needMin} acerto(s) seguido(s) para o mínimo de 60% e +${a.needTarget} para a sua meta (${target}%). Clique nos gargalos abaixo para corrigir exatamente onde você erra.${disclaimer}`;
     }
 

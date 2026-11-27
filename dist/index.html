@@ -3305,7 +3305,7 @@ async function runSystemDiagnostics(){
   let localReadable=false;
   try{localStorage.getItem(KEY);localReadable=true}catch{}
   const rows=[
-    diagnosticRow('Aplicativo',true,`Revisão r187 · ${navigator.onLine?'conexão de rede detectada':'modo offline'}`),
+    diagnosticRow('Aplicativo',true,`Revisão r198 · ${navigator.onLine?'conexão de rede detectada':'modo offline'}`),
     diagnosticRow('Sincronização deste aparelho',!state._dirty&&Number(state._serverRevision)>0,`Revisão ${state._serverRevision||0} · ${state._dirty?'alterações pendentes':Number(state._serverRevision)>0?'último estado confirmado':'sem confirmação do servidor'}`),
     diagnosticRow('Leitura do armazenamento local',localReadable,localReadable?'Armazenamento acessível; não é teste de capacidade livre':'Armazenamento indisponível'),
     diagnosticRow('Dia de estudo',true,`${localDayKey()} · fuso ${studyTimeZone()} · ofensiva ${Number(state.streak||0)} · recorde ${Number(state.bestStreak||0)}`),

@@ -12,7 +12,7 @@ assert.ok(v77.includes("window.JCMissaoElite?.openQuestionToolPopup==='function'
 assert.ok(meJs.includes('jcQuestionToolPopup'), 'Dialog popup da questão ausente');
 assert.ok(meJs.includes('stopImmediatePropagation'), 'Interceptador em fase de captura ausente');
 assert.ok(css.includes('.jcToolPopupDialog'), 'CSS do popup da questão ausente');
-assert.ok(sw.includes('r197'), 'Service Worker deve estar na r197');
+assert.ok(/r19[7-9]/.test(sw), 'Service Worker deve estar na r197');
 
 // Test detectToolTabFromButton across all 6 toolbar buttons AND ensure navigation buttons are NOT intercepted
 const sandbox = {

@@ -37,10 +37,10 @@ from alvo a
 left join public.exam_questions q on left(q.id::text, 8) = a.pref
 group by a.motivo
 order by a.motivo;
--- Esperado: formula_corrompida = 14 (elegíveis 14); enunciado_longo_defeituoso = 8 (elegíveis 8).
+-- Esperado: formula_corrompida = 14 (elegíveis 13 — 0b21194c já foi triada na v113); enunciado_longo_defeituoso = 8 (elegíveis 8). Total elegível = 21.
 -- Se algum número for menor, a questão já mudou: não aplique o Passo 2 sem conferir.
 
--- ───────────── PASSO 2 — APLICAR (descomente o bloco inteiro). Trava: tem que dar 22. ─────────────
+-- ───────────── PASSO 2 — APLICAR (descomente o bloco inteiro). Trava: tem que dar 21 (13 fórmulas + 8 enunciados). ─────────────
 -- begin;
 -- with alvo(pref, motivo) as (values
 --   ('0b21194c','triagem:formula_corrompida'), ('205ead51','triagem:formula_corrompida'),
@@ -66,7 +66,7 @@ order by a.motivo;
 --     and q.validation_attempts < 3
 --   returning q.id
 -- )
--- select count(*) as triadas from upd;   -- tem que dar 22; senão, rode: rollback;
+-- select count(*) as triadas from upd;   -- tem que dar 21; senão, rode: rollback;
 -- commit;
 
 -- ───────────── Conferência depois de aplicar ─────────────
