@@ -48,10 +48,11 @@
 --   ('Sinonímia e Substituição Lexical', 'Língua Portuguesa'),
 --   ('Funções da Linguagem', 'Língua Portuguesa'),
 --   ('Análise de Discurso e Vocabulário', 'Língua Portuguesa'),
---   ('História do Brasil', 'História');
+--   ('História do Brasil', 'História'),
+--   ('Geografia de Pernambuco', 'Geografia');
 -- -- Não mapeados de propósito (vão para a IA): '500 Questões Pmpe', '100 Questões-rlm', 'Simulado Pmpe',
 -- -- 'Simulado2 Pmpe', 'Edital e Prova', 'Questões-direitos Individuais', 'Execução Penal', 'Lógica Formal',
--- -- 'Geografia de Pernambuco' (decisão pendente: manter ou juntar em 'Geografia').
+-- -- (Geografia de Pernambuco entrou no mapa como 'Geografia', por decisão aprovada.)
 
 -- ───────────── PASSO 1 — PRÉVIA (só leitura) ─────────────
 -- select m.de, m.para, count(q.id) as linhas, count(q.id) filter (where q.subject_origem = 'manual') as protegidas_manual
